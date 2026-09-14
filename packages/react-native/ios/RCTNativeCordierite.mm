@@ -74,9 +74,9 @@ RCT_EXPORT_MODULE(Cordierite)
   [_swift unregisterToolWithName:name];
 }
 
-- (BOOL)handleUrl:(NSString *)url
+- (NSNumber *)handleUrl:(NSString *)url
 {
-  return [_swift handleUrl:url];
+  return @([_swift handleUrl:url]);
 }
 
 - (void)connect:(NSString *)inputJson
