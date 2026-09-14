@@ -1,11 +1,13 @@
 package com.callstackincubator.cordierite
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
 import java.security.cert.CertificateException
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
@@ -30,37 +32,33 @@ import java.util.Base64
 @Config(sdk = [35])
 class CordieriteSpkiPinTest {
     /**
-     * Same fixture certificate (DER, base64) as
-     * `packages/native/ios/Tests/CordieriteCoreTests/CordieriteConnectionManagerTests.swift`, generated
-     * once with:
-     *
-     *   openssl ecparam -name prime256v1 -genkey -noout -out key.pem
-     *   openssl req -new -x509 -key key.pem -days 3650 -out cert.pem -subj "/CN=cordierite-test-fixture"
-     *
-     * Inlined rather than committed as a `.pem` fixture file per this repo's rule that no key
-     * material — including throwaway test fixtures — is ever committed as a `.pem` file
-     * (`git ls-files "*.pem"` must stay empty). Only the public certificate is needed; the private
-     * key was discarded after generating the expected pin below.
+     * The shared fixture certificate (DER, base64) also used by
+     * `packages/native/ios/Tests/CordieriteCoreTests/FixturesConformanceTests.swift` and
+     * `FixturesConformanceTest`'s own SPKI-pin test in this module -- sourced once from
+     * `packages/native/fixtures/spki-pin.json` rather than duplicated as a string literal here.
+     * See that file's `description` field for how it was generated. Only the public certificate
+     * is stored; the private key was discarded after deriving [expectedPin] once.
      */
-    private val fixtureCertificateDerBase64 =
-        """
-        MIIBmTCCAT+gAwIBAgIULhk1FL4F1t1m4VB8ZocEJJk6FSAwCgYIKoZIzj0EAwIw
-        IjEgMB4GA1UEAwwXY29yZGllcml0ZS10ZXN0LWZpeHR1cmUwHhcNMjYwNzE1MTI1
-        NTM1WhcNMzYwNzEyMTI1NTM1WjAiMSAwHgYDVQQDDBdjb3JkaWVyaXRlLXRlc3Qt
-        Zml4dHVyZTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABCdrnHdxoZyNKqLxncue
-        /z1uh6STs1TnZI643d5kaELACPbJYhQtsDvMauVa5G6LOcAyfvfoboLEUbRhR2wM
-        e26jUzBRMB0GA1UdDgQWBBTDnPXrKTIWOcLw3w3PWtpV2fHnFjAfBgNVHSMEGDAW
-        gBTDnPXrKTIWOcLw3w3PWtpV2fHnFjAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49
-        BAMCA0gAMEUCIEHI+FcyHWubSC/hTHLSgyioRwNdiaQXOJyElnVT6fjnAiEAsNWW
-        oTlKSgWIcpT15v8orzlc8BOam0+LL6JUP15ESos=
-        """.trimIndent().replace("\n", "")
+    private val fixtureCertificateDerBase64: String
+        get() = fixtureJson.getString("certificateDerBase64")
 
     /**
      * Independently derived (Node.js) from the same certificate's key material using
      * `packages/cordierite/src/spki-pin.ts`'s `createSpkiPin` — must match for the same leaf
-     * certificate (and does match the iOS fixture test's `expectedPin`).
+     * certificate (and does match the iOS/Kotlin fixture-conformance tests' own computation).
      */
-    private val expectedPin = "sha256/nq5dKPoAJatciRzJQExHFls6q7YpSN2YP49Jmd+++Io="
+    private val expectedPin: String
+        get() = fixtureJson.getString("expectedPin")
+
+    private val fixtureJson: JSONObject by lazy {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".").canonicalFile
+        while (dir != null) {
+            val candidate = File(dir, "packages/native/fixtures/spki-pin.json")
+            if (candidate.isFile) return@lazy JSONObject(candidate.readText(Charsets.UTF_8))
+            dir = dir.parentFile
+        }
+        throw IllegalStateException("Could not locate packages/native/fixtures/spki-pin.json")
+    }
 
     private val fixtureCertificate: X509Certificate
         get() =
@@ -70,11 +68,10 @@ class CordieriteSpkiPinTest {
                 as X509Certificate
 
     // MARK: - SPKI pin parity with packages/cordierite/src/spki-pin.ts and iOS's spkiPin(for:)
-
-    @Test
-    fun `computeSpkiPin matches the TypeScript and iOS implementations for the same certificate`() {
-        assertEquals(expectedPin, computeSpkiPin(fixtureCertificate))
-    }
+    //
+    // The "matches the TypeScript and iOS implementations" assertion this test used to make with
+    // its own local fixture now lives once, cross-language, in FixturesConformanceTest's
+    // `spki-pin fixture matches computeSpkiPin`.
 
     @Test
     fun `computeSpkiPin emits an unwrapped single-line pin`() {

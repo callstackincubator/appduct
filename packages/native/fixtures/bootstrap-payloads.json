@@ -1,0 +1,143 @@
+[
+  {
+    "name": "ipv4-basic",
+    "base64url": "AgTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA",
+    "expected": {
+      "family": 4,
+      "address": "192.168.1.10",
+      "port": 8443,
+      "sessionId": "session-1",
+      "tokenBase64url": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+      "expiresAt": 4000000000
+    }
+  },
+  {
+    "name": "ipv4-loopback-emulator-fast-path",
+    "base64url": "AgR_AAABIPsQWHpBRVJQNTRfR29oNzRoWgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAAAAAO5rKAA",
+    "expected": {
+      "family": 4,
+      "address": "127.0.0.1",
+      "port": 8443,
+      "sessionId": "XzAERP54_Goh74hZ",
+      "tokenBase64url": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+      "expiresAt": 4000000000
+    }
+  },
+  {
+    "name": "ipv6-basic",
+    "base64url": "Agb9AAAAAAAAAAAAAAAAAAABIPsMc2Vzc2lvbi1pcHY2AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA",
+    "expected": {
+      "family": 6,
+      "address": "fd00::1",
+      "port": 8443,
+      "sessionId": "session-ipv6",
+      "tokenBase64url": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+      "expiresAt": 4000000000
+    }
+  },
+  {
+    "name": "ipv6-loopback",
+    "base64url": "AgYAAAAAAAAAAAAAAAAAAAABJw8BcwICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAAAAAO5rKAA",
+    "expected": {
+      "family": 6,
+      "address": "::1",
+      "port": 9999,
+      "sessionId": "s",
+      "tokenBase64url": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+      "expiresAt": 4000000000
+    }
+  },
+  {
+    "name": "session-id-min-length-1",
+    "base64url": "AgQKAAABAAEBYQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAAAAAAAAAAE",
+    "expected": {
+      "family": 4,
+      "address": "10.0.0.1",
+      "port": 1,
+      "sessionId": "a",
+      "tokenBase64url": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+      "expiresAt": 1
+    }
+  },
+  {
+    "name": "session-id-max-port-65535",
+    "base64url": "AgSsEAAB__8Qc2Vzc2lvbi1tYXgtcG9ydAICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAAAAAO5rKAA",
+    "expected": {
+      "family": 4,
+      "address": "172.16.0.1",
+      "port": 65535,
+      "sessionId": "session-max-port",
+      "tokenBase64url": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+      "expiresAt": 4000000000
+    }
+  },
+  {
+    "name": "session-id-multibyte-utf8",
+    "base64url": "AgTAqAAqIPsYc2VzacOzbi1ow6lsbG8t5pel5pys6KqeAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA",
+    "expected": {
+      "family": 4,
+      "address": "192.168.0.42",
+      "port": 8443,
+      "sessionId": "sesión-héllo-日本語",
+      "tokenBase64url": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+      "expiresAt": 4000000000
+    }
+  },
+  {
+    "name": "session-id-255-bytes",
+    "base64url": "AgTAqAArIPv_c3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3NzAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAAAAA7msoAA",
+    "expected": {
+      "family": 4,
+      "address": "192.168.0.43",
+      "port": 8443,
+      "sessionId": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "tokenBase64url": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+      "expiresAt": 4000000000
+    }
+  },
+  {
+    "name": "v1-version-byte",
+    "base64url": "AQTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA",
+    "expected": null
+  },
+  {
+    "name": "unknown-family-byte",
+    "base64url": "ApnAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA",
+    "expected": null
+  },
+  {
+    "name": "truncated-buffer",
+    "base64url": "AgTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
+    "expected": null
+  },
+  {
+    "name": "oversized-buffer",
+    "base64url": "AgTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAN6tvu8",
+    "expected": null
+  },
+  {
+    "name": "zero-length-session-id",
+    "base64url": "AgTAqAEKIPsAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA",
+    "expected": null
+  },
+  {
+    "name": "invalid-utf8-session-id",
+    "base64url": "AgTAqAEKIPsC__4BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQAAAADuaygA",
+    "expected": null
+  },
+  {
+    "name": "port-zero",
+    "base64url": "AgTAqAEKAAAJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA",
+    "expected": null
+  },
+  {
+    "name": "empty-buffer",
+    "base64url": "",
+    "expected": null
+  },
+  {
+    "name": "single-byte-buffer",
+    "base64url": "Ag",
+    "expected": null
+  }
+]
