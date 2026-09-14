@@ -30,18 +30,33 @@ final class CordieriteToolRegistryStore: @unchecked Sendable {
 
   /// Validates and upserts `descriptor` (registration order preserved for a name seen for the first
   /// time -- an update to an existing name keeps its original position, matching a JS `Map`'s
-  /// iteration order on `set()` of an existing key).
-  func upsert(_ descriptor: ToolDescriptor, handler: @escaping ToolHandler, defaultTimeoutMs: Int) throws {
+  /// iteration order on `set()` of an existing key). A declared `timeout_ms` is clamped to
+  /// `[CORDIERITE_MIN_TOOL_TIMEOUT_MS, CORDIERITE_MAX_TOOL_TIMEOUT_MS]` before it is stored, so the
+  /// clamped value is what both the local abort timer and the `tool_registry_snapshot`/`_delta`
+  /// wire frames use. Returns the stored (possibly clamped) descriptor, so a caller sending a
+  /// registry delta sends the same value that was actually stored.
+  @discardableResult
+  func upsert(_ descriptor: ToolDescriptor, handler: @escaping ToolHandler, defaultTimeoutMs: Int) throws -> ToolDescriptor {
     try validateToolDescriptor(descriptor)
+
+    var effectiveDescriptor = descriptor
+    if let declaredTimeoutMs = descriptor.timeoutMs {
+      effectiveDescriptor.timeoutMs = clampCordieriteToolTimeoutMs(declaredTimeoutMs)
+    }
 
     lock.lock()
     defer { lock.unlock() }
 
-    let timeoutMs = descriptor.timeoutMs ?? defaultTimeoutMs
-    if entries[descriptor.name] == nil {
-      order.append(descriptor.name)
+    let timeoutMs = effectiveDescriptor.timeoutMs ?? defaultTimeoutMs
+    if entries[effectiveDescriptor.name] == nil {
+      order.append(effectiveDescriptor.name)
     }
-    entries[descriptor.name] = CordieriteRegisteredTool(descriptor: descriptor, handler: handler, timeoutMs: timeoutMs)
+    entries[effectiveDescriptor.name] = CordieriteRegisteredTool(
+      descriptor: effectiveDescriptor,
+      handler: handler,
+      timeoutMs: timeoutMs
+    )
+    return effectiveDescriptor
   }
 
   @discardableResult

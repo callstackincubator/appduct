@@ -2,8 +2,22 @@ package com.callstackincubator.cordierite
 
 import org.json.JSONObject
 
-/** Matches `CORDIERITE_DEFAULT_TOOL_TIMEOUT_MS` in `Cordierite.types.ts`. */
+// Tool timeout bounds (packages/shared/src/domains/tool-descriptor.ts): matches
+// `DEFAULT_TOOL_TIMEOUT_MS`/`MIN_TOOL_TIMEOUT_MS`/`MAX_TOOL_TIMEOUT_MS` there exactly --
+// `CordieriteToolRegistry.kt`'s `upsert` clamps every declared `timeoutMs` into this range before
+// it is stored or sent on the wire, the same way the pre-port JS `normalizeToolTimeoutMs` did, so
+// this app's own abort timer and the daemon's `tools.call` deadline never disagree.
+
+/** The client-wide fallback timeout applied when a tool declares no `timeoutMs` of its own. */
 internal const val CORDIERITE_DEFAULT_TOOL_TIMEOUT_MS = 10_000L
+
+internal const val CORDIERITE_MIN_TOOL_TIMEOUT_MS = 1_000L
+internal const val CORDIERITE_MAX_TOOL_TIMEOUT_MS = 600_000L
+
+/** Clamps an already-validated positive `timeoutMs` into
+ * `[CORDIERITE_MIN_TOOL_TIMEOUT_MS, CORDIERITE_MAX_TOOL_TIMEOUT_MS]`. */
+internal fun clampCordieriteToolTimeoutMs(timeoutMs: Long): Long =
+    timeoutMs.coerceIn(CORDIERITE_MIN_TOOL_TIMEOUT_MS, CORDIERITE_MAX_TOOL_TIMEOUT_MS)
 
 /** Unified client state (ARCHITECTURE.md §11 / the JS `CordieriteClientState`). Distinct from the
  * raw transport-level state ([CordieriteConnectionManager]'s own idle/connecting/active/closed/error) --

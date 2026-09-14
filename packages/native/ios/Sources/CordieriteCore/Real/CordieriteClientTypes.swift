@@ -37,6 +37,25 @@ public struct CordieriteSessionChangeEvent: Sendable, Equatable {
   }
 }
 
+// MARK: - Tool timeout bounds (packages/shared/src/domains/tool-descriptor.ts)
+//
+// Matches `DEFAULT_TOOL_TIMEOUT_MS`/`MIN_TOOL_TIMEOUT_MS`/`MAX_TOOL_TIMEOUT_MS` there exactly --
+// `CordieriteToolRegistry.swift`'s `upsert` clamps every declared `timeout_ms` into this range
+// before it is stored or sent on the wire, the same way the pre-port JS `normalizeToolTimeoutMs`
+// did, so this app's own abort timer and the daemon's `tools.call` deadline never disagree.
+
+/// The client-wide fallback timeout applied when a tool declares no `timeout_ms` of its own.
+public let CORDIERITE_DEFAULT_TOOL_TIMEOUT_MS = 10_000
+
+public let CORDIERITE_MIN_TOOL_TIMEOUT_MS = 1_000
+public let CORDIERITE_MAX_TOOL_TIMEOUT_MS = 600_000
+
+/// Clamps an already-validated positive `timeout_ms` into
+/// `[CORDIERITE_MIN_TOOL_TIMEOUT_MS, CORDIERITE_MAX_TOOL_TIMEOUT_MS]`.
+public func clampCordieriteToolTimeoutMs(_ timeoutMs: Int) -> Int {
+  min(max(timeoutMs, CORDIERITE_MIN_TOOL_TIMEOUT_MS), CORDIERITE_MAX_TOOL_TIMEOUT_MS)
+}
+
 /// One error channel for bootstrap parse/connect, socket, and tool-handler failures (§11).
 public struct CordieriteUnifiedErrorEvent: Sendable, Equatable {
   public let phase: String  // "bootstrap" | "connect" | "socket" | "tool"

@@ -94,7 +94,7 @@ public actor CordieriteClient {
   public init(
     transport: any CordieriteTransportSession = CordieriteConnectionManager(),
     timers: any CordieriteClientTimers = SystemCordieriteClientTimers(),
-    defaultToolTimeoutMs: Int = 10_000,
+    defaultToolTimeoutMs: Int = CORDIERITE_DEFAULT_TOOL_TIMEOUT_MS,
     requirePrivateIp: Bool? = nil,
     foregroundObserver: (any CordieriteForegroundObserving)? = nil
   ) {
@@ -219,8 +219,8 @@ public actor CordieriteClient {
   /// by name (registration order preserved for a new name); sends `tool_registry_delta` while a
   /// session is active.
   public nonisolated func registerTool(_ descriptor: ToolDescriptor, handler: @escaping ToolHandler) throws {
-    try registryStore.upsert(descriptor, handler: handler, defaultTimeoutMs: defaultToolTimeoutMs)
-    Task { await self.sendToolRegistryDelta(.upsert(descriptor)) }
+    let effectiveDescriptor = try registryStore.upsert(descriptor, handler: handler, defaultTimeoutMs: defaultToolTimeoutMs)
+    Task { await self.sendToolRegistryDelta(.upsert(effectiveDescriptor)) }
   }
 
   public nonisolated func unregisterTool(_ name: String) {

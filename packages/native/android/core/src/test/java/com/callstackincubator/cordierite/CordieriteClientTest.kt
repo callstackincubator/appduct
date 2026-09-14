@@ -303,7 +303,13 @@ class CordieriteClientTest {
         runBlocking {
             val (client, fake) = newClient()
             client.connectAndAck(fake)
-            client.registerTool(CordieriteToolDescriptor(name = "slow", description = "Too slow.", timeoutMs = 50L)) { _, _ ->
+            // CORDIERITE_MIN_TOOL_TIMEOUT_MS, not an arbitrarily small value: registerTool clamps a
+            // declared timeoutMs to [CORDIERITE_MIN_TOOL_TIMEOUT_MS, CORDIERITE_MAX_TOOL_TIMEOUT_MS]
+            // (CordieriteToolRegistryTest covers the clamp itself), so a smaller value would still
+            // time out correctly here but at the clamped floor instead of the declared one.
+            client.registerTool(
+                CordieriteToolDescriptor(name = "slow", description = "Too slow.", timeoutMs = CORDIERITE_MIN_TOOL_TIMEOUT_MS),
+            ) { _, _ ->
                 kotlinx.coroutines.delay(60_000)
                 null
             }
@@ -316,7 +322,8 @@ class CordieriteClientTest {
                 ),
             )
 
-            val error = fake.awaitToolError()
+            // CORDIERITE_MIN_TOOL_TIMEOUT_MS (1s) needs more real-time slack than the 2s default.
+            val error = fake.awaitToolError(timeoutMs = 5_000)
             assertEquals("tool_timeout", error.getJSONObject("error").getString("type"))
         }
 

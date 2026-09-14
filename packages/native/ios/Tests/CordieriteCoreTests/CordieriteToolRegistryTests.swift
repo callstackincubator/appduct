@@ -54,10 +54,57 @@ final class CordieriteToolRegistryTests: XCTestCase {
   func testExplicitTimeoutOverridesDefault() throws {
     let store = CordieriteToolRegistryStore()
     try store.upsert(
-      ToolDescriptor(name: "a", description: "x", timeoutMs: 999),
+      ToolDescriptor(name: "a", description: "x", timeoutMs: 30_000),
       handler: noopHandler,
       defaultTimeoutMs: 4_242
     )
-    XCTAssertEqual(store.lookup("a")?.timeoutMs, 999)
+    XCTAssertEqual(store.lookup("a")?.timeoutMs, 30_000)
+  }
+
+  // MARK: - timeout_ms clamping (fix for issue #48 review: native cores must clamp like the JS
+  // registry used to via clampToolTimeoutMs, packages/shared/src/domains/tool-descriptor.ts)
+
+  func testTimeoutBelowMinimumIsClampedUp() throws {
+    let store = CordieriteToolRegistryStore()
+    try store.upsert(
+      ToolDescriptor(name: "a", description: "x", timeoutMs: 50),
+      handler: noopHandler,
+      defaultTimeoutMs: 4_242
+    )
+    XCTAssertEqual(store.lookup("a")?.timeoutMs, CORDIERITE_MIN_TOOL_TIMEOUT_MS)
+    XCTAssertEqual(store.snapshot().first?.timeoutMs, CORDIERITE_MIN_TOOL_TIMEOUT_MS)
+  }
+
+  func testTimeoutAboveMaximumIsClampedDown() throws {
+    let store = CordieriteToolRegistryStore()
+    try store.upsert(
+      ToolDescriptor(name: "a", description: "x", timeoutMs: 5_000_000),
+      handler: noopHandler,
+      defaultTimeoutMs: 4_242
+    )
+    XCTAssertEqual(store.lookup("a")?.timeoutMs, CORDIERITE_MAX_TOOL_TIMEOUT_MS)
+    XCTAssertEqual(store.snapshot().first?.timeoutMs, CORDIERITE_MAX_TOOL_TIMEOUT_MS)
+  }
+
+  func testUpsertReturnsTheClampedDescriptorForWireDeltaSends() throws {
+    let store = CordieriteToolRegistryStore()
+    let stored = try store.upsert(
+      ToolDescriptor(name: "a", description: "x", timeoutMs: 5_000_000),
+      handler: noopHandler,
+      defaultTimeoutMs: 4_242
+    )
+    XCTAssertEqual(stored.timeoutMs, CORDIERITE_MAX_TOOL_TIMEOUT_MS)
+  }
+
+  func testNonPositiveTimeoutIsStillRejectedRatherThanClamped() {
+    let store = CordieriteToolRegistryStore()
+    XCTAssertThrowsError(
+      try store.upsert(
+        ToolDescriptor(name: "a", description: "x", timeoutMs: 0),
+        handler: noopHandler,
+        defaultTimeoutMs: 4_242
+      )
+    )
+    XCTAssertEqual(store.snapshot(), [])
   }
 }

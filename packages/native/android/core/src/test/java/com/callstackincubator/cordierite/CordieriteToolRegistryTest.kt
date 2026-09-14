@@ -99,6 +99,44 @@ class CordieriteToolRegistryTest {
         }
     }
 
+    // --- timeout_ms clamping (fix for issue #48 review: native cores must clamp like the JS
+    // registry used to via clampToolTimeoutMs, packages/shared/src/domains/tool-descriptor.ts) ---
+
+    @Test
+    fun `upsert clamps a timeoutMs below the minimum`() {
+        val registry = CordieriteToolRegistry()
+        val delta = registry.upsert(descriptor(timeoutMs = 50L), noopHandler)
+
+        assertEquals(CORDIERITE_MIN_TOOL_TIMEOUT_MS, registry.get("sum")?.descriptor?.timeoutMs)
+        assertEquals(CORDIERITE_MIN_TOOL_TIMEOUT_MS, (delta as CordieriteRegistryDelta.Upsert).descriptor.timeoutMs)
+    }
+
+    @Test
+    fun `upsert clamps a timeoutMs above the maximum`() {
+        val registry = CordieriteToolRegistry()
+        val delta = registry.upsert(descriptor(timeoutMs = 5_000_000L), noopHandler)
+
+        assertEquals(CORDIERITE_MAX_TOOL_TIMEOUT_MS, registry.get("sum")?.descriptor?.timeoutMs)
+        assertEquals(CORDIERITE_MAX_TOOL_TIMEOUT_MS, (delta as CordieriteRegistryDelta.Upsert).descriptor.timeoutMs)
+    }
+
+    @Test
+    fun `wire snapshot carries the clamped timeoutMs`() {
+        val registry = CordieriteToolRegistry()
+        registry.upsert(descriptor(timeoutMs = 5_000_000L), noopHandler)
+
+        val snapshot = registry.snapshotWireJson()
+        assertEquals(CORDIERITE_MAX_TOOL_TIMEOUT_MS, snapshot[0].getLong("timeout_ms"))
+    }
+
+    @Test
+    fun `an in-range timeoutMs is stored unchanged`() {
+        val registry = CordieriteToolRegistry()
+        registry.upsert(descriptor(timeoutMs = 30_000L), noopHandler)
+
+        assertEquals(30_000L, registry.get("sum")?.descriptor?.timeoutMs)
+    }
+
     // --- registry: upsert order, delta shape, unregister no-op ---
 
     @Test

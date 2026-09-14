@@ -75,16 +75,21 @@ internal class CordieriteToolRegistry {
 
     /** `registerTool`/`unregisterTool` are ordinary (non-suspend) calls an app may make from any
      * thread, unlike the rest of [CordieriteClient]'s state, which is confined to its own
-     * dispatcher -- so registry mutation is synchronized here instead. */
+     * dispatcher -- so registry mutation is synchronized here instead. A declared `timeoutMs` is
+     * clamped to `[CORDIERITE_MIN_TOOL_TIMEOUT_MS, CORDIERITE_MAX_TOOL_TIMEOUT_MS]` before it is
+     * stored, so the clamped value is what both the local timeout and the returned (stored)
+     * descriptor's wire delta use. */
     fun upsert(
         descriptor: CordieriteToolDescriptor,
         handler: CordieriteToolHandler,
     ): CordieriteRegistryDelta {
         validateCordieriteToolDescriptor(descriptor)
+        val effectiveDescriptor =
+            descriptor.timeoutMs?.let { descriptor.copy(timeoutMs = clampCordieriteToolTimeoutMs(it)) } ?: descriptor
         synchronized(lock) {
-            entries[descriptor.name] = CordieriteRegisteredTool(descriptor, handler)
+            entries[effectiveDescriptor.name] = CordieriteRegisteredTool(effectiveDescriptor, handler)
         }
-        return CordieriteRegistryDelta.Upsert(descriptor)
+        return CordieriteRegistryDelta.Upsert(effectiveDescriptor)
     }
 
     /** Returns the removal delta, or `null` when `name` was not registered (a no-op, matching
