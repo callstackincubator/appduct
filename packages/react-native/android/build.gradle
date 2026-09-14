@@ -132,6 +132,15 @@ dependencies {
   // default, before this refactor too) -- narrowing it to only the variants that need it is a
   // follow-up, not something this mechanical extraction changes.
   implementation "com.squareup.okhttp3:okhttp:4.12.0"
+  // CordieriteClient (vendored android/core, docs/tasks/16-android-session-logic.md): suspend
+  // connect/restoreSession/disconnect/postEvent, per-call timeout/cancel via coroutine
+  // cancellation. Same "declared unconditionally" reasoning as okhttp above -- android/core-noop
+  // does not need it, but this project does not vary its dependency set by variant.
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+  // ProcessLifecycleOwner: foreground/background observation backing CordieriteClient's
+  // reconnect-pause-while-backgrounded rule.
+  implementation "androidx.lifecycle:lifecycle-process:2.8.7"
 
   // No test dependencies here: the Kotlin unit tests that used to live in this module's own
   // src/test (CordieriteConnectionManagerTest, CordieriteSpkiPinTest) moved with the sources they
