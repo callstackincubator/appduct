@@ -6,6 +6,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.annotations.ReactModule
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -116,7 +117,17 @@ class NativeCordieriteModule(
                     JSONTokener(resultJson).nextValue()
                 }
             } catch (e: CancellationException) {
-                emitOnToolCancel(Arguments.createMap().apply { putString("id", context.callId) })
+                // The frozen spec's `onToolCancel.reason`: the core's own timeout is a
+                // `TimeoutCancellationException`; every other cancellation carries its reason as the
+                // exception message (`client_cancelled`, `session_suspended`, or the wire
+                // `tool_cancel.reason`).
+                val reason = if (e is TimeoutCancellationException) "timeout" else e.message ?: "client_cancelled"
+                emitOnToolCancel(
+                    Arguments.createMap().apply {
+                        putString("id", context.callId)
+                        putString("reason", reason)
+                    },
+                )
                 throw e
             } finally {
                 pendingToolCalls.remove(context.callId)
@@ -254,10 +265,24 @@ private fun parseToolDescriptorJson(json: String): CordieriteToolDescriptor {
             ?: throw CordieriteInvalidToolDescriptorException("Tool \"$name\" $key must be a JSON object.")
     }
 
+    // Same rule as `@cordierite/shared`'s `isToolDescriptor` and the Swift bridge: an integer only.
+    // A fractional value is rejected here rather than truncated, so all three bridges agree with
+    // packages/native/fixtures/tool-descriptors.json.
     val timeoutMs: Long? =
         if (obj.has("timeout_ms") && !obj.isNull("timeout_ms")) {
-            (obj.opt("timeout_ms") as? Number)?.toLong()
-                ?: throw CordieriteInvalidToolDescriptorException("Tool \"$name\" timeout_ms must be a number.")
+            when (val raw = obj.opt("timeout_ms")) {
+                is Int -> raw.toLong()
+                is Long -> raw
+                is Number -> {
+                    val asDouble = raw.toDouble()
+                    if (asDouble.isFinite() && asDouble == Math.floor(asDouble)) {
+                        asDouble.toLong()
+                    } else {
+                        throw CordieriteInvalidToolDescriptorException("Tool \"$name\" timeout_ms must be a positive integer.")
+                    }
+                }
+                else -> throw CordieriteInvalidToolDescriptorException("Tool \"$name\" timeout_ms must be a positive integer.")
+            }
         } else {
             null
         }

@@ -264,6 +264,12 @@ final class PendingToolCallStore: @unchecked Sendable {
           lock.lock()
           continuations[id] = continuation
           lock.unlock()
+          // `onCancel` fires immediately when the task is *already* cancelled on entry -- i.e. before
+          // this continuation existed to be resumed -- so re-check here, or a cancel that races the
+          // registration would leave the call suspended forever.
+          if Task.isCancelled {
+            complete(id: id) { $0.resume(throwing: CancellationError()) }
+          }
         }
       },
       onCancel: { [self] in
