@@ -530,11 +530,21 @@ trust-mode resolution, the private-LAN check, claim/resume, reconnect with full-
 backoff, the tool registry and its wire deltas, per-call timeout/cancel/progress, v2
 bootstrap deep-link handling, and the process-memory resume lease — is not native to this
 package: it is vendored at build time from `packages/native`, a framework-free core with no
-React Native dependency, so the same code can eventually be consumed directly by plain
-iOS/Android apps (`docs/tasks/14-native-core-extraction.md`,
+React Native dependency (`docs/tasks/14-native-core-extraction.md`,
 `docs/tasks/15-native-session-logic.md`,
-[BUILD-VARIANTS.md § Native core](BUILD-VARIANTS.md#native-core)). This section covers the
-JS-facing entry points and client behavior; the bridge files that remain in this package
+[BUILD-VARIANTS.md § Native core](BUILD-VARIANTS.md#native-core)). The same core is also
+consumed directly — no React Native, no Expo — by a plain iOS app (`Cordierite.shared`,
+[`packages/native/ios/README.md`](../packages/native/ios/README.md)) and a plain Android app
+(the `Cordierite` object, [`packages/native/android/README.md`](../packages/native/android/README.md)),
+issue #48 phase 3 (`docs/tasks/18-ios-entry-points.md`, `docs/tasks/19-android-entry-points.md`).
+**The RN bridge and the plain-app facade never coexist in one app.** Each owns its own
+`CordieriteClient` instance and the one process-memory resume lease that comes with it, so an
+RN app that also imported the facade and called `Cordierite.shared`/the `Cordierite` object
+directly would end up with two clients racing for the same lease and the same deep link — which
+is why the facade's own source files are excluded from what `sync-native-core.mjs` vendors into
+this package (`packages/native/README.md`'s "The facade-exclusion rule"): an RN app is not even
+vendored `CordieriteAPI.swift`/`Cordierite.kt`, let alone meant to call them. This section covers
+the JS-facing entry points and client behavior; the bridge files that remain in this package
 (`CordieriteTurboBridge.swift`/`RCTNativeCordierite.mm` on iOS,
 `CordieritePackage.kt`/`NativeCordieriteModule.kt` on Android) translate the TurboModule
 spec's JSON-string calls and events onto that vendored core's `CordieriteClient` and answer

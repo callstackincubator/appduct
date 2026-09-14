@@ -80,7 +80,11 @@ From there:
 - **[Use the CLI and MCP server](packages/cordierite/README.md)** — connecting to a device, listing and calling tools, and checking a built artifact.
 - **[Try the playground](playground/README.md)** — a working app you can run end to end in a few minutes. Fastest way to see whether this fits your project.
 
-You'll need a development build or a bare React Native app. Expo Go can't do it.
+You'll need a development build or a bare React Native app. Expo Go can't do it. Building a plain
+iOS or Android app instead, with no React Native at all? See
+**[`packages/native/ios/README.md`](packages/native/ios/README.md)** /
+**[`packages/native/android/README.md`](packages/native/android/README.md)** — the same tool
+registration, deep-link handling, and session lifecycle, called directly from Swift or Kotlin.
 
 ## Packages
 
@@ -89,11 +93,15 @@ You'll need a development build or a bare React Native app. Expo Go can't do it.
 | [`cordierite`](packages/cordierite/README.md) | The CLI, the background service, and the MCP server |
 | [`@cordierite/react-native`](packages/react-native/README.md) | The app-side library and Expo config plugin |
 | [`@cordierite/shared`](packages/shared/README.md) | Types shared by both |
-| [`packages/native`](packages/native/README.md) | The framework-free Swift/Kotlin core, vendored into `@cordierite/react-native` |
+| [`packages/native`](packages/native/README.md) | The framework-free Swift/Kotlin core — vendored into `@cordierite/react-native`, and directly consumable by plain iOS ([`ios/README.md`](packages/native/ios/README.md)) and Android ([`android/README.md`](packages/native/android/README.md)) apps |
+| [`playground-native`](playground-native/ios/README.md) | Native SwiftUI ([`ios`](playground-native/ios/README.md)) and Jetpack Compose ([`android`](playground-native/android/README.md)) example apps built on `packages/native` directly, no React Native |
 
 ## Support
 
-iOS 15.1+ and Android, both on the New Architecture. Web gets a no-op stub so shared code doesn't break. The CLI needs Node 20 or newer. Windows works in principle but isn't tested in CI yet.
+iOS 15.1+ and Android, both on the New Architecture. Web gets a no-op stub so shared code doesn't break. The CLI needs Node 20 or newer. Windows works in principle but isn't tested in CI yet. A plain
+iOS or Android app (no React Native) can consume `packages/native` directly — see
+[`packages/native/ios/README.md`](packages/native/ios/README.md) and
+[`packages/native/android/README.md`](packages/native/android/README.md).
 
 ## Docs
 

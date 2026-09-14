@@ -314,11 +314,37 @@ method a no-op, no `okhttp` dependency, no marker class). `@cordierite/react-nat
 `core`/`core-noop` into `android/core`/`android/core-noop` and picks between them the same way
 described above — `CordieritePackage`/`NativeCordieriteModule` (`android/src/main/java`)
 always compile, and `debug`/`release` add whichever vendored directory to `java.srcDirs`.
+**A plain Android app instead depends on `core`/`core-noop` as ordinary Maven coordinates**
+(`debugImplementation("com.callstackincubator.cordierite:core:<version>")` /
+`releaseImplementation("com.callstackincubator.cordierite:core-noop:<version>")`,
+`packages/native/android/README.md`) — a real per-variant *dependency* decision, distinct from
+(and simpler than) the vendored copy's source-directory swap, since a plain app has no
+`PackageList.java`-style shared registration file forcing every variant onto the same
+classpath the way RN's autolinking does.
+
+Three exclusion mechanisms exist across the two platforms and their two consumers, all
+structural and all failing closed (issue #48 decision 2): Android's
+`debugImplementation`/`releaseImplementation` pairing with `core-noop` (a plain app, and the
+vendored copy's `java.srcDirs` swap doing the equivalent internally); iOS CocoaPods'
+`:configurations => ['Debug']`; and iOS SwiftPM's `Debug`-conditioned `CORDIERITE_ENABLED`
+compiler define plus the opt-in `AlwaysEnabled` package trait. None of the three is a runtime
+check — in every case the excluded configuration's build genuinely does not contain the real
+implementation's bytecode.
 
 A doctor-detection marker exists on both platforms, compiled only into the real
-implementation: `CordieriteCoreMarker` (an `@objc` class, iOS) and `CordieriteNativeMarker`
-(Android, unchanged from before this extraction) — see
-[`CI.md`](CI.md#release-gate-cordierite-doctor).
+implementation and never into the excluded/no-op counterpart: `CordieriteCoreMarker` (an
+`@objc` class, iOS) and `CordieriteNativeMarker` (Android, unchanged from before this
+extraction) — `doctor`'s presence verdict is decided by that marker alone on both platforms,
+never by a package/class name or a manifest/plist key that a no-op build shares with the real
+one (see [`CI.md`](CI.md#release-gate-cordierite-doctor)'s "Android detection" for why).
+**Always run `cordierite doctor --assert-absent` against the actual signed artifact you are
+about to ship** — a `Release`/`release` configuration by name, or a dependency/build-setting
+combination you believe excludes the real implementation, is what's supposed to produce that
+outcome, not a guarantee of it; `doctor` checks the artifact itself, which is the only thing
+that matters to an app-store reviewer or an attacker. This applies identically whether the
+artifact is the vendored RN copy's build or a plain native app's own `Release`/`release`
+build of `packages/native` — see the native playground gates in
+[`CI.md`](CI.md#native-playground-gates-issue-48-phase-3) for both.
 
 ## Related
 
