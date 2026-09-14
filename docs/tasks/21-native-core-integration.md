@@ -97,9 +97,85 @@ actually landed, or why it didn't.
   keys). `docs/PROTOCOL.md` checked — no wire-behavior change from any phase of issue #48, left
   untouched.
 
+## Review fixes (issue #48 code review, on top of this task's own commit `bf7dfcf`)
+
+A follow-up review pass found nine findings against the tree this task produced. Landed as one
+commit per finding/logical group on `feat/native-core`; see the commit history for exact diffs.
+
+1. **Kotlin cancellation acknowledgement never reached the wire.**
+   `CordieriteToolInvoker.kt`'s `handleToolCancel`/`abortAllInFlight` cancel the handler's own
+   coroutine `Job`, so by the time the `catch (CancellationException)` branch's `sendToolError`
+   suspended through `CordieriteClient.rawSend`'s `suspendCancellableCoroutine`, the coroutine was
+   already "Cancelling" and resumed with a forced `JobCancellationException` instead of the send's
+   real outcome — silently turned into a spurious `phase="tool"` error by `sendSafely`'s
+   `catch (Throwable)`. Fixed by wrapping every terminal-outcome send in
+   `withContext(NonCancellable) { ... }`. `FakeCordieriteTransport` gained a `deferSendCompletion`
+   mode (the default synchronous completion never exercises this path at all) and two regression
+   tests, verified to fail without the fix.
+2. **`sessionChange` lost `type`/`reason` — a public-API regression against `main` and against issue
+   #48 decision 5.** Restored end to end: `NativeCordierite.ts` (the one sanctioned edit to the
+   frozen TurboModule spec, recorded in its own header comment), `Cordierite.types.ts`/
+   `client-types.ts`/`CordieriteModule.ts`/`client/index.ts`, the Swift core (`CordieriteClientTypes.swift`'s
+   new `CordieriteSessionChangeKind`, emitted from `onAckReceived`/`finalizeSessionLost`/`disconnect`)
+   and its bridge (`CordieriteTurboBridge.swift` + `RCTNativeCordierite.mm`), the Kotlin core
+   (`CordieriteClient.kt`, the `Cordierite` facade's new `SessionChangeType`, mirrored in
+   `core-noop`) and its bridge (`NativeCordieriteModule.kt`). Tests extended in all three suites for
+   claim, resume, grace expiry, revoke (close 1000), a generic terminal close, and app disconnect.
+3. **Neither native core clamped a declared tool `timeout_ms`.** The old JS registry clamped via
+   `clampToolTimeoutMs` (`packages/shared/src/domains/tool-descriptor.ts`) before using the value as
+   both the local abort timer and the wire value; ported to `CordieriteToolRegistry.upsert` on both
+   platforms (still rejecting non-positive/non-integer values per PROTOCOL.md §5), with identically
+   named bounds constants on both platforms pointing at the TS source, and `CordieriteClient.swift`'s
+   bare `10_000` default replaced with a named constant matching Kotlin's existing one.
+4. **JS `postEvent` silently demoted every native rejection to `logger.debug`.** Restored the old
+   contract: a drop because no session is active is `logger.devWarn`; any other failure is
+   `logger.warn` plus an `error` listener event. The two are distinguished by a new
+   `E_CORDIERITE_NOT_ACTIVE` rejection code both bridges now use (iOS via the core's existing
+   `CordieriteNotActiveError`; Android via a state guard in `NativeCordieriteModule`, since the
+   Kotlin core's own `postEvent` stays a silent best-effort no-op for plain-app callers).
+5. **`CordieriteModule.web.ts`'s `restoreSession`/`disconnect` didn't throw**, contradicting the
+   file's own doc comment. Fixed to throw the same `unsupported(...)` error as `connect`/
+   `registerTool`/`postEvent`; `noop-parity.test.ts` re-verified to still hold (`./noop` is a
+   different, deliberately inert entry).
+6. **Android descriptor/connect-input JSON parsing lived only in the RN bridge**, unlike the Swift
+   equivalents already vendored in the core. Moved to `CordieriteToolDescriptor.fromJson`/
+   `CordieriteConnectInput.fromJson` in `packages/native/android/core`'s `CordieriteClientTypes.kt`,
+   mirrored in `core-noop`. Wiring `FixturesConformanceTest.kt`'s tool-descriptors case to the real
+   `fromJson` (instead of a second hand-maintained parser) surfaced one real divergence — a
+   non-string `description` silently coerced via `optString` instead of rejected, unlike the Swift
+   bridge's strict `stringValue` — fixed in `fromJson` per this fixture suite's own rule that a
+   divergence is fixed in the implementation, never the fixture.
+7. **IPv6 literals were never bracketed** in either `CordieriteConnectionManager`'s daemon connect
+   URL, unlike `formatAgentWebSocketUrl` (`packages/shared/src/domains/transport.ts`). Factored into
+   a small pure `formatCordieriteWebSocketUrl` function on each platform (same name in both Swift
+   and Kotlin), with unit tests.
+8. **`artifact-inspect.ts`'s Android marker comment was stale**, still pointing at
+   `packages/react-native/android/src/main/java`. Repointed at
+   `packages/native/android/core/.../CordieriteNativeMarker.kt` and its `sync-native-core.mjs`
+   vendored copy.
+9. **Not done (optional, judged non-trivial): `sync-native-core.mjs`'s filename-based facade
+   exclusion left as a list on both platforms.** A directory split (`Sources/CordieriteCore/API/`)
+   would work for iOS but touches `Package.swift`'s target paths, `CordieriteCore.podspec`, and the
+   RN podspec/vendoring script together; Android's public package name makes a subpackage split
+   change the facade's import path, so a list is the only option there regardless. Left as-is on
+   both platforms rather than risk destabilizing the packaging surface for a purely cosmetic change.
+
+**Noted but deliberately not changed** (flagged during review, out of scope for this pass):
+
+- The NaN/Infinity serialization divergence between the JS/Swift/Kotlin JSON layers (each rejects or
+  coerces slightly differently at the edges) — a pre-existing cross-language wrinkle, not something
+  this review's findings asked to unify.
+- The pre-existing `configuredPins` TLS-delegate race in `CordieriteConnectionManager.swift` (a
+  concurrently-in-flight `connect()` mutating `configuredPins` while the delegate reads it during
+  the handshake) — a real but separate concern from anything this review's nine findings covered.
+
 ## Verification
 
 Run from this worktree (`/Users/szymon.chmal/Projects/cordierite/.claude/worktrees/agent-a3ad3c9bae8781450`)
 after fast-forwarding to `feat/native-core` (`e2ae379`) and making the changes above. See this
 task's own commit(s) and the session report for exact commands/output; anything that could not be
 run in this environment is called out there rather than claimed as passing.
+
+See also the "Review fixes" section above for a second verification pass run in a later worktree
+(`bf7dfcf` onward) against the nine code-review findings; that session's own report has the exact
+commands/output for that pass.
