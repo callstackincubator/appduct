@@ -85,6 +85,12 @@ public struct CordieriteConnectInput: Sendable, Equatable {
   public var resumeToken: String?
   public var expiresAt: Int
   public var linkPin: String?
+  /// Optional `session_claim` device metadata overrides (mirrors the JS-level
+  /// `CordieriteConnectOptions.deviceManufacturer`/`deviceModel`/`deviceOs`); native fills its own
+  /// defaults when omitted.
+  public var deviceManufacturer: String?
+  public var deviceModel: String?
+  public var deviceOs: String?
 
   public init(
     ip: String,
@@ -93,7 +99,10 @@ public struct CordieriteConnectInput: Sendable, Equatable {
     token: String? = nil,
     resumeToken: String? = nil,
     expiresAt: Int,
-    linkPin: String? = nil
+    linkPin: String? = nil,
+    deviceManufacturer: String? = nil,
+    deviceModel: String? = nil,
+    deviceOs: String? = nil
   ) {
     self.ip = ip
     self.port = port
@@ -102,6 +111,9 @@ public struct CordieriteConnectInput: Sendable, Equatable {
     self.resumeToken = resumeToken
     self.expiresAt = expiresAt
     self.linkPin = linkPin
+    self.deviceManufacturer = deviceManufacturer
+    self.deviceModel = deviceModel
+    self.deviceOs = deviceOs
   }
 }
 
@@ -145,7 +157,10 @@ public func parseCordieriteConnectInput(_ value: JSONValue) throws -> Cordierite
     token: object["token"]?.stringValue,
     resumeToken: object["resumeToken"]?.stringValue,
     expiresAt: Int(expiresAtValue),
-    linkPin: object["linkPin"]?.stringValue
+    linkPin: object["linkPin"]?.stringValue,
+    deviceManufacturer: object["deviceManufacturer"]?.stringValue,
+    deviceModel: object["deviceModel"]?.stringValue,
+    deviceOs: object["deviceOs"]?.stringValue
   )
 }
 

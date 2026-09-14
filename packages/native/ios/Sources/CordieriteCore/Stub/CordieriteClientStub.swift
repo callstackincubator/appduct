@@ -116,6 +116,9 @@ public struct CordieriteConnectInput: Sendable, Equatable {
   public var resumeToken: String?
   public var expiresAt: Int
   public var linkPin: String?
+  public var deviceManufacturer: String?
+  public var deviceModel: String?
+  public var deviceOs: String?
 
   public init(
     ip: String,
@@ -124,7 +127,10 @@ public struct CordieriteConnectInput: Sendable, Equatable {
     token: String? = nil,
     resumeToken: String? = nil,
     expiresAt: Int,
-    linkPin: String? = nil
+    linkPin: String? = nil,
+    deviceManufacturer: String? = nil,
+    deviceModel: String? = nil,
+    deviceOs: String? = nil
   ) {
     self.ip = ip
     self.port = port
@@ -133,6 +139,9 @@ public struct CordieriteConnectInput: Sendable, Equatable {
     self.resumeToken = resumeToken
     self.expiresAt = expiresAt
     self.linkPin = linkPin
+    self.deviceManufacturer = deviceManufacturer
+    self.deviceModel = deviceModel
+    self.deviceOs = deviceOs
   }
 }
 

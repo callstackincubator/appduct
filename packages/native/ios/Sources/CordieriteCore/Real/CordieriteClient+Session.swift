@@ -190,6 +190,9 @@ extension CordieriteClient {
     if let token = input.token { dict["token"] = token }
     if let resumeToken = input.resumeToken { dict["resumeToken"] = resumeToken }
     if let linkPin = input.linkPin { dict["linkPin"] = linkPin }
+    if let deviceManufacturer = input.deviceManufacturer { dict["deviceManufacturer"] = deviceManufacturer }
+    if let deviceModel = input.deviceModel { dict["deviceModel"] = deviceModel }
+    if let deviceOs = input.deviceOs { dict["deviceOs"] = deviceOs }
     return try CordieriteConnectOptions(dict)
   }
 
