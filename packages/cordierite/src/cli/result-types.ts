@@ -76,23 +76,38 @@ export type InitCommandData = {
   path: string;
   scheme: string;
   /**
-   * Where `scheme` came from. These are `init`'s *own* three inputs, deliberately named so they
-   * cannot be read as `scheme.ts`'s resolution tiers: `init` never consults `CORDIERITE_SCHEME`
-   * and never walks up to a parent project config (see `commands/init.ts`).
+   * Where `scheme` came from. These are `init`'s *own* inputs, deliberately named so they cannot
+   * be read as `scheme.ts`'s resolution tiers: `init` never consults `CORDIERITE_SCHEME` and
+   * never walks up to a parent project config (see `commands/init.ts`).
    *
    * - `"--scheme"` — the flag.
    * - `"app.json"` — `<cwd>/app.json`'s `expo.scheme`.
+   * - `"android-gradle"` / `"android-manifest"` / `"ios-info-plist"` / `"ios-project-yml"` — one of
+   *   the static-file native-project probes added for issue #48 (`native-scheme.ts`), tried in
+   *   that order whenever `app.json` declares nothing. `origin` names the exact file/key.
    * - `"already-recorded"` — the value this file already held, which a plain re-run keeps so it
-   *   stays idempotent even after `app.json` changes.
+   *   stays idempotent even after the discovered value changes.
    */
-  source: "--scheme" | "app.json" | "already-recorded";
+  source:
+    | "--scheme"
+    | "app.json"
+    | "android-gradle"
+    | "android-manifest"
+    | "ios-info-plist"
+    | "ios-project-yml"
+    | "already-recorded";
+  /** The exact file (and key/placeholder) `scheme` was read from, when `source` is a discovery
+   * tier rather than `"--scheme"`/`"already-recorded"` — `init`'s human-readable hint surfaces
+   * this so a native-probe result says which file to go edit, not just which platform. */
+  origin?: string;
   /** The project config did not exist before this run. */
   created: boolean;
   /** This run wrote to the file. `false` on an idempotent re-run. */
   changed: boolean;
-  /** Present when the recorded scheme and `app.json`'s `expo.scheme` disagree. The recorded one
-   * still wins (a re-run must not start failing because `app.json` was edited); this says so and
-   * names the `--force` invocation that would adopt the other. */
+  /** Present when the recorded scheme and the value discovery would currently find (`app.json` or
+   * a native probe) disagree. The recorded one still wins (a re-run must not start failing because
+   * the underlying project file was edited); this says so and names the `--force` invocation that
+   * would adopt the other. */
   note?: string;
   /** The MCP server entry to paste into an agent's config — self-contained (it carries `--scheme`)
    * so one machine can serve several apps without editing a global file. */

@@ -393,6 +393,206 @@ describe("init command", () => {
   });
 });
 
+/**
+ * Issue #48's addition: `init` runs the exact same static-file discovery `resolveScheme`'s last
+ * step does (`scheme.ts`'s `discoverStaticProjectScheme`) — `app.json` first, then the native
+ * Android/iOS probes from `native-scheme.ts`. These cases exercise that path through `init`
+ * specifically: the `source`/`origin` it reports, the disagreement error, and the "read from"
+ * hint in `nextSteps`.
+ */
+describe("init command (native project discovery)", () => {
+  test("discovers a scheme from an Android build.gradle.kts placeholder", async () => {
+    const root = await makeAppRoot();
+    await mkdir(path.join(root, "app"), { recursive: true });
+    await writeFile(
+      path.join(root, "app", "build.gradle.kts"),
+      'android { defaultConfig { manifestPlaceholders["cordieriteScheme"] = "myapp" } }',
+      "utf8",
+    );
+
+    const result = await handleInitCommand({}, { cwd: root });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        scheme: "myapp",
+        source: "android-gradle",
+        origin: expect.stringContaining("build.gradle.kts"),
+      },
+    });
+    expect(await readProjectConfig(root)).toEqual({ scheme: "myapp" });
+  });
+
+  test("discovers a scheme from an AndroidManifest.xml VIEW intent-filter", async () => {
+    const root = await makeAppRoot();
+    const manifestPath = path.join(root, "app", "src", "main", "AndroidManifest.xml");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(
+      manifestPath,
+      `<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+        <application><activity android:name=".Main"><intent-filter>
+          <action android:name="android.intent.action.VIEW" />
+          <data android:scheme="myapp" />
+        </intent-filter></activity></application>
+      </manifest>`,
+      "utf8",
+    );
+
+    const result = await handleInitCommand({}, { cwd: root });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { scheme: "myapp", source: "android-manifest" },
+    });
+  });
+
+  test("discovers a scheme from an Info.plist CFBundleURLSchemes entry", async () => {
+    const root = await makeAppRoot();
+    await writeFile(
+      path.join(root, "Info.plist"),
+      `<?xml version="1.0" encoding="UTF-8"?>
+      <plist version="1.0"><dict>
+        <key>CFBundleURLTypes</key>
+        <array><dict>
+          <key>CFBundleURLSchemes</key>
+          <array><string>myapp</string></array>
+        </dict></array>
+      </dict></plist>`,
+      "utf8",
+    );
+
+    const result = await handleInitCommand({}, { cwd: root });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { scheme: "myapp", source: "ios-info-plist" },
+    });
+  });
+
+  test("discovers a scheme from xcodegen's project.yml", async () => {
+    const root = await makeAppRoot();
+    await writeFile(
+      path.join(root, "project.yml"),
+      "info:\n  properties:\n    CFBundleURLTypes:\n      - CFBundleURLSchemes:\n          - myapp\n",
+      "utf8",
+    );
+
+    const result = await handleInitCommand({}, { cwd: root });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { scheme: "myapp", source: "ios-project-yml" },
+    });
+  });
+
+  test("app.json still wins over every native probe", async () => {
+    const root = await makeAppRoot("from-app-json");
+    await mkdir(path.join(root, "app"), { recursive: true });
+    await writeFile(
+      path.join(root, "app", "build.gradle.kts"),
+      'manifestPlaceholders["cordieriteScheme"] = "from-gradle"',
+      "utf8",
+    );
+
+    const result = await handleInitCommand({}, { cwd: root });
+
+    expect(result).toMatchObject({ ok: true, data: { scheme: "from-app-json", source: "app.json" } });
+  });
+
+  test("the human-readable hint names the file the scheme was read from", async () => {
+    const root = await makeAppRoot();
+    const manifestPath = path.join(root, "app", "src", "main", "AndroidManifest.xml");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(
+      manifestPath,
+      `<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+        <application><activity android:name=".Main"><intent-filter>
+          <action android:name="android.intent.action.VIEW" />
+          <data android:scheme="myapp" />
+        </intent-filter></activity></application>
+      </manifest>`,
+      "utf8",
+    );
+
+    const result = await handleInitCommand({}, { cwd: root });
+
+    expect(result.ok).toBe(true);
+    expect(
+      result.ok && result.data.nextSteps.some((step) => step.includes(manifestPath)),
+    ).toBe(true);
+  });
+
+  test("refuses to guess when two native probes disagree, naming both", async () => {
+    const root = await makeAppRoot();
+    const manifestPath = path.join(root, "app", "src", "main", "AndroidManifest.xml");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(
+      manifestPath,
+      `<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+        <application><activity android:name=".Main"><intent-filter>
+          <action android:name="android.intent.action.VIEW" />
+          <data android:scheme="androidscheme" />
+        </intent-filter></activity></application>
+      </manifest>`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(root, "Info.plist"),
+      `<?xml version="1.0" encoding="UTF-8"?>
+      <plist version="1.0"><dict>
+        <key>CFBundleURLTypes</key>
+        <array><dict>
+          <key>CFBundleURLSchemes</key>
+          <array><string>iosscheme</string></array>
+        </dict></array>
+      </dict></plist>`,
+      "utf8",
+    );
+
+    await expect(handleInitCommand({}, { cwd: root })).rejects.toThrow(
+      /Conflicting deep-link schemes[\s\S]*androidscheme[\s\S]*iosscheme/u,
+    );
+    // Refusing to guess must not still write a config with one of the two guesses.
+    await expect(stat(projectConfigPath(root))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  test("--force adopts a changed native-probe value and updates the note accordingly", async () => {
+    const root = await makeAppRoot();
+    const manifestPath = path.join(root, "app", "src", "main", "AndroidManifest.xml");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    const writeManifest = (scheme: string) =>
+      writeFile(
+        manifestPath,
+        `<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <application><activity android:name=".Main"><intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="${scheme}" />
+          </intent-filter></activity></application>
+        </manifest>`,
+        "utf8",
+      );
+    await writeManifest("myapp");
+    await handleInitCommand({}, { cwd: root });
+
+    await writeManifest("renamed");
+    const kept = await handleInitCommand({}, { cwd: root });
+
+    expect(kept).toMatchObject({
+      ok: true,
+      data: { scheme: "myapp", source: "already-recorded", changed: false },
+    });
+    expect(kept.ok && kept.data.note).toMatch(/renamed[\s\S]*myapp/u);
+
+    const forced = await handleInitCommand({ force: true }, { cwd: root });
+
+    expect(forced).toMatchObject({
+      ok: true,
+      data: { scheme: "renamed", source: "android-manifest", changed: true },
+    });
+    expect(forced.ok && forced.data.note).toBeUndefined();
+  });
+});
+
 describe("cordierite init (CLI)", () => {
   test("is idempotent across two real CLI runs", async () => {
     const root = await makeAppRoot("myapp");

@@ -22,13 +22,17 @@
  * into the existing JSON rather than truncating it, so a key a future version adds is not silently
  * dropped by an old binary.
  *
- * **`init` is not the resolver.** It considers exactly two sources — `--scheme` and
- * `<cwd>/app.json` — plus whatever this very file already records. It deliberately does *not*
- * consult `CORDIERITE_SCHEME` or walk up for a parent `.cordierite/config.json`, because its job
- * is to decide what to *write here*, and inheriting either would bake an ambient value into a
- * committed file: a shell variable that happened to be exported, or a parent project's scheme
- * silently copied into a sub-package. `scheme.ts`'s full precedence chain is what *reads* the
- * result. `InitCommandData.source` therefore names only these three origins.
+ * **`init` is not the resolver.** It considers exactly two *kinds* of source — `--scheme`, and
+ * whatever {@link discoverStaticProjectScheme} finds on disk (`<cwd>/app.json`, then the native
+ * Android/iOS probes from `native-scheme.ts`) — plus whatever this very file already records. It
+ * deliberately does *not* consult `CORDIERITE_SCHEME` or walk up for a parent
+ * `.cordierite/config.json`, because its job is to decide what to *write here*, and inheriting
+ * either would bake an ambient value into a committed file: a shell variable that happened to be
+ * exported, or a parent project's scheme silently copied into a sub-package. `scheme.ts`'s full
+ * precedence chain is what *reads* the result. Discovery is shared with that chain's own final
+ * step via {@link discoverStaticProjectScheme} specifically so the two can never disagree about
+ * what "discovery" means. `InitCommandData.source` names every origin this command itself can
+ * produce.
  */
 
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -37,8 +41,7 @@ import { dirname, join, resolve } from "node:path";
 import type { CliResult, InitCommandData } from "../cli/result-types.js";
 import { usageError } from "../errors.js";
 import {
-  APP_JSON_FILENAME,
-  discoverExpoScheme,
+  discoverStaticProjectScheme,
   globalConfigDirs,
   isValidScheme,
   PROJECT_CONFIG_DIR,
@@ -186,41 +189,56 @@ export const handleInitCommand = async (
     configPath,
     options.force === true || options.scheme !== undefined,
   );
-  const appJsonScheme = await discoverExpoScheme(root);
+  // Same discovery `resolveScheme`'s own last step runs (app.json, then the native Android/iOS
+  // probes) — never CORDIERITE_SCHEME, never a walk-up, per this file's doc comment. `discovered`
+  // throws on its own for a malformed value or two native probes disagreeing, exactly as it would
+  // for `resolveScheme`.
+  const discovered = await discoverStaticProjectScheme(root);
+  const discoveredScheme = discovered.scheme;
+  const discoveredSourceLabel: InitCommandData["source"] | undefined =
+    discovered.source === undefined
+      ? undefined
+      : discovered.source === "app-json"
+        ? "app.json"
+        : discovered.source;
 
   /*
    * Which scheme wins, and when that is an error, is the whole idempotency contract:
    *
    * - `--scheme` always wins, but replacing a *different* recorded scheme needs `--force`, since
    *   that is a person asking for one thing while the file already says another.
-   * - A plain re-run keeps whatever is already recorded, even when `app.json` has since changed.
+   * - A plain re-run keeps whatever is already recorded, even when discovery has since changed.
    *   Erroring there would mean `cordierite init` — documented as safe to re-run — starts failing
-   *   because somebody renamed a scheme in `app.json`. The divergence is reported as a `note`
-   *   instead: visible, but not fatal.
+   *   because somebody renamed a scheme in `app.json` or a native project file. The divergence is
+   *   reported as a `note` instead: visible, but not fatal.
    * - `--force` on its own is the escape hatch that re-adopts discovery, replacing the recorded
-   *   scheme with `app.json`'s.
-   * - With nothing recorded, `app.json` decides.
+   *   scheme with whatever it currently finds.
+   * - With nothing recorded, discovery decides.
    */
-  const [scheme, source] = ((): [string | undefined, InitCommandData["source"]] => {
+  const [scheme, source, origin] = ((): [
+    string | undefined,
+    InitCommandData["source"],
+    string | undefined,
+  ] => {
     if (options.scheme !== undefined) {
-      return [options.scheme, "--scheme"];
+      return [options.scheme, "--scheme", undefined];
     }
 
-    if (options.force && appJsonScheme !== undefined) {
-      return [appJsonScheme, "app.json"];
+    if (options.force && discoveredScheme !== undefined) {
+      return [discoveredScheme, discoveredSourceLabel ?? "app.json", discovered.origin];
     }
 
     return existingScheme === undefined
-      ? [appJsonScheme, "app.json"]
-      : [existingScheme, "already-recorded"];
+      ? [discoveredScheme, discoveredSourceLabel ?? "app.json", discovered.origin]
+      : [existingScheme, "already-recorded", undefined];
   })();
 
   if (scheme === undefined) {
     throw usageError(
-      `No deep-link scheme found for ${root}: ${join(root, APP_JSON_FILENAME)} declares no ` +
-        '"expo.scheme", and none was given. Run `cordierite init --scheme <scheme>` with the ' +
-        'scheme your app registers for deep links (e.g. "myapp"), or add "expo.scheme" to ' +
-        `${APP_JSON_FILENAME} first.`,
+      `No deep-link scheme found for ${root}, and none was given. Looked in, in order:\n${discovered.tried
+        .map((location, index) => `  ${index + 1}. ${location}`)
+        .join("\n")}\nRun \`cordierite init --scheme <scheme>\` with the scheme your app ` +
+        'registers for deep links (e.g. "myapp"), or declare it in one of the locations above.',
     );
   }
 
@@ -237,17 +255,17 @@ export const handleInitCommand = async (
     );
   }
 
-  // Only when the recorded scheme is the one being *kept by default* and app.json disagrees. An
+  // Only when the recorded scheme is the one being *kept by default* and discovery disagrees. An
   // explicit `--scheme` (even one that matches what is recorded) is the user stating the answer,
   // so there is nothing to bring to their attention; `--force` has already resolved it.
   const note =
     options.scheme === undefined &&
     scheme === existingScheme &&
-    appJsonScheme !== undefined &&
-    appJsonScheme !== scheme
-      ? `${join(root, APP_JSON_FILENAME)} declares "${appJsonScheme}", but ${configPath} records ` +
+    discoveredScheme !== undefined &&
+    discoveredScheme !== scheme
+      ? `${discovered.origin} declares "${discoveredScheme}", but ${configPath} records ` +
         `"${existingScheme}", which is what Cordierite uses. Run \`cordierite init --force\` to ` +
-        "adopt the app.json value instead."
+        "adopt that value instead."
       : undefined;
 
   const alreadyCorrect = existingScheme === scheme;
@@ -271,12 +289,16 @@ export const handleInitCommand = async (
   await chmod(dirname(configPath), 0o700);
   await chmod(configPath, 0o600);
 
+  // `origin` (set only in the two discovery branches above — see the tuple returned there) names
+  // the exact file/key `scheme` was read from, so the human-readable hint can say more than just
+  // "source: android-manifest".
   return {
     ok: true,
     data: {
       path: configPath,
       scheme,
       source,
+      ...(origin === undefined ? {} : { origin }),
       created: existing === undefined,
       changed: !alreadyCorrect,
       ...(note === undefined ? {} : { note }),
@@ -291,6 +313,7 @@ export const handleInitCommand = async (
           `that entry self-contained; ${SCHEME_ENV_VAR} and this ${PROJECT_CONFIG_RELATIVE_PATH} ` +
           "work too.",
         "With the app running, pair a device: `cordierite link --open ios-sim` (or `--open android`).",
+        ...(origin === undefined ? [] : [`Scheme "${scheme}" was read from ${origin}.`]),
         `This file is safe to commit — it holds only "scheme". Do not point --state-dir at this ` +
           "directory: the state dir holds the daemon's private key and audit log, which must " +
           "never be committed.",
