@@ -25,6 +25,16 @@ android {
     minSdkVersion rootProject.ext.minSdkVersion
     targetSdkVersion rootProject.ext.targetSdkVersion
     consumerProguardFiles 'consumer-rules.pro'
+    // A default only for *this module's own* unit-test manifest merge (Robolectric's
+    // CordieriteLinkActivityTest needs a fully-resolved manifest to build against) -- it has no
+    // effect on a downstream consumer, which resolves `${cordieriteScheme}` (declared in
+    // src/main/AndroidManifest.xml, read by CordieriteLinkActivityTest) from its *own*
+    // `manifestPlaceholders`, set in the consuming app's build.gradle, at that app's own final
+    // manifest-merge step -- a library's `defaultConfig.manifestPlaceholders` is only consulted
+    // when merging that library's own manifest, never propagated to a downstream merge. Forgetting
+    // it in a real consumer app is still a manifest-merger error at build time (docs/tasks/19-android-entry-points.md,
+    // packages/native/android/README.md).
+    manifestPlaceholders = [cordieriteScheme: "cordierite-core-test"]
   }
 
   testOptions {
