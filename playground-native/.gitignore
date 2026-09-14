@@ -1,0 +1,4 @@
+# Gradle build output for the native (non-React-Native) playground app.
+android/.gradle/
+android/**/build/
+android/local.properties
