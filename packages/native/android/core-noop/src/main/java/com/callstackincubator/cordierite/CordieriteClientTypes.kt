@@ -21,7 +21,26 @@ internal data class CordieriteToolDescriptor(
     val outputSchema: JSONObject? = null,
     val annotations: JSONObject? = null,
     val timeoutMs: Long? = null,
-)
+) {
+    internal fun toWireJson(): JSONObject =
+        JSONObject().apply {
+            put("name", name)
+            put("description", description)
+            if (inputSchema != null) put("input_schema", inputSchema)
+            if (outputSchema != null) put("output_schema", outputSchema)
+            if (annotations != null) put("annotations", annotations)
+            if (timeoutMs != null) put("timeout_ms", timeoutMs)
+        }
+}
+
+/** No-op mirror of `core`'s `CordieriteToolReplyError` -- this module never invokes a registered
+ * handler, so it is never thrown here, but the bridge (compiled against both `core` and
+ * `core-noop`) references the type unconditionally. */
+internal class CordieriteToolReplyError(
+    val errorType: String,
+    override val message: String,
+    val details: Any? = null,
+) : Exception(message)
 
 internal class CordieriteInvalidToolDescriptorException(message: String) : IllegalArgumentException(message)
 
