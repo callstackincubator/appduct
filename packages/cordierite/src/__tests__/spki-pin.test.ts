@@ -1,8 +1,16 @@
-import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  generateKeyPairSync,
+  X509Certificate,
+} from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vitest";
 
-import { getSpkiPinFromPrivateKeyPem } from "../spki-pin.js";
+import { createSpkiPin, getSpkiPinFromPrivateKeyPem } from "../spki-pin.js";
 
 describe("SPKI pin helper", () => {
   test("derives a stable sha256 pin from freshly generated key material", () => {
@@ -30,5 +38,27 @@ describe("SPKI pin helper", () => {
     const expectedPin = `sha256/${createHash("sha256").update(spkiDer).digest("base64")}`;
 
     expect(getSpkiPinFromPrivateKeyPem(firstPem)).toBe(expectedPin);
+  });
+});
+
+/**
+ * Cross-language conformance fixture (issue #48, "Parity is the risk"):
+ * `packages/native/fixtures/spki-pin.json` holds the one certificate+pin vector that used to be
+ * duplicated as a hand-written string literal in `CordieriteConnectionManagerTests.swift` and
+ * `CordieriteSpkiPinTest.kt`. Swift and Kotlin assert the same fixture against their own SPKI-pin
+ * computation (`spkiPin(for:)` / `computeSpkiPin`) in `FixturesConformanceTests.swift` /
+ * `FixturesConformanceTest.kt`. See `packages/native/fixtures/README.md`.
+ */
+describe("SPKI pin conformance fixture", () => {
+  const fixture = JSON.parse(
+    readFileSync(fileURLToPath(new URL("../../../native/fixtures/spki-pin.json", import.meta.url)), "utf8"),
+  ) as { certificateDerBase64: string; expectedPin: string };
+
+  test("createSpkiPin reproduces the shared fixture's expected pin for its certificate", () => {
+    const der = Buffer.from(fixture.certificateDerBase64, "base64");
+    const certificate = new X509Certificate(der);
+    const spkiDer = certificate.publicKey.export({ type: "spki", format: "der" }) as Buffer;
+
+    expect(createSpkiPin(spkiDer)).toBe(fixture.expectedPin);
   });
 });

@@ -1,0 +1,43 @@
+[
+  { "code": 1000, "reason": "session_replaced", "terminal": false },
+  { "code": 1000, "reason": "revoked", "terminal": false },
+  { "code": 1003, "reason": "binary_frame_not_supported", "terminal": false },
+  { "code": 1008, "reason": "pre_claim_timeout", "terminal": true },
+  { "code": 1008, "reason": "invalid_json", "terminal": true },
+  { "code": 1008, "reason": "expected_claim_or_resume", "terminal": true },
+  { "code": 1008, "reason": "unknown_message_type", "terminal": true },
+  { "code": 1008, "reason": "session_mismatch", "terminal": true },
+  { "code": 1008, "reason": "already_claimed", "terminal": true },
+  { "code": 1008, "reason": "unknown_session", "terminal": true },
+  { "code": 1008, "reason": "link_expired", "terminal": true },
+  { "code": 1008, "reason": "claim_attempts_exceeded", "terminal": true },
+  { "code": 1008, "reason": "invalid_token", "terminal": true },
+  { "code": 1008, "reason": "invalid_resume_token", "terminal": true },
+  { "code": 1008, "reason": "invalid_registry", "terminal": true },
+  { "code": 1008, "reason": "invalid_message", "terminal": true },
+  { "code": 1011, "reason": "send_failed", "terminal": false },
+  {
+    "code": 1001,
+    "reason": "daemon_shutdown",
+    "terminal": false,
+    "note": "not in PROTOCOL.md's table verbatim, but a documented transport-level close worth retrying inside the grace window (see CordieriteTerminalClose.kt's doc comment)"
+  },
+  {
+    "code": 1006,
+    "reason": null,
+    "terminal": false,
+    "note": "abnormal closure (backgrounding, network blips); the close frame itself carries no reason string in this case"
+  },
+  {
+    "code": 4000,
+    "reason": "some_future_unrecognized_code",
+    "terminal": false,
+    "note": "an unlisted/unknown code -- only 1008 is ever treated as terminal, wholesale, never by matching individual reason strings"
+  },
+  {
+    "code": null,
+    "reason": null,
+    "terminal": false,
+    "note": "no close code/reason at all (e.g. a close event synthesized before any frame arrived) must not be misclassified as terminal"
+  }
+]
