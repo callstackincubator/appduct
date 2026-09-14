@@ -29,14 +29,14 @@ private struct CordieriteModuleError: Error {
   let message: String
 }
 
-struct CordieriteErrorDetails: Sendable {
-  let code: String
-  let message: String
-  let phase: String
-  let nativeCode: String?
-  let closeReason: String?
-  let isRetryable: Bool?
-  let hint: String?
+public struct CordieriteErrorDetails: Sendable {
+  public let code: String
+  public let message: String
+  public let phase: String
+  public let nativeCode: String?
+  public let closeReason: String?
+  public let isRetryable: Bool?
+  public let hint: String?
 }
 
 /// RCT/JSI often passes numeric fields as `NSNumber`; accept both `Int` and `NSNumber`.
@@ -55,26 +55,26 @@ private func cordieriteIntFromBridge(_ value: Any?) -> Int? {
 /// `CordieriteTurboBridge` from the loosely-typed JS options bag before it ever crosses onto the
 /// actor, so `connect(options:)` never has to send a non-`Sendable` `[String: Any]`/`NSDictionary`
 /// across an isolation boundary.
-struct CordieriteConnectOptions: Sendable {
-  let ip: String
-  let port: Int
-  let sessionId: String
+public struct CordieriteConnectOptions: Sendable {
+  public let ip: String
+  public let port: Int
+  public let sessionId: String
   /// Claim token. Required unless `resumeToken` is present (protocol v2 `session_resume`).
-  let token: String?
+  public let token: String?
   /// When present, `connect` sends `session_resume` as the first frame instead of `session_claim`.
-  let resumeToken: String?
-  let expiresAt: Int
-  let deviceManufacturer: String?
-  let deviceModel: String?
-  let deviceOs: String?
+  public let resumeToken: String?
+  public let expiresAt: Int
+  public let deviceManufacturer: String?
+  public let deviceModel: String?
+  public let deviceOs: String?
   /// The bootstrap deep link's separate `pin` query param, forwarded unchanged from JS
   /// (`CordieriteConnectOptions.linkPin` in `Cordierite.types.ts`). Only ever consulted by
   /// `resolveTrustedPins` when no build-time `cliPins` are configured and the explicit
   /// `CordieriteTrust` plist value (or its missing-key default) resolves to `"link"` — see
   /// `configureFromBundle`.
-  let linkPin: String?
+  public let linkPin: String?
 
-  init(_ value: [String: Any]) throws {
+  public init(_ value: [String: Any]) throws {
     // NOTE: intentionally not actor-isolated — called synchronously from the TurboModule bridge
     // before any actor hop, so parsing failures reject the JS promise immediately.
     guard
@@ -331,17 +331,17 @@ private func mergeSessionClaimDeviceFields(
 /// `URLSessionWebSocketDelegate`; the delegate methods below are `nonisolated` (URLSession calls
 /// them synchronously from its own queue) and hop back onto the actor via `Task` before touching
 /// any state.
-actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSocketDelegate {
+public actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSocketDelegate {
   /// Event callbacks are wired once, synchronously, immediately after construction (see
   /// `CordieriteTurboBridge.wireEventHandlers`) and before any JS call can reach `connect`.
   /// `nonisolated(unsafe)` lets the bridge assign them from outside the actor without an `await`,
   /// matching the existing synchronous wiring contract; `invalidate()` clears them so a
   /// straggling delegate callback can never call back into a torn-down bridge.
-  nonisolated(unsafe) var emitStateChange: ((String) -> Void)?
+  public nonisolated(unsafe) var emitStateChange: (@Sendable (String) -> Void)?
   /// Turbo path: only the raw JSON string; JS parses `message`.
-  nonisolated(unsafe) var emitMessageRaw: ((String) -> Void)?
-  nonisolated(unsafe) var emitError: ((CordieriteErrorDetails) -> Void)?
-  nonisolated(unsafe) var emitClose: ((NSDictionary) -> Void)?
+  public nonisolated(unsafe) var emitMessageRaw: (@Sendable (String) -> Void)?
+  public nonisolated(unsafe) var emitError: (@Sendable (CordieriteErrorDetails) -> Void)?
+  public nonisolated(unsafe) var emitClose: (@Sendable (NSDictionary) -> Void)?
 
   private(set) var state: CordieriteConnectionState = .idle {
     didSet {
@@ -375,7 +375,7 @@ actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSo
   private var keepaliveTask: Task<Void, Never>?
   private var pingFailureCount = 0
 
-  override init() {
+  public override init() {
     ownerGeneration = CordieriteProcessResumeLeaseStore.shared.newOwnerGeneration()
     super.init()
   }
@@ -411,7 +411,7 @@ actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSo
     allowPrivateLanOnly = manifestConfig.allowPrivateLanOnly
   }
 
-  func connect(options: CordieriteConnectOptions) async throws {
+  public func connect(options: CordieriteConnectOptions) async throws {
     guard !isInvalidated else {
       throw CordieriteModuleError(message: "Cordierite native module has been invalidated.")
     }
@@ -492,7 +492,7 @@ actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSo
     try await sendRawObject(firstFrame, requireActiveSession: false)
   }
 
-  func send(message: String) async throws {
+  public func send(message: String) async throws {
     guard state == .active, let activeSessionId else {
       throw CordieriteModuleError(message: "Cordierite session is not active.")
     }
@@ -511,7 +511,7 @@ actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSo
     try await sendText(message)
   }
 
-  func close() async {
+  public func close() async {
     CordieriteProcessResumeLeaseStore.shared.clear(ownerGeneration: ownerGeneration)
 
     guard let socketTask else {
@@ -531,7 +531,7 @@ actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSo
   /// dead bridge. Deliberately synchronous within the actor turn (no awaited network round trip)
   /// so the socket is released promptly and the daemon observes the disconnect and suspends the
   /// session.
-  func invalidate() {
+  public func invalidate() {
     guard !isInvalidated else {
       return
     }
@@ -550,17 +550,17 @@ actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSo
 
   /// Synchronous, non-isolated read of the current state for the TurboModule's `getState()`,
   /// which is a synchronous ObjC method and cannot `await` onto the actor.
-  nonisolated func currentStateSnapshot() -> String {
+  public nonisolated func currentStateSnapshot() -> String {
     stateSnapshot
   }
 
   /// Synchronous TurboModule bridge wrappers; clear retains this manager's generation guard.
-  nonisolated func currentResumeLeaseRecord() -> NSDictionary? {
+  public nonisolated func currentResumeLeaseRecord() -> NSDictionary? {
     CordieriteProcessResumeLeaseStore.shared.getRecord().map { $0 as NSDictionary }
   }
 
   @discardableResult
-  nonisolated func clearResumeLease() -> Bool {
+  public nonisolated func clearResumeLease() -> Bool {
     CordieriteProcessResumeLeaseStore.shared.clear(ownerGeneration: ownerGeneration)
   }
 
@@ -904,7 +904,7 @@ actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSo
   /// (`configuredPins`) is a `nonisolated(unsafe)` snapshot written before any socket exists;
   /// error reporting is dispatched separately via a fire-and-forget `Task` that only carries the
   /// `Sendable` `CordieriteErrorDetails`.
-  nonisolated func urlSession(
+  public nonisolated func urlSession(
     _ session: URLSession,
     didReceive challenge: URLAuthenticationChallenge,
     completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
@@ -981,7 +981,7 @@ actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSo
     }
   }
 
-  nonisolated func urlSession(
+  public nonisolated func urlSession(
     _ session: URLSession,
     webSocketTask: URLSessionWebSocketTask,
     didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
@@ -997,7 +997,7 @@ actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSo
   /// process kill on the other end) where `didCloseWith` never fires at all. Both paths funnel
   /// into `finishTransportTeardown`, which is guarded by `closeEventPending` so exactly one
   /// `close` event is ever emitted no matter which delegate callback (or both) fire.
-  nonisolated func urlSession(
+  public nonisolated func urlSession(
     _ session: URLSession,
     task: URLSessionTask,
     didCompleteWithError error: Error?

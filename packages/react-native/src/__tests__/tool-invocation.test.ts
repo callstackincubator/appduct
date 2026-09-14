@@ -1,385 +1,325 @@
-import { describe, expect, test, vi } from "vitest";
-import { z as z3 } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { describe, expect, vi, test } from "vitest";
+import { z } from "zod";
 
 import type { CordieriteRegisteredTool } from "../Cordierite.types";
-import type { ClientTimerHandle, ClientTimers } from "../client/timers";
 import { createToolMessageHandler } from "../client/tool-invocation";
-import { normalizeToolSchema, toToolDescriptor } from "../schema";
+import { normalizeToolSchema } from "../schema";
 
-/** Real timers, but exposed through the `ClientTimers` DI seam the module under test expects. */
-const realTimers: ClientTimers = {
-  setTimeout: (callback, ms) =>
-    setTimeout(callback, ms) as unknown as ClientTimerHandle,
-  clearTimeout: (handle) => clearTimeout(handle as unknown as NodeJS.Timeout),
-  now: () => Date.now(),
-  random: () => Math.random(),
+(globalThis as { __DEV__?: boolean }).__DEV__ = true;
+
+/**
+ * Ports the still-JS-owned half of the old `tool-invocation.test.ts` (issue #48 phase 2): schema
+ * validation, running the handler, and answering through `respondToToolCall`/`reportToolProgress`.
+ * Timeout, unknown-tool `tool_not_found`, and the `tool_cancel` wire frame itself are now the
+ * native core's job (see `CordieriteCoreTests/CordieriteClientTests.swift`) -- this file only
+ * covers what still runs in JS, driven directly by the native → JS events this bridge answers.
+ */
+
+type RespondCall = {
+  id: string;
+  resultJson: string | null;
+  errorJson: string | null;
 };
 
-const SESSION_ID = "session-1";
-
-const registerTool = (
-  registry: Map<string, CordieriteRegisteredTool>,
-  name: string,
-  handler: CordieriteRegisteredTool["handler"],
-  timeoutMs = 1000,
-): void => {
-  registry.set(name, {
-    id: Symbol(name),
-    descriptor: { name, description: "A test tool." },
-    handler,
-    timeoutMs,
+const makeHandler = (
+  tools: Map<string, CordieriteRegisteredTool>,
+  sessionId = "session-1",
+) => {
+  const responds: RespondCall[] = [];
+  const progress: {
+    id: string;
+    progress: number | null;
+    message: string | null;
+  }[] = [];
+  const handler = createToolMessageHandler({
+    getRegistry: () => tools,
+    getSessionId: () => sessionId,
+    respondToToolCall: (id, resultJson, errorJson) =>
+      responds.push({ id, resultJson, errorJson }),
+    reportToolProgress: (id, p, message) =>
+      progress.push({ id, progress: p, message }),
   });
+  return { ...handler, responds, progress };
 };
 
-const createHarness = () => {
-  const registry = new Map<string, CordieriteRegisteredTool>();
-  const sent: Record<string, unknown>[] = [];
-  const errors: unknown[] = [];
-
-  const handlerApi = createToolMessageHandler({
-    getSessionId: () => SESSION_ID,
-    getRegistry: () => registry,
-    sendWire: async (json) => {
-      sent.push(JSON.parse(json));
-    },
-    timers: realTimers,
-    onError: (event) => {
-      errors.push(event);
-    },
-  });
-
-  return { registry, sent, errors, ...handlerApi };
-};
-
-const toolCallMessage = (
-  id: string,
-  name: string,
-  args: Record<string, unknown> = {},
-) => ({
-  type: "tool_call",
-  session_id: SESSION_ID,
-  id,
-  name,
-  args,
+const registeredTool = (
+  overrides: Partial<CordieriteRegisteredTool> &
+    Pick<CordieriteRegisteredTool, "name" | "handler">,
+): CordieriteRegisteredTool => ({
+  id: Symbol(overrides.name),
+  inputSchema: undefined,
+  outputSchema: undefined,
+  ...overrides,
 });
 
-const toolCancelMessage = (id: string, reason = "client_cancelled") => ({
-  type: "tool_cancel",
-  session_id: SESSION_ID,
-  id,
-  reason,
-});
+describe("createToolMessageHandler", () => {
+  test("unregistered tool responds tool_not_found (defensive -- native normally filters this)", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
+    const { handleToolCall, responds } = makeHandler(tools);
 
-describe("createToolMessageHandler: cancellation", () => {
-  test("tool_cancel aborts the handler's signal, and an observing handler's throw is reported as tool_cancelled", async () => {
-    const { registry, sent, handleMessage } = createHarness();
+    await handleToolCall({ id: "call-1", name: "missing", argsJson: "{}" });
 
+    expect(responds).toHaveLength(1);
+    expect(responds[0]?.resultJson).toBeNull();
+    expect(JSON.parse(responds[0]!.errorJson!).type).toBe("tool_not_found");
+  });
+
+  test("no inputSchema + empty args calls the handler with undefined", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
+    const handlerFn = vi.fn().mockResolvedValue(undefined);
+    tools.set("noop", registeredTool({ name: "noop", handler: handlerFn }));
+    const { handleToolCall, responds } = makeHandler(tools);
+
+    await handleToolCall({ id: "call-1", name: "noop", argsJson: "{}" });
+
+    expect(handlerFn).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ invocationId: "call-1" }),
+    );
+    expect(responds[0]?.resultJson).toBe("null");
+    expect(responds[0]?.errorJson).toBeNull();
+  });
+
+  test("no inputSchema + non-empty args responds tool_input_validation_error", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
+    const handlerFn = vi.fn();
+    tools.set("noop", registeredTool({ name: "noop", handler: handlerFn }));
+    const { handleToolCall, responds } = makeHandler(tools);
+
+    await handleToolCall({
+      id: "call-1",
+      name: "noop",
+      argsJson: JSON.stringify({ extra: 1 }),
+    });
+
+    expect(handlerFn).not.toHaveBeenCalled();
+    expect(JSON.parse(responds[0]!.errorJson!).type).toBe(
+      "tool_input_validation_error",
+    );
+  });
+
+  test("inputSchema validates args and passes the parsed value to the handler", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
+    const handlerFn = vi.fn().mockResolvedValue({ ok: true });
+    const schema = normalizeToolSchema(
+      z.object({ city: z.string() }),
+      "test inputSchema",
+    );
+    tools.set(
+      "geocode",
+      registeredTool({
+        name: "geocode",
+        handler: handlerFn,
+        inputSchema: schema,
+        outputSchema: normalizeToolSchema(z.object({ ok: z.boolean() }), "x"),
+      }),
+    );
+    const { handleToolCall, responds } = makeHandler(tools);
+
+    await handleToolCall({
+      id: "call-1",
+      name: "geocode",
+      argsJson: JSON.stringify({ city: "NYC" }),
+    });
+
+    expect(handlerFn).toHaveBeenCalledWith({ city: "NYC" }, expect.anything());
+    expect(JSON.parse(responds[0]!.resultJson!)).toEqual({ ok: true });
+  });
+
+  test("invalid args against inputSchema respond tool_input_validation_error without calling the handler", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
+    const handlerFn = vi.fn();
+    const schema = normalizeToolSchema(
+      z.object({ city: z.string() }),
+      "test inputSchema",
+    );
+    tools.set(
+      "geocode",
+      registeredTool({
+        name: "geocode",
+        handler: handlerFn,
+        inputSchema: schema,
+      }),
+    );
+    const { handleToolCall, responds } = makeHandler(tools);
+
+    await handleToolCall({
+      id: "call-1",
+      name: "geocode",
+      argsJson: JSON.stringify({ city: 5 }),
+    });
+
+    expect(handlerFn).not.toHaveBeenCalled();
+    expect(JSON.parse(responds[0]!.errorJson!).type).toBe(
+      "tool_input_validation_error",
+    );
+  });
+
+  test("a handler that throws responds tool_execution_error with the error's message", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
+    tools.set(
+      "boom",
+      registeredTool({
+        name: "boom",
+        handler: () => {
+          throw new Error("kaboom");
+        },
+      }),
+    );
+    const { handleToolCall, responds } = makeHandler(tools);
+
+    await handleToolCall({ id: "call-1", name: "boom", argsJson: "{}" });
+
+    const error = JSON.parse(responds[0]!.errorJson!);
+    expect(error.type).toBe("tool_execution_error");
+    expect(error.message).toBe("kaboom");
+  });
+
+  test("outputSchema omitted + handler returns a value responds tool_output_validation_error", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
+    tools.set(
+      "noop",
+      registeredTool({ name: "noop", handler: () => "unexpected" }),
+    );
+    const { handleToolCall, responds } = makeHandler(tools);
+
+    await handleToolCall({ id: "call-1", name: "noop", argsJson: "{}" });
+
+    expect(JSON.parse(responds[0]!.errorJson!).type).toBe(
+      "tool_output_validation_error",
+    );
+  });
+
+  test("a result failing outputSchema responds tool_output_validation_error", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
+    const schema = normalizeToolSchema(
+      z.object({ ok: z.boolean() }),
+      "test outputSchema",
+    );
+    tools.set(
+      "tool",
+      registeredTool({
+        name: "tool",
+        handler: () => ({ ok: "not-a-bool" }),
+        outputSchema: schema,
+      }),
+    );
+    const { handleToolCall, responds } = makeHandler(tools);
+
+    await handleToolCall({ id: "call-1", name: "tool", argsJson: "{}" });
+
+    expect(JSON.parse(responds[0]!.errorJson!).type).toBe(
+      "tool_output_validation_error",
+    );
+  });
+
+  test("reportProgress calls reportToolProgress with the call id", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
+    tools.set(
+      "progressive",
+      registeredTool({
+        name: "progressive",
+        handler: async (_args, context) => {
+          await context.reportProgress(0.5, "halfway");
+          return undefined;
+        },
+      }),
+    );
+    const { handleToolCall, progress } = makeHandler(tools);
+
+    await handleToolCall({ id: "call-1", name: "progressive", argsJson: "{}" });
+
+    expect(progress).toEqual([
+      { id: "call-1", progress: 0.5, message: "halfway" },
+    ]);
+  });
+
+  test("handleToolCancel aborts the matching in-flight signal", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
     let observedAborted = false;
-    let resolveHandler!: () => void;
-    const handlerStarted = new Promise<void>((resolve) => {
-      resolveHandler = resolve;
-    });
-
-    registerTool(registry, "slow", (_args, { signal }) => {
-      return new Promise((_resolve, reject) => {
-        resolveHandler();
-        signal.addEventListener("abort", () => {
-          observedAborted = true;
-          reject(new Error("aborted"));
-        });
-      });
-    });
-
-    const callPromise = handleMessage(toolCallMessage("call-1", "slow"));
-    await handlerStarted;
-    await handleMessage(toolCancelMessage("call-1"));
-    await callPromise;
-
-    expect(observedAborted).toBe(true);
-    expect(sent).toEqual([
-      {
-        type: "tool_error",
-        session_id: SESSION_ID,
-        id: "call-1",
-        error: { type: "tool_cancelled", message: expect.any(String) },
-      },
-    ]);
-  });
-
-  test("a handler that ignores the signal still completes normally (backwards compatible)", async () => {
-    const { registry, sent, handleMessage } = createHarness();
-
-    let resolveHandler!: (value: undefined) => void;
-    const handlerCalled = new Promise<void>((resolve) => {
-      registerTool(registry, "stubborn", () => {
-        resolve();
-        return new Promise<undefined>((res) => {
-          resolveHandler = res;
-        });
-      });
-    });
-
-    const callPromise = handleMessage(toolCallMessage("call-2", "stubborn"));
-    await handlerCalled;
-    await handleMessage(toolCancelMessage("call-2"));
-    resolveHandler(undefined);
-    await callPromise;
-
-    expect(sent).toEqual([
-      {
-        type: "tool_result",
-        session_id: SESSION_ID,
-        id: "call-2",
-        result: null,
-      },
-    ]);
-  });
-
-  test("tool_cancel for an unknown or already-finished id is a silent no-op", async () => {
-    const { sent, handleMessage } = createHarness();
-
-    await handleMessage(toolCancelMessage("call-does-not-exist"));
-
-    expect(sent).toEqual([]);
-  });
-
-  test("abortAllInFlight aborts every currently-registered call's signal", async () => {
-    const { registry, handleMessage, abortAllInFlight } = createHarness();
-
-    const aborted: string[] = [];
-    let started = 0;
-    let resolveStarted!: () => void;
-    const bothStarted = new Promise<void>((resolve) => {
-      resolveStarted = resolve;
-    });
-
-    for (const name of ["a", "b"]) {
-      registerTool(registry, name, (_args, { signal }) => {
-        return new Promise((_resolve, reject) => {
-          started += 1;
-          if (started === 2) {
-            resolveStarted();
-          }
-          signal.addEventListener("abort", () => {
-            aborted.push(name);
-            reject(new Error("aborted"));
-          });
-        });
-      });
-    }
-
-    const callA = handleMessage(toolCallMessage("call-a", "a"));
-    const callB = handleMessage(toolCallMessage("call-b", "b"));
-    await bothStarted;
-
-    abortAllInFlight();
-    await Promise.all([callA, callB]);
-
-    expect(aborted.sort()).toEqual(["a", "b"]);
-  });
-
-  test("abortAllInFlight reports tool_cancelled (not a generic execution error) and never fires onError", async () => {
-    const { registry, sent, errors, handleMessage, abortAllInFlight } = createHarness();
-
     let handlerStarted!: () => void;
     const started = new Promise<void>((resolve) => {
       handlerStarted = resolve;
     });
+    tools.set(
+      "cancellable",
+      registeredTool({
+        name: "cancellable",
+        handler: async (_args, context) => {
+          handlerStarted();
+          await new Promise<void>((resolve) => {
+            context.signal.addEventListener("abort", () => {
+              observedAborted = true;
+              resolve();
+            });
+          });
+          return undefined;
+        },
+      }),
+    );
+    const { handleToolCall, handleToolCancel } = makeHandler(tools);
 
-    registerTool(registry, "loses-transport", (_args, { signal }) => {
-      return new Promise((_resolve, reject) => {
-        handlerStarted();
-        signal.addEventListener("abort", () => reject(new Error("aborted")));
-      });
+    const callPromise = handleToolCall({
+      id: "call-1",
+      name: "cancellable",
+      argsJson: "{}",
     });
-
-    const callPromise = handleMessage(toolCallMessage("call-4", "loses-transport"));
     await started;
-
-    abortAllInFlight();
+    handleToolCancel({ id: "call-1", reason: "client_cancelled" });
     await callPromise;
 
-    expect(sent).toEqual([
-      {
-        type: "tool_error",
-        session_id: SESSION_ID,
-        id: "call-4",
-        error: { type: "tool_cancelled", message: expect.any(String) },
-      },
-    ]);
-    // The client initiated this abort itself (transport loss) — it must not also surface it to
-    // the app's own error listeners as if something unexpected happened.
-    expect(errors).toEqual([]);
+    expect(observedAborted).toBe(true);
   });
 
-  test("a timeout also aborts the signal, distinctly from an explicit tool_cancel", async () => {
-    const { registry, sent, handleMessage } = createHarness();
+  test("malformed argsJson falls back to an empty object instead of throwing", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
+    const handlerFn = vi.fn().mockResolvedValue(undefined);
+    tools.set("noop", registeredTool({ name: "noop", handler: handlerFn }));
+    const { handleToolCall, responds } = makeHandler(tools);
 
-    let observedAborted = false;
-    registerTool(
-      registry,
-      "hangs",
-      (_args, { signal }) => {
-        return new Promise((_resolve, reject) => {
-          signal.addEventListener("abort", () => {
-            observedAborted = true;
-            reject(new Error("aborted"));
+    await handleToolCall({ id: "call-1", name: "noop", argsJson: "not json" });
+
+    expect(handlerFn).toHaveBeenCalledWith(undefined, expect.anything());
+    expect(responds[0]?.errorJson).toBeNull();
+  });
+
+  test("abortAllInFlight aborts every pending signal", async () => {
+    const tools = new Map<string, CordieriteRegisteredTool>();
+    const abortedIds: string[] = [];
+    let started = 0;
+    const bothStarted = () => started === 2;
+    tools.set(
+      "slow",
+      registeredTool({
+        name: "slow",
+        handler: async (_args, context) => {
+          started += 1;
+          await new Promise<void>((resolve) => {
+            context.signal.addEventListener("abort", () => {
+              abortedIds.push(context.invocationId);
+              resolve();
+            });
           });
-        });
-      },
-      10,
-    );
-
-    await handleMessage(toolCallMessage("call-3", "hangs"));
-    await vi.waitFor(() => expect(observedAborted).toBe(true));
-
-    expect(sent).toEqual([
-      {
-        type: "tool_error",
-        session_id: SESSION_ID,
-        id: "call-3",
-        error: { type: "tool_timeout", message: expect.any(String) },
-      },
-    ]);
-  });
-});
-
-describe("createToolMessageHandler: paired and raw tool schemas (issue #27)", () => {
-  test("a zod 3 + zod-to-json-schema pair validates args and results end to end", async () => {
-    const { registry, sent, handleMessage } = createHarness();
-
-    const input = z3.object({ a: z3.number(), b: z3.number() });
-    const output = z3.object({ total: z3.number() });
-    const inputPair = normalizeToolSchema(
-      { schema: input, jsonSchema: zodToJsonSchema(input) },
-      "l",
-    );
-    const outputPair = normalizeToolSchema(
-      { schema: output, jsonSchema: zodToJsonSchema(output) },
-      "l",
-    );
-
-    registry.set("sum", {
-      id: Symbol("sum"),
-      descriptor: toToolDescriptor({
-        name: "sum",
-        description: "Add two numbers.",
-        inputSchema: inputPair,
-        outputSchema: outputPair,
-      }),
-      inputSchema: inputPair,
-      outputSchema: outputPair,
-      handler: (args) => {
-        const { a, b } = args as { a: number; b: number };
-        return { total: a + b };
-      },
-      timeoutMs: 1000,
-    });
-
-    // The descriptor the daemon would receive carries a real shape, not an empty object.
-    expect(registry.get("sum")?.descriptor.input_schema).toMatchObject({
-      type: "object",
-      properties: { a: { type: "number" }, b: { type: "number" } },
-    });
-
-    await handleMessage(toolCallMessage("call-p1", "sum", { a: 2, b: 3 }));
-
-    expect(sent).toEqual([
-      {
-        type: "tool_result",
-        session_id: SESSION_ID,
-        id: "call-p1",
-        result: { total: 5 },
-      },
-    ]);
-  });
-
-  test("a paired schema still rejects bad input with tool_input_validation_error", async () => {
-    const { registry, sent, handleMessage } = createHarness();
-
-    const input = z3.object({ a: z3.number() });
-    registry.set("strict", {
-      id: Symbol("strict"),
-      descriptor: { name: "strict", description: "d" },
-      inputSchema: normalizeToolSchema(
-        { schema: input, jsonSchema: zodToJsonSchema(input) },
-        "l",
-      ),
-      handler: () => undefined,
-      timeoutMs: 1000,
-    });
-
-    await handleMessage(toolCallMessage("call-p2", "strict", { a: "nope" }));
-
-    expect(sent[0]).toMatchObject({
-      type: "tool_error",
-      id: "call-p2",
-      error: { type: "tool_input_validation_error" },
-    });
-  });
-
-  test("a raw JSON Schema tool passes args straight through, unvalidated", async () => {
-    const { registry, sent, handleMessage } = createHarness();
-
-    const seen: unknown[] = [];
-    registry.set("raw", {
-      id: Symbol("raw"),
-      descriptor: { name: "raw", description: "d" },
-      inputSchema: normalizeToolSchema(
-        {
-          type: "object",
-          properties: { city: { type: "string" } },
-          required: ["city"],
         },
-        "l",
-      ),
-      outputSchema: normalizeToolSchema({ type: "object" }, "l"),
-      handler: (args) => {
-        seen.push(args);
-        return { ok: true };
-      },
-      timeoutMs: 1000,
+      }),
+    );
+    const { handleToolCall, abortAllInFlight } = makeHandler(tools);
+
+    const call1 = handleToolCall({
+      id: "call-1",
+      name: "slow",
+      argsJson: "{}",
     });
-
-    // `city` is required by the schema and absent, and `extra` is not declared at all: with no
-    // app-side JSON Schema validator both reach the handler verbatim.
-    await handleMessage(toolCallMessage("call-r1", "raw", { extra: 1 }));
-
-    expect(seen).toEqual([{ extra: 1 }]);
-    expect(sent).toEqual([
-      {
-        type: "tool_result",
-        session_id: SESSION_ID,
-        id: "call-r1",
-        result: { ok: true },
-      },
-    ]);
-  });
-
-  test("a raw output schema does not reject a non-matching result", async () => {
-    const { registry, sent, handleMessage } = createHarness();
-
-    registry.set("raw-out", {
-      id: Symbol("raw-out"),
-      descriptor: { name: "raw-out", description: "d" },
-      outputSchema: normalizeToolSchema(
-        { type: "object", required: ["total"] },
-        "l",
-      ),
-      handler: () => "a string, not an object",
-      timeoutMs: 1000,
+    const call2 = handleToolCall({
+      id: "call-2",
+      name: "slow",
+      argsJson: "{}",
     });
+    await vi.waitFor(() => expect(bothStarted()).toBe(true));
 
-    await handleMessage(toolCallMessage("call-r2", "raw-out"));
+    abortAllInFlight();
+    await Promise.all([call1, call2]);
 
-    expect(sent).toEqual([
-      {
-        type: "tool_result",
-        session_id: SESSION_ID,
-        id: "call-r2",
-        result: "a string, not an object",
-      },
-    ]);
+    expect(abortedIds.sort()).toEqual(["call-1", "call-2"]);
   });
 });

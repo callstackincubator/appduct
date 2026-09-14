@@ -1,10 +1,23 @@
 # `packages/native`
 
 The framework-free native core behind Cordierite: TLS-pinned session transport, SPKI pinning,
-explicit trust-mode resolution, and process-memory resume leases, in plain Swift and Kotlin with
-no React Native dependency. See [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) and
-[`docs/tasks/14-native-core-extraction.md`](../../docs/tasks/14-native-core-extraction.md) for how
-this split came to be and why.
+explicit trust-mode resolution, process-memory resume leases, and — since issue #48 phase 2 — the
+entire app-side session lifecycle (claim/resume, reconnect backoff, grace-window recovery, the tool
+registry and its wire deltas, per-call timeout/cancel/progress, and v2 bootstrap deep-link
+handling), in plain Swift and Kotlin with no React Native dependency. See
+[`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) §11,
+[`docs/tasks/14-native-core-extraction.md`](../../docs/tasks/14-native-core-extraction.md) (phase 1:
+the mechanical extraction), and
+[`docs/tasks/15-native-session-logic.md`](../../docs/tasks/15-native-session-logic.md) (phase 2:
+this session-logic port) for how this split came to be and why.
+
+## `CordieriteClient` (iOS)
+
+`ios/Sources/CordieriteCore/Real/CordieriteClient.swift` (plus its `+Session`/`+ToolInvocation`
+extensions) is a `public actor` on top of `CordieriteConnectionManager` that owns everything the
+TypeScript client (`packages/react-native/src/client/*`) used to own. See
+`docs/tasks/15-native-session-logic.md` for the full API and the RN bridge's continuation-per-call
+protocol on top of it. The Kotlin equivalent is tracked separately (`docs/tasks/16-android-session-logic.md`).
 
 This directory is **not an npm/pnpm workspace package** — it has no `package.json`, so
 `pnpm-workspace.yaml`'s `packages/*` glob does not pick it up (pnpm silently skips a directory with

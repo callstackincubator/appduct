@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 
 import {
   cordieriteNativeModule,
-  cordieriteNativeResumeLeaseStore,
   getCordieriteNativeBuildConfig,
   isCordieriteNativeModuleAvailable,
 } from "../CordieriteModule.web";
@@ -14,9 +13,7 @@ describe("CordieriteModule.web stub", () => {
     () => {
       // Metro resolves `./CordieriteModule` to this `.web.ts` file for web bundles, so `index.ts`'s
       // `noopIfNativeUnavailable` calls this exact export on web. Returning `false` here would swap
-      // web's intentional "unsupported platform" errors for the generic inert noop behavior instead —
-      // regression-guards the bug caught in this task's self-review (the WIP omitted this export
-      // entirely, which would have thrown "is not a function" on any web bundle).
+      // web's intentional "unsupported platform" errors for the generic inert noop behavior instead.
       expect(isCordieriteNativeModuleAvailable()).toBe(true);
     },
   );
@@ -28,22 +25,34 @@ describe("CordieriteModule.web stub", () => {
     expect(cordieriteNativeModule.getState()).toBe("idle");
   });
 
-  test("connect/send/close still throw: Cordierite is iOS/Android-only", async () => {
-    await expect(
-      cordieriteNativeModule.connect({
-        ip: "127.0.0.1",
-        port: 8443,
-        sessionId: "s",
-        token: "t",
-        expiresAt: 0,
-      }),
-    ).rejects.toThrow();
-    await expect(cordieriteNativeModule.send("{}")).rejects.toThrow();
-    await expect(cordieriteNativeModule.close()).rejects.toThrow();
+  test("getSessionId()/getRegisteredToolsJson()/handleUrl() are inert, not throwing", () => {
+    expect(cordieriteNativeModule.getSessionId()).toBeNull();
+    expect(cordieriteNativeModule.getRegisteredToolsJson()).toBe("[]");
+    expect(cordieriteNativeModule.handleUrl("myapp://open?cordierite=x")).toBe(
+      false,
+    );
+  });
+
+  test("registerTool/connect/restoreSession/postEvent still throw or reject: Cordierite is iOS/Android-only", async () => {
+    expect(() => cordieriteNativeModule.registerTool("{}")).toThrow();
+    await expect(cordieriteNativeModule.connect("{}", false)).rejects.toThrow();
+    await expect(cordieriteNativeModule.restoreSession()).resolves.toBe(false);
+    await expect(cordieriteNativeModule.disconnect()).resolves.toBeUndefined();
+    await expect(cordieriteNativeModule.postEvent("x", null)).rejects.toThrow();
+  });
+
+  test("respondToToolCall/reportToolProgress/unregisterTool are no-ops, not throwing", () => {
+    expect(() =>
+      cordieriteNativeModule.respondToToolCall("id", null, null),
+    ).not.toThrow();
+    expect(() =>
+      cordieriteNativeModule.reportToolProgress("id", null, null),
+    ).not.toThrow();
+    expect(() => cordieriteNativeModule.unregisterTool("name")).not.toThrow();
   });
 
   test("addListener returns a no-op removable subscription", () => {
-    const subscription = cordieriteNativeModule.addListener("close", () => {});
+    const subscription = cordieriteNativeModule.addListener("error", () => {});
     expect(() => {
       subscription.remove();
     }).not.toThrow();
@@ -57,10 +66,5 @@ describe("CordieriteModule.web stub", () => {
     // export here would throw an unactionable "is not a function" instead of this file's
     // intentional "unsupported platform" error.
     expect(() => getCordieriteNativeBuildConfig()).toThrow();
-  });
-
-  test("resume lease store is inert and nonthrowing", () => {
-    expect(cordieriteNativeResumeLeaseStore.get()).toBeNull();
-    expect(() => cordieriteNativeResumeLeaseStore.clear()).not.toThrow();
   });
 });

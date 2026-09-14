@@ -27,29 +27,27 @@ RCT_EXPORT_MODULE(Cordierite)
     _swift = [[CordieriteTurboBridge alloc] init];
     __weak __typeof__(self) weakSelf = self;
     [_swift
-        wireEventHandlersWithStateChange:^(NSString *state) {
-          [weakSelf emitOnStateChange:@{@"state" : state}];
+        wireEventHandlersWithToolCall:^(NSString *callId, NSString *name, NSString *argsJson) {
+          [weakSelf emitOnToolCall:@{@"id" : callId, @"name" : name, @"argsJson" : argsJson}];
         }
-        messageRaw:^(NSString *raw) {
-          [weakSelf emitOnMessage:@{@"rawMessage" : raw}];
+        toolCancel:^(NSString *callId, NSString *reason) {
+          [weakSelf emitOnToolCancel:@{@"id" : callId, @"reason" : reason}];
+        }
+        stateChange:^(NSString *state, NSString *reason) {
+          NSMutableDictionary *payload = [NSMutableDictionary dictionaryWithObject:state forKey:@"state"];
+          if (reason != nil) {
+            payload[@"reason"] = reason;
+          }
+          [weakSelf emitOnStateChange:payload];
+        }
+        sessionChange:^(NSString *sessionId, NSString *alias) {
+          [weakSelf emitOnSessionChange:@{
+            @"sessionId" : sessionId != nil ? sessionId : [NSNull null],
+            @"alias" : alias != nil ? alias : [NSNull null],
+          }];
         }
         error:^(NSDictionary *payload) {
-          NSMutableDictionary *out = [NSMutableDictionary dictionaryWithDictionary:payload];
-          if (out[@"code"] == nil) {
-            out[@"code"] = @"connection_failed";
-          }
-          if (out[@"message"] == nil) {
-            out[@"message"] = @"Cordierite connection failed.";
-          }
-          [weakSelf emitOnError:out];
-        }
-        close:^(NSDictionary *payload) {
-          NSMutableDictionary *out = [NSMutableDictionary dictionary];
-          id codeVal = payload[@"code"];
-          id reasonVal = payload[@"reason"];
-          out[@"code"] = codeVal != nil ? codeVal : [NSNull null];
-          out[@"reason"] = reasonVal != nil ? reasonVal : [NSNull null];
-          [weakSelf emitOnClose:out];
+          [weakSelf emitOnError:payload];
         }];
   }
   return self;
@@ -62,52 +60,59 @@ RCT_EXPORT_MODULE(Cordierite)
 
 #pragma mark - NativeCordieriteSpec
 
-- (void)connect:(JS::NativeCordierite::CordieriteConnectOptionsNative &)options
+- (void)registerTool:(NSString *)descriptorJson
+{
+  NSError *error = nil;
+  [_swift registerToolWithDescriptorJson:descriptorJson error:&error];
+  if (error != nil) {
+    @throw [NSException exceptionWithName:@"CordieriteError" reason:error.localizedDescription userInfo:nil];
+  }
+}
+
+- (void)unregisterTool:(NSString *)name
+{
+  [_swift unregisterToolWithName:name];
+}
+
+- (NSNumber *)handleUrl:(NSString *)url
+{
+  return @([_swift handleUrl:url]);
+}
+
+- (void)connect:(NSString *)inputJson
+      supersede:(BOOL)supersede
         resolve:(RCTPromiseResolveBlock)resolve
          reject:(RCTPromiseRejectBlock)reject
 {
-  NSMutableDictionary *opts = [@{
-    @"ip" : options.ip(),
-    @"port" : @(options.port()),
-    @"sessionId" : options.sessionId(),
-    @"token" : options.token(),
-    @"expiresAt" : @(options.expiresAt()),
-  } mutableCopy];
-
-  NSString *deviceManufacturer = options.deviceManufacturer();
-  if (deviceManufacturer != nil) {
-    opts[@"deviceManufacturer"] = deviceManufacturer;
-  }
-  NSString *deviceModel = options.deviceModel();
-  if (deviceModel != nil) {
-    opts[@"deviceModel"] = deviceModel;
-  }
-  NSString *deviceOs = options.deviceOs();
-  if (deviceOs != nil) {
-    opts[@"deviceOs"] = deviceOs;
-  }
-  NSString *resumeToken = options.resumeToken();
-  if (resumeToken != nil) {
-    opts[@"resumeToken"] = resumeToken;
-  }
-  // Opt-in hardening dev-mode: the bootstrap deep link's separate `pin` param, forwarded from JS.
-  // See CordieriteConnectionManager.swift's `resolveTrustedPins` for the trust decision.
-  NSString *linkPin = options.linkPin();
-  if (linkPin != nil) {
-    opts[@"linkPin"] = linkPin;
-  }
-
-  [_swift connectWithOptions:opts resolve:resolve reject:reject];
+  [_swift connectWithInputJson:inputJson supersede:supersede resolve:resolve reject:reject];
 }
 
-- (void)send:(NSString *)message resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+- (void)restoreSession:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
 {
-  [_swift sendWithMessage:message resolve:resolve reject:reject];
+  [_swift restoreSessionWithResolve:resolve reject:reject];
 }
 
-- (void)close:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+- (void)disconnect:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
 {
-  [_swift closeWithResolve:resolve reject:reject];
+  [_swift disconnectWithResolve:resolve reject:reject];
+}
+
+- (void)postEvent:(NSString *)name
+      payloadJson:(NSString *)payloadJson
+          resolve:(RCTPromiseResolveBlock)resolve
+           reject:(RCTPromiseRejectBlock)reject
+{
+  [_swift postEventWithName:name payloadJson:payloadJson resolve:resolve reject:reject];
+}
+
+- (void)respondToToolCall:(NSString *)callId resultJson:(NSString *)resultJson errorJson:(NSString *)errorJson
+{
+  [_swift respondToToolCallWithId:callId resultJson:resultJson errorJson:errorJson];
+}
+
+- (void)reportToolProgress:(NSString *)callId progress:(NSNumber *)progress message:(NSString *)message
+{
+  [_swift reportToolProgressWithId:callId progress:progress message:message];
 }
 
 - (NSString *)getState
@@ -115,14 +120,14 @@ RCT_EXPORT_MODULE(Cordierite)
   return (NSString *)[_swift getState];
 }
 
-- (NSDictionary *)getResumeLease
+- (NSString *)getSessionId
 {
-  return [_swift getResumeLease];
+  return [_swift getSessionId];
 }
 
-- (void)clearResumeLease
+- (NSString *)getRegisteredToolsJson
 {
-  [_swift clearResumeLease];
+  return (NSString *)[_swift getRegisteredToolsJson];
 }
 
 #pragma mark - Constants
@@ -130,7 +135,7 @@ RCT_EXPORT_MODULE(Cordierite)
 // Codegen special-cases `getConstants()` (legacy bridge constants export): the generated
 // `NativeCordieriteSpec` protocol requires both `constantsToExport` and `getConstants`, mirroring
 // e.g. RN core's `RCTAppState`. `[self getConstants]` reads the Swift/Bundle-backed build config
-// each call rather than caching it, matching `getState`/`getResumeLease` above.
+// each call rather than caching it, matching `getState`/`getSessionId` above.
 - (facebook::react::ModuleConstants<JS::NativeCordierite::Constants::Builder>)constantsToExport
 {
   return (facebook::react::ModuleConstants<JS::NativeCordierite::Constants::Builder>)[self getConstants];
