@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+
 def safeExtGet(prop, fallback) {
   rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
 }
@@ -32,7 +34,10 @@ apply plugin: "com.android.library"
 apply plugin: "kotlin-android"
 
 group = "com.callstackincubator.cordierite"
-version = "0.4.0-rc.1" // keep in sync with package.json
+// Single source of truth: package.json (docs/tasks/14-native-core-extraction.md -- this used to be
+// a hard-coded literal here that drifted from package.json's own version).
+def cordieriteVersion = new JsonSlurper().parse(file("$projectDir/../package.json")).version
+version = cordieriteVersion
 
 // Only configured when autolinking has already decided to link Cordierite, so the line appearing
 // at all is the proof. Ungated: a release build carrying Cordierite by mistake is the failure
@@ -46,11 +51,19 @@ logger.lifecycle("[cordierite] native module INCLUDED in this build (v${version}
  * this whole Gradle project per build type (`buildTypes` in `react-native.config.js`) would leave
  * that reference unresolved for a variant this project isn't linked into -- a compile error, not
  * an inert build. So this project is linked into every variant unconditionally (`buildTypes` is
- * empty in `react-native.config.js`), and the split instead happens at the source-set level:
- * `debug` always compiles the real implementation; `release` compiles the same real files only
- * when `CORDIERITE_ENABLED` is truthy, and a no-op `CordieritePackage` (`src/release-stub/`)
- * otherwise. The real implementation is genuinely absent from a default release build's bytecode,
- * not merely gated behind a runtime check.
+ * empty in `react-native.config.js`).
+ *
+ * `CordieritePackage`/`NativeCordieriteModule` (src/main -- docs/tasks/14-native-core-extraction.md)
+ * now always compile, for every variant: they reference `CordieriteConnectionManager` and friends by
+ * simple (unqualified) name only, never a build-type check. Which implementation that name resolves
+ * to is decided below by which vendored source directory is on each variant's compile classpath --
+ * `android/core` (real, vendored from packages/native/android/core) or `android/core-noop` (no-op,
+ * vendored from packages/native/android/core-noop) -- both scripts/sync-native-core.mjs targets,
+ * both declaring the exact same package/class names so only one may ever be on a given variant's
+ * classpath at once. `debug` always gets the real implementation; `release` gets the real
+ * implementation only when `CORDIERITE_ENABLED` is truthy, and the no-op otherwise -- the same
+ * default this project has always had, just implemented as a vendored-directory swap instead of a
+ * `src/debug`/`src/release-stub` one.
  */
 def cordieriteEnabledForRelease = System.getenv("CORDIERITE_ENABLED")?.trim()?.toLowerCase() in ["1", "true"]
 
@@ -59,8 +72,11 @@ android {
   compileSdk safeExtGet("compileSdkVersion", 35)
 
   sourceSets {
+    debug {
+      java.srcDirs += ["core"]
+    }
     release {
-      java.srcDirs = [cordieriteEnabledForRelease ? "src/debug/java" : "src/release-stub/java"]
+      java.srcDirs += [cordieriteEnabledForRelease ? "core" : "core-noop"]
     }
   }
 
@@ -68,13 +84,18 @@ android {
     minSdkVersion safeExtGet("minSdkVersion", 24)
     targetSdkVersion safeExtGet("targetSdkVersion", 35)
     versionCode 1
-    versionName "0.4.0-rc.1" // keep in sync with package.json
+    versionName cordieriteVersion
     buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
-    // Ships a keep rule for CordieriteNativeMarker (see consumer-rules.pro) to every consuming app's
-    // R8/ProGuard pass, so `cordierite doctor` (docs/tasks/10-android-detection-keep-rule.md) has a
-    // detection anchor that survives minification even with no config plugin and no app-authored
-    // keep rules for this package.
-    consumerProguardFiles "consumer-rules.pro"
+    // Ships a keep rule for CordieriteNativeMarker (see android/core/consumer-rules.pro, vendored
+    // from packages/native/android/core) to every consuming app's R8/ProGuard pass, so
+    // `cordierite doctor` (docs/tasks/10-android-detection-keep-rule.md) has a detection anchor
+    // that survives minification even with no config plugin and no app-authored keep rules for
+    // this package. Only ever meaningful for the `debug`/`CORDIERITE_ENABLED=1` variants that
+    // actually vendor `core` rather than `core-noop` -- consumerProguardFiles is declared once,
+    // unconditionally, but the file it names only exists (post-sync) in the shape appropriate to
+    // whichever `core`/`core-noop` directory this variant's sourceSet points at above; R8 simply
+    // finds nothing to keep in a build that never compiled the marker class in the first place.
+    consumerProguardFiles "core/consumer-rules.pro"
   }
 
   buildFeatures {
@@ -83,15 +104,6 @@ android {
 
   lintOptions {
     abortOnError false
-  }
-
-  testOptions {
-    unitTests {
-      // Required by Robolectric, which backs CordieriteSpkiPinTest (the only test class that needs
-      // a real android.util.Base64 / android.jar runtime). Every other unit test runs on the plain
-      // JVM and is unaffected.
-      includeAndroidResources = true
-    }
   }
 
   compileOptions {
@@ -114,19 +126,20 @@ repositories {
 
 dependencies {
   implementation "com.facebook.react:react-android"
+  // Needed by the vendored android/core (debug, and release when CORDIERITE_ENABLED=1) but not by
+  // android/core-noop. Declared unconditionally rather than per-variant, matching this project's
+  // pre-extraction behavior (it shipped okhttp on every variant, including the release-stub
+  // default, before this refactor too) -- narrowing it to only the variants that need it is a
+  // follow-up, not something this mechanical extraction changes.
   implementation "com.squareup.okhttp3:okhttp:4.12.0"
 
-  // Pure-logic JVM tests (SPKI pin parity, metadata parsing, protocol-v2 frame shape); no
-  // Robolectric/emulator dependency needed. Run with `./gradlew :cordierite_react-native:testDebugUnitTest`
-  // from playground/android (the autolinked consumer app), or any consumer app that includes this module.
-  testImplementation "junit:junit:4.13.2"
-  // Real org.json implementation: the stub in android.jar throws "not mocked" for every method at
-  // unit-test runtime (same reason expo-modules-core's own tests depend on this).
-  testImplementation "org.json:json:20180813"
-  // Robolectric supplies a real android.util.Base64 (and the rest of android.jar) so
-  // CordieriteSpkiPinTest can call the shipped `computeSpkiPin`/`PinningTrustManager` instead of
-  // re-deriving the digest math. Still no emulator: it runs in the same JVM test task.
-  testImplementation "org.robolectric:robolectric:4.16"
+  // No test dependencies here: the Kotlin unit tests that used to live in this module's own
+  // src/test (CordieriteConnectionManagerTest, CordieriteSpkiPinTest) moved with the sources they
+  // cover to packages/native/android/core/src/test (docs/tasks/14-native-core-extraction.md) and
+  // run via `./gradlew :core:testDebugUnitTest` there. `:cordierite_react-native:testDebugUnitTest`
+  // still runs in CI (no test classes -> a trivial pass) so the task name stays stable; the vendored
+  // `core`/`core-noop` compiling cleanly for every CORDIERITE_ENABLED state is what
+  // `assembleDebug`/`assembleRelease` plus the `cordierite doctor` gates below actually prove.
 }
 
 tasks.register("assertNewArchitectureEnabled") {
