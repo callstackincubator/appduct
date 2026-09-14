@@ -52,11 +52,27 @@ function syncFile(srcFile, destFile) {
   console.log(`[sync-native-core] ${srcFile} -> ${destFile}`);
 }
 
+// The app-facing entry points of the native core (issue #48 phase 3) are deliberately NOT vendored
+// into the React Native package: the RN bridge owns its own `CordieriteClient`, and a second client
+// behind `Cordierite.shared` / the `Cordierite` object would compete with it for the one
+// process-memory resume lease. Android's init `ContentProvider` and deep-link trampoline `Activity`
+// exist only for plain apps too (RN routes links through `Linking`) and are never declared in the
+// RN module's manifest. Everything else -- the client, transport, codecs, marker -- is shared.
+const IOS_FACADE_FILES = new Set(["CordieriteAPI.swift"]);
+const ANDROID_FACADE_FILES = new Set([
+  "Cordierite.kt",
+  "CordieriteInitProvider.kt",
+  "CordieriteLinkActivity.kt",
+]);
+
+const excludeFacade = (facadeFiles) => (src) => !facadeFiles.has(src.split("/").pop());
+
 function main() {
-  // --- iOS: Real/ only (every file under it is Swift -- no filter needed) ---
+  // --- iOS: Real/ only, minus the plain-app facade ---
   syncDir(
     join(nativeRoot, "ios", "Sources", "CordieriteCore", "Real"),
     join(rnRoot, "ios", "Core"),
+    { filter: excludeFacade(IOS_FACADE_FILES) },
   );
 
   // --- Android: core ---
@@ -68,7 +84,7 @@ function main() {
     "main",
     "java",
   );
-  syncDir(coreJavaSrc, join(rnRoot, "android", "core"));
+  syncDir(coreJavaSrc, join(rnRoot, "android", "core"), { filter: excludeFacade(ANDROID_FACADE_FILES) });
   syncFile(
     join(nativeRoot, "android", "core", "consumer-rules.pro"),
     join(rnRoot, "android", "core", "consumer-rules.pro"),
@@ -83,7 +99,7 @@ function main() {
     "main",
     "java",
   );
-  syncDir(coreNoopJavaSrc, join(rnRoot, "android", "core-noop"));
+  syncDir(coreNoopJavaSrc, join(rnRoot, "android", "core-noop"), { filter: excludeFacade(ANDROID_FACADE_FILES) });
 
   if (readdirSync(join(rnRoot, "ios", "Core")).length === 0) {
     throw new Error("sync-native-core: ios/Core ended up empty -- packages/native/ios moved?");

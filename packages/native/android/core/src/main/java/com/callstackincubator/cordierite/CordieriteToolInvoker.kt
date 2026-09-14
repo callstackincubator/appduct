@@ -2,6 +2,7 @@ package com.callstackincubator.cordierite
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
@@ -87,8 +88,11 @@ internal class CordieriteToolInvoker(
             return
         }
 
+        // Started lazily so the map entry exists before the coroutine can run: a handler that
+        // completes synchronously would otherwise hit `finally { inFlight.remove }` before the
+        // `inFlight[callId] = job` below, leaving a stale entry behind forever.
         val job =
-            scope.launch {
+            scope.launch(start = CoroutineStart.LAZY) {
                 val context =
                     CordieriteToolCallContext(callId, name, sessionId) { progress, message ->
                         sendSafely(
@@ -152,6 +156,7 @@ internal class CordieriteToolInvoker(
             }
 
         inFlight[callId] = job
+        job.start()
     }
 
     /** An explicit `tool_cancel` frame (PROTOCOL.md §4). A cancel for an unknown or
