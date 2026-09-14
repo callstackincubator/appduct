@@ -25,16 +25,6 @@ android {
     minSdkVersion rootProject.ext.minSdkVersion
     targetSdkVersion rootProject.ext.targetSdkVersion
     consumerProguardFiles 'consumer-rules.pro'
-    // A default only for *this module's own* unit-test manifest merge (Robolectric's
-    // CordieriteLinkActivityTest needs a fully-resolved manifest to build against) -- it has no
-    // effect on a downstream consumer, which resolves `${cordieriteScheme}` (declared in
-    // src/main/AndroidManifest.xml, read by CordieriteLinkActivityTest) from its *own*
-    // `manifestPlaceholders`, set in the consuming app's build.gradle, at that app's own final
-    // manifest-merge step -- a library's `defaultConfig.manifestPlaceholders` is only consulted
-    // when merging that library's own manifest, never propagated to a downstream merge. Forgetting
-    // it in a real consumer app is still a manifest-merger error at build time (docs/tasks/19-android-entry-points.md,
-    // packages/native/android/README.md).
-    manifestPlaceholders = [cordieriteScheme: "cordierite-core-test"]
   }
 
   testOptions {
@@ -90,6 +80,23 @@ dependencies {
   // CordieriteSpkiPinTest can call the shipped `computeSpkiPin`/`PinningTrustManager` instead of
   // re-deriving the digest math. Still no emulator: it runs in the same JVM test task.
   testImplementation "org.robolectric:robolectric:4.16"
+}
+
+// `${cordieriteScheme}` in src/main/AndroidManifest.xml is deliberately left unresolved by this
+// module's own build config -- a real consumer resolves it from their own app's
+// `manifestPlaceholders`. AGP resolves a library's manifest placeholders once, at that library's
+// own manifest-merge step, baking a literal value into the merged manifest that a downstream
+// consumer then inherits verbatim -- proven the hard way: an earlier `defaultConfig.manifestPlaceholders`
+// default here leaked into playground-native's own debug build via project substitution, silently
+// overriding that app's own `cordieriteScheme` (docs/tasks/19-android-entry-points.md's deviations
+// section). So the only placeholder value this module may ever set is one scoped to a component
+// real consumers never resolve through: `unitTest`, which needs *some* concrete value purely so
+// Robolectric's CordieriteLinkActivityTest gets a mergeable manifest, and is never published or
+// depended on by anything downstream.
+androidComponents {
+  onVariants(selector().withBuildType("debug")) { variant ->
+    variant.unitTest?.manifestPlaceholders?.put("cordieriteScheme", "cordierite-core-test")
+  }
 }
 
 // Minimal `maven-publish` wiring for Phase 3 (docs/tasks/14-native-core-extraction.md), when this

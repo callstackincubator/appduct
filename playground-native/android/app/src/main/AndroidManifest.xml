@@ -1,5 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- OkHttp (vendored into `core`'s debug implementation) needs this to open the pinned
+         wss:// socket at all; without it, connect() fails immediately with an EPERM-style
+         SecurityException, which is exactly what this playground's own live check surfaced
+         before this permission was added (docs/tasks/19-android-entry-points.md). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:name=".PlaygroundApplication"
         android:allowBackup="true"
