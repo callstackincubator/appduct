@@ -15,12 +15,23 @@
  *      directory (never `~/.cordierite` or the state dir in use — see {@link findProjectConfigs};
  *      a project config without a `scheme` key does not stop the walk)
  *   4. `scheme` in the state directory's `config.json` (the pre-#29 behaviour)
- *   5. `<cwd>/app.json`'s `expo.scheme` (no walk-up — an app root is where you run these commands)
+ *   5. a static-file project probe, tried in this order (no walk-up — an app root is where you
+ *      run these commands), with {@link discoverStaticProjectScheme} owning the whole step:
+ *      a. `<cwd>/app.json`'s `expo.scheme` (the pre-#48 behaviour, unchanged)
+ *      b. Android: `app/build.gradle(.kts)`'s `cordieriteScheme` manifest placeholder, then
+ *         `app/src/main/AndroidManifest.xml`'s first `<data android:scheme>` in a `VIEW`
+ *         intent filter
+ *      c. iOS: any `Info.plist` up to two levels deep (excluding `Pods`/`build`/`node_modules`/
+ *         `DerivedData`) for the first `CFBundleURLSchemes` entry, then xcodegen's `project.yml`
+ *         for the same key — see `native-scheme.ts`, which owns 5b/5c and never guesses when two
+ *         of them disagree (throws instead, naming both)
  *
  * Nothing here executes project code: `app.config.js`/`app.config.ts` are deliberately *not*
  * evaluated (running arbitrary project JS to read one string is a much larger blast radius than
- * this feature warrants). Dynamic-config projects use `--scheme`, `CORDIERITE_SCHEME`, or a
- * project `.cordierite/config.json` instead.
+ * this feature warrants), and neither is `xcodebuild`/`plutil`/a Gradle evaluation for the native
+ * probes added in issue #48 — every one of them is a plain, defensively-parsed read of a static
+ * project file (`native-scheme.ts`'s doc comment has the detail). Dynamic-config projects use
+ * `--scheme`, `CORDIERITE_SCHEME`, or a project `.cordierite/config.json` instead.
  *
  * A project `.cordierite/config.json` carries client-side keys only (`scheme` today). It never
  * redirects the state directory — `--state-dir` / `CORDIERITE_STATE_DIR` remain the only way to do
@@ -33,6 +44,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { usageError } from "./errors.js";
+import { discoverNativeScheme, type NativeSchemeSource } from "./native-scheme.js";
 
 /** The directory a project-level config lives in, relative to an app root. */
 export const PROJECT_CONFIG_DIR = ".cordierite";
@@ -59,8 +71,16 @@ const SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*$/u;
 
 export const isValidScheme = (value: string): boolean => SCHEME_PATTERN.test(value);
 
-/** Which step of the order above produced the scheme. */
-export type SchemeSource = "flag" | "env" | "project-config" | "state-config" | "app-json";
+/** Which step of the order above produced the scheme. The four `NativeSchemeSource` values are
+ * step 5's native-project probes (`native-scheme.ts`); `"app-json"` is step 5's original,
+ * unchanged probe. */
+export type SchemeSource =
+  | "flag"
+  | "env"
+  | "project-config"
+  | "state-config"
+  | "app-json"
+  | NativeSchemeSource;
 
 export type ResolvedScheme = {
   /** Undefined when no source produced one; `tried` then explains where we looked. */
@@ -115,8 +135,11 @@ const readJsonFile = async (path: string): Promise<{ raw: unknown } | undefined>
  * Normalizes Expo's `scheme` field, which is either a single string or an array of them. Mirrors
  * `packages/react-native/app.plugin.js`'s `configuredSchemes` so the CLI and the config plugin
  * agree on what "the app's scheme" means; the first entry wins for an array.
+ *
+ * Exported so {@link ../native-scheme.js} can apply the same "string, or first non-empty entry of
+ * an array" rule to `CFBundleURLSchemes` (`Info.plist`/`project.yml`) — the shape is identical.
  */
-const firstConfiguredScheme = (value: unknown): string | undefined => {
+export const firstConfiguredScheme = (value: unknown): string | undefined => {
   if (Array.isArray(value)) {
     return value.find((entry): entry is string => typeof entry === "string" && entry.length > 0);
   }
@@ -147,6 +170,51 @@ export const discoverExpoScheme = async (dir: string): Promise<string | undefine
   const scheme = firstConfiguredScheme(expo.scheme);
 
   return scheme === undefined ? undefined : requireValidScheme(scheme, `"expo.scheme" in ${path}`);
+};
+
+export type StaticProjectSchemeDiscovery = {
+  /** `undefined` when nothing in this step resolved a scheme. */
+  scheme?: string;
+  source?: "app-json" | NativeSchemeSource;
+  /** The human-readable location `scheme` was actually read from (a path, plus what was read from
+   * it) — distinct from `tried` below, which lists every location whether or not it hit. Only set
+   * alongside `scheme`. */
+  origin?: string;
+  /** Every location this step consulted, in order: `app.json` first (unchanged from pre-#48), then
+   * every `native-scheme.ts` probe — always present, hit or miss, one entry each. */
+  tried: string[];
+};
+
+/**
+ * Step 5 of {@link resolveScheme} in full: `<cwd>/app.json` first (unchanged), then the native
+ * Android/iOS project probes from `native-scheme.ts`. Exported as its own step — not inlined into
+ * `resolveScheme` — because `cordierite init` (`commands/init.ts`) runs exactly this same
+ * discovery on its own, deliberately skipping steps 1-4 (see that file's doc comment for why): the
+ * two must never disagree about what "discovery" means for the tail of the precedence order, or
+ * `init` could write a scheme `resolveScheme` would never have found on its own.
+ */
+export const discoverStaticProjectScheme = async (cwd: string): Promise<StaticProjectSchemeDiscovery> => {
+  const appJsonPath = join(resolve(cwd), APP_JSON_FILENAME);
+  const tried = [`${appJsonPath} ("expo.scheme")`];
+  const appJsonScheme = await discoverExpoScheme(cwd);
+
+  if (appJsonScheme !== undefined) {
+    return { scheme: appJsonScheme, source: "app-json", origin: appJsonPath, tried };
+  }
+
+  const native = await discoverNativeScheme(resolve(cwd));
+  tried.push(...native.tried);
+
+  if (native.result !== undefined) {
+    return {
+      scheme: native.result.scheme,
+      source: native.result.source,
+      origin: native.result.origin,
+      tried,
+    };
+  }
+
+  return { tried };
 };
 
 export type ProjectConfigLookupOptions = {
@@ -360,12 +428,11 @@ export const resolveScheme = async (options: ResolveSchemeOptions = {}): Promise
     };
   }
 
-  tried.push(`${join(cwd, APP_JSON_FILENAME)} ("expo.scheme")`);
+  const discovered = await discoverStaticProjectScheme(cwd);
+  tried.push(...discovered.tried);
 
-  const appJsonScheme = await discoverExpoScheme(cwd);
-
-  if (appJsonScheme !== undefined) {
-    return { scheme: appJsonScheme, source: "app-json", tried };
+  if (discovered.scheme !== undefined) {
+    return { scheme: discovered.scheme, source: discovered.source, tried };
   }
 
   return { tried };
