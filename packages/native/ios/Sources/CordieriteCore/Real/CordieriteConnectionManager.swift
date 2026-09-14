@@ -29,6 +29,15 @@ private struct CordieriteModuleError: Error {
   let message: String
 }
 
+/// Composes the daemon connect URL, bracketing an IPv6 literal (`wss://[fd00::1]:8443`) and
+/// leaving an IPv4 literal unbracketed (`wss://192.168.1.10:8443`) — matching
+/// `formatAgentWebSocketUrl` in `packages/shared/src/domains/transport.ts`. A pure, free function
+/// so it is directly unit-testable without a real socket.
+func formatCordieriteWebSocketUrl(ip: String, port: Int) -> String {
+  let host = ip.contains(":") ? "[\(ip)]" : ip
+  return "wss://\(host):\(port)"
+}
+
 public struct CordieriteErrorDetails: Sendable {
   public let code: String
   public let message: String
@@ -432,7 +441,7 @@ public actor CordieriteConnectionManager: NSObject, URLSessionDelegate, URLSessi
       throw CordieriteModuleError(message: "Cordierite only allows local IPv4 addresses.")
     }
 
-    guard let url = URL(string: "wss://\(options.ip):\(options.port)") else {
+    guard let url = URL(string: formatCordieriteWebSocketUrl(ip: options.ip, port: options.port)) else {
       throw CordieriteModuleError(message: "Failed to create a Cordierite WebSocket URL.")
     }
 

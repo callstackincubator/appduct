@@ -195,6 +195,20 @@ internal fun resolveTrustedPins(
     }
 }
 
+/**
+ * Composes the daemon connect URL, bracketing an IPv6 literal (`wss://[fd00::1]:8443`) and leaving
+ * an IPv4 literal unbracketed (`wss://192.168.1.10:8443`) — matching `formatAgentWebSocketUrl` in
+ * `packages/shared/src/domains/transport.ts`. A pure, top-level function so it is directly
+ * unit-testable without a real socket.
+ */
+internal fun formatCordieriteWebSocketUrl(
+    ip: String,
+    port: Int,
+): String {
+    val host = if (ip.contains(":")) "[$ip]" else ip
+    return "wss://$host:$port"
+}
+
 internal data class CordieriteErrorDetails(
     val code: String,
     val message: String,
@@ -637,7 +651,7 @@ internal class CordieriteConnectionManager(
             val request =
                 Request
                     .Builder()
-                    .url("wss://${options.ip}:${options.port}")
+                    .url(formatCordieriteWebSocketUrl(options.ip, options.port))
                     .build()
 
             webSocket = connectClient.newWebSocket(request, ConnectionListener(options))

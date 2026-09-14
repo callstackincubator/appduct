@@ -641,4 +641,21 @@ class CordieriteConnectionManagerTest {
     // SPKI pin parity with packages/cordierite/src/spki-pin.ts and iOS's spkiPin(for:), plus the
     // PinningTrustManager decision path, live in CordieriteSpkiPinTest — they call the shipped
     // `computeSpkiPin`, which needs Robolectric's android.util.Base64.
+
+    // MARK: - formatCordieriteWebSocketUrl (IPv6 bracketing, matches transport.ts's formatAgentWebSocketUrl)
+
+    @Test
+    fun `IPv4 literal is not bracketed`() {
+        assertEquals("wss://192.168.1.10:8443", formatCordieriteWebSocketUrl("192.168.1.10", 8443))
+    }
+
+    @Test
+    fun `IPv6 literal is bracketed`() {
+        assertEquals("wss://[fd00::1]:8443", formatCordieriteWebSocketUrl("fd00::1", 8443))
+    }
+
+    @Test
+    fun `loopback IPv6 literal is bracketed`() {
+        assertEquals("wss://[::1]:8443", formatCordieriteWebSocketUrl("::1", 8443))
+    }
 }

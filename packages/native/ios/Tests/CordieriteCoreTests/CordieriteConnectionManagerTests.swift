@@ -7,6 +7,20 @@ final class CordieriteConnectionManagerTests: XCTestCase {
     CordieriteProcessResumeLeaseStore.shared.resetForTests()
   }
 
+  // MARK: - formatCordieriteWebSocketUrl (IPv6 bracketing, matches transport.ts's formatAgentWebSocketUrl)
+
+  func testFormatWebSocketUrlLeavesIpv4Unbracketed() {
+    XCTAssertEqual(formatCordieriteWebSocketUrl(ip: "192.168.1.10", port: 8443), "wss://192.168.1.10:8443")
+  }
+
+  func testFormatWebSocketUrlBracketsIpv6() {
+    XCTAssertEqual(formatCordieriteWebSocketUrl(ip: "fd00::1", port: 8443), "wss://[fd00::1]:8443")
+  }
+
+  func testFormatWebSocketUrlBracketsLoopbackIpv6() {
+    XCTAssertEqual(formatCordieriteWebSocketUrl(ip: "::1", port: 8443), "wss://[::1]:8443")
+  }
+
   // MARK: - Process resume lease
 
   func testValidClaimAckStoresExactSchemaRecordBeforeRawCallback() throws {
