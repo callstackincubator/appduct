@@ -5,6 +5,7 @@ import type {
   CordieriteNativeEvents,
   CordieriteNativeModuleLike,
 } from "../client-types";
+import { logger } from "../logger";
 
 (globalThis as { __DEV__?: boolean }).__DEV__ = true;
 
@@ -268,5 +269,68 @@ describe("createCordieriteClient (bridge contract)", () => {
     fake.emit("toolCall", { id: "call-1", name: "anything", argsJson: "{}" });
     // No respond call: the toolCall listener was removed by destroy().
     expect(fake.respondCalls).toEqual([]);
+  });
+
+  describe("postEvent", () => {
+    test("never throws, even when native rejects", async () => {
+      const fake = createFakeNativeModule();
+      fake.module.postEvent = async () => {
+        throw new Error("boom");
+      };
+      const client = createCordieriteClient(fake.module);
+
+      await expect(client.postEvent("screen_changed")).resolves.toBeUndefined();
+    });
+
+    test('a rejection carrying code "E_CORDIERITE_NOT_ACTIVE" is a dev-only drop, not an `error` event', async () => {
+      const fake = createFakeNativeModule();
+      fake.module.postEvent = async () => {
+        const error = new Error("no active session") as Error & {
+          code?: string;
+        };
+        error.code = "E_CORDIERITE_NOT_ACTIVE";
+        throw error;
+      };
+      const client = createCordieriteClient(fake.module);
+      const devWarnSpy = vi.spyOn(logger, "devWarn");
+      const warnSpy = vi.spyOn(logger, "warn");
+      const errorEvents: unknown[] = [];
+      client.addCordieriteListener("error", (event) => {
+        errorEvents.push(event);
+      });
+
+      await client.postEvent("screen_changed");
+
+      expect(devWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('postEvent("screen_changed") dropped'),
+      );
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(errorEvents).toEqual([]);
+    });
+
+    test("any other rejection is a warning plus an `error` listener event (phase socket)", async () => {
+      const fake = createFakeNativeModule();
+      fake.module.postEvent = async () => {
+        throw new Error("socket write failed");
+      };
+      const client = createCordieriteClient(fake.module);
+      const warnSpy = vi.spyOn(logger, "warn");
+      const errorEvents: { phase: string; message: string }[] = [];
+      client.addCordieriteListener("error", (event) => {
+        errorEvents.push(event);
+      });
+
+      await client.postEvent("screen_changed");
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('postEvent("screen_changed") failed to send'),
+        expect.anything(),
+      );
+      expect(errorEvents).toHaveLength(1);
+      expect(errorEvents[0]).toMatchObject({
+        phase: "socket",
+        message: 'Failed to send event "screen_changed".',
+      });
+    });
   });
 });

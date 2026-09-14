@@ -196,6 +196,12 @@ public final class CordieriteTurboBridge: NSObject, @unchecked Sendable {
         let payload = try payloadJson.map { try JSONValue.parse($0 as String) }
         try await self.client.postEvent(name as String, payload: payload)
         resolve(nil)
+      } catch is CordieriteClient.CordieriteNotActiveError {
+        reject(
+          "E_CORDIERITE_NOT_ACTIVE",
+          "Cordierite postEvent(\(name)) dropped: no active Cordierite session.",
+          CordieriteClient.CordieriteNotActiveError()
+        )
       } catch {
         reject("E_CORDIERITE", CordieriteTurboBridge.describe(error), error)
       }

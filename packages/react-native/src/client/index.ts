@@ -26,6 +26,24 @@ export type {
 } from "../client-types";
 
 /**
+ * Both native bridges reject `postEvent` with this code when no session is active (iOS:
+ * `CordieriteClient.CordieriteNotActiveError` via `CordieriteTurboBridge.swift`; Android: the
+ * `NativeCordieriteModule.postEvent` state guard, since the Kotlin core's own `postEvent` is
+ * itself a best-effort no-op for a plain-app caller) -- see `postEvent` below, which downgrades
+ * exactly this rejection to a dev-only warning instead of the generic `error` listener event every
+ * other `postEvent` failure gets.
+ */
+export const CORDIERITE_NOT_ACTIVE_ERROR_CODE = "E_CORDIERITE_NOT_ACTIVE";
+
+/** Whether `error` is a native `postEvent` rejection specifically for "no session is active",
+ * identified by `code` the way a rejected TurboModule/bridge promise surfaces it to JS. */
+export const isCordieriteNotActiveError = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  (error as { code?: unknown }).code === CORDIERITE_NOT_ACTIVE_ERROR_CODE;
+
+/**
  * The thin client left after issue #48 phase 2 (`docs/tasks/15-native-session-logic.md`): the
  * native core owns session lifecycle (claim/resume, reconnect, grace), the tool registry and its
  * wire deltas, and per-call timeout/cancel/progress. This layer keeps only what is inherently JS —
@@ -207,7 +225,8 @@ export const createCordieriteClient = (
       );
     },
 
-    /** Emits an `event` frame while active; rejects otherwise (native's `postEvent` contract). */
+    /** Emits an `event` frame while active; drops (with a dev warning) when no session is active;
+     * otherwise reports the failure on the `error` listener (phase `"socket"`). Never throws. */
     async postEvent(name: string, payload?: unknown): Promise<void> {
       try {
         await module.postEvent(
@@ -215,7 +234,19 @@ export const createCordieriteClient = (
           payload === undefined ? null : JSON.stringify(payload),
         );
       } catch (error) {
-        logger.debug(`postEvent("${name}") dropped or failed`, error);
+        if (isCordieriteNotActiveError(error)) {
+          logger.devWarn(
+            `postEvent("${name}") dropped: no active Cordierite session.`,
+          );
+          return;
+        }
+
+        logger.warn(`postEvent("${name}") failed to send`, error);
+        listenerBus.emit("error", {
+          phase: "socket",
+          message: `Failed to send event "${name}".`,
+          cause: error,
+        });
       }
     },
 

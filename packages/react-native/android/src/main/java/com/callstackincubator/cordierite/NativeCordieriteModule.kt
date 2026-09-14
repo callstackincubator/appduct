@@ -191,6 +191,19 @@ class NativeCordieriteModule(
         promise: Promise,
     ) {
         moduleScope.launch {
+            // [CordieriteClient.postEvent] is itself best-effort (silently a no-op while no session
+            // is active, for the benefit of a plain-app caller), but the RN bridge's JS contract
+            // needs a distinguishable rejection here -- see client/index.ts's postEvent, which turns
+            // this exact code into a dev-only warning instead of surfacing an `error` event, mirroring
+            // the iOS bridge's `E_CORDIERITE_NOT_ACTIVE` (`CordieriteClient.CordieriteNotActiveError`).
+            if (client.state.name != "active" || client.sessionId == null) {
+                promise.reject(
+                    "E_CORDIERITE_NOT_ACTIVE",
+                    "Cordierite postEvent(\"$name\") dropped: no active Cordierite session.",
+                )
+                return@launch
+            }
+
             try {
                 val payload = payloadJson?.let { JSONTokener(it).nextValue() }
                 client.postEvent(name, payload)
