@@ -236,9 +236,15 @@ private fun JSONObject.optStringOrNull(key: String): String? = if (has(key) && !
  * `foreground` (mirrors the JS `CordieriteUnifiedStateChangeEvent`). */
 internal typealias CordieriteStateChangeListener = (state: CordieriteClientState, reason: String?) -> Unit
 
-/** `sessionChange(sessionId?, alias?)`, matching `CordieriteSessionChangeEventNative` (the frozen
- * TurboModule spec carries no `type`/`reason` on this event -- both are `null` once the session is
- * gone). */
-internal typealias CordieriteSessionChangeListener = (sessionId: String?, alias: String?) -> Unit
+/** `sessionChange(type, sessionId?, alias?, reason?)`, matching `CordieriteSessionChangeEventNative`
+ * (issue #48 review, Decision 5 follow-up: restoring the `type`/`reason` the initial phase-2 port
+ * dropped). `type` is `"claimed"` | `"resumed"` | `"lost"`; `sessionId`/`alias` are both `null` once
+ * the session is gone; `reason` is set only when `type` is `"lost"`. */
+internal typealias CordieriteSessionChangeListener = (
+    type: String,
+    sessionId: String?,
+    alias: String?,
+    reason: String?,
+) -> Unit
 
 internal typealias CordieriteErrorListener = (error: CordieriteUnifiedError) -> Unit

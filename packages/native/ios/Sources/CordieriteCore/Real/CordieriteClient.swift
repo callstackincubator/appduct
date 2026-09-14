@@ -186,8 +186,8 @@ public actor CordieriteClient {
     for callback in stateChangeListeners.values { callback(event) }
   }
 
-  func emitSessionChange(sessionId: String?, alias: String?) {
-    let event = CordieriteSessionChangeEvent(sessionId: sessionId, alias: alias)
+  func emitSessionChange(type: CordieriteSessionChangeKind, sessionId: String?, alias: String?, reason: String? = nil) {
+    let event = CordieriteSessionChangeEvent(type: type, sessionId: sessionId, alias: alias, reason: reason)
     for callback in sessionChangeListeners.values { callback(event) }
   }
 
@@ -278,7 +278,7 @@ public actor CordieriteClient {
       // Both null once the session is gone -- see `CordieriteSessionChangeEventNative`'s doc
       // comment; a listener that needs the departing session's id/alias should cache the most
       // recent non-null `sessionChange` event alongside this one.
-      emitSessionChange(sessionId: nil, alias: nil)
+      emitSessionChange(type: .lost, sessionId: nil, alias: nil, reason: "closed_by_app")
     }
 
     await transport.close()

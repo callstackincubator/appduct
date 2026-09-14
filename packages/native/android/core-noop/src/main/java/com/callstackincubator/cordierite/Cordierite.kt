@@ -103,6 +103,13 @@ enum class ClientState {
     closed,
 }
 
+/** No-op mirror of `core`'s `SessionChangeType`. */
+enum class SessionChangeType {
+    claimed,
+    resumed,
+    lost,
+}
+
 /** No-op mirror of `core`'s `BuildConfig`. */
 data class BuildConfig(
     val trust: String,
@@ -115,7 +122,12 @@ data class BuildConfig(
 sealed class CordieriteEvent {
     data class StateChange(val state: ClientState, val reason: String?) : CordieriteEvent()
 
-    data class SessionChange(val sessionId: String?, val alias: String?) : CordieriteEvent()
+    data class SessionChange(
+        val type: SessionChangeType,
+        val sessionId: String?,
+        val alias: String?,
+        val reason: String? = null,
+    ) : CordieriteEvent()
 
     data class Error(
         val phase: String,

@@ -28,12 +28,26 @@ public struct CordieriteStateChangeEvent: Sendable, Equatable {
   }
 }
 
+/// Matches `CordieriteSessionChangeEvent`/`CordieriteSessionChangeEventNative` (issue #48 review,
+/// Decision 5 follow-up: restoring the `type`/`reason` the initial phase-2 port dropped).
+/// `sessionId`/`alias` are both `nil` once the session is gone; `reason` is set only when `type`
+/// is `.lost`.
+public enum CordieriteSessionChangeKind: String, Sendable, Equatable {
+  case claimed
+  case resumed
+  case lost
+}
+
 public struct CordieriteSessionChangeEvent: Sendable, Equatable {
+  public let type: CordieriteSessionChangeKind
   public let sessionId: String?
   public let alias: String?
-  public init(sessionId: String?, alias: String?) {
+  public let reason: String?
+  public init(type: CordieriteSessionChangeKind, sessionId: String?, alias: String?, reason: String? = nil) {
+    self.type = type
     self.sessionId = sessionId
     self.alias = alias
+    self.reason = reason
   }
 }
 

@@ -311,7 +311,7 @@ internal class CordieriteClient private constructor(
             settlePendingAttempt(Result.failure(IllegalStateException("Cordierite client was closed.")))
 
             setClientState(CordieriteClientState.closed, "closed_by_app")
-            if (hadSession) emitSessionChange(null, null)
+            if (hadSession) emitSessionChange("lost", null, null, "closed_by_app")
 
             closeTransport()
         }
@@ -415,7 +415,7 @@ internal class CordieriteClient private constructor(
             }
 
             connectingSessionId = null
-            onAckReceived(ack, options.ip, options.port)
+            onAckReceived(ack, "claimed", options.ip, options.port)
         } catch (e: Throwable) {
             if (myEpoch == epoch) {
                 connectingSessionId = null
@@ -535,6 +535,7 @@ internal class CordieriteClient private constructor(
 
     private fun onAckReceived(
         ack: JSONObject,
+        kind: String,
         endpointIp: String,
         endpointPort: Int,
     ) {
@@ -558,7 +559,7 @@ internal class CordieriteClient private constructor(
             )
 
         setClientState(CordieriteClientState.active, null)
-        emitSessionChange(sessionId, alias)
+        emitSessionChange(kind, sessionId, alias)
 
         scope.launch { sendSnapshotSafely() }
     }
@@ -617,7 +618,7 @@ internal class CordieriteClient private constructor(
 
         resumeInFlight = false
         if (myEpoch != epoch || destroyed) return
-        onAckReceived(ack, session.ip, session.port)
+        onAckReceived(ack, "resumed", session.ip, session.port)
     }
 
     private fun scheduleReconnectAttempt(myEpoch: Int) {
@@ -674,7 +675,7 @@ internal class CordieriteClient private constructor(
         settlePendingAttempt(Result.failure(IllegalStateException("Cordierite session was lost: $reason.")))
 
         setClientState(CordieriteClientState.closed, reason)
-        if (sessionId != null) emitSessionChange(null, null)
+        if (sessionId != null) emitSessionChange("lost", null, null, reason)
     }
 
     private suspend fun onBackgroundedChanged(nowBackground: Boolean) {
@@ -900,10 +901,12 @@ internal class CordieriteClient private constructor(
     }
 
     private fun emitSessionChange(
+        type: String,
         sessionId: String?,
         alias: String?,
+        reason: String? = null,
     ) {
-        for (listener in sessionChangeListeners) listener(sessionId, alias)
+        for (listener in sessionChangeListeners) listener(type, sessionId, alias, reason)
     }
 
     private fun emitError(error: CordieriteUnifiedError) {

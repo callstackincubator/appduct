@@ -40,11 +40,16 @@ RCT_EXPORT_MODULE(Cordierite)
           }
           [weakSelf emitOnStateChange:payload];
         }
-        sessionChange:^(NSString *sessionId, NSString *alias) {
-          [weakSelf emitOnSessionChange:@{
+        sessionChange:^(NSString *type, NSString *sessionId, NSString *alias, NSString *reason) {
+          NSMutableDictionary *payload = [NSMutableDictionary dictionaryWithDictionary:@{
+            @"type" : type,
             @"sessionId" : sessionId != nil ? sessionId : [NSNull null],
             @"alias" : alias != nil ? alias : [NSNull null],
           }];
+          if (reason != nil) {
+            payload[@"reason"] = reason;
+          }
+          [weakSelf emitOnSessionChange:payload];
         }
         error:^(NSDictionary *payload) {
           [weakSelf emitOnError:payload];

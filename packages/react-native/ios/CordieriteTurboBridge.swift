@@ -26,7 +26,7 @@ public final class CordieriteTurboBridge: NSObject, @unchecked Sendable {
     toolCall: @escaping @Sendable (NSString, NSString, NSString) -> Void,
     toolCancel: @escaping @Sendable (NSString, NSString) -> Void,
     stateChange: @escaping @Sendable (NSString, NSString?) -> Void,
-    sessionChange: @escaping @Sendable (NSString?, NSString?) -> Void,
+    sessionChange: @escaping @Sendable (NSString, NSString?, NSString?, NSString?) -> Void,
     error: @escaping @Sendable (NSDictionary) -> Void
   ) {
     toolCallEmitter = toolCall
@@ -37,7 +37,12 @@ public final class CordieriteTurboBridge: NSObject, @unchecked Sendable {
         stateChange(event.state.rawValue as NSString, event.reason as NSString?)
       }
       _ = await self.client.onSessionChange { event in
-        sessionChange(event.sessionId as NSString?, event.alias as NSString?)
+        sessionChange(
+          event.type.rawValue as NSString,
+          event.sessionId as NSString?,
+          event.alias as NSString?,
+          event.reason as NSString?
+        )
       }
       _ = await self.client.onError { event in
         error(CordieriteTurboBridge.errorPayload(event))

@@ -198,13 +198,78 @@ describe("createCordieriteClient (bridge contract)", () => {
     client.addCordieriteListener("error", (e) => errors.push(e));
 
     fake.emit("stateChange", { state: "active", reason: undefined });
-    fake.emit("sessionChange", { sessionId: "session-1", alias: "iphone-1" });
+    fake.emit("sessionChange", {
+      type: "claimed",
+      sessionId: "session-1",
+      alias: "iphone-1",
+    });
     fake.emit("error", { phase: "tool", message: "boom" });
 
     expect(states).toEqual([{ state: "active", reason: undefined }]);
-    expect(sessions).toEqual([{ sessionId: "session-1", alias: "iphone-1" }]);
+    expect(sessions).toEqual([
+      {
+        type: "claimed",
+        sessionId: "session-1",
+        alias: "iphone-1",
+        reason: undefined,
+      },
+    ]);
     expect(errors).toEqual([
       expect.objectContaining({ phase: "tool", message: "boom" }),
+    ]);
+  });
+
+  test("sessionChange carries type/reason for claim, resume, and every lost cause", () => {
+    const fake = createFakeNativeModule();
+    const client = createCordieriteClient(fake.module);
+    const sessions: unknown[] = [];
+    client.addCordieriteListener("sessionChange", (e) => sessions.push(e));
+
+    fake.emit("sessionChange", {
+      type: "claimed",
+      sessionId: "session-1",
+      alias: "iphone-1",
+    });
+    fake.emit("sessionChange", {
+      type: "resumed",
+      sessionId: "session-1",
+      alias: "iphone-1",
+    });
+    fake.emit("sessionChange", {
+      type: "lost",
+      sessionId: null,
+      alias: null,
+      reason: "revoked",
+    });
+    fake.emit("sessionChange", {
+      type: "lost",
+      sessionId: null,
+      alias: null,
+      reason: "grace_expired",
+    });
+    fake.emit("sessionChange", {
+      type: "lost",
+      sessionId: null,
+      alias: null,
+      reason: "closed_by_app",
+    });
+
+    expect(sessions).toEqual([
+      {
+        type: "claimed",
+        sessionId: "session-1",
+        alias: "iphone-1",
+        reason: undefined,
+      },
+      {
+        type: "resumed",
+        sessionId: "session-1",
+        alias: "iphone-1",
+        reason: undefined,
+      },
+      { type: "lost", sessionId: null, alias: null, reason: "revoked" },
+      { type: "lost", sessionId: null, alias: null, reason: "grace_expired" },
+      { type: "lost", sessionId: null, alias: null, reason: "closed_by_app" },
     ]);
   });
 

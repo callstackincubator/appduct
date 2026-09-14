@@ -59,13 +59,22 @@ class CordieriteClientTest {
     private fun CordieriteClient.connectAndAck(
         fake: FakeCordieriteTransport,
         sessionId: String = "sess-1",
+        graceS: Double = 600.0,
     ) = runBlocking {
         val before = fake.connectCalls.size
         val job = launch(Dispatchers.Default) { connect(explicitInput(sessionId = sessionId)) }
         waitUntil { fake.connectCalls.size > before }
-        fake.simulateAck(sessionId)
+        fake.simulateAck(sessionId, graceS = graceS)
         job.join()
     }
+
+    /** Captures one call of [CordieriteSessionChangeListener]'s 4-arg callback shape. */
+    private data class SessionChangeEvent(
+        val type: String,
+        val sessionId: String?,
+        val alias: String?,
+        val reason: String?,
+    )
 
     // --- connect / handshake ---
 
@@ -444,44 +453,100 @@ class CordieriteClientTest {
     // --- listeners ---
 
     @Test
-    fun `sessionChange fires claimed, then lost with both fields null, on a revoked close`() =
+    fun `sessionChange fires claimed, then lost reason revoked with both fields null, on a 1000 close`() =
         runBlocking {
             val (client, fake) = newClient()
-            val events = CopyOnWriteArrayList<Pair<String?, String?>>()
-            client.addSessionChangeListener { sessionId, alias -> events.add(sessionId to alias) }
+            val events = CopyOnWriteArrayList<SessionChangeEvent>()
+            client.addSessionChangeListener { type, sessionId, alias, reason ->
+                events.add(SessionChangeEvent(type, sessionId, alias, reason))
+            }
 
             client.connectAndAck(fake, sessionId = "sess-1")
             waitUntil { events.isNotEmpty() }
-            assertEquals("sess-1" to "test-device", events.first())
+            assertEquals(SessionChangeEvent("claimed", "sess-1", "test-device", null), events.first())
 
             fake.simulateClose(1000, "revoked")
             waitUntil { events.size >= 2 }
-            assertEquals(null to null, events[1])
+            assertEquals(SessionChangeEvent("lost", null, null, "revoked"), events[1])
             assertEquals(CordieriteClientState.closed, client.state)
+        }
+
+    @Test
+    fun `sessionChange fires resumed with no reason after a successful reconnect`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            val events = CopyOnWriteArrayList<SessionChangeEvent>()
+            client.addSessionChangeListener { type, sessionId, alias, reason ->
+                events.add(SessionChangeEvent(type, sessionId, alias, reason))
+            }
+
+            // A long grace window so only the reconnect (not the grace timer) resolves first.
+            client.connectAndAck(fake, sessionId = "sess-1", graceS = 120.0)
+            waitUntil { events.isNotEmpty() }
+            assertEquals("claimed", events.first().type)
+
+            val connectCallsBeforeReconnect = fake.connectCalls.size
+            fake.simulateClose(1006, null)
+            waitUntil(timeoutMs = 3_000) { fake.connectCalls.size > connectCallsBeforeReconnect }
+            fake.simulateAck("sess-1", graceS = 120.0)
+
+            waitUntil(timeoutMs = 3_000) { events.size >= 2 }
+            assertEquals(SessionChangeEvent("resumed", "sess-1", "test-device", null), events[1])
+        }
+
+    @Test
+    fun `sessionChange fires lost reason grace_expired once the grace window elapses`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            val events = CopyOnWriteArrayList<SessionChangeEvent>()
+            client.addSessionChangeListener { type, sessionId, alias, reason ->
+                events.add(SessionChangeEvent(type, sessionId, alias, reason))
+            }
+
+            // A tiny grace window so the grace timer, not the reconnect backoff, resolves first.
+            client.connectAndAck(fake, sessionId = "sess-1", graceS = 0.05)
+            waitUntil { events.isNotEmpty() }
+
+            fake.simulateClose(1006, null)
+            waitUntil(timeoutMs = 3_000) { events.size >= 2 }
+
+            assertEquals(SessionChangeEvent("lost", null, null, "grace_expired"), events[1])
         }
 
     @Test
     fun `a terminal 1008 close finalizes the session as lost with the daemon's reason`() =
         runBlocking {
             val (client, fake) = newClient()
+            val events = CopyOnWriteArrayList<SessionChangeEvent>()
+            client.addSessionChangeListener { type, sessionId, alias, reason ->
+                events.add(SessionChangeEvent(type, sessionId, alias, reason))
+            }
             client.connectAndAck(fake, sessionId = "sess-1")
 
             fake.simulateClose(1008, "unknown_session")
 
             waitUntil { client.state == CordieriteClientState.closed }
             assertNull(client.sessionId)
+            assertEquals(SessionChangeEvent("lost", null, null, "unknown_session"), events.last())
         }
 
     // --- disconnect / postEvent ---
 
     @Test
-    fun `disconnect closes the transport and moves to closed`() =
+    fun `disconnect closes the transport, moves to closed, and fires sessionChange lost reason closed_by_app`() =
         runBlocking {
             val (client, fake) = newClient()
+            val events = CopyOnWriteArrayList<SessionChangeEvent>()
             client.connectAndAck(fake)
+            client.addSessionChangeListener { type, sessionId, alias, reason ->
+                events.add(SessionChangeEvent(type, sessionId, alias, reason))
+            }
+
             client.disconnect()
+
             assertEquals(CordieriteClientState.closed, client.state)
             assertEquals("closed", fake.rawState)
+            assertEquals(SessionChangeEvent("lost", null, null, "closed_by_app"), events.last())
         }
 
     @Test

@@ -182,8 +182,8 @@ object Cordierite {
                 listener(CordieriteEvent.StateChange(state.toPublic(), reason))
             }
         val sessionSub =
-            client().addSessionChangeListener { sessionId, alias ->
-                listener(CordieriteEvent.SessionChange(sessionId, alias))
+            client().addSessionChangeListener { type, sessionId, alias, reason ->
+                listener(CordieriteEvent.SessionChange(SessionChangeType.valueOf(type), sessionId, alias, reason))
             }
         val errorSub =
             client().addErrorListener { error ->
@@ -269,6 +269,13 @@ enum class ClientState {
     closed,
 }
 
+/** [CordieriteEvent.SessionChange.type] (issue #48 review, Decision 5 follow-up). */
+enum class SessionChangeType {
+    claimed,
+    resumed,
+    lost,
+}
+
 /** [Cordierite.buildConfig]: this build's effective trust configuration. */
 data class BuildConfig(
     val trust: String,
@@ -280,7 +287,12 @@ data class BuildConfig(
 sealed class CordieriteEvent {
     data class StateChange(val state: ClientState, val reason: String?) : CordieriteEvent()
 
-    data class SessionChange(val sessionId: String?, val alias: String?) : CordieriteEvent()
+    data class SessionChange(
+        val type: SessionChangeType,
+        val sessionId: String?,
+        val alias: String?,
+        val reason: String? = null,
+    ) : CordieriteEvent()
 
     data class Error(
         val phase: String,

@@ -128,8 +128,10 @@ const bridgeListeners: {
     const subscription = resolveNativeModule().onSessionChange(
       (nativeEvent) => {
         listener({
+          type: nativeEvent.type,
           sessionId: nativeEvent.sessionId ?? null,
           alias: nativeEvent.alias ?? null,
+          reason: nativeEvent.reason ?? undefined,
         });
       },
     );

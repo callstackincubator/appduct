@@ -97,15 +97,17 @@ export type CordieriteUnifiedStateChangeEvent = {
 };
 
 /**
- * Mirrors native's `onSessionChange` exactly: both fields go `null` once the session is gone (a
- * claim, a resume, and a loss are no longer distinguished on this event — native owns the whole
- * session lifecycle now, and which category applied is an internal state-machine detail). A
- * listener that needs the departing session's id/alias should keep the most recent non-null event
- * around; the accompanying `stateChange` event's `reason` says why it ended.
+ * Mirrors native's `onSessionChange` exactly: `sessionId`/`alias` go `null` once the session is
+ * gone. `type` distinguishes a fresh claim from a resume from a loss; `reason` is set only when
+ * `type` is `"lost"` (`revoked`, `grace_expired`, `closed_by_app`, or a terminal close reason from
+ * the daemon — PROTOCOL.md §7). This mirrors the accompanying `stateChange` event's `reason`,
+ * which says the same thing from the state machine's perspective rather than the session's.
  */
 export type CordieriteSessionChangeEvent = {
+  type: "claimed" | "resumed" | "lost";
   sessionId: string | null;
   alias: string | null;
+  reason?: string;
 };
 
 /** One error channel for bootstrap parse/connect, socket, and tool-handler failures (§11). */

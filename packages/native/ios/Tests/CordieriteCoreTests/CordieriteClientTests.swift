@@ -56,6 +56,8 @@ final class CordieriteClientTests: XCTestCase {
     XCTAssertEqual(sessionId, "session-1")
     XCTAssertEqual(sessionChanges.last?.sessionId, "session-1")
     XCTAssertEqual(sessionChanges.last?.alias, "iphone-1")
+    XCTAssertEqual(sessionChanges.last?.type, .claimed)
+    XCTAssertNil(sessionChanges.last?.reason)
   }
 
   func testConnectSendsFullRegistrySnapshotAfterAck() async throws {
@@ -144,6 +146,8 @@ final class CordieriteClientTests: XCTestCase {
     XCTAssertNil(sessionId)
     XCTAssertEqual(sessionChanges.last?.sessionId, nil)
     XCTAssertEqual(sessionChanges.last?.alias, nil)
+    XCTAssertEqual(sessionChanges.last?.type, .lost)
+    XCTAssertEqual(sessionChanges.last?.reason, "closed_by_app")
   }
 
   // MARK: reconnect / grace
@@ -174,6 +178,9 @@ final class CordieriteClientTests: XCTestCase {
     transport.simulateAck(sessionId: "session-1", resumeToken: "resume-1", graceS: 120)
     try await connectTask.value
 
+    let sessionChanges = EventCollector<CordieriteSessionChangeEvent>()
+    _ = await client.onSessionChange { event in sessionChanges.append(event) }
+
     transport.simulateClose(code: 1_006, reason: nil)
     await drainPendingTasks()
     let stateAfterClose = await client.state
@@ -187,6 +194,9 @@ final class CordieriteClientTests: XCTestCase {
 
     let stateAfterResume = await client.state
     XCTAssertEqual(stateAfterResume, .active)
+    XCTAssertEqual(sessionChanges.last?.type, .resumed)
+    XCTAssertEqual(sessionChanges.last?.sessionId, "session-1")
+    XCTAssertNil(sessionChanges.last?.reason)
   }
 
   func testGraceExpiryFinalizesSessionAsLost() async throws {
@@ -197,6 +207,9 @@ final class CordieriteClientTests: XCTestCase {
     await drainPendingTasks()
     transport.simulateAck(sessionId: "session-1", graceS: 10)
     try await connectTask.value
+
+    let sessionChanges = EventCollector<CordieriteSessionChangeEvent>()
+    _ = await client.onSessionChange { event in sessionChanges.append(event) }
 
     transport.simulateClose(code: 1_006, reason: nil)
     await drainPendingTasks()
@@ -210,6 +223,8 @@ final class CordieriteClientTests: XCTestCase {
     XCTAssertEqual(stateAfterGraceExpiry, .closed)
     let sessionIdAfterGraceExpiry = await client.sessionId
     XCTAssertNil(sessionIdAfterGraceExpiry)
+    XCTAssertEqual(sessionChanges.last?.type, .lost)
+    XCTAssertEqual(sessionChanges.last?.reason, "grace_expired")
   }
 
   func testTerminalCloseDuringActiveSessionIsNotRetried() async throws {
@@ -231,6 +246,8 @@ final class CordieriteClientTests: XCTestCase {
     XCTAssertEqual(state, .closed)
     XCTAssertEqual(timers.pendingCount, 0)
     XCTAssertEqual(sessionChanges.last?.sessionId, nil)
+    XCTAssertEqual(sessionChanges.last?.type, .lost)
+    XCTAssertEqual(sessionChanges.last?.reason, "unknown_session")
   }
 
   func testRevokedCloseFinalizesImmediately() async throws {
@@ -241,11 +258,16 @@ final class CordieriteClientTests: XCTestCase {
     transport.simulateAck(sessionId: "session-1", graceS: 120)
     try await connectTask.value
 
+    let sessionChanges = EventCollector<CordieriteSessionChangeEvent>()
+    _ = await client.onSessionChange { event in sessionChanges.append(event) }
+
     transport.simulateClose(code: 1_000, reason: nil)
     await drainPendingTasks()
 
     let state = await client.state
     XCTAssertEqual(state, .closed)
+    XCTAssertEqual(sessionChanges.last?.type, .lost)
+    XCTAssertEqual(sessionChanges.last?.reason, "revoked")
   }
 
   // MARK: tool registry wire deltas

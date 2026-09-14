@@ -77,7 +77,7 @@ extension CordieriteClient {
       }
 
       connectingSessionId = nil
-      onAckReceived(ack, endpoint: (input.ip, input.port))
+      onAckReceived(ack, kind: .claimed, endpoint: (input.ip, input.port))
     } catch {
       if myEpoch == epoch {
         connectingSessionId = nil
@@ -217,7 +217,7 @@ extension CordieriteClient {
     }
   }
 
-  func onAckReceived(_ ack: SessionAck, endpoint: (ip: String, port: Int)) {
+  func onAckReceived(_ ack: SessionAck, kind: CordieriteSessionChangeKind, endpoint: (ip: String, port: Int)) {
     clearReconnectTimer()
     clearGraceTimer()
     reconnectAttempt = 0
@@ -235,7 +235,7 @@ extension CordieriteClient {
     updateSessionIdSnapshot()
 
     setClientState(.active)
-    emitSessionChange(sessionId: ack.sessionId, alias: ack.alias)
+    emitSessionChange(type: kind, sessionId: ack.sessionId, alias: ack.alias)
 
     Task { await self.sendSnapshot() }
   }
@@ -255,7 +255,7 @@ extension CordieriteClient {
 
     setClientState(.closed, reason: reason)
     if hadSession {
-      emitSessionChange(sessionId: nil, alias: nil)
+      emitSessionChange(type: .lost, sessionId: nil, alias: nil, reason: reason)
     }
   }
 
@@ -353,7 +353,7 @@ extension CordieriteClient {
 
     resumeInFlight = false
     if myEpoch != epoch || destroyed { return }
-    onAckReceived(ack, endpoint: session.endpoint)
+    onAckReceived(ack, kind: .resumed, endpoint: session.endpoint)
   }
 
   // MARK: Transport event handlers

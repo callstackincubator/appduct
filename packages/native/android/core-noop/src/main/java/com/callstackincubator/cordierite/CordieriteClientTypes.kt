@@ -203,7 +203,12 @@ internal sealed class CordieriteConnectInput {
 private fun JSONObject.optStringOrNull(key: String): String? = if (has(key) && !isNull(key)) getString(key) else null
 
 internal typealias CordieriteStateChangeListener = (state: CordieriteClientState, reason: String?) -> Unit
-internal typealias CordieriteSessionChangeListener = (sessionId: String?, alias: String?) -> Unit
+internal typealias CordieriteSessionChangeListener = (
+    type: String,
+    sessionId: String?,
+    alias: String?,
+    reason: String?,
+) -> Unit
 internal typealias CordieriteErrorListener = (error: CordieriteUnifiedError) -> Unit
 
 /** Never fires and never needs removing in this build, but keeps the same call shape as `core`'s. */

@@ -57,11 +57,13 @@ class NativeCordieriteModule(
                 },
             )
         }
-        client.addSessionChangeListener { sessionId, alias ->
+        client.addSessionChangeListener { type, sessionId, alias, reason ->
             emitOnSessionChange(
                 Arguments.createMap().apply {
+                    putString("type", type)
                     if (sessionId != null) putString("sessionId", sessionId) else putNull("sessionId")
                     if (alias != null) putString("alias", alias) else putNull("alias")
+                    if (reason != null) putString("reason", reason)
                 },
             )
         }

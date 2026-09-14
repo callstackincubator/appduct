@@ -10,6 +10,12 @@ import { TurboModuleRegistry, CodegenTypes } from "react-native";
  * it converts schemas, runs handlers, and validates handler input/output against the registered
  * schema. Everything else — reconnect, grace, lease restore, registry snapshots/deltas, timeouts,
  * cancel, progress, the seven `tool_error` types — lives in `packages/native`.
+ *
+ * **Sanctioned spec change (issue #48 review, Decision 5 follow-up):** the initial phase-2 port of
+ * `CordieriteSessionChangeEventNative` dropped `type`/`reason` (see the frozen-spec deviation once
+ * recorded in `docs/tasks/15-native-session-logic.md`/`16-android-session-logic.md`), which was a
+ * public-API regression against `main`'s `CordieriteSessionChangeEvent`. `type`/`reason` are
+ * restored below — the one deliberate edit to this otherwise-frozen spec.
  */
 
 /**
@@ -45,10 +51,15 @@ export type CordieriteStateChangeEventNative = {
   reason?: string;
 };
 
-/** Mirrors `CordieriteSessionChangeEvent`. Both null once the session is gone. */
+/** Mirrors `CordieriteSessionChangeEvent`. `sessionId`/`alias` are both null once the session is
+ * gone. `type` is `"claimed"` | `"resumed"` | `"lost"`; `reason` is set only when `type` is
+ * `"lost"` (`revoked`, `grace_expired`, `closed_by_app`, or a PROTOCOL.md §7 terminal close
+ * reason). */
 export type CordieriteSessionChangeEventNative = {
+  type: string;
   sessionId: string | null;
   alias: string | null;
+  reason?: string;
 };
 
 /** Native → JS: run the registered handler for `name` and answer with `respondToToolCall`. */

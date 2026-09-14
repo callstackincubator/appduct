@@ -90,8 +90,10 @@ export const createCordieriteClient = (
     "sessionChange",
     (event) => {
       listenerBus.emit("sessionChange", {
+        type: event.type as "claimed" | "resumed" | "lost",
         sessionId: event.sessionId,
         alias: event.alias,
+        reason: event.reason,
       });
     },
   );

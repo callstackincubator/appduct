@@ -23,8 +23,13 @@ export type CordieriteNativeStateChangeEvent = {
 };
 
 export type CordieriteNativeSessionChangeEvent = {
+  /** "claimed" | "resumed" | "lost" */
+  type: string;
   sessionId: string | null;
   alias: string | null;
+  /** Set only when `type` is `"lost"`: `revoked`, `grace_expired`, `closed_by_app`, or a
+   * PROTOCOL.md §7 terminal close reason. */
+  reason?: string;
 };
 
 export type CordieriteNativeErrorEvent = {
