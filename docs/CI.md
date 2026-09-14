@@ -3,9 +3,11 @@
   CI is implemented with three workflows:
 
   - `test.yaml` runs JavaScript, Android JVM, and iOS XCTest coverage in parallel; the `android`
-    job also runs the `cordierite doctor` release gate (below) against four builds of the
-    playground across all three `CORDIERITE_ENABLED` states; the `ios` job runs it against two
-    Debug builds (default and `CORDIERITE_ENABLED=0`).
+    job also runs the `cordierite doctor` release gate (below) against four builds of the Expo
+    playground across all three `CORDIERITE_ENABLED` states, plus Debug/Release of the native
+    `playground-native/android` app (issue #48 phase 3); the `ios` job runs it against two Debug
+    builds of the Expo playground (default and `CORDIERITE_ENABLED=0`), plus Debug/Release of the
+    native `playground-native/ios` app.
   - `lint.yaml` runs lint and package typecheck in parallel; the playground is intentionally excluded from typecheck.
   - `deploy.yaml` gates a production release on both reusable workflows, packages the three tarballs, and publishes them
     through npm trusted publishing.
@@ -161,6 +163,43 @@ coupling" in `docs/ARCHITECTURE.md` §11 and `docs/tasks/00-overview.md`). Both 
 deleted once the native tests moved to `packages/native/ios/Tests/CordieriteCoreTests` and run
 via plain `swift test` instead — there is no longer a Pods-generated test target for the
 excluded-build case to interact with, so that coupling no longer applies to CI at all.
+
+### Native playground gates (issue #48 phase 3)
+
+Both platforms' `doctor` gate above only exercises the Expo playground, which links Cordierite
+through RN autolinking and `CORDIERITE_ENABLED`. `packages/native` also ships a public,
+directly-consumable API (`Cordierite.shared` on iOS, the `Cordierite` object on Android,
+`docs/tasks/18-ios-entry-points.md`/`docs/tasks/19-android-entry-points.md`) with its own,
+independent inclusion mechanism — SwiftPM/CocoaPods build configuration on iOS,
+`debugImplementation`/`releaseImplementation` on Android — that autolinking never touches. The
+Expo playground's Release build passing `doctor --assert-absent` says nothing about whether a
+plain native app that consumes `packages/native` directly compiles at all, let alone whether
+*its* Release build actually excludes the real implementation. `test.yaml`'s `android` and `ios`
+jobs each build the corresponding native playground (`playground-native/android`,
+`playground-native/ios`) after their Expo-playground steps, for exactly this reason:
+
+- **Android**: `./gradlew :app:assembleDebug :app:assembleRelease` in `playground-native/android`
+  (which resolves `com.callstackincubator.cordierite:core`/`:core-noop` to the local
+  `packages/native/android` projects via `settings.gradle`'s `includeBuild` substitution, not a
+  published artifact), then `cordierite doctor --assert-present` on the debug APK and
+  `--assert-absent` on the release APK — the same marker-only signal the Expo gate uses, proving
+  the `debugImplementation(core)`/`releaseImplementation(core-noop)` pairing issue #48 phase 3
+  asks a consumer app to declare actually excludes the real implementation from Release.
+- **iOS**: `brew install xcodegen` (idempotent — skipped if already present) and `xcodegen
+  generate` in `playground-native/ios` regenerate the gitignored `.xcodeproj` from `project.yml`
+  before every build, then `xcodebuild` builds both `Debug` and `Release` for the simulator (no
+  Expo prebuild, no CocoaPods — this app has no React Native anywhere in it), and `cordierite
+  doctor` asserts present on Debug, absent on Release — proving `Package.swift`'s
+  `.when(configuration: .debug)` split (not `CORDIERITE_ENABLED`, which this app never sets) holds
+  for a real plain-app build.
+
+The standalone `packages/native/android` test step (above) also runs
+`:core:publishToMavenLocal :core-noop:publishToMavenLocal` alongside its existing
+`testDebugUnitTest`/`assembleRelease` tasks, so the `maven-publish` configuration
+(`docs/tasks/19-android-entry-points.md` §6) that a real Maven Central publish will eventually use
+is exercised on every run rather than only when someone remembers to check it by hand. This is
+still `publishToMavenLocal`, not a real publish — CocoaPods trunk / Maven Central / a SwiftPM tag
+publish remains an ops task, not something CI does (see `docs/tasks/21-native-core-integration.md`).
 
 CI invokes the command directly against the built artifact — `node packages/cordierite/bin.js
 doctor <path> --assert-present|--assert-absent` from the repo root, after `pnpm build` — rather
