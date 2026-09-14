@@ -27,36 +27,36 @@ internal class CordieriteConnectionManager(
     emitError: (CordieriteErrorDetails) -> Unit,
     emitClose: (Map<String, Any?>) -> Unit,
     ownerGeneration: Long = 0L,
-) {
-    fun connect(
+) : CordieriteTransport {
+    override fun connect(
         rawOptions: Map<String, Any?>,
         completion: (Throwable?) -> Unit,
     ) {
         completion(null)
     }
 
-    fun send(
+    override fun send(
         message: String,
         completion: (Throwable?) -> Unit,
     ) {
         completion(null)
     }
 
-    fun close(completion: () -> Unit) {
+    override fun close(completion: () -> Unit) {
         completion()
     }
 
-    fun invalidate(completion: () -> Unit = {}) {
+    override fun invalidate(completion: () -> Unit) {
         completion()
     }
 
-    fun getState(): String = "idle"
+    override fun getState(): String = "idle"
 
-    fun getResumeLeaseRecord(): Map<String, Any?>? = null
+    override fun getResumeLeaseRecord(): Map<String, Any?>? = null
 
-    fun clearResumeLease(): Boolean = true
+    override fun clearResumeLease(): Boolean = true
 
-    fun getBuildConfig(): CordieriteBuildConfig =
+    override fun getBuildConfig(): CordieriteBuildConfig =
         CordieriteBuildConfig(trust = "excluded", hasEmbeddedPins = false, allowPrivateLanOnly = true)
 }
 
