@@ -1,0 +1,4 @@
+rootProject.name = 'cordierite-native'
+
+include ':core'
+include ':core-noop'

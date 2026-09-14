@@ -65,7 +65,10 @@ class NativeCordieriteModule(
         options: ReadableMap,
         promise: Promise,
     ) {
-        manager.connect(options) { error ->
+        // `CordieriteConnectionManager` (packages/native/android/core, vendored into
+        // android/core|core-noop below) has no `react-android` dependency, so the RN-specific
+        // `ReadableMap` is converted to a plain map at this, the one place that still needs it.
+        manager.connect(options.toHashMap()) { error ->
             if (error != null) {
                 promise.reject("E_CORDIERITE", error.message, error)
             } else {

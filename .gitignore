@@ -30,6 +30,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .ccache
 *.tsbuildinfo
 
+# SwiftPM build output for the repo-root Package.swift (packages/native/ios)
+.build/
+.swiftpm/
+
 # IntelliJ based IDEs
 .idea
 

@@ -63,17 +63,28 @@ internal data class CordieriteConnectOptions(
     val linkPin: String?,
 ) {
     companion object {
-        fun fromReadableMap(value: com.facebook.react.bridge.ReadableMap): CordieriteConnectOptions {
-            val ip = value.getString("ip") ?: throw IllegalArgumentException("Invalid Cordierite IP.")
-            val port = value.getInt("port")
-            val sessionId = value.getString("sessionId") ?: throw IllegalArgumentException("Invalid Cordierite session ID.")
-            val expiresAt = value.getInt("expiresAt")
+        /**
+         * Parses the connect payload from a plain string-keyed map. This module has no
+         * `react-android` dependency (docs/tasks/14-native-core-extraction.md, Decision 1's
+         * "framework-free" core) -- the RN bridge (`NativeCordieriteModule.kt`, which stays in
+         * `@cordierite/react-native`) converts its `ReadableMap` via `ReadableMap.toHashMap()`
+         * before calling `CordieriteConnectionManager.connect()`. `Number.toInt()` (rather than
+         * `ReadableMap.getInt`, which throws for a missing/non-numeric key) mirrors that method's
+         * own "missing means 0, present-and-wrong-type means a ClassCastException" contract closely
+         * enough for values that always originate from a JSON-decoded bootstrap payload, which never
+         * omits `port`/`expiresAt`.
+         */
+        fun fromMap(value: Map<String, Any?>): CordieriteConnectOptions {
+            val ip = value["ip"] as? String ?: throw IllegalArgumentException("Invalid Cordierite IP.")
+            val port = (value["port"] as? Number)?.toInt() ?: throw IllegalArgumentException("Invalid Cordierite port.")
+            val sessionId =
+                value["sessionId"] as? String ?: throw IllegalArgumentException("Invalid Cordierite session ID.")
+            val expiresAt =
+                (value["expiresAt"] as? Number)?.toInt()
+                    ?: throw IllegalArgumentException("Invalid Cordierite expiresAt.")
 
             fun optionalDeviceString(key: String): String? {
-                if (!value.hasKey(key)) {
-                    return null
-                }
-                val s = value.getString(key)?.trim() ?: return null
+                val s = (value[key] as? String)?.trim() ?: return null
                 return s.takeIf { it.isNotEmpty() }
             }
 
@@ -350,7 +361,7 @@ internal fun buildFirstFrame(
             .put("resume_token", resumeToken)
     }
 
-    // Unreachable in practice: `CordieriteConnectOptions.fromReadableMap` already requires one of
+    // Unreachable in practice: `CordieriteConnectOptions.fromMap` already requires one of
     // `token`/`resumeToken` to be present.
     val token = options.token ?: throw IllegalStateException("Cordierite connect requires a claim token.")
     val device = mergeSessionClaimDeviceFields(options, defaults)
@@ -466,7 +477,7 @@ internal class CordieriteConnectionManager(
     private var negotiatedPingIntervalMillis = TimeUnit.SECONDS.toMillis(DEFAULT_PING_INTERVAL_SECONDS)
 
     fun connect(
-        rawOptions: com.facebook.react.bridge.ReadableMap,
+        rawOptions: Map<String, Any?>,
         completion: (Throwable?) -> Unit,
     ) {
         if (invalidationRequested.get()) {
@@ -476,7 +487,7 @@ internal class CordieriteConnectionManager(
 
         val options =
             try {
-                CordieriteConnectOptions.fromReadableMap(rawOptions)
+                CordieriteConnectOptions.fromMap(rawOptions)
             } catch (e: Exception) {
                 completion(e)
                 return

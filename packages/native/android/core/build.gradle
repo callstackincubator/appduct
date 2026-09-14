@@ -1,0 +1,88 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'maven-publish'
+
+group = 'com.callstackincubator.cordierite'
+version = rootProject.ext.cordieriteVersion
+
+android {
+  // Distinct from @cordierite/react-native's own AAR namespace ("com.callstackincubator.cordierite",
+  // packages/react-native/android/build.gradle) even though the Kotlin *package* the classes in this
+  // module live in is left unchanged (docs/tasks/14-native-core-extraction.md: "keeping the existing
+  // package is acceptable and lower-risk" -- it avoids touching every import across the moved files
+  // and the RN bridge that references them). The AAR namespace and the Kotlin package are unrelated
+  // concepts in AGP: this only controls where this module's own generated `R`/`BuildConfig` classes
+  // live, and it must differ from the RN module's own namespace so a debug build that links both
+  // `@cordierite/react-native`'s android module *and* this `core` module (which is exactly what
+  // happens once it is vendored in) never collides on a shared manifest package. `core-noop` uses the
+  // same namespace as `core` -- the two are never linked into the same build variant at once (one
+  // is `debugImplementation`, the other `releaseImplementation`), so they cannot collide with each
+  // other, only with the RN module they're paired with.
+  namespace 'com.callstackincubator.cordierite.core'
+  compileSdk rootProject.ext.compileSdkVersion
+
+  defaultConfig {
+    minSdkVersion rootProject.ext.minSdkVersion
+    targetSdkVersion rootProject.ext.targetSdkVersion
+    consumerProguardFiles 'consumer-rules.pro'
+  }
+
+  testOptions {
+    unitTests {
+      // Required by Robolectric, which backs CordieriteSpkiPinTest (the only test class that needs a
+      // real android.util.Base64 / android.jar runtime). Every other unit test runs on the plain JVM.
+      includeAndroidResources = true
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+
+  lintOptions {
+    abortOnError false
+  }
+
+  // Required by AGP for `components.release` (below) to exist at all -- `com.android.library`
+  // does not publish a component by default.
+  publishing {
+    singleVariant('release')
+  }
+}
+
+dependencies {
+  implementation "com.squareup.okhttp3:okhttp:4.12.0"
+
+  testImplementation "junit:junit:4.13.2"
+  // Real org.json implementation: the stub in android.jar throws "not mocked" for every method at
+  // unit-test runtime.
+  testImplementation "org.json:json:20180813"
+  // Robolectric supplies a real android.util.Base64 (and the rest of android.jar) so
+  // CordieriteSpkiPinTest can call the shipped `computeSpkiPin`/`PinningTrustManager` instead of
+  // re-deriving the digest math. Still no emulator: it runs in the same JVM test task.
+  testImplementation "org.robolectric:robolectric:4.16"
+}
+
+// Minimal `maven-publish` wiring for Phase 3 (docs/tasks/14-native-core-extraction.md), when this
+// module is actually published to Maven Central rather than only vendored into
+// @cordierite/react-native by scripts/sync-native-core.mjs. Not exercised by CI yet -- no
+// `publishing.repositories` target is configured -- but the coordinates are fixed now so a
+// consumer's `debugImplementation("com.callstackincubator.cordierite:core:<version>")` (see the
+// issue's Phase 3 sketch) is stable ahead of the actual publish.
+afterEvaluate {
+  publishing {
+    publications {
+      release(MavenPublication) {
+        from components.release
+        groupId = group
+        artifactId = 'core'
+        version = version
+      }
+    }
+  }
+}

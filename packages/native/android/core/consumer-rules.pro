@@ -1,4 +1,6 @@
-# Consumed by every app that depends on @cordierite/react-native (R8/ProGuard reads
+# Canonical copy: packages/native/android/core (docs/tasks/14-native-core-extraction.md). Vendored
+# into @cordierite/react-native's android/core/ by scripts/sync-native-core.mjs, and consumed from
+# there by every app that depends on @cordierite/react-native (R8/ProGuard reads
 # `consumerProguardFiles` from this library's AAR metadata, not just the app's own rules file).
 #
 # Keeps CordieriteNativeMarker's fully-qualified name unminified and unremoved so

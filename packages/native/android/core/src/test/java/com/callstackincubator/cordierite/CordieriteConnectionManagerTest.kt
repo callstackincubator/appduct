@@ -13,9 +13,11 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Pure-logic JVM tests for the Android connection layer. Runs on the plain JVM (no
- * Robolectric, no emulator) via `./gradlew :cordierite_react-native:testDebugUnitTest` from
- * `playground/android` (the autolinked consumer app).
+ * Pure-logic JVM tests for the Android connection layer, in the standalone
+ * `packages/native/android` Gradle project (docs/tasks/14-native-core-extraction.md). Runs on the
+ * plain JVM (no Robolectric, no emulator) via `./gradlew :core:testDebugUnitTest` from
+ * `packages/native/android`. The same sources are also vendored into `@cordierite/react-native` by
+ * `scripts/sync-native-core.mjs`, but these tests are not -- they exercise the canonical copy only.
  *
  * `PinningTrustManager`/`computeSpkiPin` are covered by [CordieriteSpkiPinTest], which runs in the
  * same task under Robolectric because both reach `android.util.Base64` (a "not mocked" stub on a
