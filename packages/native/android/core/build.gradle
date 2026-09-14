@@ -59,9 +59,13 @@ android {
   }
 
   // Required by AGP for `components.release` (below) to exist at all -- `com.android.library`
-  // does not publish a component by default.
+  // does not publish a component by default. `withSourcesJar()` (AGP 7.1+) adds the sources jar
+  // Phase 3 asks for, generated straight from this variant's Kotlin/Java sources -- no separate
+  // `Jar` task to hand-wire.
   publishing {
-    singleVariant('release')
+    singleVariant('release') {
+      withSourcesJar()
+    }
   }
 }
 
