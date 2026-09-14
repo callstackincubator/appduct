@@ -36,18 +36,19 @@ const everyBuild = {
 const excluded = { android: null, ios: null };
 
 /**
- * Parse errors fall back to including in every build rather than propagating: the resolver
- * swallows whatever this file throws (exits 0 and autodetects the package anyway), so raising here
- * would read as a gate that does not exist. `app.plugin.js` validates the value where a throw does
- * fail the build, and `cordierite doctor` is what establishes whether a built artifact actually
- * carries Cordierite.
+ * Parse errors fall back to dev-only rather than propagating: the resolver swallows whatever this
+ * file throws (exits 0 and autodetects the package anyway), so raising here would read as a gate
+ * that does not exist. An unrecognized value must behave exactly like an unset one -- fail open
+ * into "every build" would ship Cordierite into a release build over a typo. `app.plugin.js`
+ * validates the value where a throw does fail the build, and `cordierite doctor` is what
+ * establishes whether a built artifact actually carries Cordierite.
  */
 function resolvePlatforms() {
   let enabled;
   try {
     enabled = parseCordieriteEnabled();
   } catch {
-    return everyBuild;
+    return devOnly;
   }
 
   if (enabled === false) {

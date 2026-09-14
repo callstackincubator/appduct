@@ -80,13 +80,14 @@ CORDIERITE_ENABLED=0 npx expo prebuild && CORDIERITE_ENABLED=0 npx expo run:ios 
 Accepted values are `1`/`true` and `0`/`false`, case-insensitive; unset or empty means the
 dev-only default described above.
 
-**A value that is neither is only caught on the Expo path.** The config plugin throws at
-prebuild, but nothing else does, and the two platforms then disagree: autolinking's
-`react-native.config.js` swallows the parse error and falls back to linking Cordierite into
-**every** build, while `android/build.gradle` treats anything but `1`/`true` as off and
-compiles the `release` stub. A bare-RN pipeline gets no error at all — check the built
-artifact with `cordierite doctor` ([`CI.md`](CI.md#release-gate-cordierite-doctor)) rather
-than trusting the variable's spelling.
+**A malformed value is only caught on the Expo path, but both platforms fail closed the same
+way.** The config plugin throws at prebuild. Nothing else does: autolinking's
+`react-native.config.js` swallows the parse error, and `android/build.gradle` treats anything
+but `1`/`true` as off — both fall back to the dev-only default (Debug-only on iOS, the
+`release` stub on Android), exactly as if the variable were unset. A bare-RN pipeline gets no
+error at all — check the built artifact with `cordierite doctor`
+([`CI.md`](CI.md#release-gate-cordierite-doctor)) rather than trusting the variable's
+spelling.
 
 **One variable, every surface.** Cordierite ships its own `react-native.config.js` that
 reads the variable and sets `ios.configurations` in autolinking accordingly;
