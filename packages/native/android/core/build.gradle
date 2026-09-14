@@ -57,8 +57,18 @@ android {
 
 dependencies {
   implementation "com.squareup.okhttp3:okhttp:4.12.0"
+  // CordieriteClient's public API (docs/tasks/16-android-session-logic.md): suspend fun connect/
+  // restoreSession/disconnect/postEvent, per-call timeout/cancel via coroutine cancellation.
+  // core-noop deliberately does not depend on this (its CordieriteClient mirror needs no coroutine
+  // machinery for a same-signature no-op) -- see that module's build.gradle.
+  api "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1"
+  api "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+  // ProcessLifecycleOwner: foreground/background observation backing CordieriteClient's
+  // reconnect-pause-while-backgrounded rule (mirrors client/index.ts's AppState handling).
+  implementation "androidx.lifecycle:lifecycle-process:2.8.7"
 
   testImplementation "junit:junit:4.13.2"
+  testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1"
   // Real org.json implementation: the stub in android.jar throws "not mocked" for every method at
   // unit-test runtime.
   testImplementation "org.json:json:20180813"

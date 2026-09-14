@@ -423,7 +423,7 @@ internal class CordieriteConnectionManager(
     private val emitError: (CordieriteErrorDetails) -> Unit,
     private val emitClose: (Map<String, Any?>) -> Unit,
     private val ownerGeneration: Long = CordieriteProcessResumeLeaseStore.newOwnerGeneration(),
-) {
+) : CordieriteTransport {
     /**
      * Every mutation and read of connection state goes through this single-thread executor — the
      * TurboModule bridge calls `connect`/`send`/`close` from the JS thread, and OkHttp invokes
@@ -476,7 +476,7 @@ internal class CordieriteConnectionManager(
      */
     private var negotiatedPingIntervalMillis = TimeUnit.SECONDS.toMillis(DEFAULT_PING_INTERVAL_SECONDS)
 
-    fun connect(
+    override fun connect(
         rawOptions: Map<String, Any?>,
         completion: (Throwable?) -> Unit,
     ) {
@@ -502,7 +502,7 @@ internal class CordieriteConnectionManager(
         }
     }
 
-    fun send(
+    override fun send(
         message: String,
         completion: (Throwable?) -> Unit,
     ) {
@@ -521,7 +521,7 @@ internal class CordieriteConnectionManager(
         }
     }
 
-    fun close(completion: () -> Unit) {
+    override fun close(completion: () -> Unit) {
         if (invalidationRequested.get()) {
             completion()
             return
@@ -534,7 +534,7 @@ internal class CordieriteConnectionManager(
     }
 
     /** Metro/TurboModule teardown: preserve recovery data, release transport, and emit nothing. */
-    fun invalidate(completion: () -> Unit = {}) {
+    override fun invalidate(completion: () -> Unit) {
         if (!invalidationRequested.compareAndSet(false, true)) {
             completion()
             return
@@ -544,12 +544,12 @@ internal class CordieriteConnectionManager(
         executor.execute { performInvalidation(disconnectedAtMs, completion) }
     }
 
-    fun getState(): String = stateSnapshot
+    override fun getState(): String = stateSnapshot
 
     /** Synchronous TurboModule bridge wrappers; clear retains this manager's generation guard. */
-    fun getResumeLeaseRecord(): Map<String, Any?>? = CordieriteProcessResumeLeaseStore.getRecord()
+    override fun getResumeLeaseRecord(): Map<String, Any?>? = CordieriteProcessResumeLeaseStore.getRecord()
 
-    fun clearResumeLease(): Boolean = CordieriteProcessResumeLeaseStore.clear(ownerGeneration)
+    override fun clearResumeLease(): Boolean = CordieriteProcessResumeLeaseStore.clear(ownerGeneration)
 
     /**
      * Backs the TurboModule's `getConstants()`. Reads the manifest through the exact same
@@ -568,7 +568,7 @@ internal class CordieriteConnectionManager(
      * diagnostic call as non-throwing as the read genuinely allows, without adding any parsing
      * logic beyond what [readCordieriteManifestConfig] already does.
      */
-    fun getBuildConfig(): CordieriteBuildConfig =
+    override fun getBuildConfig(): CordieriteBuildConfig =
         try {
             val manifestConfig = readCordieriteManifestConfig(context)
             val resolution = resolveTrustedPins(manifestConfig.trust, manifestConfig.embeddedPins, linkPin = null)
