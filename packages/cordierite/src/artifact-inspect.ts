@@ -113,10 +113,12 @@ const IOS_OBJC_CLASS_MARKER = "RCTNativeCordierite";
 const IOS_INFO_PLIST_KEY_MARKERS = ["CordieriteCliPins", "CordieriteTrust", "CordieriteAllowPrivateLanOnly"];
 
 // Fully-qualified name of `CordieriteNativeMarker`
-// (packages/react-native/android/src/main/java/com/callstackincubator/cordierite/CordieriteNativeMarker.kt),
-// kept unminified by packages/react-native/android/consumer-rules.pro. Checked as a dex type descriptor
-// (`Lcom/.../CordieriteNativeMarker;`) — see detectAndroidSignals — which is how the class's fully-qualified
-// name is actually encoded in classes.dex.
+// (packages/native/android/core/src/main/java/com/callstackincubator/cordierite/CordieriteNativeMarker.kt,
+// vendored into packages/react-native/android/core/src/main/java/com/callstackincubator/cordierite/CordieriteNativeMarker.kt
+// by scripts/sync-native-core.mjs), kept unminified by packages/native/android/core/consumer-rules.pro
+// (vendored to packages/react-native/android/core/consumer-rules.pro the same way). Checked as a dex
+// type descriptor (`Lcom/.../CordieriteNativeMarker;`) — see detectAndroidSignals — which is how the
+// class's fully-qualified name is actually encoded in classes.dex.
 const ANDROID_KEEP_RULE_MARKER_CLASS = "com/callstackincubator/cordierite/CordieriteNativeMarker";
 
 const ANDROID_DEX_PACKAGE_MARKERS = ["com/callstackincubator/cordierite", "com.callstackincubator.cordierite"];
