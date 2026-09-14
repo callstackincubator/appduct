@@ -44,9 +44,11 @@ export const cordieriteNativeModule: CordieriteNativeModuleLike = {
     unsupported("connect");
   },
   async restoreSession() {
-    return false;
+    return unsupported("restoreSession");
   },
-  async disconnect() {},
+  async disconnect() {
+    unsupported("disconnect");
+  },
   async postEvent() {
     unsupported("postEvent");
   },

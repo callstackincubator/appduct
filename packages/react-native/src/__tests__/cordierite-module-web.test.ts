@@ -33,11 +33,11 @@ describe("CordieriteModule.web stub", () => {
     );
   });
 
-  test("registerTool/connect/restoreSession/postEvent still throw or reject: Cordierite is iOS/Android-only", async () => {
+  test("registerTool/connect/restoreSession/disconnect/postEvent all throw or reject: Cordierite is iOS/Android-only", async () => {
     expect(() => cordieriteNativeModule.registerTool("{}")).toThrow();
     await expect(cordieriteNativeModule.connect("{}", false)).rejects.toThrow();
-    await expect(cordieriteNativeModule.restoreSession()).resolves.toBe(false);
-    await expect(cordieriteNativeModule.disconnect()).resolves.toBeUndefined();
+    await expect(cordieriteNativeModule.restoreSession()).rejects.toThrow();
+    await expect(cordieriteNativeModule.disconnect()).rejects.toThrow();
     await expect(cordieriteNativeModule.postEvent("x", null)).rejects.toThrow();
   });
 
