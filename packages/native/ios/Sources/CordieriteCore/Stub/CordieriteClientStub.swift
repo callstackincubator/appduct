@@ -71,6 +71,7 @@ public struct ToolCallContext: Sendable {
     self.sessionId = sessionId
   }
   public func reportProgress(progress: Double? = nil, message: String? = nil) async {}
+  public func cancelReason() async -> String? { nil }
 }
 
 public typealias ToolHandler = @Sendable (JSONObject, ToolCallContext) async throws -> JSONValue

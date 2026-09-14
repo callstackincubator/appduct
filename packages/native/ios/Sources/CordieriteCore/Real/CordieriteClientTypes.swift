@@ -281,23 +281,35 @@ public struct ToolCallContext: Sendable {
   public let toolName: String
   public let sessionId: String
   private let onProgress: @Sendable (Double?, String?) async -> Void
+  private let cancelReasonProvider: @Sendable () async -> String?
 
   public init(
     callId: String,
     toolName: String,
     sessionId: String,
-    onProgress: @escaping @Sendable (Double?, String?) async -> Void
+    onProgress: @escaping @Sendable (Double?, String?) async -> Void,
+    cancelReasonProvider: @escaping @Sendable () async -> String? = { nil }
   ) {
     self.callId = callId
     self.toolName = toolName
     self.sessionId = sessionId
     self.onProgress = onProgress
+    self.cancelReasonProvider = cancelReasonProvider
   }
 
   /// Reports incremental progress (`tool_call_progress`, PROTOCOL.md §7). Best-effort: send
   /// failures land on the unified `error` channel, never thrown back into the handler.
   public func reportProgress(progress: Double? = nil, message: String? = nil) async {
     await onProgress(progress, message)
+  }
+
+  /// Once cancellation has been requested (`Task.isCancelled`/`try Task.checkCancellation()`),
+  /// the reason: `"client_cancelled"`/the wire `tool_cancel.reason`, `"timeout"`, or
+  /// `"session_suspended"`. `nil` before cancellation or if this context did not come from a
+  /// `CordieriteClient` (e.g. a unit test constructing one directly). The RN bridge surfaces this
+  /// on its `onToolCancel` event so JS can abort the matching `AbortSignal`.
+  public func cancelReason() async -> String? {
+    await cancelReasonProvider()
   }
 }
 

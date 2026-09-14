@@ -15,6 +15,7 @@ extension CordieriteClient {
     case "tool_cancel":
       guard let id = object["id"]?.stringValue, let call = inFlightCalls[id] else { return }
       call.cancelled = true
+      call.cancelReason = object["reason"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? "client_cancelled"
       call.task.cancel()
 
     case "tool_call":
@@ -69,6 +70,9 @@ extension CordieriteClient {
       sessionId: sessionId,
       onProgress: { [weak self] progress, message in
         await self?.sendToolCallProgress(id: id, sessionId: sessionId, progress: progress, message: message)
+      },
+      cancelReasonProvider: { [weak self] in
+        await self?.inFlightCallCancelReason(id: id)
       }
     )
 
@@ -164,6 +168,7 @@ extension CordieriteClient {
   private func handleToolTimeout(id: String, name: String, sessionId: String, timeoutMs: Int) async {
     guard let call = inFlightCalls[id], !call.timedOut else { return }
     call.timedOut = true
+    call.cancelReason = "timeout"
     call.task.cancel()
     await sendToolError(
       id: id,
@@ -215,6 +220,7 @@ extension CordieriteClient {
   func abortAllInFlight() {
     for call in inFlightCalls.values {
       call.cancelled = true
+      call.cancelReason = call.cancelReason ?? "session_suspended"
       call.task.cancel()
     }
   }
@@ -224,6 +230,11 @@ extension CordieriteClient {
   public func reportToolProgress(callId: String, progress: Double?, message: String?) async {
     guard inFlightCalls[callId] != nil, let sessionId = heldSession?.sessionId else { return }
     await sendToolCallProgress(id: callId, sessionId: sessionId, progress: progress, message: message)
+  }
+
+  /// Backs `ToolCallContext.cancelReason()` and the RN bridge's `onToolCancel` event.
+  func inFlightCallCancelReason(id: String) async -> String? {
+    inFlightCalls[id]?.cancelReason
   }
 }
 

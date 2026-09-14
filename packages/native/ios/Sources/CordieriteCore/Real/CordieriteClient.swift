@@ -74,6 +74,10 @@ public actor CordieriteClient {
     let task: Task<Void, Never>
     var cancelled = false
     var timedOut = false
+    /// "client_cancelled" (default for an explicit `tool_cancel` with no reason)/the wire
+    /// `tool_cancel.reason`, "timeout", or "session_suspended" -- surfaced to a native `ToolHandler`
+    /// via `ToolCallContext.cancelReason()` and to the RN bridge's `onToolCancel` event.
+    var cancelReason: String?
     init(task: Task<Void, Never>) { self.task = task }
   }
 
