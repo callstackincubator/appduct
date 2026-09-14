@@ -83,7 +83,7 @@ class NativeCordieriteModule(
     }
 
     override fun registerTool(descriptorJson: String) {
-        val descriptor = parseToolDescriptorJson(descriptorJson)
+        val descriptor = CordieriteToolDescriptor.fromJson(descriptorJson)
         // Throws CordieriteInvalidToolDescriptorException synchronously for an invalid descriptor,
         // matching the spec's doc comment ("native validates it ... and throws on an invalid one").
         client.registerTool(descriptor) { args, context ->
@@ -148,7 +148,7 @@ class NativeCordieriteModule(
     ) {
         val input =
             try {
-                parseConnectInputJson(inputJson)
+                CordieriteConnectInput.fromJson(inputJson)
             } catch (e: Exception) {
                 promise.reject("E_CORDIERITE", e.message, e)
                 return
@@ -260,86 +260,7 @@ class NativeCordieriteModule(
     }
 }
 
-private fun JSONObject.optStringOrNull(key: String): String? = if (has(key) && !isNull(key)) getString(key) else null
-
-private fun parseToolDescriptorJson(json: String): CordieriteToolDescriptor {
-    val obj =
-        try {
-            JSONObject(json)
-        } catch (e: Exception) {
-            throw CordieriteInvalidToolDescriptorException("Tool descriptor must be a JSON object.")
-        }
-
-    val name = obj.optString("name", "")
-
-    fun optionalObject(key: String): JSONObject? {
-        if (!obj.has(key) || obj.isNull(key)) return null
-        return obj.optJSONObject(key)
-            ?: throw CordieriteInvalidToolDescriptorException("Tool \"$name\" $key must be a JSON object.")
-    }
-
-    // Same rule as `@cordierite/shared`'s `isToolDescriptor` and the Swift bridge: an integer only.
-    // A fractional value is rejected here rather than truncated, so all three bridges agree with
-    // packages/native/fixtures/tool-descriptors.json.
-    val timeoutMs: Long? =
-        if (obj.has("timeout_ms") && !obj.isNull("timeout_ms")) {
-            when (val raw = obj.opt("timeout_ms")) {
-                is Int -> raw.toLong()
-                is Long -> raw
-                is Number -> {
-                    val asDouble = raw.toDouble()
-                    if (asDouble.isFinite() && asDouble == Math.floor(asDouble)) {
-                        asDouble.toLong()
-                    } else {
-                        throw CordieriteInvalidToolDescriptorException("Tool \"$name\" timeout_ms must be a positive integer.")
-                    }
-                }
-                else -> throw CordieriteInvalidToolDescriptorException("Tool \"$name\" timeout_ms must be a positive integer.")
-            }
-        } else {
-            null
-        }
-
-    return CordieriteToolDescriptor(
-        name = name,
-        description = obj.optString("description", ""),
-        inputSchema = optionalObject("input_schema"),
-        outputSchema = optionalObject("output_schema"),
-        annotations = optionalObject("annotations"),
-        timeoutMs = timeoutMs,
-    )
-}
-
-/** `inputJson` is either a decoded v2 bootstrap payload (`family`/`address` present) or explicit
- * connect options (`ip` instead) -- see `NativeCordierite.ts`'s `connect` doc comment. */
-private fun parseConnectInputJson(json: String): CordieriteConnectInput {
-    val obj = JSONObject(json)
-
-    return if (obj.has("family") && obj.has("address")) {
-        CordieriteConnectInput.Bootstrap(
-            payload =
-                CordieriteBootstrapPayload(
-                    family = obj.getInt("family"),
-                    address = obj.getString("address"),
-                    port = obj.getInt("port"),
-                    sessionId = obj.getString("sessionId"),
-                    token = obj.getString("token"),
-                    expiresAt = obj.getLong("expiresAt"),
-                ),
-            linkPin = obj.optStringOrNull("linkPin"),
-        )
-    } else {
-        CordieriteConnectInput.Explicit(
-            ip = obj.getString("ip"),
-            port = obj.getInt("port"),
-            sessionId = obj.getString("sessionId"),
-            token = obj.optStringOrNull("token"),
-            resumeToken = obj.optStringOrNull("resumeToken"),
-            expiresAt = obj.getLong("expiresAt"),
-            deviceManufacturer = obj.optStringOrNull("deviceManufacturer"),
-            deviceModel = obj.optStringOrNull("deviceModel"),
-            deviceOs = obj.optStringOrNull("deviceOs"),
-            linkPin = obj.optStringOrNull("linkPin"),
-        )
-    }
-}
+// JSON parsing for both of these now lives on the core types themselves --
+// CordieriteToolDescriptor.fromJson / CordieriteConnectInput.fromJson (packages/native/android/core
+// and core-noop's CordieriteClientTypes.kt) -- vendored like the Swift equivalents
+// (parseToolDescriptor/parseCordieriteConnectInput) and covered by FixturesConformanceTest.kt.

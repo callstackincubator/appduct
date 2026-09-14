@@ -117,67 +117,18 @@ class FixturesConformanceTest {
     // --- tool-descriptors.json ---
 
     /**
-     * Parses a fixture's raw `descriptor` JSON value into a typed [CordieriteToolDescriptor],
-     * enforcing the wire-shape rules PROTOCOL.md §5 requires beyond what the typed
-     * [CordieriteToolDescriptor] constructor alone can check (schema fields must be JSON objects,
-     * `timeout_ms` must be a whole number, not a fraction or a string) -- mirroring what the RN
-     * bridge's own (bridge-only, out of this task's scope) wire parsing does, so the fixture can
-     * drive [validateCordieriteToolDescriptor] -- the actual `packages/native/android/core`
-     * implementation under test -- with realistic typed input. Throws on any shape violation;
-     * delegates the rest (name pattern, description bounds, annotation keys/values, timeout
-     * positivity) to [validateCordieriteToolDescriptor] itself.
+     * Parses a fixture's raw `descriptor` JSON value through [CordieriteToolDescriptor.fromJson] --
+     * the same wire-shape parser `NativeCordieriteModule.registerTool` calls, vendored like the
+     * Swift/iOS equivalent (`parseToolDescriptor`) -- so the fixture actually drives the real
+     * implementation under test end to end (structural parsing, then PROTOCOL.md §5 validation),
+     * rather than a second, hand-maintained parser that could silently drift from it.
      */
     private fun parseFixtureToolDescriptor(raw: Any?): CordieriteToolDescriptor {
         if (raw !is JSONObject) {
             throw CordieriteInvalidToolDescriptorException("Tool descriptor must be a JSON object.")
         }
 
-        if (!raw.has("name") || raw.isNull("name") || raw.get("name") !is String) {
-            throw CordieriteInvalidToolDescriptorException("Tool descriptor is missing a valid \"name\".")
-        }
-        val name = raw.getString("name")
-
-        if (!raw.has("description") || raw.isNull("description") || raw.get("description") !is String) {
-            throw CordieriteInvalidToolDescriptorException("Tool \"$name\" is missing a valid \"description\".")
-        }
-        val description = raw.getString("description")
-
-        fun optionalObject(key: String): JSONObject? {
-            if (!raw.has(key) || raw.isNull(key)) return null
-            return raw.get(key) as? JSONObject
-                ?: throw CordieriteInvalidToolDescriptorException("Tool \"$name\" $key must be a JSON object.")
-        }
-
-        val inputSchema = optionalObject("input_schema")
-        val outputSchema = optionalObject("output_schema")
-        val annotations = optionalObject("annotations")
-
-        val timeoutMs: Long? =
-            if (raw.has("timeout_ms") && !raw.isNull("timeout_ms")) {
-                when (val value = raw.get("timeout_ms")) {
-                    is Int -> value.toLong()
-                    is Long -> value
-                    is Double -> {
-                        if (value.isNaN() || value.isInfinite() || value != Math.floor(value)) {
-                            throw CordieriteInvalidToolDescriptorException("Tool \"$name\" timeout_ms must be an integer.")
-                        }
-                        value.toLong()
-                    }
-                    else -> throw CordieriteInvalidToolDescriptorException("Tool \"$name\" timeout_ms must be a number.")
-                }
-            } else {
-                null
-            }
-
-        val descriptor =
-            CordieriteToolDescriptor(
-                name = name,
-                description = description,
-                inputSchema = inputSchema,
-                outputSchema = outputSchema,
-                annotations = annotations,
-                timeoutMs = timeoutMs,
-            )
+        val descriptor = CordieriteToolDescriptor.fromJson(raw.toString())
         validateCordieriteToolDescriptor(descriptor)
         return descriptor
     }

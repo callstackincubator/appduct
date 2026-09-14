@@ -51,6 +51,74 @@ internal data class CordieriteToolDescriptor(
             if (annotations != null) put("annotations", annotations)
             if (timeoutMs != null) put("timeout_ms", timeoutMs)
         }
+
+    companion object {
+        /** Parses the bridge's `registerTool(descriptorJson)` wire-shaped JSON (mirrors iOS's
+         * `parseToolDescriptor`). Structural parsing only -- PROTOCOL.md §5 validation (name
+         * pattern, description length, ...) happens separately in
+         * [validateCordieriteToolDescriptor], run by [CordieriteToolRegistry.upsert]. */
+        fun fromJson(json: String): CordieriteToolDescriptor {
+            val obj =
+                try {
+                    JSONObject(json)
+                } catch (e: Exception) {
+                    throw CordieriteInvalidToolDescriptorException("Tool descriptor must be a JSON object.")
+                }
+
+            // `optString` would silently coerce a non-string value (e.g. a number) to its
+            // `toString()` instead of rejecting it -- strict here so a wire violation is caught
+            // by validateCordieriteToolDescriptor's later checks instead of accepted as a
+            // stringified accident (packages/native/fixtures/tool-descriptors.json's
+            // "description-non-string" case).
+            fun requiredStringOrEmpty(key: String, errorSubject: String): String {
+                val raw = obj.opt(key)
+                return when {
+                    raw == null || raw === JSONObject.NULL -> ""
+                    raw is String -> raw
+                    else -> throw CordieriteInvalidToolDescriptorException("$errorSubject \"$key\" must be a string.")
+                }
+            }
+
+            val name = requiredStringOrEmpty("name", "Tool descriptor's")
+
+            fun optionalObject(key: String): JSONObject? {
+                if (!obj.has(key) || obj.isNull(key)) return null
+                return obj.optJSONObject(key)
+                    ?: throw CordieriteInvalidToolDescriptorException("Tool \"$name\" $key must be a JSON object.")
+            }
+
+            // Same rule as `@cordierite/shared`'s `isToolDescriptor` and the Swift bridge: an
+            // integer only. A fractional value is rejected here rather than truncated, so all three
+            // bridges agree with packages/native/fixtures/tool-descriptors.json.
+            val timeoutMs: Long? =
+                if (obj.has("timeout_ms") && !obj.isNull("timeout_ms")) {
+                    when (val raw = obj.opt("timeout_ms")) {
+                        is Int -> raw.toLong()
+                        is Long -> raw
+                        is Number -> {
+                            val asDouble = raw.toDouble()
+                            if (asDouble.isFinite() && asDouble == Math.floor(asDouble)) {
+                                asDouble.toLong()
+                            } else {
+                                throw CordieriteInvalidToolDescriptorException("Tool \"$name\" timeout_ms must be a positive integer.")
+                            }
+                        }
+                        else -> throw CordieriteInvalidToolDescriptorException("Tool \"$name\" timeout_ms must be a positive integer.")
+                    }
+                } else {
+                    null
+                }
+
+            return CordieriteToolDescriptor(
+                name = name,
+                description = requiredStringOrEmpty("description", "Tool \"$name\""),
+                inputSchema = optionalObject("input_schema"),
+                outputSchema = optionalObject("output_schema"),
+                annotations = optionalObject("annotations"),
+                timeoutMs = timeoutMs,
+            )
+        }
+    }
 }
 
 /** Thrown by `registerTool`/`unregisterTool` when a descriptor fails PROTOCOL.md §5 validation. */
@@ -122,7 +190,46 @@ internal sealed class CordieriteConnectInput {
         /** The deep link's separate `pin` query param (`extractLinkPin` in `bootstrap.ts`). */
         val linkPin: String? = null,
     ) : CordieriteConnectInput()
+
+    companion object {
+        /** Parses the bridge's `connect(inputJson)` payload: either a decoded v2 bootstrap payload
+         * (`family`/`address` present) or explicit connect options (`ip` instead) -- see
+         * `NativeCordierite.ts`'s `connect` doc comment. */
+        fun fromJson(json: String): CordieriteConnectInput {
+            val obj = JSONObject(json)
+
+            return if (obj.has("family") && obj.has("address")) {
+                Bootstrap(
+                    payload =
+                        CordieriteBootstrapPayload(
+                            family = obj.getInt("family"),
+                            address = obj.getString("address"),
+                            port = obj.getInt("port"),
+                            sessionId = obj.getString("sessionId"),
+                            token = obj.getString("token"),
+                            expiresAt = obj.getLong("expiresAt"),
+                        ),
+                    linkPin = obj.optStringOrNull("linkPin"),
+                )
+            } else {
+                Explicit(
+                    ip = obj.getString("ip"),
+                    port = obj.getInt("port"),
+                    sessionId = obj.getString("sessionId"),
+                    token = obj.optStringOrNull("token"),
+                    resumeToken = obj.optStringOrNull("resumeToken"),
+                    expiresAt = obj.getLong("expiresAt"),
+                    deviceManufacturer = obj.optStringOrNull("deviceManufacturer"),
+                    deviceModel = obj.optStringOrNull("deviceModel"),
+                    deviceOs = obj.optStringOrNull("deviceOs"),
+                    linkPin = obj.optStringOrNull("linkPin"),
+                )
+            }
+        }
+    }
 }
+
+private fun JSONObject.optStringOrNull(key: String): String? = if (has(key) && !isNull(key)) getString(key) else null
 
 /** `stateChange(state, reason?)`. `reason` is set on transitions into `closed`/`reconnecting`:
  * `revoked`, `grace_expired`, `closed_by_app`, `socket_error`, `connect_error`, `background`,

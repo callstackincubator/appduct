@@ -31,6 +31,65 @@ internal data class CordieriteToolDescriptor(
             if (annotations != null) put("annotations", annotations)
             if (timeoutMs != null) put("timeout_ms", timeoutMs)
         }
+
+    companion object {
+        /** Same structural JSON parsing as `core`'s -- pure JSON, no Android/OkHttp dependency, so
+         * there is no reason for this build to parse it any differently. Kept identical rather than
+         * a stub so the bridge behaves the same way regardless of which core variant resolved. */
+        fun fromJson(json: String): CordieriteToolDescriptor {
+            val obj =
+                try {
+                    JSONObject(json)
+                } catch (e: Exception) {
+                    throw CordieriteInvalidToolDescriptorException("Tool descriptor must be a JSON object.")
+                }
+
+            fun requiredStringOrEmpty(key: String, errorSubject: String): String {
+                val raw = obj.opt(key)
+                return when {
+                    raw == null || raw === JSONObject.NULL -> ""
+                    raw is String -> raw
+                    else -> throw CordieriteInvalidToolDescriptorException("$errorSubject \"$key\" must be a string.")
+                }
+            }
+
+            val name = requiredStringOrEmpty("name", "Tool descriptor's")
+
+            fun optionalObject(key: String): JSONObject? {
+                if (!obj.has(key) || obj.isNull(key)) return null
+                return obj.optJSONObject(key)
+                    ?: throw CordieriteInvalidToolDescriptorException("Tool \"$name\" $key must be a JSON object.")
+            }
+
+            val timeoutMs: Long? =
+                if (obj.has("timeout_ms") && !obj.isNull("timeout_ms")) {
+                    when (val raw = obj.opt("timeout_ms")) {
+                        is Int -> raw.toLong()
+                        is Long -> raw
+                        is Number -> {
+                            val asDouble = raw.toDouble()
+                            if (asDouble.isFinite() && asDouble == Math.floor(asDouble)) {
+                                asDouble.toLong()
+                            } else {
+                                throw CordieriteInvalidToolDescriptorException("Tool \"$name\" timeout_ms must be a positive integer.")
+                            }
+                        }
+                        else -> throw CordieriteInvalidToolDescriptorException("Tool \"$name\" timeout_ms must be a positive integer.")
+                    }
+                } else {
+                    null
+                }
+
+            return CordieriteToolDescriptor(
+                name = name,
+                description = requiredStringOrEmpty("description", "Tool \"$name\""),
+                inputSchema = optionalObject("input_schema"),
+                outputSchema = optionalObject("output_schema"),
+                annotations = optionalObject("annotations"),
+                timeoutMs = timeoutMs,
+            )
+        }
+    }
 }
 
 /** No-op mirror of `core`'s `CordieriteToolReplyError` -- this module never invokes a registered
@@ -103,7 +162,45 @@ internal sealed class CordieriteConnectInput {
         val payload: CordieriteBootstrapPayload,
         val linkPin: String? = null,
     ) : CordieriteConnectInput()
+
+    companion object {
+        /** Same structural JSON parsing as `core`'s -- see `CordieriteToolDescriptor.fromJson`'s
+         * doc comment above for why this build keeps a real parser rather than a stub. */
+        fun fromJson(json: String): CordieriteConnectInput {
+            val obj = JSONObject(json)
+
+            return if (obj.has("family") && obj.has("address")) {
+                Bootstrap(
+                    payload =
+                        CordieriteBootstrapPayload(
+                            family = obj.getInt("family"),
+                            address = obj.getString("address"),
+                            port = obj.getInt("port"),
+                            sessionId = obj.getString("sessionId"),
+                            token = obj.getString("token"),
+                            expiresAt = obj.getLong("expiresAt"),
+                        ),
+                    linkPin = obj.optStringOrNull("linkPin"),
+                )
+            } else {
+                Explicit(
+                    ip = obj.getString("ip"),
+                    port = obj.getInt("port"),
+                    sessionId = obj.getString("sessionId"),
+                    token = obj.optStringOrNull("token"),
+                    resumeToken = obj.optStringOrNull("resumeToken"),
+                    expiresAt = obj.getLong("expiresAt"),
+                    deviceManufacturer = obj.optStringOrNull("deviceManufacturer"),
+                    deviceModel = obj.optStringOrNull("deviceModel"),
+                    deviceOs = obj.optStringOrNull("deviceOs"),
+                    linkPin = obj.optStringOrNull("linkPin"),
+                )
+            }
+        }
+    }
 }
+
+private fun JSONObject.optStringOrNull(key: String): String? = if (has(key) && !isNull(key)) getString(key) else null
 
 internal typealias CordieriteStateChangeListener = (state: CordieriteClientState, reason: String?) -> Unit
 internal typealias CordieriteSessionChangeListener = (sessionId: String?, alias: String?) -> Unit
