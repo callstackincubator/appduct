@@ -280,6 +280,11 @@ Run from the worktree root unless noted.
   `CordieriteTerminalClose.o`, `CordieriteClientTimers.o`, `CordieriteTurboBridge.o`,
   `RCTNativeCordierite.o`) under the derived data directory. This is also what caught the
   `handleUrl` return-type mismatch noted above.
+- **`cordierite doctor <built .app> --assert-present` — passes.** Run against the
+  playground's built `playground.app` from the `xcodebuild` above:
+  `Present true`, `Signals ios-core-marker-symbol, ios-objc-class-symbol,
+  ios-info-plist-keys`, `Assertion present (holds)` — confirming `CordieriteCoreMarker`
+  (compiled only into `Real/`, per task 14) is actually present in the built binary.
 - **End-to-end in the iOS simulator — attempted, blocked by this environment's network
   sandboxing, not by this change.** Booted a dedicated simulator (`iPhone 17 Pro`),
   installed and launched the built `playground.app` (`xcrun simctl install`/`launch`), and
