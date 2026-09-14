@@ -229,7 +229,7 @@ cordierite doctor ./build/MyApp.ipa --assert-absent
 cordierite doctor ./build/app-release.apk --assert-absent
 ```
 
-Exit codes, what it inspects per platform, the Android marker-only detection rules and the CI wiring are in [docs/CI.md][ci].
+Exit codes, what it inspects per platform, the marker-only detection rules on both platforms, and the CI wiring are in [docs/CI.md][ci].
 
 ## Related packages
 

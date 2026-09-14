@@ -46,11 +46,16 @@ cordierite doctor ./build/app-release.apk --assert-absent
 ```
 
 It inspects a built `.app`/`.ipa`/`.apk`/`.aab` for Cordierite's native code and reports
-`present`/`absent`. On iOS it looks for the `RCTNativeCordierite` Objective-C class and the
-plugin-authored `Info.plist` keys. On Android the verdict is decided by the
-`CordieriteNativeMarker` keep-rule signal alone; the `com.callstackincubator.cordierite`
-dex package and the `AndroidManifest.xml` meta-data keys are reported alongside it but
-cannot flip it (see [Android detection](#android-detection)).
+`present`/`absent`. On iOS the verdict is decided by real-code-only symbols: the
+`CordieriteCoreMarker` Objective-C class (`packages/native/ios/Sources/CordieriteCore/Real`,
+docs/tasks/14-native-core-extraction.md) or the `RCTNativeCordierite` Objective-C class,
+OR'd together so a stripped binary that dropped one doesn't read as absent; the
+plugin-authored `Info.plist` keys are reported alongside them but cannot flip the verdict on
+their own. On Android the verdict is decided by the `CordieriteNativeMarker` keep-rule
+signal alone; the `com.callstackincubator.cordierite` dex package and the
+`AndroidManifest.xml` meta-data keys are reported alongside it but cannot flip it — the two
+platforms now follow the same "real-code-only symbol, corroborating signals only" rule (see
+[Android detection](#android-detection)).
 
 | Exit code | Meaning |
 | --- | --- |

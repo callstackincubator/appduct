@@ -52,9 +52,28 @@ describe("artifact-inspect: iOS .ipa (synthetic zip fixture)", () => {
     expect(result.signals).toContain("ios-objc-class-symbol");
   });
 
-  test("included via Info.plist keys alone (corroborating signal) also reports present", async () => {
+  test("included via CordieriteCoreMarker alone (primary signal) reports present", async () => {
     const root = await withFixtureRoot();
-    const ipaPath = path.join(root, "included-plist-only.ipa");
+    const ipaPath = path.join(root, "included-core-marker-only.ipa");
+
+    await buildZipFixture(ipaPath, {
+      "Payload/Fixture.app/Fixture": Buffer.concat([
+        Buffer.from("junk-mach-o-bytes-before "),
+        Buffer.from("CordieriteCoreMarker"),
+        Buffer.from(" junk-mach-o-bytes-after"),
+      ]),
+      "Payload/Fixture.app/Info.plist": "not cordierite related",
+    });
+
+    const result = await inspectArtifact(ipaPath);
+
+    expect(result.present).toBe(true);
+    expect(result.signals).toContain("ios-core-marker-symbol");
+  });
+
+  test("Info.plist keys alone (corroborating signal only) does NOT prove presence -- an app can author these keys by hand without the real implementation being present", async () => {
+    const root = await withFixtureRoot();
+    const ipaPath = path.join(root, "plist-only.ipa");
 
     await buildZipFixture(ipaPath, {
       "Payload/Fixture.app/Fixture": "no objc marker in this fake binary",
@@ -63,8 +82,8 @@ describe("artifact-inspect: iOS .ipa (synthetic zip fixture)", () => {
 
     const result = await inspectArtifact(ipaPath);
 
-    expect(result.present).toBe(true);
-    expect(result.signals).toContain("ios-info-plist-keys");
+    expect(result.present).toBe(false);
+    expect(result.signals).toEqual(["ios-info-plist-keys"]);
   });
 
   test("excluded: reports absent with no signals", async () => {

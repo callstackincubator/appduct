@@ -11,26 +11,34 @@
  * answer throws {@link inspectionError} — a distinct, non-zero exit — instead of falling through to
  * `present: false`.
  *
- * Detection strategy, and why it's two signals per platform rather than one:
+ * Detection strategy, and why no single signal is authoritative on either platform:
  *
- * - iOS: the Objective-C class name `RCTNativeCordierite` (`RCT_EXPORT_MODULE`, see
- *   `packages/react-native/ios/RCTNativeCordierite.mm`) is Objective-C runtime metadata — it lives
- *   in `__objc_classname`/`__objc_data`, and `strip`/release optimization leaves it alone because
- *   removing it would break `+[NSObject class]`-based dispatch. (A build that dead-strips the whole
- *   translation unit for lack of `-ObjC`/`-force_load` could still drop it — this signal assumes
+ * - iOS: `present` is decided by real-code-only symbols alone, exactly like Android below —
+ *   `CordieriteCoreMarker` (`packages/native/ios/Sources/CordieriteCore/Real/CordieriteCoreMarker.swift`,
+ *   docs/tasks/14-native-core-extraction.md), an `@objc` class compiled only into the real
+ *   implementation, never into the SwiftPM package's `Stub/` branch, so its presence cannot be
+ *   confused with a stub build. `RCTNativeCordierite` (`RCT_EXPORT_MODULE`, see
+ *   `packages/react-native/ios/RCTNativeCordierite.mm`) is kept as a second real-code signal for
+ *   artifacts built before the marker existed. Both are Objective-C runtime metadata — they live in
+ *   `__objc_classname`/`__objc_data`, and `strip`/release optimization leaves them alone because
+ *   removing them would break `+[NSObject class]`-based dispatch. (A build that dead-strips the whole
+ *   translation unit for lack of `-ObjC`/`-force_load` could still drop them — these signals assume
  *   the module actually links into the binary, which is the thing being checked in the first
- *   place.) It's corroborated by the plugin-authored `Info.plist` keys
+ *   place.) The plugin-authored `Info.plist` keys
  *   (`CordieriteCliPins`/`CordieriteTrust`/`CordieriteAllowPrivateLanOnly`, docs/tasks/00-overview.md
- *   "Native config keys the plugin writes"), which are plist string data, not code, so they can't be
- *   renamed by anything that mangles symbols.
+ *   "Native config keys the plugin writes") are reported as a corroborating signal only and can no
+ *   longer flip `present` to `true` on their own — an app author can write these keys by hand (or a
+ *   future stub could ship them) without the real implementation being present, exactly the reason
+ *   the Android signals below aren't all treated as equally authoritative either.
  * - Android: the primary signal is `CordieriteNativeMarker`
- *   (`packages/react-native/android/src/main/java/com/callstackincubator/cordierite/CordieriteNativeMarker.kt`),
- *   a marker class with no other purpose. Its fully-qualified name is kept unminified and unremoved by a
- *   `-keep` rule in `packages/react-native/android/consumer-rules.pro`, shipped to every consuming app via
- *   `consumerProguardFiles` (see `../build.gradle`) — R8 applies it regardless of whether the app used the
- *   Expo config plugin or bare-RN autolinking, and regardless of whether the app authored any keep rules of
- *   its own (docs/tasks/10-android-detection-keep-rule.md). This is the only Android signal guaranteed to
- *   survive minification in every supported consumer setup.
+ *   (`packages/native/android/core/src/main/java/com/callstackincubator/cordierite/CordieriteNativeMarker.kt`,
+ *   vendored into `@cordierite/react-native` at `android/core/src/main/java/...`), a marker class with no
+ *   other purpose. Its fully-qualified name is kept unminified and unremoved by a `-keep` rule in
+ *   `consumer-rules.pro` (same vendoring path), shipped to every consuming app via `consumerProguardFiles`
+ *   (see `../build.gradle`) — R8 applies it regardless of whether the app used the Expo config plugin or
+ *   bare-RN autolinking, and regardless of whether the app authored any keep rules of its own
+ *   (docs/tasks/10-android-detection-keep-rule.md). This is the only Android signal guaranteed to survive
+ *   minification in every supported consumer setup.
  *
  *   Two more signals are kept as fallbacks for artifacts built before this marker existed: the
  *   `com.callstackincubator.cordierite` package string in the dex string pool (survives as long as
@@ -41,19 +49,24 @@
  *   identifiers, so R8 never touches them, but they only exist at all if the config plugin ran. Both
  *   encodings AAPT2 can choose for the manifest string pool (UTF-8 or UTF-16LE) are checked.
  *
- * On iOS, no single signal is authoritative on its own for "absent": presence is an OR across both
- * signals, specifically so a stripped binary that dropped one literal doesn't flip a real inclusion
- * to "absent" just because one check missed.
+ * On iOS, `present` is an OR across the two real-code-only signals (`ios-core-marker-symbol`,
+ * `ios-objc-class-symbol`) — specifically so a stripped binary that dropped one literal doesn't flip
+ * a real inclusion to "absent" just because one check missed — but the Info.plist keys signal cannot
+ * flip it to `true` by itself, matching Android's marker-only rule below (a stub that ships the same
+ * plist keys without the real implementation is exactly the failure mode this guards against, even
+ * though no such stub exists yet as of Phase 1 of docs/tasks/14-native-core-extraction.md).
  *
  * On Android, `present` is decided by the keep-rule marker alone, not an OR across all three
  * signals. The other two are reported in `signals` for corroboration/debugging but cannot flip
- * `present` to `true` on their own: `android/build.gradle`'s `CORDIERITE_ENABLED`-gated source-set
- * swap (docs/tasks/00-overview.md, "Revisited post-implementation") compiles a genuine no-op
- * `CordieritePackage` into a default release build at the *same* fully-qualified name the real one
- * uses (required so the shared, non-variant-aware `PackageList.java` still resolves), and the
- * config plugin writes the same manifest meta-data regardless of variant (Expo mods edit the single
- * merged manifest, not a per-variant one). Both fallback signals therefore fire on that harmless
- * stub exactly as they would on the real module, and can no longer prove inclusion by themselves.
+ * `present` to `true` on their own: `android/build.gradle`'s `CORDIERITE_ENABLED`-gated vendored
+ * source-directory swap (`core` vs `core-noop`, docs/tasks/14-native-core-extraction.md; previously a
+ * `src/debug`/`src/release-stub` swap, see docs/tasks/00-overview.md's "Revisited
+ * post-implementation") compiles a genuine no-op `CordieritePackage` into a default release build at
+ * the *same* fully-qualified name the real one uses (required so the shared, non-variant-aware
+ * `PackageList.java` still resolves), and the config plugin writes the same manifest meta-data
+ * regardless of variant (Expo mods edit the single merged manifest, not a per-variant one). Both
+ * fallback signals therefore fire on that harmless stub exactly as they would on the real module, and
+ * can no longer prove inclusion by themselves.
  *
  * `cordierite doctor` is strictly better than the runtime check it replaces (docs/tasks/00-overview.md
  * "What we give up, deliberately"). The keep-rule marker closes the previously-documented gap where a
@@ -73,6 +86,7 @@ export type ArtifactPlatform = "ios" | "android";
 export type ArtifactFormat = "app" | "ipa" | "apk" | "aab";
 
 export type DetectionSignal =
+  | "ios-core-marker-symbol"
   | "ios-objc-class-symbol"
   | "ios-info-plist-keys"
   | "android-keep-rule-marker"
@@ -91,6 +105,10 @@ export type ArtifactInspection = {
 
 // --- markers ---
 
+// `@objc(CordieriteCoreMarker)` -- packages/native/ios/Sources/CordieriteCore/Real/CordieriteCoreMarker.swift.
+// Compiled only into the real implementation, never the SwiftPM package's Stub/ branch, so unlike
+// the Info.plist keys below it cannot exist without the real implementation also being present.
+const IOS_CORE_MARKER = "CordieriteCoreMarker";
 const IOS_OBJC_CLASS_MARKER = "RCTNativeCordierite";
 const IOS_INFO_PLIST_KEY_MARKERS = ["CordieriteCliPins", "CordieriteTrust", "CordieriteAllowPrivateLanOnly"];
 
@@ -322,6 +340,12 @@ const resolveFormat = (artifactPath: string): { platform: ArtifactPlatform; form
 const detectIosSignals = (bytes: Buffer): DetectionSignal[] => {
   const signals: DetectionSignal[] = [];
 
+  // Primary signal: checked first because, unlike the Info.plist keys below, it cannot exist
+  // without the real implementation (see the file-level doc comment).
+  if (bufferIncludesAscii(bytes, IOS_CORE_MARKER)) {
+    signals.push("ios-core-marker-symbol");
+  }
+
   if (bufferIncludesAscii(bytes, IOS_OBJC_CLASS_MARKER)) {
     signals.push("ios-objc-class-symbol");
   }
@@ -403,9 +427,14 @@ export const inspectArtifact = async (
   const signals = platform === "ios" ? detectIosSignals(bytes) : detectAndroidSignals(bytes);
 
   // Android: only the keep-rule marker proves inclusion (see the file-level doc comment) -- the
-  // other two Android signals are reported but can't flip `present` on their own.
+  // other two Android signals are reported but can't flip `present` on their own. iOS mirrors
+  // this: only the two real-code-only symbols prove inclusion (OR'd together so a stripped binary
+  // that dropped one doesn't read as absent) -- the Info.plist keys are corroborating only and
+  // can't flip `present` on their own either.
   const present =
-    platform === "android" ? signals.includes("android-keep-rule-marker") : signals.length > 0;
+    platform === "android"
+      ? signals.includes("android-keep-rule-marker")
+      : signals.includes("ios-core-marker-symbol") || signals.includes("ios-objc-class-symbol");
 
   return {
     platform,
