@@ -24,6 +24,16 @@ internal class FakeCordieriteTransport(
 
     @Volatile var nextSendError: Throwable? = null
 
+    /** When `true`, [send] hands its `completion` to a fresh background thread (after a short real
+     * sleep) instead of calling it inline. `rawSend`'s `suspendCancellableCoroutine` genuinely
+     * suspends and is resumed via the dispatcher, exactly like a real socket write, so a caller
+     * whose coroutine `Job` was cancelled in the meantime (`handleToolCancel`/`abortAllInFlight`)
+     * observes that on resume -- the default synchronous completion below resumes inline, before
+     * `suspendCancellableCoroutine` ever actually suspends, which cannot reproduce that class of
+     * bug (see `CordieriteToolInvokerTest`/`CordieriteClientTest`'s cancellation-reaches-the-wire
+     * tests). */
+    @Volatile var deferSendCompletion = false
+
     @Volatile var resumeLeaseRecordValue: Map<String, Any?>? = null
 
     @Volatile var buildConfigValue: CordieriteBuildConfig = CordieriteBuildConfig(trust = "pin", hasEmbeddedPins = true, allowPrivateLanOnly = true)
@@ -50,12 +60,16 @@ internal class FakeCordieriteTransport(
         completion: (Throwable?) -> Unit,
     ) {
         val error = nextSendError
-        if (error != null) {
+        if (error == null) sentMessages.add(message)
+
+        if (deferSendCompletion) {
+            Thread {
+                Thread.sleep(20)
+                completion(error)
+            }.start()
+        } else {
             completion(error)
-            return
         }
-        sentMessages.add(message)
-        completion(null)
     }
 
     override fun close(completion: () -> Unit) {

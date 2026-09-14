@@ -299,6 +299,99 @@ class CordieriteClientTest {
         }
 
     @Test
+    fun `tool_cancel's tool_cancelled reply completes cleanly even when the reply send itself genuinely suspends`() =
+        runBlocking {
+            // Regression test (issue #48 review): handleToolCancel cancels the handler's own Job, so
+            // by the time the catch(CancellationException) block's own sendToolError call suspends
+            // through rawSend's suspendCancellableCoroutine, the coroutine is already "Cancelling" --
+            // an ordinary suspension point in that state resumes with a JobCancellationException
+            // instead of the outcome the send actually completed with, which sendSafely's
+            // catch (Throwable) then silently turns into a spurious phase="tool" error, even though
+            // the tool_cancelled frame itself still reaches sentMessages (the underlying executor
+            // dispatch that writes it runs to completion regardless of the awaiting coroutine's own
+            // fate). The fix wraps that send in withContext(NonCancellable) { ... }, so the coroutine
+            // observes the send's real (successful) outcome instead of a forced cancellation.
+            //
+            // FakeCordieriteTransport's default synchronous completion resumes the continuation
+            // inline, before suspendCancellableCoroutine ever truly suspends -- which cannot
+            // reproduce the bug (the coroutine dispatcher/cancellation machinery is never consulted
+            // at all). deferSendCompletion forces a genuine suspend-then-resume-via-dispatcher, the
+            // same shape a real socket write has.
+            val (client, fake) = newClient()
+            client.connectAndAck(fake)
+            val errors = CopyOnWriteArrayList<CordieriteUnifiedError>()
+            client.addErrorListener { errors.add(it) }
+            val started = CompletableDeferred<Unit>()
+            client.registerTool(CordieriteToolDescriptor(name = "slow", description = "Never finishes.")) { _, _ ->
+                started.complete(Unit)
+                kotlinx.coroutines.delay(60_000)
+                null
+            }
+            fake.sentMessages.clear()
+
+            fake.simulateMessage(
+                JSONObject().put("type", "tool_call").put("session_id", "sess-1").put("id", "call-1").put("name", "slow").put(
+                    "args",
+                    JSONObject(),
+                ),
+            )
+            started.await()
+
+            fake.deferSendCompletion = true
+            fake.simulateMessage(
+                JSONObject().put("type", "tool_cancel").put("session_id", "sess-1").put("id", "call-1").put("reason", "client_cancelled"),
+            )
+
+            val error = fake.awaitToolError()
+            assertEquals("tool_cancelled", error.getJSONObject("error").getString("type"))
+
+            // Give the deferred completion (20ms) time to settle, then assert it was not turned into
+            // a spurious send-failure report -- the actual bug signature this test guards against.
+            waitUntil(timeoutMs = 500) { true }
+            assertTrue("expected no spurious tool-phase error, got: $errors", errors.none { it.phase == "tool" })
+        }
+
+    @Test
+    fun `abortAllInFlight's reply send observes its real outcome instead of a forced cancellation`() =
+        runBlocking {
+            // Regression test (issue #48 review): onSocketLost's abortAllInFlight() cancels every
+            // in-flight handler's Job directly (no tool_cancel frame is possible once the socket is
+            // gone), hitting the exact same gap as an explicit tool_cancel -- see the test above.
+            // Here the wire send legitimately fails (the transport is gone): before the fix, the
+            // awaiting coroutine would observe a JobCancellationException artifact instead of the
+            // real send failure; the fix (withContext(NonCancellable)) lets it observe the actual
+            // cause, so the reported error is the real transport failure, not a cancellation
+            // artifact -- proving the send was genuinely attempted rather than short-circuited.
+            val (client, fake) = newClient()
+            client.connectAndAck(fake)
+            val errors = CopyOnWriteArrayList<CordieriteUnifiedError>()
+            client.addErrorListener { errors.add(it) }
+            val started = CompletableDeferred<Unit>()
+            client.registerTool(CordieriteToolDescriptor(name = "slow", description = "Never finishes.")) { _, _ ->
+                started.complete(Unit)
+                kotlinx.coroutines.delay(60_000)
+                null
+            }
+            fake.sentMessages.clear()
+
+            fake.simulateMessage(
+                JSONObject().put("type", "tool_call").put("session_id", "sess-1").put("id", "call-1").put("name", "slow").put(
+                    "args",
+                    JSONObject(),
+                ),
+            )
+            started.await()
+
+            fake.deferSendCompletion = true
+            fake.nextSendError = IllegalStateException("socket is gone")
+            fake.simulateClose(1000, "socket_lost")
+
+            waitUntil { errors.any { it.phase == "tool" } }
+            val toolError = errors.first { it.phase == "tool" }
+            assertEquals("socket is gone", toolError.cause?.message)
+        }
+
+    @Test
     fun `a slow tool times out on its declared timeoutMs`() =
         runBlocking {
             val (client, fake) = newClient()

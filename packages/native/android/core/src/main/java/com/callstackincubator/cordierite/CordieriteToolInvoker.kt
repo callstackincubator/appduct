@@ -4,8 +4,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
@@ -109,36 +111,54 @@ internal class CordieriteToolInvoker(
 
                 val timeoutMs = entry.descriptor.timeoutMs ?: defaultTimeoutMs
 
+                // Every terminal-outcome send below runs inside `withContext(NonCancellable) { ... }`.
+                // `handleToolCancel`/`abortAllInFlight` cancel this coroutine's own `job`, so by the
+                // time a `catch` block here runs, the coroutine is already in the "cancelling" state --
+                // any ordinary suspending call in that state (including `sendWire`'s
+                // `suspendCancellableCoroutine`, several frames down through `sendToolError`) throws
+                // `CancellationException` immediately instead of actually suspending, so the
+                // `tool_error`/`tool_cancelled` frame this catch exists to send would never reach the
+                // wire. `NonCancellable` opts this specific send back into running to completion.
                 try {
                     val result = withTimeout(timeoutMs) { entry.handler(args, context) }
                     val jsonResult =
                         try {
                             cordieriteToJsonValue(result)
                         } catch (e: IllegalArgumentException) {
-                            sendToolError(
-                                sessionId,
-                                callId,
-                                "tool_serialization_error",
-                                "Cordierite tool result is not JSON-serializable.",
-                            )
+                            withContext(NonCancellable) {
+                                sendToolError(
+                                    sessionId,
+                                    callId,
+                                    "tool_serialization_error",
+                                    "Cordierite tool result is not JSON-serializable.",
+                                )
+                            }
                             return@launch
                         }
-                    sendSafely(
-                        JSONObject()
-                            .put("type", "tool_result")
-                            .put("session_id", sessionId)
-                            .put("id", callId)
-                            .put("result", jsonResult),
-                    )
+                    withContext(NonCancellable) {
+                        sendSafely(
+                            JSONObject()
+                                .put("type", "tool_result")
+                                .put("session_id", sessionId)
+                                .put("id", callId)
+                                .put("result", jsonResult),
+                        )
+                    }
                 } catch (e: TimeoutCancellationException) {
-                    sendToolError(sessionId, callId, "tool_timeout", "Tool \"$name\" did not respond within ${timeoutMs}ms.")
+                    withContext(NonCancellable) {
+                        sendToolError(sessionId, callId, "tool_timeout", "Tool \"$name\" did not respond within ${timeoutMs}ms.")
+                    }
                 } catch (e: CancellationException) {
-                    sendToolError(sessionId, callId, "tool_cancelled", "Tool \"$name\" was cancelled.")
+                    withContext(NonCancellable) {
+                        sendToolError(sessionId, callId, "tool_cancelled", "Tool \"$name\" was cancelled.")
+                    }
                 } catch (e: CordieriteToolReplyError) {
                     // A caller (the Android bridge, on behalf of `respondToToolCall`) already knows
                     // the exact wire error shape to report -- use it verbatim instead of the generic
                     // `tool_execution_error` classification below.
-                    sendToolError(sessionId, callId, e.errorType, e.message, e.details)
+                    withContext(NonCancellable) {
+                        sendToolError(sessionId, callId, e.errorType, e.message, e.details)
+                    }
                 } catch (e: Throwable) {
                     onError(
                         CordieriteUnifiedError(
@@ -149,7 +169,9 @@ internal class CordieriteToolInvoker(
                             invocationId = callId,
                         ),
                     )
-                    sendToolError(sessionId, callId, "tool_execution_error", e.message ?: "Cordierite tool execution failed.")
+                    withContext(NonCancellable) {
+                        sendToolError(sessionId, callId, "tool_execution_error", e.message ?: "Cordierite tool execution failed.")
+                    }
                 } finally {
                     inFlight.remove(callId)
                 }
