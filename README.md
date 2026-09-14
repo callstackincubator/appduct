@@ -89,6 +89,7 @@ You'll need a development build or a bare React Native app. Expo Go can't do it.
 | [`cordierite`](packages/cordierite/README.md) | The CLI, the background service, and the MCP server |
 | [`@cordierite/react-native`](packages/react-native/README.md) | The app-side library and Expo config plugin |
 | [`@cordierite/shared`](packages/shared/README.md) | Types shared by both |
+| [`packages/native`](packages/native/README.md) | The framework-free Swift/Kotlin core, vendored into `@cordierite/react-native` |
 
 ## Support
 

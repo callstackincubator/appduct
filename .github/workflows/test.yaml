@@ -96,6 +96,15 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build packages
         run: pnpm build
+      - name: Test and assemble the standalone native Android core
+        # packages/native/android (docs/tasks/14-native-core-extraction.md) is not part of the
+        # pnpm/Turbo workspace and is never autolinked into the playground -- it builds and tests
+        # on its own, independent of the playground prebuild below, since this is what
+        # @cordierite/react-native's android/build.gradle vendors from (scripts/sync-native-core.mjs).
+        working-directory: packages/native/android
+        run: >-
+          ./gradlew :core:testDebugUnitTest :core-noop:assembleRelease
+          --build-cache --no-configuration-cache
       - name: Prebuild Android
         working-directory: playground
         env:
@@ -257,6 +266,19 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build packages
         run: pnpm build
+      - name: Build and test CordieriteCore (packages/native/ios)
+        # Repo-root Package.swift (docs/tasks/14-native-core-extraction.md; SwiftPM manifests must
+        # live at the repository root for URL dependencies). Runs before the CocoaPods-based
+        # playground build below since it needs neither Expo prebuild nor `pod install`, so a stub
+        # compile failure or a test regression fails fast. `-c debug` (the implicit default for
+        # `swift test`, and where `swift test` itself always runs) compiles the Real/ branch and
+        # exercises the moved XCTest suite (formerly ios/CordieriteTests, now
+        # Tests/CordieriteCoreTests); `-c release` compiles the Stub/ branch, which is the check
+        # that the stub's declarations actually match what the real implementation (and thus any
+        # code written against it) expects.
+        run: |
+          swift build -c release
+          swift test
       - name: Prebuild iOS
         working-directory: playground
         env:
@@ -264,21 +286,6 @@ jobs:
           EXPO_NO_TELEMETRY: "1"
           LANG: en_US.UTF-8
         run: pnpm exec expo prebuild --platform ios
-      - name: Test Cordierite native library
-        # Shares -derivedDataPath with the playground build below. Both are the same pods at the
-        # same commit in the same configuration, so the app build reuses everything the test build
-        # already compiled instead of compiling the pod graph a second time. The excluded build
-        # further down deliberately keeps its own derived data: it is the artifact the doctor
-        # --assert-absent gate inspects, and it gets a clean one.
-        run: |
-          ruby playground/scripts/create-cordierite-test-scheme.rb playground/ios/Pods/Pods.xcodeproj
-          cd playground/ios
-          xcodebuild test -workspace playground.xcworkspace -scheme Cordierite-Native-Tests \
-            -destination 'platform=iOS Simulator,name=iPhone 17' \
-            -derivedDataPath build-included \
-            C_COMPILER_LAUNCHER="$CCACHE_BIN" \
-            CLANG_ENABLE_EXPLICIT_MODULES_WITH_COMPILER_LAUNCHER=YES \
-            CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
       - name: Build playground for iOS Simulator
         working-directory: playground/ios
         # ARCHS=arm64 only: the generic simulator destination otherwise builds arm64 and x86_64,

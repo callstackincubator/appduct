@@ -525,7 +525,16 @@ running for a caller that has already exited; the process then exits reporting
 
 ## 11. React Native SDK
 
-Package `@cordierite/react-native`. Entry points:
+Package `@cordierite/react-native`. The Swift/Kotlin connection layer it bridges to —
+TLS, SPKI pinning, trust-mode resolution, the private-LAN check, and the process-memory
+resume lease — is not native to this package: it is vendored at build time from
+`packages/native`, a framework-free core with no React Native dependency, so the same code
+can eventually be consumed directly by plain iOS/Android apps (`docs/tasks/14-native-core-extraction.md`,
+[BUILD-VARIANTS.md § Native core](BUILD-VARIANTS.md#native-core)). This section covers the
+JS-facing entry points and client behavior; the four thin bridge files that remain in this
+package (`CordieriteTurboBridge.swift`/`RCTNativeCordierite.mm`,
+`CordieritePackage.kt`/`NativeCordieriteModule.kt`) are what actually calls into that vendored
+core. Entry points:
 
 - `@cordierite/react-native` — **side-effect-free**. Its default API includes
   `registerTool`, `useCordieriteTool`, `postEvent`, `getRegisteredTools`,
@@ -792,9 +801,17 @@ packages/
     src/mcp/       stdio MCP server
   react-native/    @cordierite/react-native (entries: ., /auto, /noop). Depends only on
                    @cordierite/shared — no third-party runtime deps, which is why no
-                   JSON Schema validator ships with it (§11's raw schema form).
+                   JSON Schema validator ships with it (§11's raw schema form). Vendors
+                   packages/native at build time (see below) rather than depending on it.
+  native/          Framework-free Swift (SwiftPM, packages/native/ios) and Kotlin
+                   (standalone Gradle project, packages/native/android) core. Not an
+                   npm/pnpm workspace package -- no package.json. §11, BUILD-VARIANTS.md
+                   § Native core, docs/tasks/14-native-core-extraction.md.
 playground/        reference app (Expo dev build)
 ```
+
+The repo-root `Package.swift` (SwiftPM manifests must live at the repository root for URL
+dependencies) is the SwiftPM manifest for `packages/native/ios`.
 
 Tooling stays: pnpm workspaces, turbo, Vitest, tsc builds. Node ≥ 20 for the daemon
 (UDS + `AF_UNIX` on Windows). Windows support is best-effort; the control plane uses the

@@ -42,7 +42,6 @@
           "trust": "pin"
         }
       ],
-      "./plugins/with-native-tests",
       "./plugins/with-app-display-name",
       [
         "expo-splash-screen",
