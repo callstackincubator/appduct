@@ -1,11 +1,12 @@
 /**
  * Web / unsupported-platform stub for Metro resolution.
  *
- * `connect`, `send`, and `close` throw — Cordierite is iOS/Android-only. `getState` returns
- * `"idle"` rather than throwing: it is called unconditionally from code paths that run on every
- * platform (e.g. the deep-link handler's "already connecting/active?" guard), and throwing there
- * would crash any web bundle that merely imports the package before an app ever calls a Cordierite
- * API. Apps must still not call the throwing APIs on web.
+ * `registerTool`, `connect`, `restoreSession`, `disconnect`, and `postEvent` throw — Cordierite is
+ * iOS/Android-only. `handleUrl`/`getState`/`getSessionId`/`getRegisteredToolsJson` return inert
+ * values rather than throwing: they are called unconditionally from code paths that run on every
+ * platform (e.g. the deep-link handler), and throwing there would crash any web bundle that merely
+ * imports the package before an app ever calls a Cordierite API. Apps must still not call the
+ * throwing APIs on web.
  *
  * `addListener` returns a no-op subscription for the same reason: the package eagerly constructs
  * `cordieriteClient` at import time, which registers internal listeners.
@@ -14,15 +15,10 @@
  * exists on web, but so that `index.ts`'s default-inert-release-builds degrade path never
  * kicks in on this platform: Metro resolves `./CordieriteModule` to this `.web.ts` file for web
  * bundles, and web already has its own distinct, intentional "unsupported platform" error surface
- * above (`connect`/`send`/`close` throwing). Reporting "unavailable" here would silently swap that
- * actionable error for the generic inert noop behavior instead, which is the "misfire on web" the
- * task explicitly rules out.
+ * above. Reporting "unavailable" here would silently swap that actionable error for the generic
+ * inert noop behavior instead, which is the "misfire on web" the task explicitly rules out.
  */
-import type {
-  CordieriteBuildConfig,
-  CordieriteConnectionState,
-} from "./Cordierite.types";
-import type { ResumeLeaseStore } from "./client/resume-lease";
+import type { CordieriteBuildConfig } from "./Cordierite.types";
 import type { CordieriteNativeModuleLike } from "./client-types";
 import { logger } from "./logger";
 
@@ -37,17 +33,33 @@ const unsupported = (what: string): never => {
 };
 
 export const cordieriteNativeModule: CordieriteNativeModuleLike = {
+  registerTool() {
+    unsupported("registerTool");
+  },
+  unregisterTool() {},
+  handleUrl(): boolean {
+    return false;
+  },
   async connect() {
     unsupported("connect");
   },
-  async send() {
-    unsupported("send");
+  async restoreSession() {
+    return false;
   },
-  async close() {
-    unsupported("close");
+  async disconnect() {},
+  async postEvent() {
+    unsupported("postEvent");
   },
-  getState(): CordieriteConnectionState {
+  respondToToolCall() {},
+  reportToolProgress() {},
+  getState(): string {
     return "idle";
+  },
+  getSessionId(): string | null {
+    return null;
+  },
+  getRegisteredToolsJson(): string {
+    return "[]";
   },
   addListener() {
     return {
@@ -59,7 +71,7 @@ export const cordieriteNativeModule: CordieriteNativeModuleLike = {
 /**
  * Web has no native module to read a build config from. Unlike `getState`/`addListener` (called
  * unconditionally from internal code paths, so they degrade quietly), this mirrors `connect`/
- * `send`/`close`: a diagnostic call an app makes deliberately, so — since
+ * `registerTool`/`postEvent`: a diagnostic call an app makes deliberately, so — since
  * `isCordieriteNativeModuleAvailable` is forced `true` on web (see the file-level doc comment) and
  * `index.ts`'s `noopIfNativeUnavailable` therefore always takes this "available" branch on web —
  * it throws the same actionable "unsupported platform" error rather than silently reporting a fake
@@ -67,9 +79,3 @@ export const cordieriteNativeModule: CordieriteNativeModuleLike = {
  */
 export const getCordieriteNativeBuildConfig = (): CordieriteBuildConfig =>
   unsupported("getCordieriteBuildConfig");
-
-/** @internal Unsupported platforms never have a native process-memory lease. */
-export const cordieriteNativeResumeLeaseStore: ResumeLeaseStore = {
-  get: () => null,
-  clear() {},
-};
