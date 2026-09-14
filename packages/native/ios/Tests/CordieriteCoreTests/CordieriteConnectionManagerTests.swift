@@ -1,5 +1,5 @@
 import XCTest
-@testable import Cordierite
+@testable import CordieriteCore
 
 final class CordieriteConnectionManagerTests: XCTestCase {
   override func setUp() {

@@ -1,3 +1,10 @@
+// Vendored into @cordierite/react-native at build time by scripts/sync-native-core.mjs -- see
+// packages/native/README.md. Compiled unconditionally by the RN pod (Cordierite.podspec always
+// sets -DCORDIERITE_ENABLED); the #if guard below only matters when this file is built directly
+// as part of the CordieriteCore SwiftPM package (see repo-root Package.swift and Decision 2 in
+// docs/tasks/14-native-core-extraction.md).
+#if CORDIERITE_ENABLED
+
 import CoreFoundation
 import Foundation
 
@@ -242,3 +249,5 @@ private func positiveFiniteNumber(_ value: Any?) -> Double? {
   let value = number.doubleValue
   return value.isFinite && value > 0 ? value : nil
 }
+
+#endif
