@@ -32,10 +32,8 @@ useCordieriteTool({
 });
 ```
 
-The hook registers once per mount — re-rendering costs nothing for a schema that exports JSON
-Schema (Zod 4, ArkType) or is hoisted out of the component, and the handler always sees the latest
-state it closes over. The [package README](packages/react-native/README.md#4-define-tools-in-app-startup-code)
-covers the one exception, schemas that cannot export JSON Schema.
+The hook registers once per mount — re-rendering costs nothing, and the handler always sees the
+latest state it closes over.
 
 Call it from your terminal:
 
@@ -53,17 +51,15 @@ Or hand it to an agent:
 }
 ```
 
-Both read your app's deep-link scheme from `app.json`'s `expo.scheme`, so from your app's root directory there is nothing to configure. The CLI is normally run from there; an MCP client is not, and it starts the server in whatever working directory it likes — so give that entry its own scheme with `args: ["mcp", "--scheme", "myapp"]`, or set `CORDIERITE_SCHEME`. Running `cordierite init` once in the app root prints exactly that entry with the scheme filled in.
+Both read your app's deep-link scheme straight from `app.json`'s `expo.scheme`, so there's nothing to configure.
 
 That's the whole idea. Everything else is about which builds include it and what they trust.
 
 ## Is this safe to ship?
 
-That's the right question to ask, and the honest answer is: it depends on how you set it up, so it's worth ten minutes of reading before you ship it in something customers install.
+By default, yes — nothing here ships in a release build, so there's no code on the device to attack in the first place. If you opt into carrying Cordierite in a build that reaches people outside your team (see [Build variants](docs/BUILD-VARIANTS.md)), the connection is still encrypted, your app checks the identity of the machine on the other end rather than trusting whoever's on the network, and a link someone intercepts isn't a way in.
 
-The short version: the connection is encrypted, your app checks the identity of the machine on the other end rather than trusting whoever's on the network, and a link someone intercepts isn't a way in. On top of that, you choose per build whether Cordierite's code is even in the binary. In development none of this needs configuring — it just works — and you tighten it up for builds that leave your machine.
-
-[`docs/SECURITY.md`](docs/SECURITY.md) walks through what it protects against, what it doesn't, and how to rotate keys.
+[`docs/SECURITY.md`](docs/SECURITY.md) walks through what it protects against, what it doesn't, and how to configure and rotate keys for that case.
 
 ## Getting started
 
