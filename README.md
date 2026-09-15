@@ -2,7 +2,7 @@
 
 [![MIT license][license-badge]][license] [![npm downloads][npm-downloads-badge]][npm-downloads] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-Appduct lets a terminal, a test runner, or an AI agent call functions inside your app while it's running — React Native, plain iOS, or plain Android. You pick what's callable — a few functions you write yourself — and nothing else is reachable.
+Appduct lets a terminal, a test runner, or an AI agent call functions inside your React Native app while it's running. You pick what's callable — a few functions you write yourself — and nothing else is reachable.
 
 ## Why you'd want this
 
@@ -63,8 +63,6 @@ By default, yes — nothing here ships in a release build, so there's no code on
 
 ## Getting started
 
-This walks through the React Native setup. Building a plain iOS or Android app with no React Native at all? Skip to [Native apps](#native-apps) below.
-
 Install the CLI where you'll run it, and the package in your app:
 
 ```bash
@@ -80,13 +78,6 @@ From there:
 
 You'll need a development build or a bare React Native app — Expo Go can't do it.
 
-### Native apps
-
-No React Native in your app at all? Appduct has a native SDK you call directly from Swift or Kotlin — same tool registration, deep-link handling, and session lifecycle:
-
-- **[Get started on iOS](packages/native/ios/README.md)**
-- **[Get started on Android](packages/native/android/README.md)**
-
 ## Packages
 
 | Package | What it is |
@@ -94,12 +85,10 @@ No React Native in your app at all? Appduct has a native SDK you call directly f
 | [`appduct`](packages/appduct/README.md) | The CLI, the background service, and the MCP server |
 | [`@appduct/react-native`](packages/react-native/README.md) | The app-side library and Expo config plugin |
 | [`@appduct/shared`](packages/shared/README.md) | Types shared by both |
-| [`packages/native`](packages/native/README.md) | The framework-free Swift/Kotlin core — vendored into `@appduct/react-native`, and directly consumable by plain iOS ([`ios/README.md`](packages/native/ios/README.md)) and Android ([`android/README.md`](packages/native/android/README.md)) apps |
-| [`playground-native`](playground-native/ios/README.md) | Native SwiftUI ([`ios`](playground-native/ios/README.md)) and Jetpack Compose ([`android`](playground-native/android/README.md)) example apps built on `packages/native` directly, no React Native |
 
 ## Support
 
-iOS 15.1+ and Android, both on the New Architecture. Web gets a no-op stub so shared code doesn't break. The CLI needs Node 20 or newer. Windows should work but hasn't been verified yet.
+React Native apps on iOS 15.1+ and Android, both on the New Architecture. Web gets a no-op stub so shared code doesn't break. The CLI needs Node 20 or newer. Windows should work but hasn't been verified yet.
 
 ## Docs
 
