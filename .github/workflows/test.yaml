@@ -84,6 +84,13 @@ jobs:
           java-version: 17
       - name: Set up Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          # Default is "tools platform-tools" -- Google has removed the legacy standalone
+          # "tools" package from the SDK repository, so installing it now fails outright
+          # (android-actions/setup-android#537, still open upstream). Nothing in this workflow
+          # needs it: Gradle resolves build-tools/platforms itself, and cmdline-tools is already
+          # on PATH from this same action.
+          packages: platform-tools
       - name: Set up Gradle
         # Caches the Gradle user home across runs: downloaded dependencies (including React
         # Native's prebuilt .so artifacts) and the local build cache under
