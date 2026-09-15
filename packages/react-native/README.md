@@ -45,7 +45,7 @@ By default the native module ships in **debug** builds only: a Release build has
 import "@cordierite/react-native/auto";
 ```
 
-`/auto` is the only entry that installs anything: the deep-link bootstrap listener and native-lease recovery. To control *when* — in `__DEV__`, behind a QA toggle — `require()` it there instead. Metro resolves it lazily; importing twice installs once:
+`/auto` is the only entry that installs anything: the deep-link bootstrap listener and session recovery. To control *when* — in `__DEV__`, behind a QA toggle — `require()` it there instead:
 
 ```ts
 if (__DEV__) {

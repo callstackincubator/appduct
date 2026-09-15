@@ -2,7 +2,7 @@
 
 [![MIT license][license-badge]][license] [![npm downloads][npm-downloads-badge]][npm-downloads] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-Cordierite lets a terminal, a test runner, or an AI agent call functions inside your React Native app while it's running. You pick what's callable — a few functions you write yourself — and nothing else is reachable.
+Cordierite lets a terminal, a test runner, or an AI agent call functions inside your app while it's running — React Native, plain iOS, or plain Android. You pick what's callable — a few functions you write yourself — and nothing else is reachable.
 
 ## Why you'd want this
 
@@ -12,7 +12,7 @@ Cordierite lets a terminal, a test runner, or an AI agent call functions inside 
 
 **No hidden debug UI.** No secret gestures, no long-press-the-logo admin panel, nothing extra in the app for someone to go find. The only things reachable are functions you deliberately registered.
 
-**It works in whatever build you want.** Dev, internal, TestFlight, production — Cordierite isn't tied to debug builds. You decide which builds carry it and what those builds are willing to trust. Most teams ship it in dev and internal builds and strip it from store releases, but that's your call, not something the library decides for you.
+**Nothing ships in your release build by default.** Cordierite is included in debug builds only — a release build compiles it out entirely, not just switches it off. Want it in a TestFlight or other internal build too? You can opt in per build — see [Build variants](docs/BUILD-VARIANTS.md).
 
 **Your dev loop doesn't fight you.** Metro reloads, backgrounding the app, flaky Wi-Fi — the session survives all of it and picks back up on its own. One background service handles as many devices as you've got plugged in.
 
@@ -32,10 +32,8 @@ useCordieriteTool({
 });
 ```
 
-The hook registers once per mount — re-rendering costs nothing for a schema that exports JSON
-Schema (Zod 4, ArkType) or is hoisted out of the component, and the handler always sees the latest
-state it closes over. The [package README](packages/react-native/README.md#4-define-tools-in-app-startup-code)
-covers the one exception, schemas that cannot export JSON Schema.
+The hook registers once per mount — re-rendering costs nothing, and the handler always sees the
+latest state it closes over.
 
 Call it from your terminal:
 
@@ -53,19 +51,19 @@ Or hand it to an agent:
 }
 ```
 
-Both read your app's deep-link scheme from `app.json`'s `expo.scheme`, so from your app's root directory there is nothing to configure. The CLI is normally run from there; an MCP client is not, and it starts the server in whatever working directory it likes — so give that entry its own scheme with `args: ["mcp", "--scheme", "myapp"]`, or set `CORDIERITE_SCHEME`. Running `cordierite init` once in the app root prints exactly that entry with the scheme filled in.
+Both read your app's deep-link scheme straight from `app.json`'s `expo.scheme`, so there's nothing to configure.
 
 That's the whole idea. Everything else is about which builds include it and what they trust.
 
 ## Is this safe to ship?
 
-That's the right question to ask, and the honest answer is: it depends on how you set it up, so it's worth ten minutes of reading before you ship it in something customers install.
+By default, yes — nothing here ships in a release build, so there's no code on the device to attack in the first place. If you opt into carrying Cordierite in a build that reaches people outside your team (see [Build variants](docs/BUILD-VARIANTS.md)), the connection is still encrypted, your app checks the identity of the machine on the other end rather than trusting whoever's on the network, and a link someone intercepts isn't a way in.
 
-The short version: the connection is encrypted, your app checks the identity of the machine on the other end rather than trusting whoever's on the network, and a link someone intercepts isn't a way in. On top of that, you choose per build whether Cordierite's code is even in the binary. In development none of this needs configuring — it just works — and you tighten it up for builds that leave your machine.
-
-[`docs/SECURITY.md`](docs/SECURITY.md) walks through what it protects against, what it doesn't, and how to rotate keys.
+[`docs/SECURITY.md`](docs/SECURITY.md) walks through what it protects against, what it doesn't, and how to configure and rotate keys for that case.
 
 ## Getting started
+
+This walks through the React Native setup. Building a plain iOS or Android app with no React Native at all? Skip to [Native apps](#native-apps) below.
 
 Install the CLI where you'll run it, and the package in your app:
 
@@ -80,11 +78,14 @@ From there:
 - **[Use the CLI and MCP server](packages/cordierite/README.md)** — connecting to a device, listing and calling tools, and checking a built artifact.
 - **[Try the playground](playground/README.md)** — a working app you can run end to end in a few minutes. Fastest way to see whether this fits your project.
 
-You'll need a development build or a bare React Native app. Expo Go can't do it. Building a plain
-iOS or Android app instead, with no React Native at all? See
-**[`packages/native/ios/README.md`](packages/native/ios/README.md)** /
-**[`packages/native/android/README.md`](packages/native/android/README.md)** — the same tool
-registration, deep-link handling, and session lifecycle, called directly from Swift or Kotlin.
+You'll need a development build or a bare React Native app — Expo Go can't do it.
+
+### Native apps
+
+No React Native in your app at all? Cordierite has a native SDK you call directly from Swift or Kotlin — same tool registration, deep-link handling, and session lifecycle:
+
+- **[Get started on iOS](packages/native/ios/README.md)**
+- **[Get started on Android](packages/native/android/README.md)**
 
 ## Packages
 
@@ -98,10 +99,7 @@ registration, deep-link handling, and session lifecycle, called directly from Sw
 
 ## Support
 
-iOS 15.1+ and Android, both on the New Architecture. Web gets a no-op stub so shared code doesn't break. The CLI needs Node 20 or newer. Windows works in principle but isn't tested in CI yet. A plain
-iOS or Android app (no React Native) can consume `packages/native` directly — see
-[`packages/native/ios/README.md`](packages/native/ios/README.md) and
-[`packages/native/android/README.md`](packages/native/android/README.md).
+iOS 15.1+ and Android, both on the New Architecture. Web gets a no-op stub so shared code doesn't break. The CLI needs Node 20 or newer. Windows should work but hasn't been verified yet.
 
 ## Docs
 
