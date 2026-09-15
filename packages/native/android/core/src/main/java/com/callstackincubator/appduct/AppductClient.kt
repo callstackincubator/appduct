@@ -382,7 +382,7 @@ internal class AppductClient private constructor(
         val nativeState = transport.getState()
         val supersedingReconnect = clientState == AppductClientState.reconnecting || supersede
         if ((nativeState == "connecting" || nativeState == "active") && !supersedingReconnect) {
-            throw IllegalStateException("A Appduct session is already connecting or active.")
+            throw IllegalStateException("An Appduct session is already connecting or active.")
         }
 
         epoch += 1

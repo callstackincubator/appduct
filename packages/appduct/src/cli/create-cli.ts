@@ -25,7 +25,7 @@ export const createCli = () => {
     .option("--force", "Replace the scheme already recorded in the project config.");
 
   cli
-    .command("keygen", "Generate a Appduct host private key and print its app fingerprint.")
+    .command("keygen", "Generate an Appduct host private key and print its app fingerprint.")
     .option("--out <path>", "Destination path (default: <state-dir>/key.pem).")
     .option("--force", "Overwrite an existing key at the destination path.");
 

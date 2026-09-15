@@ -39,7 +39,7 @@ struct ContentView: View {
 
         Section(header: Text("Recent activity")) {
           if viewModel.log.isEmpty {
-            Text("Nothing yet -- open a appduct link to connect.")
+            Text("Nothing yet -- open an appduct link to connect.")
               .font(.caption)
               .foregroundColor(.secondary)
           } else {

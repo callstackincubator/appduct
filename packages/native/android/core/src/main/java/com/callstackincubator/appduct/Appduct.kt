@@ -128,7 +128,7 @@ object Appduct {
     }
 
     /**
-     * Feeds a deep link to the client. Returns `true` iff [uri] carried a Appduct bootstrap
+     * Feeds a deep link to the client. Returns `true` iff [uri] carried an Appduct bootstrap
      * payload -- whatever the parse outcome; a bad payload is reported on [addListener] (a
      * [AppductEvent.Error] with `phase == "bootstrap"`) asynchronously, never thrown here.
      * `false` for any other URI, so the caller (or [AppductLinkActivity], for a link the OS

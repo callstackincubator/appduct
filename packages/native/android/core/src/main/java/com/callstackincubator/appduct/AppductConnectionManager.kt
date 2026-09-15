@@ -601,7 +601,7 @@ internal class AppductConnectionManager(
         completion: (Throwable?) -> Unit,
     ) {
         if (state == AppductConnectionState.connecting || state == AppductConnectionState.active) {
-            completion(IllegalStateException("A Appduct session is already connecting or active."))
+            completion(IllegalStateException("An Appduct session is already connecting or active."))
             return
         }
 

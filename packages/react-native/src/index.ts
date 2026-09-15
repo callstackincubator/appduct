@@ -33,7 +33,7 @@ export type { CordierePublicApi, AppductSubscription } from "./public-api";
 export type { UseAppductToolOptions } from "./useAppductTool";
 
 /**
- * Register a Appduct tool on the default client. Same as `appductClient.registerTool` —
+ * Register an Appduct tool on the default client. Same as `appductClient.registerTool` —
  * prefer this for typical app code so you do not need to touch the singleton. The returned
  * disposer removes only this registration (identity-based), even if a later call re-registers the
  * same tool name.

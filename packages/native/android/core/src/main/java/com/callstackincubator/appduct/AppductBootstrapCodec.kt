@@ -249,7 +249,7 @@ internal fun isAppductBootstrapExpired(
 ): Boolean = expiresAt <= nowSeconds
 
 /**
- * Parses and validates a Appduct bootstrap deep link (PROTOCOL.md §2, `bootstrap.ts`'s
+ * Parses and validates an Appduct bootstrap deep link (PROTOCOL.md §2, `bootstrap.ts`'s
  * `parseBootstrapUrl`): the `appduct` query param decodes to a valid, unexpired v2 payload,
  * and (when [requirePrivateIp]) the advertised address is local/private. The `pin` param, when
  * present and well-formed, is returned as [ParsedBootstrapUrl.linkPin].

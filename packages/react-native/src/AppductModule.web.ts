@@ -5,7 +5,7 @@
  * iOS/Android-only. `handleUrl`/`getState`/`getSessionId`/`getRegisteredToolsJson` return inert
  * values rather than throwing: they are called unconditionally from code paths that run on every
  * platform (e.g. the deep-link handler), and throwing there would crash any web bundle that merely
- * imports the package before an app ever calls a Appduct API. Apps must still not call the
+ * imports the package before an app ever calls an Appduct API. Apps must still not call the
  * throwing APIs on web.
  *
  * `addListener` returns a no-op subscription for the same reason: the package eagerly constructs

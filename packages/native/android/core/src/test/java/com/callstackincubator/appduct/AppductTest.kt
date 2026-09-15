@@ -167,7 +167,7 @@ class AppductTest {
     // --- deep links ---
 
     @Test
-    fun `handle(Uri) routes a appduct bootstrap link into the client`() {
+    fun `handle(Uri) routes an appduct bootstrap link into the client`() {
         val bootstrapUri = Uri.parse("appduct://bootstrap?appduct=not-a-real-payload")
         assertTrue(Appduct.handle(bootstrapUri))
     }

@@ -194,7 +194,7 @@ describe("noop entry: runtime no-op behavior", () => {
     });
   });
 
-  test("connect() rejects with a AppductDisabledError (code: appduct_disabled)", async () => {
+  test("connect() rejects with an AppductDisabledError (code: appduct_disabled)", async () => {
     const { connect } = await import("../noop");
 
     await expect(

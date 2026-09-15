@@ -426,7 +426,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
     }
 
     if state == .connecting || state == .active {
-      throw AppductModuleError(message: "A Appduct session is already connecting or active.")
+      throw AppductModuleError(message: "An Appduct session is already connecting or active.")
     }
 
     try configureFromBundle(linkPin: options.linkPin)
@@ -442,7 +442,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
     }
 
     guard let url = URL(string: formatAppductWebSocketUrl(ip: options.ip, port: options.port)) else {
-      throw AppductModuleError(message: "Failed to create a Appduct WebSocket URL.")
+      throw AppductModuleError(message: "Failed to create an Appduct WebSocket URL.")
     }
 
     // Resume needs no claim token, so validate up front (still before any `await`) rather than
@@ -631,7 +631,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
 
     let data = try JSONSerialization.data(withJSONObject: value)
     guard let text = String(data: data, encoding: .utf8) else {
-      throw AppductModuleError(message: "Failed to serialize a Appduct message.")
+      throw AppductModuleError(message: "Failed to serialize an Appduct message.")
     }
 
     try await sendText(text)

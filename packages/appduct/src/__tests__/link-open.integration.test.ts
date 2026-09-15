@@ -434,7 +434,7 @@ describe("client link({ target: \"ios-device\" })", () => {
     ]);
   });
 
-  test("the programmatic client surfaces a missing bundle id as a AppductError", async () => {
+  test("the programmatic client surfaces a missing bundle id as an AppductError", async () => {
     const { stateDir } = await startTestDaemon();
 
     const calls: Array<{ command: string; args: string[] }> = [];

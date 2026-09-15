@@ -108,7 +108,7 @@ func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>)
 }
 ```
 
-`handle(_:)` returns `true` iff the URL actually carried a Appduct bootstrap payload, so you can
+`handle(_:)` returns `true` iff the URL actually carried an Appduct bootstrap payload, so you can
 compose it with your own, unrelated deep links:
 
 ```swift

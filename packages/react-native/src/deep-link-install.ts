@@ -3,7 +3,7 @@ import { Linking } from "react-native";
 import { logger } from "./logger";
 
 /**
- * Structural seam the auto-bootstrap flow needs from a Appduct client: startup recovery and
+ * Structural seam the auto-bootstrap flow needs from an Appduct client: startup recovery and
  * `handleUrl`. Issue #48 phase 2 moved the entire "parse this deep link, decide whether it
  * outranks the held session, connect" decision into the native core (`AppductClient.handleUrl`
  * in Swift, the analogous entry point in Kotlin) -- this file's only remaining job is wiring
