@@ -1,0 +1,4 @@
+# Gradle build output for the standalone packages/native/android project.
+android/.gradle/
+android/**/build/
+android/local.properties

@@ -228,6 +228,9 @@ const renderInitData = (colors: ColorPalette, data: InitCommandData): string[] =
       ["Path", data.path],
       ["Scheme", data.scheme],
       ["Source", data.source],
+      // Only present for a scheme discovery read off a static project file (app.json, or one of
+      // the native Android/iOS probes) — names the exact file/key, not just which platform.
+      ["Read from", data.origin],
       ["Written", data.changed ? (data.created ? "created" : "updated") : "unchanged"],
     ]),
     ...(data.note === undefined ? [] : ["", colors.yellow(`Note: ${data.note}`)]),

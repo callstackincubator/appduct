@@ -190,6 +190,23 @@ Wire **deep links** so the OS can open your app with the host's bootstrap URL, a
 sure the app scheme matches the one `cordierite link` (or the `deepLinkScheme` plugin
 option, or `config.json`) uses to compose that link.
 
+### Plain native apps (no React Native)
+
+A plain iOS app consuming `packages/native` directly (`Cordierite.shared`) sets the exact same
+three `Info.plist` keys — `CordieriteCliPins`, `CordieriteTrust`, `CordieriteAllowPrivateLanOnly`
+— read from the same table above, since both `@cordierite/react-native`'s bridge and the plain-app
+facade resolve trust through the same native `resolveTrustedPins` logic. See
+[`packages/native/ios/README.md`](../packages/native/ios/README.md#hardened-builds) for the
+worked example and `Cordierite.shared.buildConfig`, the plain-app equivalent of
+`getCordieriteBuildConfig()`.
+
+A plain Android app consuming `packages/native` directly (the `Cordierite` object) sets the same
+`<application>` meta-data keys — `com.callstackincubator.cordierite.CLI_PINS`, `.TRUST`,
+`.ALLOW_PRIVATE_LAN_ONLY` — from the table above, read by the same `resolveTrustedPins`-equivalent
+logic the RN bridge's `connect()` uses. See
+[`packages/native/android/README.md`](../packages/native/android/README.md#5-hardened-builds) for
+the worked example and `Cordierite.buildConfig`.
+
 ### `allowPrivateLanOnly`
 
 When enabled, bootstrap must target a **local IPv4** address — RFC1918 private ranges or

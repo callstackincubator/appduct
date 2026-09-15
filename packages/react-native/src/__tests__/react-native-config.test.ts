@@ -61,8 +61,11 @@ describe("react-native.config.js resolvePlatforms", () => {
     },
   );
 
-  test("unparseable value: falls back to every build rather than throwing", () => {
-    process.env[ENV_VAR] = "yes-please";
-    expect(resolvePlatforms()).toStrictEqual(everyBuild);
-  });
+  test.each(["yes-please", "yes", "PIN"])(
+    "%s: unparseable value falls back to dev-only, same as unset, rather than throwing or including in every build",
+    (value) => {
+      process.env[ENV_VAR] = value;
+      expect(resolvePlatforms()).toStrictEqual(devOnly);
+    },
+  );
 });

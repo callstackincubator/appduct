@@ -1,10 +1,8 @@
 import {
   cordieriteNativeModule,
-  cordieriteNativeResumeLeaseStore,
   isCordieriteNativeModuleAvailable,
 } from "./CordieriteModule";
 import { createCordieriteClient } from "./client";
-import { realAppState } from "./client/real-app-state";
 import { logger } from "./logger";
 
 /**
@@ -62,10 +60,7 @@ const getCordieriteClientInstance = (): ReturnType<
   typeof createCordieriteClient
 > => {
   if (!cordieriteClientInstance) {
-    cordieriteClientInstance = createCordieriteClient(cordieriteNativeModule, {
-      appState: realAppState,
-      resumeLeaseStore: cordieriteNativeResumeLeaseStore,
-    });
+    cordieriteClientInstance = createCordieriteClient(cordieriteNativeModule);
   }
   return cordieriteClientInstance;
 };

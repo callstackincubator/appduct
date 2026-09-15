@@ -3,9 +3,11 @@
   CI is implemented with three workflows:
 
   - `test.yaml` runs JavaScript, Android JVM, and iOS XCTest coverage in parallel; the `android`
-    job also runs the `cordierite doctor` release gate (below) against four builds of the
-    playground across all three `CORDIERITE_ENABLED` states; the `ios` job runs it against two
-    Debug builds (default and `CORDIERITE_ENABLED=0`).
+    job also runs the `cordierite doctor` release gate (below) against four builds of the Expo
+    playground across all three `CORDIERITE_ENABLED` states, plus Debug/Release of the native
+    `playground-native/android` app (issue #48 phase 3); the `ios` job runs it against two Debug
+    builds of the Expo playground (default and `CORDIERITE_ENABLED=0`), plus Debug/Release of the
+    native `playground-native/ios` app.
   - `lint.yaml` runs lint and package typecheck in parallel; the playground is intentionally excluded from typecheck.
   - `deploy.yaml` gates a production release on both reusable workflows, packages the three tarballs, and publishes them
     through npm trusted publishing.
@@ -20,8 +22,14 @@
   - The JavaScript test suite passes locally.
   - A cache-free, frozen-lockfile installation builds successfully.
   - Packed CLI and React Native tarballs contain an exact `@cordierite/shared` version rather than `workspace:*`.
-  - Android JVM tests pass with :cordierite_react-native:testDebugUnitTest; no emulator is required. The TLS pinning cases (`computeSpkiPin`, `PinningTrustManager`) run under Robolectric inside that same task, since both reach `android.util.Base64`; everything else stays on the plain JVM.
-  - 18 iOS XCTest cases pass through the generated Cordierite-Unit-Tests scheme.
+  - Android JVM tests pass with `:core:testDebugUnitTest` in the standalone `packages/native/android` project
+    (docs/tasks/14-native-core-extraction.md) -- the canonical source `@cordierite/react-native`'s own
+    `:cordierite_react-native:testDebugUnitTest` vendors (and runs, with no test classes of its own left to run,
+    since the tests moved with the sources they cover); no emulator is required either way. The TLS pinning
+    cases (`computeSpkiPin`, `PinningTrustManager`) run under Robolectric inside that same task, since both
+    reach `android.util.Base64`; everything else stays on the plain JVM.
+  - iOS XCTest cases pass through `swift test` against the repo-root `CordieriteCore` SwiftPM package
+    (`packages/native/ios`), not a CocoaPods-generated scheme.
   - Linting exists for the React Native package and playground. It passes with 10 warnings.
   - Root typecheck, including the CLI and React Native test suites, passes locally.
   - The checked-in playground pin passes Expo plugin configuration validation.
@@ -46,11 +54,16 @@ cordierite doctor ./build/app-release.apk --assert-absent
 ```
 
 It inspects a built `.app`/`.ipa`/`.apk`/`.aab` for Cordierite's native code and reports
-`present`/`absent`. On iOS it looks for the `RCTNativeCordierite` Objective-C class and the
-plugin-authored `Info.plist` keys. On Android the verdict is decided by the
-`CordieriteNativeMarker` keep-rule signal alone; the `com.callstackincubator.cordierite`
-dex package and the `AndroidManifest.xml` meta-data keys are reported alongside it but
-cannot flip it (see [Android detection](#android-detection)).
+`present`/`absent`. On iOS the verdict is decided by real-code-only symbols: the
+`CordieriteCoreMarker` Objective-C class (`packages/native/ios/Sources/CordieriteCore/Real`,
+docs/tasks/14-native-core-extraction.md) or the `RCTNativeCordierite` Objective-C class,
+OR'd together so a stripped binary that dropped one doesn't read as absent; the
+plugin-authored `Info.plist` keys are reported alongside them but cannot flip the verdict on
+their own. On Android the verdict is decided by the `CordieriteNativeMarker` keep-rule
+signal alone; the `com.callstackincubator.cordierite` dex package and the
+`AndroidManifest.xml` meta-data keys are reported alongside it but cannot flip it — the two
+platforms now follow the same "real-code-only symbol, corroborating signals only" rule (see
+[Android detection](#android-detection)).
 
 | Exit code | Meaning |
 | --- | --- |
@@ -129,23 +142,64 @@ reassembles Release, and asserts `--assert-absent` again — the regression test
 exclusion recipe had never worked. All four assertions run against a real built artifact each
 run, not by inspecting the config.
 
-**The iOS side is wired too** (`test.yaml`'s `ios` job, `docs/tasks/13-ios-ci-doctor-gate.md`):
-after the existing `Cordierite-Native-Tests` XCTest run and the normal Debug simulator build
-(unset `CORDIERITE_ENABLED`, the default, which links Cordierite in Debug), it asserts
-`--assert-present` against that build's `.app`, then re-prebuilds with `CORDIERITE_ENABLED=0`
-and rebuilds for the simulator, asserting `--assert-absent`. Excluding the package from iOS
-autolinking also disables its codegen, and the playground's `with-native-tests` Expo plugin used to
-hand-add the `Cordierite` pod unconditionally for the XCTest target — hand-adding the pod on top of
-an exclusion fails to compile, since `RCTNativeCordierite.mm` imports a `CordieriteSpec.h` header
-codegen never generates for an excluded module (verified against a real build; see "iOS codegen
-coupling" in `docs/ARCHITECTURE.md` §11 and `docs/tasks/00-overview.md`). `with-native-tests.js`
-reads the same `CORDIERITE_ENABLED` signal, through `@cordierite/react-native/autolink-env.js`'s
-`isCordieriteAutolinkEnabled` — the exact parser `react-native.config.js` itself uses — and skips
-adding the pod line when Cordierite is excluded, so the excluded rebuild compiles and produces a
-real `.app` for `doctor` to inspect instead of failing outright. The normal, non-excluded `ios` job
-still runs the `Cordierite-Native-Tests` XCTest target unchanged. Only the Debug configuration is
-exercised on iOS today — Release-configuration coverage for the new dev-only default (mirroring the
-Android job's Release legs above) is not wired yet.
+**The iOS side is wired too** (`test.yaml`'s `ios` job, `docs/tasks/13-ios-ci-doctor-gate.md`,
+`docs/tasks/14-native-core-extraction.md`): it first runs `swift build -c release` and
+`swift test` at the repo root against the `CordieriteCore` SwiftPM package
+(`packages/native/ios`) — independent of Expo prebuild or `pod install`, so a stub-compile or
+test regression fails fast, before the slower CocoaPods-based steps below even start. It then
+prebuilds and builds the normal playground `.app` (unset `CORDIERITE_ENABLED`, the default,
+which links Cordierite in Debug) and asserts `--assert-present`, then re-prebuilds with
+`CORDIERITE_ENABLED=0` and rebuilds for the simulator, asserting `--assert-absent`. Only the
+Debug configuration is exercised on iOS today — Release-configuration coverage for the new
+dev-only default (mirroring the Android job's Release legs above) is not wired yet.
+
+Earlier revisions of this gate additionally hand-added the `Cordierite` pod for a dedicated
+XCTest target (`playground/plugins/with-native-tests.js`, a `Cordierite-Native-Tests` scheme
+generated by `playground/scripts/create-cordierite-test-scheme.rb`), which needed to skip that
+hand-added pod line whenever Cordierite was excluded — excluding the package from iOS
+autolinking also disables its codegen, and `RCTNativeCordierite.mm` imports a
+`CordieriteSpec.h` header codegen never generates for an excluded module (see "iOS codegen
+coupling" in `docs/ARCHITECTURE.md` §11 and `docs/tasks/00-overview.md`). Both files were
+deleted once the native tests moved to `packages/native/ios/Tests/CordieriteCoreTests` and run
+via plain `swift test` instead — there is no longer a Pods-generated test target for the
+excluded-build case to interact with, so that coupling no longer applies to CI at all.
+
+### Native playground gates (issue #48 phase 3)
+
+Both platforms' `doctor` gate above only exercises the Expo playground, which links Cordierite
+through RN autolinking and `CORDIERITE_ENABLED`. `packages/native` also ships a public,
+directly-consumable API (`Cordierite.shared` on iOS, the `Cordierite` object on Android,
+`docs/tasks/18-ios-entry-points.md`/`docs/tasks/19-android-entry-points.md`) with its own,
+independent inclusion mechanism — SwiftPM/CocoaPods build configuration on iOS,
+`debugImplementation`/`releaseImplementation` on Android — that autolinking never touches. The
+Expo playground's Release build passing `doctor --assert-absent` says nothing about whether a
+plain native app that consumes `packages/native` directly compiles at all, let alone whether
+*its* Release build actually excludes the real implementation. `test.yaml`'s `android` and `ios`
+jobs each build the corresponding native playground (`playground-native/android`,
+`playground-native/ios`) after their Expo-playground steps, for exactly this reason:
+
+- **Android**: `./gradlew :app:assembleDebug :app:assembleRelease` in `playground-native/android`
+  (which resolves `com.callstackincubator.cordierite:core`/`:core-noop` to the local
+  `packages/native/android` projects via `settings.gradle`'s `includeBuild` substitution, not a
+  published artifact), then `cordierite doctor --assert-present` on the debug APK and
+  `--assert-absent` on the release APK — the same marker-only signal the Expo gate uses, proving
+  the `debugImplementation(core)`/`releaseImplementation(core-noop)` pairing issue #48 phase 3
+  asks a consumer app to declare actually excludes the real implementation from Release.
+- **iOS**: `brew install xcodegen` (idempotent — skipped if already present) and `xcodegen
+  generate` in `playground-native/ios` regenerate the gitignored `.xcodeproj` from `project.yml`
+  before every build, then `xcodebuild` builds both `Debug` and `Release` for the simulator (no
+  Expo prebuild, no CocoaPods — this app has no React Native anywhere in it), and `cordierite
+  doctor` asserts present on Debug, absent on Release — proving `Package.swift`'s
+  `.when(configuration: .debug)` split (not `CORDIERITE_ENABLED`, which this app never sets) holds
+  for a real plain-app build.
+
+The standalone `packages/native/android` test step (above) also runs
+`:core:publishToMavenLocal :core-noop:publishToMavenLocal` alongside its existing
+`testDebugUnitTest`/`assembleRelease` tasks, so the `maven-publish` configuration
+(`docs/tasks/19-android-entry-points.md` §6) that a real Maven Central publish will eventually use
+is exercised on every run rather than only when someone remembers to check it by hand. This is
+still `publishToMavenLocal`, not a real publish — CocoaPods trunk / Maven Central / a SwiftPM tag
+publish remains an ops task, not something CI does (see `docs/tasks/21-native-core-integration.md`).
 
 CI invokes the command directly against the built artifact — `node packages/cordierite/bin.js
 doctor <path> --assert-present|--assert-absent` from the repo root, after `pnpm build` — rather
@@ -196,7 +250,9 @@ proven path.
 
     pnpm install --frozen-lockfile --ignore-scripts
     pnpm build -- --cache=local:,remote:
-    cd playground
+    cd packages/native/android
+    ./gradlew :core:testDebugUnitTest :core-noop:assembleRelease --build-cache --no-configuration-cache
+    cd ../../../playground
     pnpm exec expo prebuild --platform android --no-install
     cd android
     ./gradlew \
@@ -206,21 +262,32 @@ proven path.
       --no-build-cache \
       --no-configuration-cache
 
+    (docs/tasks/14-native-core-extraction.md: the standalone `packages/native/android`
+    project's own `:core:testDebugUnitTest` now covers the canonical Kotlin sources;
+    `:cordierite_react-native:testDebugUnitTest` runs against the vendored copy, with no test
+    classes of its own left.)
+
     Remove gradle/actions/setup-gradle; the generated wrapper is sufficient.
 
   - ios on a fixed macOS image:
 
     pnpm install --frozen-lockfile --ignore-scripts
     pnpm build -- --cache=local:,remote:
+    swift build -c release
+    swift test
     cd playground
     pnpm exec expo prebuild --platform ios
     cd ios
-    xcodebuild test \
+    xcodebuild build \
       -workspace playground.xcworkspace \
-      -scheme Cordierite-Unit-Tests \
-      -destination 'platform=iOS Simulator,name=iPhone 16' \
+      -scheme playground \
+      -sdk iphonesimulator \
       CODE_SIGNING_ALLOWED=NO \
       COMPILER_INDEX_STORE_ENABLE=NO
+
+    (docs/tasks/14-native-core-extraction.md: native Swift unit tests moved out of a
+    CocoaPods-generated scheme into the repo-root `CordieriteCore` SwiftPM package, run with
+    plain `swift test` instead of `xcodebuild test -scheme Cordierite-Unit-Tests`.)
 
     Preserve the existing playground simulator build as a second xcodebuild build step so the workflow tests both the
     native library and consumer integration.

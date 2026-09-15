@@ -1,0 +1,45 @@
+[
+  {
+    "name": "payload-only-no-pin",
+    "url": "myapp:///?cordierite=AgTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA",
+    "expected": { "payloadIndex": 0, "pin": null }
+  },
+  {
+    "name": "payload-then-pin",
+    "url": "myapp:///?cordierite=AgTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA&pin=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "expected": { "payloadIndex": 0, "pin": "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" }
+  },
+  {
+    "name": "pin-before-payload",
+    "url": "myapp:///?pin=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=&cordierite=AgTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA",
+    "expected": { "payloadIndex": 0, "pin": "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" }
+  },
+  {
+    "name": "extra-query-params-between-payload-and-pin",
+    "url": "myapp:///?cordierite=AgTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA&utm_source=qr&pin=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "expected": { "payloadIndex": 0, "pin": "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" }
+  },
+  {
+    "name": "percent-encoded-pin-must-be-url-decoded",
+    "comment": "pin=sha256%2FAAAA...%3D percent-encodes '/' and the trailing '='; a parser that reads the raw query string without URL-decoding would see a pin value with no '/' and reject the LINK_PIN_PATTERN shape.",
+    "url": "myapp:///?cordierite=AgTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA&pin=sha256%2FAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%3D",
+    "expected": { "payloadIndex": 0, "pin": "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" }
+  },
+  {
+    "name": "malformed-pin-is-ignored-not-corrupted",
+    "comment": "A pin that doesn't match sha256/<43-base64-chars>= is treated as absent, never forwarded as a real pin (PROTOCOL.md §2 / bootstrap.ts's extractLinkPin).",
+    "url": "myapp:///?cordierite=AgTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA&pin=not-a-real-pin",
+    "expected": { "payloadIndex": 0, "pin": null }
+  },
+  {
+    "name": "second-payload-with-pin",
+    "url": "myapp:///?cordierite=AgR_AAABIPsQWHpBRVJQNTRfR29oNzRoWgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAAAAAO5rKAA&pin=sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
+    "expected": { "payloadIndex": 1, "pin": "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=" }
+  },
+  {
+    "name": "must-stop-at-ampersand-not-slice-to-end-of-string",
+    "comment": "A naive implementation that slices everything after 'cordierite=' to the end of the string (instead of parsing the query string properly) would swallow '&pin=...' into the decoded blob and corrupt it. The payload here is deliberately the shortest fixture payload (session-id-min-length-1, index 4) so an off-by-many-bytes corruption is unambiguous.",
+    "url": "myapp:///?cordierite=AgQKAAABAAEBYQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAAAAAAAAAAE&pin=sha256/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC=",
+    "expected": { "payloadIndex": 4, "pin": "sha256/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC=" }
+  }
+]

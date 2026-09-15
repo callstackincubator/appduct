@@ -1,0 +1,45 @@
+// Standalone Gradle project for the framework-free Android core (docs/tasks/14-native-core-extraction.md).
+// Not part of the pnpm/Turbo workspace and not autolinked into any app -- it exists so `core` and
+// `core-noop` can be built, tested, and (eventually, Phase 3) published on their own, independent of
+// any React Native/Expo project. `@cordierite/react-native` vendors these sources at build time
+// (packages/react-native/scripts/sync-native-core.mjs) rather than depending on published artifacts
+// of this project -- see packages/native/README.md.
+//
+// AGP/Kotlin versions are pinned to match the versions React Native 0.81's own Gradle plugin resolves
+// (node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml), so a change here that breaks
+// the playground's own Android build is a signal this project has drifted from the toolchain the rest
+// of the repo actually uses -- not a requirement this project literally builds inside a React Native
+// tree.
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath('com.android.tools.build:gradle:8.11.0')
+    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20')
+  }
+}
+
+import groovy.json.JsonSlurper
+
+// Single source of truth for the version every published artifact here carries (core, core-noop,
+// and -- once this project is a real dependency rather than something vendored -- CordieriteCore).
+// This repo's three npm packages have always versioned in lockstep (docs/CI.md's release policy);
+// reading it from @cordierite/react-native's package.json avoids a fourth place that number could
+// drift out of sync, exactly like `Cordierite.podspec` already does for iOS.
+def rnPackageJson = new JsonSlurper().parse(file("$rootDir/../../react-native/package.json"))
+ext.cordieriteVersion = rnPackageJson.version
+
+ext {
+  compileSdkVersion = 35
+  minSdkVersion = 24
+  targetSdkVersion = 35
+}
+
+allprojects {
+  repositories {
+    google()
+    mavenCentral()
+  }
+}

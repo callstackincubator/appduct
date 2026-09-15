@@ -39,11 +39,13 @@
     "plugin": "./app.plugin.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/sync-native-core.mjs && tsc",
     "clean": "rm -rf build",
     "lint": "eslint .",
+    "sync-native-core": "node scripts/sync-native-core.mjs",
     "test": "vitest run --config ../../vitest.config.ts src/__tests__",
     "typecheck": "tsc -p tsconfig.typecheck.json",
+    "prepack": "node scripts/sync-native-core.mjs",
     "prepublishOnly": "pnpm run clean && pnpm run build"
   },
   "keywords": [

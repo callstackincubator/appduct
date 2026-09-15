@@ -1,0 +1,59 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'maven-publish'
+
+group = 'com.callstackincubator.cordierite'
+version = rootProject.ext.cordieriteVersion
+
+android {
+  // Same namespace as `core` -- see that module's build.gradle for why this is safe: the two are
+  // never linked into the same build variant at once.
+  namespace 'com.callstackincubator.cordierite.core'
+  compileSdk rootProject.ext.compileSdkVersion
+
+  defaultConfig {
+    minSdkVersion rootProject.ext.minSdkVersion
+    targetSdkVersion rootProject.ext.targetSdkVersion
+    // Deliberately no `consumerProguardFiles` -- no `CordieriteNativeMarker` class exists in this
+    // module for a keep rule to protect (see CordieriteConnectionManager.kt's doc comment). A keep
+    // rule here would be dead configuration at best and, if it ever accidentally matched a class
+    // that *did* exist, a lie about what `cordierite doctor` can detect.
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+
+  lintOptions {
+    abortOnError false
+  }
+
+  publishing {
+    singleVariant('release') {
+      withSourcesJar()
+    }
+  }
+}
+
+// Deliberately no dependencies at all -- no okhttp3, no org.json, nothing beyond the Kotlin/Android
+// standard library. That absence is itself part of the contract: a release build that resolves this
+// artifact must not pull in the real transport dependency graph.
+dependencies {}
+
+afterEvaluate {
+  publishing {
+    publications {
+      release(MavenPublication) {
+        from components.release
+        groupId = group
+        artifactId = 'core-noop'
+        version = version
+      }
+    }
+  }
+}

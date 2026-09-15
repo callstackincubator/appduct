@@ -57,20 +57,25 @@ Every command that targets a session accepts an optional `selector` (a session i
 2. the `CORDIERITE_SCHEME` environment variable
 3. the nearest `.cordierite/config.json` that declares a `scheme`, walking up from the working directory — one without that key does not stop the walk, and the walk skips `~/.cordierite` and the state dir in use so global config is never mistaken for a project's
 4. `scheme` in `<state-dir>/config.json`
-5. `<cwd>/app.json`'s `expo.scheme` — a string, or the first entry of an array
+5. a static-file project probe, tried in this order (no walk-up — an app root is where you run these commands):
+   1. `<cwd>/app.json`'s `expo.scheme` — a string, or the first entry of an array
+   2. **Android**: `app/build.gradle.kts` or `app/build.gradle`'s `cordieriteScheme` manifest placeholder (`manifestPlaceholders["cordieriteScheme"] = "myapp"` or `manifestPlaceholders.cordieriteScheme = "myapp"`), then `app/src/main/AndroidManifest.xml`'s first `<data android:scheme>` inside an intent filter that also declares `android.intent.action.VIEW`
+   3. **iOS**: any `Info.plist` up to two levels below the app root (excluding `Pods`, `build`, `node_modules`, `DerivedData`) for the first `CFBundleURLSchemes` entry, then xcodegen's `project.yml` for the same key under `info.properties.CFBundleURLTypes`
 6. otherwise an error naming every location above
 
-So in an Expo app root, none of it needs configuring. `app.config.js` / `app.config.ts` are never executed to read a scheme, so dynamic-config projects should use `--scheme`, `CORDIERITE_SCHEME`, or `cordierite init --scheme <s>`.
+So in an Expo app root, none of it needs configuring; a plain Xcode or Gradle app root needs no configuring either, once its `Info.plist`/`AndroidManifest.xml`/`build.gradle` already declares a `CFBundleURLTypes`/intent-filter/`cordieriteScheme` for deep links. `app.config.js` / `app.config.ts` are never executed to read a scheme, and neither is `xcodebuild`, `plutil` or a Gradle evaluation for the native probes — every one of them is a plain, defensively-parsed read of a static project file (a binary-encoded `Info.plist` is reported as unreadable rather than decoded). Dynamic-config projects, or anything these probes can't make sense of, should use `--scheme`, `CORDIERITE_SCHEME`, or `cordierite init --scheme <s>`.
+
+**Disagreement is never guessed away.** If more than one native probe resolves to a *different* scheme (say, an `android/` and an `ios/` tree in the same repo declaring different values), resolution fails with a usage error naming every conflicting source instead of picking one.
 
 `cordierite init`, run in an app root, writes `.cordierite/config.json` (mode `0600`, in a `0700` directory) with the discovered scheme and prints the MCP server entry to paste plus the `import "@cordierite/react-native/auto"` reminder. It never generates keys or touches daemon state.
 
-**`init` is not the resolver.** It consults exactly two sources — `--scheme` and `<cwd>/app.json` — plus whatever the file already records. It deliberately ignores `CORDIERITE_SCHEME` and does not walk up to a parent `.cordierite/config.json`, because it is deciding what to *write here*: inheriting either would bake an ambient value into a committed file (a shell variable that happened to be exported, or a parent project's scheme silently copied into a sub-package). The precedence list above is what *reads* the result. `--json`'s `source` field reports which of those three inputs won: `"--scheme"`, `"app.json"`, or `"already-recorded"`.
+**`init` is not the resolver.** It consults exactly two *kinds* of source — `--scheme`, and whatever the same static-file discovery step 5 above runs (`<cwd>/app.json`, then the native Android/iOS probes) — plus whatever the file already records. It deliberately ignores `CORDIERITE_SCHEME` and does not walk up to a parent `.cordierite/config.json`, because it is deciding what to *write here*: inheriting either would bake an ambient value into a committed file (a shell variable that happened to be exported, or a parent project's scheme silently copied into a sub-package). The precedence list above is what *reads* the result. `--json`'s `source` field reports which input won: `"--scheme"`, `"app.json"`, one of the four native-probe names (`"android-gradle"`, `"android-manifest"`, `"ios-info-plist"`, `"ios-project-yml"`), or `"already-recorded"`. When it is a discovery tier, `origin` names the exact file (and key/placeholder) the value came from, and the printed hint says so too — "Scheme … was read from …" — rather than only naming the platform.
 
 It also refuses to run where `<cwd>/.cordierite` would be the daemon's own state directory (`~/.cordierite`, or a `--state-dir`/`CORDIERITE_STATE_DIR` you point at it) — that directory holds `key.pem` and the audit log, and a config written there is not something to commit.
 
 It is idempotent, and safe to re-run:
 
-- A plain re-run keeps whatever scheme is already recorded. If `app.json` has since changed, the result carries a `note` saying so rather than failing — a command documented as safe to re-run must not start erroring because somebody renamed a scheme.
+- A plain re-run keeps whatever scheme is already recorded. If discovery (`app.json` or a native probe) has since come to declare a different value, the result carries a `note` saying so rather than failing — a command documented as safe to re-run must not start erroring because somebody renamed a scheme.
 - `--scheme <different>` needs `--force` to replace a recorded scheme; `--force` on its own re-adopts `app.json`'s value.
 - `--force` merges into the existing JSON rather than truncating it.
 
@@ -229,7 +234,7 @@ cordierite doctor ./build/MyApp.ipa --assert-absent
 cordierite doctor ./build/app-release.apk --assert-absent
 ```
 
-Exit codes, what it inspects per platform, the Android marker-only detection rules and the CI wiring are in [docs/CI.md][ci].
+Exit codes, what it inspects per platform, the marker-only detection rules on both platforms, and the CI wiring are in [docs/CI.md][ci].
 
 ## Related packages
 

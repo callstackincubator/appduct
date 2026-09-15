@@ -17,6 +17,7 @@ What a build *trusts* once it does ship is a separate, orthogonal decision — s
 - [Compiling Cordierite out of production builds](#compiling-cordierite-out-of-production-builds)
 - [Excluding it permanently, without the environment variable](#excluding-it-permanently-without-the-environment-variable)
 - [JS — swap the module at bundle time](#js--swap-the-module-at-bundle-time)
+- [Native core](#native-core)
 
 ## Inclusion is an autolinking decision
 
@@ -34,10 +35,17 @@ by variant would leave that shared file referencing a class absent from an unlis
 variant's classpath — a compile error, not an inert build.
 
 Android therefore links this project into every variant unconditionally, and
-`android/build.gradle` instead swaps which Kotlin source set compiles for the `release`
-build type, based on `CORDIERITE_ENABLED`. `debug` always compiles the real
-implementation; `release` compiles either the same real files (opted in) or a no-op
-`CordieritePackage` (the default) that registers nothing.
+`android/build.gradle` instead swaps which *vendored source directory* compiles for the
+`release` build type, based on `CORDIERITE_ENABLED`. Since
+[the native core extraction](#native-core), `CordieritePackage`/`NativeCordieriteModule`
+(`android/src/main/java`) always compile, for every variant — they reference
+`CordieriteConnectionManager` and friends by unqualified name only, never a build-type
+check. Which implementation that name resolves to is decided by which directory is on the
+variant's compile classpath: `debug` always adds `android/core` (the real implementation,
+vendored from `packages/native/android/core`); `release` adds either the same `android/core`
+(opted in) or `android/core-noop` (the default) — the same public API, every method a no-op.
+There is no `src/debug`/`src/release-stub` source-set split anymore; the split is which
+vendored directory gets added to the variant's `java.srcDirs`.
 
 Either way, the real implementation is genuinely absent from the compiled output it is
 excluded from — not a `#if DEBUG`/`FLAG_DEBUGGABLE` check baked into code that ships
@@ -80,13 +88,14 @@ CORDIERITE_ENABLED=0 npx expo prebuild && CORDIERITE_ENABLED=0 npx expo run:ios 
 Accepted values are `1`/`true` and `0`/`false`, case-insensitive; unset or empty means the
 dev-only default described above.
 
-**A value that is neither is only caught on the Expo path.** The config plugin throws at
-prebuild, but nothing else does, and the two platforms then disagree: autolinking's
-`react-native.config.js` swallows the parse error and falls back to linking Cordierite into
-**every** build, while `android/build.gradle` treats anything but `1`/`true` as off and
-compiles the `release` stub. A bare-RN pipeline gets no error at all — check the built
-artifact with `cordierite doctor` ([`CI.md`](CI.md#release-gate-cordierite-doctor)) rather
-than trusting the variable's spelling.
+**A malformed value is only caught on the Expo path, but both platforms fail closed the same
+way.** The config plugin throws at prebuild. Nothing else does: autolinking's
+`react-native.config.js` swallows the parse error, and `android/build.gradle` treats anything
+but `1`/`true` as off — both fall back to the dev-only default (Debug-only on iOS, the
+`release` stub on Android), exactly as if the variable were unset. A bare-RN pipeline gets no
+error at all — check the built artifact with `cordierite doctor`
+([`CI.md`](CI.md#release-gate-cordierite-doctor)) rather than trusting the variable's
+spelling.
 
 **One variable, every surface.** Cordierite ships its own `react-native.config.js` that
 reads the variable and sets `ios.configurations` in autolinking accordingly;
@@ -270,9 +279,79 @@ switching between them is a drop-in swap. `registerTool` still returns a dispose
 `CordieriteDisabledError`, `code: "cordierite_disabled"`), and `getCordieriteState()`
 always reports `"idle"`.
 
+## Native core
+
+The Swift/Kotlin connection code above — TLS, SPKI pinning, trust-mode resolution, the
+private-LAN check, and the process-memory resume lease — lives canonically in
+`packages/native`, not in `@cordierite/react-native` itself
+(`docs/tasks/14-native-core-extraction.md`). `@cordierite/react-native` vendors it at
+build/publish time (`scripts/sync-native-core.mjs`) rather than depending on it as a
+published package, so this package's releases stay independent of separately publishing
+`packages/native` to CocoaPods trunk / Maven Central — that publishing step is deferred to a
+later phase. Nothing here changes what ships in a given build variant; it only changes where
+the source of truth for that code lives.
+
+**iOS** (`packages/native/ios`): a SwiftPM package, `CordieriteCore`, manifested by the
+repo-root `Package.swift` (SwiftPM requires the manifest at the repository root for URL
+dependencies). Every file under `Sources/CordieriteCore/Real/` is wrapped in
+`#if CORDIERITE_ENABLED`, with a same-API no-op mirror under `Stub/` wrapped in
+`#if !CORDIERITE_ENABLED`. The `CordieriteCore` target's `swiftSettings` define
+`CORDIERITE_ENABLED` for the `Debug` configuration, plus for any configuration that opts into
+the `AlwaysEnabled` package trait — a trait rather than a second product, because a target's
+sources (and therefore its active `#if` branches) are shared by every product built from it,
+so a second "always-real" product could not compile different content from the first. This
+is the same `Debug`-only default as `:configurations => ['Debug']` above, just expressed as a
+compiler define instead of a linking decision, because a SwiftPM `TargetDependency` cannot be
+conditioned on build configuration the way a CocoaPods dependency can.
+`@cordierite/react-native`'s own `Cordierite.podspec` vendors only `Real/` and always compiles
+it with `-DCORDIERITE_ENABLED` set — autolinking has already decided inclusion by the time
+those sources compile, so the pod never needs `Stub/`.
+
+**Android** (`packages/native/android`): a standalone Gradle project (own `settings.gradle`,
+not a workspace member) publishing two modules with the same public API —
+`com.callstackincubator.cordierite:core` (the real implementation) and `:core-noop` (every
+method a no-op, no `okhttp` dependency, no marker class). `@cordierite/react-native` vendors
+`core`/`core-noop` into `android/core`/`android/core-noop` and picks between them the same way
+described above — `CordieritePackage`/`NativeCordieriteModule` (`android/src/main/java`)
+always compile, and `debug`/`release` add whichever vendored directory to `java.srcDirs`.
+**A plain Android app instead depends on `core`/`core-noop` as ordinary Maven coordinates**
+(`debugImplementation("com.callstackincubator.cordierite:core:<version>")` /
+`releaseImplementation("com.callstackincubator.cordierite:core-noop:<version>")`,
+`packages/native/android/README.md`) — a real per-variant *dependency* decision, distinct from
+(and simpler than) the vendored copy's source-directory swap, since a plain app has no
+`PackageList.java`-style shared registration file forcing every variant onto the same
+classpath the way RN's autolinking does.
+
+Three exclusion mechanisms exist across the two platforms and their two consumers, all
+structural and all failing closed (issue #48 decision 2): Android's
+`debugImplementation`/`releaseImplementation` pairing with `core-noop` (a plain app, and the
+vendored copy's `java.srcDirs` swap doing the equivalent internally); iOS CocoaPods'
+`:configurations => ['Debug']`; and iOS SwiftPM's `Debug`-conditioned `CORDIERITE_ENABLED`
+compiler define plus the opt-in `AlwaysEnabled` package trait. None of the three is a runtime
+check — in every case the excluded configuration's build genuinely does not contain the real
+implementation's bytecode.
+
+A doctor-detection marker exists on both platforms, compiled only into the real
+implementation and never into the excluded/no-op counterpart: `CordieriteCoreMarker` (an
+`@objc` class, iOS) and `CordieriteNativeMarker` (Android, unchanged from before this
+extraction) — `doctor`'s presence verdict is decided by that marker alone on both platforms,
+never by a package/class name or a manifest/plist key that a no-op build shares with the real
+one (see [`CI.md`](CI.md#release-gate-cordierite-doctor)'s "Android detection" for why).
+**Always run `cordierite doctor --assert-absent` against the actual signed artifact you are
+about to ship** — a `Release`/`release` configuration by name, or a dependency/build-setting
+combination you believe excludes the real implementation, is what's supposed to produce that
+outcome, not a guarantee of it; `doctor` checks the artifact itself, which is the only thing
+that matters to an app-store reviewer or an attacker. This applies identically whether the
+artifact is the vendored RN copy's build or a plain native app's own `Release`/`release`
+build of `packages/native` — see the native playground gates in
+[`CI.md`](CI.md#native-playground-gates-issue-48-phase-3) for both.
+
 ## Related
 
 - [`SECURITY.md`](SECURITY.md) — trust modes, pins, and the threat model
 - [`CI.md`](CI.md#release-gate-cordierite-doctor) — the `cordierite doctor` release gate
 - [`ARCHITECTURE.md`](ARCHITECTURE.md#11-react-native-sdk) — SDK entry points and client behavior
 - [`@cordierite/react-native` README](../packages/react-native/README.md) — getting started and API reference
+- [`packages/native/README.md`](../packages/native/README.md) — the native core's consumer entry points
+- [`docs/internal/native-core.md`](internal/native-core.md) — the native core's own layout and vendoring
+- [`docs/tasks/14-native-core-extraction.md`](tasks/14-native-core-extraction.md) — how and why the core was extracted

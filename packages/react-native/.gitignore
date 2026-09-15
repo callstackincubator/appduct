@@ -55,3 +55,10 @@ yarn-error.log
 
 # Expo
 .expo/*
+
+# Vendored from packages/native at build/publish time by scripts/sync-native-core.mjs -- not
+# source, never edited directly. Included in the npm tarball anyway: see .npmignore (which, once it
+# exists, is the only file npm's packing step consults -- it does not fall back to this file).
+ios/Core/
+android/core/
+android/core-noop/

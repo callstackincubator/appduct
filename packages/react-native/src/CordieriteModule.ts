@@ -1,13 +1,8 @@
+import type { CordieriteBuildConfig } from "./Cordierite.types";
 import type {
-  CordieriteBuildConfig,
-  CordieriteCloseEvent,
-  CordieriteConnectionState,
-  CordieriteMessageEvent,
-  CordieriteModuleEvents,
-  CordieriteStateChangeEvent,
-} from "./Cordierite.types";
-import type { ResumeLeaseStore } from "./client/resume-lease";
-import type { CordieriteNativeModuleLike } from "./client-types";
+  CordieriteNativeEvents,
+  CordieriteNativeModuleLike,
+} from "./client-types";
 import { logger } from "./logger";
 
 // Metro/Node's CommonJS `require` is available at runtime in every environment this file actually
@@ -94,97 +89,68 @@ export const isCordieriteNativeModuleAvailable = (): boolean => {
   return nativeModuleAvailable;
 };
 
-const toErrorPhase = (
-  phase: string | undefined,
-):
-  | "bootstrap"
-  | "tls"
-  | "connect"
-  | "handshake"
-  | "session"
-  | "transport"
-  | "config"
-  | undefined => {
-  switch (phase) {
-    case "bootstrap":
-    case "tls":
-    case "connect":
-    case "handshake":
-    case "session":
-    case "transport":
-    case "config":
-      return phase;
-    default:
-      return undefined;
-  }
-};
-
-const parseMessagePayload = (rawMessage: string): Record<string, unknown> => {
-  const parsed = JSON.parse(rawMessage) as unknown;
-  if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-    return parsed as Record<string, unknown>;
-  }
-  return {};
-};
-
 type EventSubscription = { remove(): void };
 
 const bridgeListeners: {
-  [K in keyof CordieriteModuleEvents]: (
-    listener: CordieriteModuleEvents[K],
+  [K in keyof CordieriteNativeEvents]: (
+    listener: CordieriteNativeEvents[K],
   ) => EventSubscription;
 } = {
-  stateChange(listener) {
-    const subscription = resolveNativeModule().onStateChange((nativeEvent) => {
+  toolCall(listener) {
+    const subscription = resolveNativeModule().onToolCall((nativeEvent) => {
       listener({
-        state: nativeEvent.state as CordieriteStateChangeEvent["state"],
+        id: nativeEvent.id,
+        name: nativeEvent.name,
+        argsJson: nativeEvent.argsJson,
       });
     });
     return { remove: () => subscription.remove() };
   },
 
-  message(listener) {
-    const subscription = resolveNativeModule().onMessage((nativeEvent) => {
-      const rawMessage = nativeEvent.rawMessage;
-      let message: CordieriteMessageEvent["message"];
-      try {
-        message = parseMessagePayload(rawMessage);
-      } catch {
-        logger.warn(
-          "incoming message is not valid JSON; exposing empty object to listeners",
-        );
-        message = {};
-      }
-      listener({ message, rawMessage });
+  toolCancel(listener) {
+    const subscription = resolveNativeModule().onToolCancel((nativeEvent) => {
+      listener({ id: nativeEvent.id, reason: nativeEvent.reason });
     });
+    return { remove: () => subscription.remove() };
+  },
+
+  stateChange(listener) {
+    const subscription = resolveNativeModule().onStateChange((nativeEvent) => {
+      listener({
+        state: nativeEvent.state,
+        reason: nativeEvent.reason ?? undefined,
+      });
+    });
+    return { remove: () => subscription.remove() };
+  },
+
+  sessionChange(listener) {
+    const subscription = resolveNativeModule().onSessionChange(
+      (nativeEvent) => {
+        listener({
+          type: nativeEvent.type,
+          sessionId: nativeEvent.sessionId ?? null,
+          alias: nativeEvent.alias ?? null,
+          reason: nativeEvent.reason ?? undefined,
+        });
+      },
+    );
     return { remove: () => subscription.remove() };
   },
 
   error(listener) {
     const subscription = resolveNativeModule().onError((nativeEvent) => {
       listener({
-        code: nativeEvent.code,
+        phase: nativeEvent.phase,
         message: nativeEvent.message,
-        phase: toErrorPhase(nativeEvent.phase ?? undefined),
+        code: nativeEvent.code ?? undefined,
         nativeCode: nativeEvent.nativeCode ?? undefined,
         closeReason: nativeEvent.closeReason ?? undefined,
         isRetryable: nativeEvent.isRetryable ?? undefined,
         hint: nativeEvent.hint ?? undefined,
+        toolName: nativeEvent.toolName ?? undefined,
+        invocationId: nativeEvent.invocationId ?? undefined,
       });
-    });
-    return { remove: () => subscription.remove() };
-  },
-
-  close(listener) {
-    const subscription = resolveNativeModule().onClose((nativeEvent) => {
-      const event: CordieriteCloseEvent = {};
-      if (nativeEvent.code != null) {
-        event.code = nativeEvent.code;
-      }
-      if (nativeEvent.reason != null) {
-        event.reason = nativeEvent.reason;
-      }
-      listener(event);
     });
     return { remove: () => subscription.remove() };
   },
@@ -193,18 +159,44 @@ const bridgeListeners: {
 const noopSubscription: EventSubscription = { remove() {} };
 
 export const cordieriteNativeModule: CordieriteNativeModuleLike = {
-  connect: (options) => resolveNativeModule().connect(options),
-  send: (message) => resolveNativeModule().send(message),
-  close: () => resolveNativeModule().close(),
+  registerTool: (descriptorJson) =>
+    resolveNativeModule().registerTool(descriptorJson),
+  unregisterTool: (name) => resolveNativeModule().unregisterTool(name),
+  handleUrl: (url) => resolveNativeModule().handleUrl(url),
+  connect: (inputJson, supersede) =>
+    resolveNativeModule().connect(inputJson, supersede),
   /**
-   * Never throws, even when the native module cannot be resolved: mirrors `CordieriteModule.web.ts`
-   * (see its doc comment) since this is called unconditionally from code paths that must survive a
-   * missing native module (e.g. the deep-link handler's "already connecting/active?" guard) before
-   * an app-level `connect()` call ever gets a chance to surface the actionable error.
+   * Never throws, even when the native module cannot be resolved: called unconditionally from
+   * startup orchestration (`deep-link-install.ts`, and directly by apps that drive bootstrap
+   * themselves) before any app-level call has a chance to surface the actionable error --
+   * mirrors `getState`/`getSessionId` above.
    */
-  getState: (): CordieriteConnectionState => {
+  restoreSession: async (): Promise<boolean> => {
     try {
-      return resolveNativeModule().getState() as CordieriteConnectionState;
+      return await resolveNativeModule().restoreSession();
+    } catch (error) {
+      logger.debug(
+        "restoreSession(): native module unavailable, reporting false",
+        error,
+      );
+      return false;
+    }
+  },
+  disconnect: () => resolveNativeModule().disconnect(),
+  postEvent: (name, payloadJson) =>
+    resolveNativeModule().postEvent(name, payloadJson),
+  respondToToolCall: (id, resultJson, errorJson) =>
+    resolveNativeModule().respondToToolCall(id, resultJson, errorJson),
+  reportToolProgress: (id, progress, message) =>
+    resolveNativeModule().reportToolProgress(id, progress, message),
+  /**
+   * Never throws, even when the native module cannot be resolved: called unconditionally from
+   * code paths that must survive a missing native module (e.g. `default-client.ts`'s constructor
+   * wiring) before an app-level call ever gets a chance to surface the actionable error.
+   */
+  getState: (): string => {
+    try {
+      return resolveNativeModule().getState();
     } catch (error) {
       logger.debug(
         "getState(): native module unavailable, reporting idle",
@@ -213,8 +205,30 @@ export const cordieriteNativeModule: CordieriteNativeModuleLike = {
       return "idle";
     }
   },
+  getSessionId: (): string | null => {
+    try {
+      return resolveNativeModule().getSessionId();
+    } catch (error) {
+      logger.debug(
+        "getSessionId(): native module unavailable, reporting null",
+        error,
+      );
+      return null;
+    }
+  },
+  getRegisteredToolsJson: (): string => {
+    try {
+      return resolveNativeModule().getRegisteredToolsJson();
+    } catch (error) {
+      logger.debug(
+        "getRegisteredToolsJson(): native module unavailable, reporting []",
+        error,
+      );
+      return "[]";
+    }
+  },
   /**
-   * Never throws: constructing a `CordieriteClient` subscribes three of these at creation
+   * Never throws: constructing a `CordieriteClient` subscribes several of these at creation
    * time, and that must stay side-effect-free at import time. When the native module is
    * unavailable the returned subscription is an inert no-op — the listener simply never fires until
    * an app-level native call (e.g. `connect()`) has a chance to surface the real, actionable error.
@@ -225,12 +239,10 @@ export const cordieriteNativeModule: CordieriteNativeModuleLike = {
       throw new Error(`Unknown Cordierite event: ${String(eventName)}`);
     }
     try {
-      return attach(listener as CordieriteModuleEvents[typeof eventName]);
+      return attach(listener as CordieriteNativeEvents[typeof eventName]);
     } catch (error) {
       logger.debug(
-        `addListener("${String(
-          eventName,
-        )}"): native module unavailable, subscription is inert`,
+        `addListener("${String(eventName)}"): native module unavailable, subscription is inert`,
         error,
       );
       return noopSubscription;
@@ -242,35 +254,10 @@ export const cordieriteNativeModule: CordieriteNativeModuleLike = {
  * Reads the effective trust/pin build config via the TurboModule's `getConstants()` — the exact
  * same manifest/plist keys `resolveTrustedPins` (task 05) reads on both platforms, never a second
  * parse. Callers reach this only through `noopIfNativeUnavailable` (see `index.ts`'s
- * `getCordieriteBuildConfig`), which already gates on `isCordieriteNativeModuleAvailable()`, so —
- * like `connect`/`registerTool`/`postEvent` — this deliberately does not catch: a resolution
- * failure here would mean the availability probe and this call disagreed, which should surface
- * loudly rather than be swallowed into a fake "absent" result.
+ * `getCordieriteBuildConfig`), which already gates on `isCordieriteNativeModuleAvailable()`, so
+ * this deliberately does not catch: a resolution failure here would mean the availability probe
+ * and this call disagreed, which should surface loudly rather than be swallowed into a fake
+ * "absent" result.
  */
 export const getCordieriteNativeBuildConfig = (): CordieriteBuildConfig =>
   resolveNativeModule().getConstants();
-
-/** @internal Production adapter for the native process-memory resume lease. */
-export const cordieriteNativeResumeLeaseStore: ResumeLeaseStore = {
-  get() {
-    try {
-      return resolveNativeModule().getResumeLease();
-    } catch (error) {
-      logger.debug(
-        "getResumeLease(): native module unavailable, reporting no lease",
-        error,
-      );
-      return null;
-    }
-  },
-  clear() {
-    try {
-      resolveNativeModule().clearResumeLease();
-    } catch (error) {
-      logger.debug(
-        "clearResumeLease(): native module unavailable, clear is inert",
-        error,
-      );
-    }
-  },
-};

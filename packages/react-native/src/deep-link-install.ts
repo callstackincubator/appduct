@@ -1,34 +1,21 @@
 import { Linking } from "react-native";
 
-import { getCordieriteNativeBuildConfig } from "./CordieriteModule";
-import {
-  handleCordieriteDeepLinkUrl,
-  type CordieriteAutoBootstrapClient,
-} from "./deep-link-core";
 import { logger } from "./logger";
 
-let installed = false;
-
 /**
- * Whether a bootstrap payload's address must be private/loopback, read from the same native
- * `allowPrivateLanOnly` build config (`CordieriteAllowPrivateLanOnly` in Info.plist / the Android
- * manifest) that native `connect()` enforces — never a second, JS-side copy of the policy. JS can
- * only ever *narrow* what native allows, so a JS knob that disagreed with native would be a no-op
- * at best (native rejects the address anyway) and a misleading one at worst.
- *
- * Fail-closed on any read failure: an unresolvable native module means no `connect()` can succeed
- * regardless, so the strict default costs nothing and never widens trust by accident.
+ * Structural seam the auto-bootstrap flow needs from a Cordierite client: startup recovery and
+ * `handleUrl`. Issue #48 phase 2 moved the entire "parse this deep link, decide whether it
+ * outranks the held session, connect" decision into the native core (`CordieriteClient.handleUrl`
+ * in Swift, the analogous entry point in Kotlin) -- this file's only remaining job is wiring
+ * `Linking` events into it.
  */
-const requirePrivateIp = (): boolean => {
-  try {
-    return getCordieriteNativeBuildConfig().allowPrivateLanOnly;
-  } catch (error) {
-    logger.debug(
-      "Cordierite: could not read allowPrivateLanOnly; requiring a private address",
-      error,
-    );
-    return true;
-  }
+export type CordieriteAutoBootstrapClient = {
+  /** Starts recovery from the native process-memory lease, if one is available. */
+  restoreSession(): Promise<boolean>;
+  /** Feeds a URL to the native core. Returns `true` iff it carried a `cordierite` query param
+   * (whatever the parse outcome -- a bad payload surfaces on the unified `error` channel with
+   * phase `"bootstrap"`), `false` for any other URL so the app can route it itself. */
+  handleUrl(url: string): boolean;
 };
 
 /**
@@ -48,9 +35,7 @@ export function installCordieriteDeepLinkBootstrap(
 
   try {
     Linking.addEventListener("url", ({ url }) => {
-      handleCordieriteDeepLinkUrl(client, url, {
-        requirePrivateIp: requirePrivateIp(),
-      });
+      client.handleUrl(url);
     });
   } catch (error) {
     logger.warn("Cordierite: Linking.addEventListener(url) failed", error);
@@ -94,19 +79,21 @@ export function installCordieriteDeepLinkBootstrap(
     }
 
     // The initial URL is handled even when a lease *was* restored. A link delivered to launch this
-    // app is newer intent than a session recovered from process memory, and
-    // `handleCordieriteDeepLinkUrl` arbitrates between them: same session id keeps the restored
-    // one, a different id supersedes it. Returning early here instead is what let a
-    // lease-restored app silently ignore the link an operator had just delivered — the session
-    // they were waiting on was never claimed and nothing said why.
+    // app is newer intent than a session recovered from process memory, and native's `handleUrl`
+    // arbitrates between them: same session id keeps the restored one, a different id supersedes
+    // it. Returning early here instead is what let a lease-restored app silently ignore the link an
+    // operator had just delivered — the session they were waiting on was never claimed and nothing
+    // said why.
     const initialUrl = await initialUrlPromise;
-    handleCordieriteDeepLinkUrl(client, initialUrl, {
-      requirePrivateIp: requirePrivateIp(),
-    });
+    if (initialUrl) {
+      client.handleUrl(initialUrl);
+    }
   })().catch(() => {
     logger.warn("Cordierite: startup bootstrap orchestration failed");
   });
 }
+
+let installed = false;
 
 /** @internal */
 export function __cordieriteResetInstallGuardForTests(): void {

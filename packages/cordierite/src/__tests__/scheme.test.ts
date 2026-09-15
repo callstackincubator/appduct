@@ -412,6 +412,13 @@ describe("resolveScheme precedence", () => {
       `.cordierite/config.json (searched upwards from ${dir})`,
       `${stateConfigPath} ("scheme")`,
       `${path.join(dir, "app.json")} ("expo.scheme")`,
+      `${path.join(dir, "app", "build.gradle.kts")}, ${path.join(dir, "app", "build.gradle")} ` +
+        '("cordieriteScheme" manifest placeholder)',
+      `${path.join(dir, "app", "src", "main", "AndroidManifest.xml")} (first <data android:scheme> ` +
+        "in a VIEW intent-filter)",
+      `Info.plist up to 2 levels below ${dir} (excluding Pods/build/node_modules/DerivedData) — ` +
+        "none found",
+      `${path.join(dir, "project.yml")} ("info.properties.CFBundleURLTypes" > "CFBundleURLSchemes")`,
     ]);
   });
 

@@ -1,0 +1,33 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- OkHttp (vendored into `core`'s debug implementation) needs this to open the pinned
+         wss:// socket at all; without it, connect() fails immediately with an EPERM-style
+         SecurityException, which is exactly what this playground's own live check surfaced
+         before this permission was added (docs/tasks/19-android-entry-points.md). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:name=".PlaygroundApplication"
+        android:allowBackup="true"
+        android:label="Cordierite Playground"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="Cordierite Playground">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          CordieriteInitProvider and CordieriteLinkActivity are declared in `core`'s own
+          AndroidManifest.xml (debugImplementation, see app/build.gradle) and merged in
+          automatically: nothing to declare here. A release build resolves `core-noop` instead,
+          which has no manifest entries at all, so neither exists in that variant's merged
+          manifest either.
+        -->
+    </application>
+</manifest>

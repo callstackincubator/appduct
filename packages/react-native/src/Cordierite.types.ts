@@ -1,46 +1,26 @@
 import type {
   BootstrapPayload,
-  SessionBoundMessage,
   SessionId,
   StandardSchemaV1,
   StandardSchemaV1JsonSchema,
   ToolAnnotations,
-  ToolCallMessage,
-  ToolDescriptor,
-  ToolErrorMessage,
-  ToolResultMessage,
-  WireMessage,
 } from "@cordierite/shared";
 
 /** Local app-side ceiling for a tool handler, matching the daemon's `tools.call` default (§5/§11). */
 export const CORDIERITE_DEFAULT_TOOL_TIMEOUT_MS = 10_000;
 
-/** Mirrors the raw native TurboModule connection lifecycle (one native socket, no resume concept). */
-export type CordieriteConnectionState =
-  | "idle"
-  | "connecting"
-  | "active"
-  | "closed"
-  | "error";
-
 /**
- * Unified JS-level client state (ARCHITECTURE.md §11): adds `reconnecting` for the
- * resume/backoff loop that lives entirely in JS, on top of the raw native states above.
+ * Unified client state (ARCHITECTURE.md §11), owned entirely by the native core since issue #48
+ * phase 2: there is no longer a separate "raw native" state distinct from this one -- native's own
+ * `getState()`/`onStateChange` already report `"reconnecting"` alongside the transport-level states.
  */
 export type CordieriteClientState =
-  | "idle"
-  | "connecting"
-  | "active"
-  | "reconnecting"
-  | "closed";
+  "idle" | "connecting" | "active" | "reconnecting" | "closed";
 
 /**
- * Options passed to the TurboModule `connect` method. Must stay aligned with
- * `CordieriteConnectOptionsNative` in `NativeCordierite.ts` (Codegen).
- *
- * NOTE: the native layer still speaks this single-`ip` shape internally (v1-era claim building);
- * it does not yet carry the v2 bootstrap `family`/`address` split — the JS client maps a v2
- * `BootstrapPayload` (`family`/`address`) onto `ip` before calling native (`connect-helpers.ts`).
+ * Options passed to `connect()`. Native fills `deviceManufacturer`/`deviceModel`/`deviceOs`
+ * defaults when omitted; setting them here still overrides those defaults end-to-end (native reads
+ * them off the decoded `CordieriteConnectInput` JSON).
  */
 export type CordieriteConnectOptions = {
   ip: string;
@@ -51,7 +31,6 @@ export type CordieriteConnectOptions = {
   /** Base64url, 32 raw bytes. When present, native sends `session_resume` instead of `session_claim`. */
   resumeToken?: string;
   expiresAt: number;
-  /** Optional overrides for `session_claim`; native fills defaults when omitted. */
   deviceManufacturer?: string;
   deviceModel?: string;
   deviceOs?: string;
@@ -85,11 +64,12 @@ export type CordieriteBuildConfig = {
 
 /** A decoded v2 bootstrap payload, plus the deep link's optional sibling `pin` param (see
  * `CordieriteConnectOptions.linkPin`) — `bootstrap.ts`'s `parseBootstrapUrl` produces this shape. */
-export type CordieriteBootstrapConnectInput = BootstrapPayload & { linkPin?: string };
+export type CordieriteBootstrapConnectInput = BootstrapPayload & {
+  linkPin?: string;
+};
 
 export type CordieriteConnectInput =
-  | CordieriteConnectOptions
-  | CordieriteBootstrapConnectInput;
+  CordieriteConnectOptions | CordieriteBootstrapConnectInput;
 
 /** Per-call options for `connect()`, distinct from the payload being connected with. */
 export type CordieriteConnectCallOptions = {
@@ -104,86 +84,8 @@ export type CordieriteConnectCallOptions = {
   supersede?: boolean;
 };
 
-/**
- * Parsed JSON from the wire. Non-object or invalid JSON may surface as `{}` (see `CordieriteModule`).
- */
-export type CordieriteIncomingMessage =
-  | WireMessage
-  | SessionBoundMessage
-  | Record<string, unknown>;
-
-/**
- * Structured messages accepted by `cordieriteClient.send`. Omit `session_id` to let the client inject
- * the active session.
- *
- * Includes `ToolCallMessage` for advanced/testing scenarios; app code usually sends
- * `tool_result` / `tool_error` or custom `type` payloads.
- */
-export type CordieriteStructuredOutboundMessage =
-  | ToolCallMessage
-  | ToolResultMessage
-  | ToolErrorMessage
-  | (Record<string, unknown> & {
-      type: string;
-      session_id?: SessionId;
-    });
-
-/**
- * Outbound payload: either a pre-serialized JSON string (must include correct `session_id` when
- * session-bound) or a structured object (session id injected when missing).
- */
-export type CordieriteOutboundMessage =
-  | string
-  | CordieriteStructuredOutboundMessage;
-
-export type CordieriteStateChangeEvent = {
-  state: CordieriteConnectionState;
-};
-
-export type CordieriteMessageEvent = {
-  message: CordieriteIncomingMessage;
-  /** Original JSON string from native before parsing. */
-  rawMessage: string;
-};
-
-export type CordieriteErrorEvent = {
-  code: string;
-  message: string;
-  phase?:
-    | "bootstrap"
-    | "tls"
-    | "connect"
-    | "handshake"
-    | "session"
-    | "transport"
-    | "config";
-  nativeCode?: string;
-  closeReason?: string;
-  isRetryable?: boolean;
-  hint?: string;
-};
-
-export type CordieriteCloseEvent = {
-  code?: number;
-  reason?: string;
-};
-
-/**
- * Subscriptions mirror the native TurboModule events. `message` fires for session-bound JSON after
- * the session is `active` (native validates `session_id`).
- */
-export type CordieriteModuleEvents = {
-  stateChange: (event: CordieriteStateChangeEvent) => void;
-  message: (event: CordieriteMessageEvent) => void;
-  error: (event: CordieriteErrorEvent) => void;
-  close: (event: CordieriteCloseEvent) => void;
-};
-
 export type CordieriteBootstrapParseErrorCode =
-  | "invalid_url"
-  | "missing_payload"
-  | "invalid_payload"
-  | "expired_payload";
+  "invalid_url" | "missing_payload" | "invalid_payload" | "expired_payload";
 
 /** Unified listener kinds (ARCHITECTURE.md §11): `addCordieriteListener(kind, cb)`. */
 export type CordieriteListenerKind = "stateChange" | "sessionChange" | "error";
@@ -194,11 +96,17 @@ export type CordieriteUnifiedStateChangeEvent = {
   reason?: string;
 };
 
+/**
+ * Mirrors native's `onSessionChange` exactly: `sessionId`/`alias` go `null` once the session is
+ * gone. `type` distinguishes a fresh claim from a resume from a loss; `reason` is set only when
+ * `type` is `"lost"` (`revoked`, `grace_expired`, `closed_by_app`, or a terminal close reason from
+ * the daemon — PROTOCOL.md §7). This mirrors the accompanying `stateChange` event's `reason`,
+ * which says the same thing from the state machine's perspective rather than the session's.
+ */
 export type CordieriteSessionChangeEvent = {
   type: "claimed" | "resumed" | "lost";
   sessionId: string | null;
   alias: string | null;
-  /** Set when `type` is `"lost"`: `revoked`, `grace_expired`, or `closed_by_app`. */
   reason?: string;
 };
 
@@ -230,7 +138,7 @@ export type CordieriteUnifiedListenerMap = {
  */
 export type CordieriteReportProgress = (
   progress?: number,
-  message?: string
+  message?: string,
 ) => Promise<void>;
 
 export type CordieriteToolExecutionContext = {
@@ -238,14 +146,15 @@ export type CordieriteToolExecutionContext = {
   invocationId: string;
   receivedAt: string;
   reportProgress: CordieriteReportProgress;
-  /** Aborted when the daemon sends `tool_cancel` for this call, or when the session suspends
-   * mid-call. Handlers may ignore it — they then run to completion as before. */
+  /** Aborted when native reports `onToolCancel` for this call: an explicit `tool_cancel` frame, a
+   * core-owned per-call timeout, or session suspension. Handlers may ignore it — they then run to
+   * completion as before. */
   signal: AbortSignal;
 };
 
 export type CordieriteToolHandler<TArgs = unknown, TResult = unknown> = (
   args: TArgs,
-  context: CordieriteToolExecutionContext
+  context: CordieriteToolExecutionContext,
 ) => TResult | Promise<TResult>;
 
 /**
@@ -384,7 +293,7 @@ export type InferToolResult<TSchema> = TSchema extends StandardSchemaV1
 
 export type CordieriteToolDefinition<
   TInputSchema extends CordieriteRuntimeSchema | undefined = undefined,
-  TOutputSchema extends CordieriteRuntimeSchema | undefined = undefined
+  TOutputSchema extends CordieriteRuntimeSchema | undefined = undefined,
 > = {
   name: string;
   description: string;
@@ -392,8 +301,9 @@ export type CordieriteToolDefinition<
   outputSchema?: TOutputSchema;
   annotations?: ToolAnnotations;
   /**
-   * Overrides the default 10 s app-side handler timeout (ARCHITECTURE.md §11). On timeout the app
-   * replies `tool_timeout`; a later result from the same invocation is ignored with a dev warning.
+   * Overrides the default 10 s app-side handler timeout (ARCHITECTURE.md §11), enforced entirely
+   * by the native core. On timeout native replies `tool_timeout` and emits `onToolCancel(id,
+   * "timeout")`; a later result from the same invocation is ignored.
    *
    * Declared here it also travels on the tool descriptor and becomes the daemon's default deadline
    * for this tool, so a caller that passes no timeout of its own (an MCP agent, `cordierite invoke`
@@ -406,7 +316,7 @@ export type CordieriteToolDefinition<
 
 export type CordieriteToolRegistration<
   TInputSchema extends CordieriteRuntimeSchema | undefined = undefined,
-  TOutputSchema extends CordieriteRuntimeSchema | undefined = undefined
+  TOutputSchema extends CordieriteRuntimeSchema | undefined = undefined,
 > = CordieriteToolDefinition<TInputSchema, TOutputSchema> & {
   handler: CordieriteToolHandler<
     InferToolArgs<TInputSchema>,
@@ -417,12 +327,11 @@ export type CordieriteToolRegistration<
 export type CordieriteRegisteredTool = {
   /** Registration identity: `remove()` disposers compare this, not the tool name (stale-disposer fix). */
   id: symbol;
-  descriptor: ToolDescriptor;
+  name: string;
   /** Normalized at registration time (`schema.ts`'s `normalizeToolSchema`), never the raw user value. */
   inputSchema?: CordieriteNormalizedToolSchema;
   outputSchema?: CordieriteNormalizedToolSchema;
   handler: CordieriteToolHandler;
-  timeoutMs: number;
 };
 
 export class CordieriteBootstrapParseError extends Error {

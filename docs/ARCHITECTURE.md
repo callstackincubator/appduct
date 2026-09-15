@@ -525,7 +525,31 @@ running for a caller that has already exited; the process then exits reporting
 
 ## 11. React Native SDK
 
-Package `@cordierite/react-native`. Entry points:
+Package `@cordierite/react-native`. The session logic it bridges to — TLS, SPKI pinning,
+trust-mode resolution, the private-LAN check, claim/resume, reconnect with full-jitter
+backoff, the tool registry and its wire deltas, per-call timeout/cancel/progress, v2
+bootstrap deep-link handling, and the process-memory resume lease — is not native to this
+package: it is vendored at build time from `packages/native`, a framework-free core with no
+React Native dependency (`docs/tasks/14-native-core-extraction.md`,
+`docs/tasks/15-native-session-logic.md`,
+[BUILD-VARIANTS.md § Native core](BUILD-VARIANTS.md#native-core)). The same core is also
+consumed directly — no React Native, no Expo — by a plain iOS app (`Cordierite.shared`,
+[`packages/native/ios/README.md`](../packages/native/ios/README.md)) and a plain Android app
+(the `Cordierite` object, [`packages/native/android/README.md`](../packages/native/android/README.md)),
+issue #48 phase 3 (`docs/tasks/18-ios-entry-points.md`, `docs/tasks/19-android-entry-points.md`).
+**The RN bridge and the plain-app facade never coexist in one app.** Each owns its own
+`CordieriteClient` instance and the one process-memory resume lease that comes with it, so an
+RN app that also imported the facade and called `Cordierite.shared`/the `Cordierite` object
+directly would end up with two clients racing for the same lease and the same deep link — which
+is why the facade's own source files are excluded from what `sync-native-core.mjs` vendors into
+this package (`docs/internal/native-core.md`'s "The facade-exclusion rule"): an RN app is not even
+vendored `CordieriteAPI.swift`/`Cordierite.kt`, let alone meant to call them. This section covers
+the JS-facing entry points and client behavior; the bridge files that remain in this package
+(`CordieriteTurboBridge.swift`/`RCTNativeCordierite.mm` on iOS,
+`CordieritePackage.kt`/`NativeCordieriteModule.kt` on Android) translate the TurboModule
+spec's JSON-string calls and events onto that vendored core's `CordieriteClient` and answer
+each JS-registered tool's call through a continuation resumed by `respondToToolCall` — they
+own no session state themselves. Entry points:
 
 - `@cordierite/react-native` — **side-effect-free**. Its default API includes
   `registerTool`, `useCordieriteTool`, `postEvent`, `getRegisteredTools`,
@@ -569,38 +593,54 @@ The full config surface (option names, native keys, trust recipes) lives in
 [SECURITY.md](SECURITY.md). The [package README](../packages/react-native/README.md) is the
 getting-started path and API reference.
 
-Client behavior:
+Client behavior (issue #48 phase 2 moved everything in this list except schema handling
+and cancellation's `AbortSignal` translation into the native core —
+`docs/tasks/15-native-session-logic.md` has the full core API, bridge protocol, and
+deviations):
 
 - On every successful claim/resume, native commits the latest `resume_token` lease before
-  emitting the `session_ack` to JS. The lease is synchronous, native **process-memory
+  emitting the `session_ack`. The lease is synchronous, native **process-memory
   only**, and never written to disk. It records transport suspension/disconnection time,
   which anchors `grace_s`; ack time does not. On socket loss, auto-reconnect with
   exponential backoff (0.5 s → 30 s cap, jitter) while the lease remains within grace,
   and re-send the full registry snapshot after every successful resume. Resume attempts
-  pause in background and restart on foreground. A `1008` close is terminal in both
-  directions — mid-session, and as the rejection of a claim/resume handshake: it is the
-  daemon's "no retry of this frame can succeed" signal (`unknown_session` after a daemon
-  restart, `invalid_resume_token`, `link_expired`, an expired or revoked session, a
-  malformed frame), so the session is lost immediately with the daemon's own reason —
-  surfaced to JS as `sessionChange: lost` — rather than retried for the remainder of the
-  grace window. Transport-level closes stay retryable, including `1011 send_failed` and
-  `1001 daemon_shutdown`: the daemon may well be back before grace expires.
-- Installing the bootstrap explicitly or importing `/auto` registers the runtime URL
-  listener first, then restores once from the native lease before considering the initial
-  launch URL. A successful restore suppresses that initial URL claim; no lease or an
-  unexpected orchestration failure falls back to normal initial-link handling. This lets
-  a fresh Metro JS runtime resume automatically with the same alias and no new link.
-  Runtime URLs delivered later still parse the v2 bootstrap payload and call `connect` when
-  the client is idle, so an app on the default flow needs no `Linking` handler of its own.
-  Native app process death erases the lease and requires a fresh bootstrap. Apps that
-  drive bootstrap themselves and never install the listener must call the exported
-  `restoreSession()` (equivalently `cordieriteClient.restoreSession()`) at startup — it is
-  the only other reader of the lease, so skipping it drops a resumable session on every JS
-  runtime replacement.
+  pause in background and restart on foreground (`UIApplication` notifications on iOS,
+  `ProcessLifecycleOwner` on Android — no JS `AppState` involved). A `1008` close is
+  terminal in both directions — mid-session, and as the rejection of a claim/resume
+  handshake: it is the daemon's "no retry of this frame can succeed" signal
+  (`unknown_session` after a daemon restart, `invalid_resume_token`, `link_expired`, an
+  expired or revoked session, a malformed frame), so the session is lost immediately with
+  the daemon's own reason — surfaced on the unified `stateChange` event's `reason` — rather
+  than retried for the remainder of the grace window. Transport-level closes stay
+  retryable, including `1011 send_failed` and `1001 daemon_shutdown`: the daemon may well
+  be back before grace expires. The `sessionChange` event itself carries only
+  `{ sessionId, alias }`, both `null` once the session is gone; it no longer distinguishes
+  a claim from a resume from a loss (that categorization was JS-tracked state that no
+  longer exists on this side of the bridge) — a listener that needs the departing session's
+  id/alias keeps the most recent non-null event, and reads the reason off the paired
+  `stateChange` event.
+- Native's own `handleUrl(url)` decodes the v2 bootstrap payload, checks expiry and the
+  private-IP policy (`allowPrivateLanOnly`, read once from the same manifest/plist key
+  `resolveTrustedPins` uses), and decides whether the link outranks a session already held
+  — the JS-side `deep-link-core.ts` this used to be is gone. `@cordierite/react-native/auto`
+  installs a `Linking` `url` listener that forwards straight into `handleUrl`, then calls
+  `restoreSession()` once before considering the initial launch URL (recovery goes first so
+  the link is judged against a settled session, not so it wins) — a successful restore does
+  not suppress the initial URL: it is still fed to `handleUrl`, which supersedes a restored
+  session that names a different one and ignores a re-delivery of the one already held.
+  Runtime URLs delivered later go through the same `handleUrl` path, so an app on the
+  default flow needs no `Linking` handler of its own. Native app process death erases the
+  lease and requires a fresh bootstrap. Apps that drive bootstrap themselves and never
+  install the listener must call the exported `restoreSession()` (equivalently
+  `cordieriteClient.restoreSession()`) at startup — it is the only other reader of the
+  lease, so skipping it drops a resumable session on every JS runtime replacement.
 - `registerTool({ name, description, inputSchema?, outputSchema?, annotations?, handler })`
-  → `{ remove() }`. The disposer removes only its own registration (compare by
-  registration identity, not name). Duplicate name registration logs a dev warning and
-  overwrites.
+  → `{ remove() }`. JS converts/validates the schema and keeps the handler in a local map;
+  the wire descriptor is validated again natively (per PROTOCOL.md §5) and throws
+  synchronously on an invalid one. The disposer removes only its own registration (compare
+  by registration identity, not name). Duplicate name registration logs a dev warning and
+  overwrites. Native owns the registry itself and its `tool_registry_snapshot`/
+  `tool_registry_delta` sends; `getRegisteredTools()` reads straight from it.
 - `useCordieriteTool(definition, deps?, { enabled? })` — `useEffect` wrapper around
   `registerTool`/`remove`. It registers **once per mount**: the registered handler is a
   stable wrapper forwarding to the latest render's `definition.handler`, so a handler
@@ -676,30 +716,33 @@ Client behavior:
   two libraries describing the same shape may not produce byte-identical schemas. The wire
   `ToolDescriptor` (§7) is unchanged by any of this — it already carries draft 2020-12
   JSON Schema, so the whole contract is app-side.
-- App-side handler timeout: if a handler exceeds the call timeout hint, abort its
-  `AbortSignal`, reply `tool_timeout`, and ignore the late result. The hint is the tool's
-  own `timeoutMs`, falling back to the client-wide `defaultToolTimeoutMs`. This timer is
+- Per-call timeout is native-owned: if a handler exceeds the call timeout hint, native
+  emits `onToolCancel(id, "timeout")` (so JS aborts the matching `AbortSignal`), replies
+  `tool_timeout` itself, and ignores whatever the handler later resolves or throws. The
+  hint is the tool's own `timeoutMs`, falling back to native's built-in default
+  (`CORDIERITE_DEFAULT_TOOL_TIMEOUT_MS`, 10 s — the frozen TurboModule spec has no channel
+  for JS to override this client-wide default the way the old `defaultToolTimeoutMs` client
+  option once did; see `docs/tasks/15-native-session-logic.md`'s deviations). This timer is
   the real ceiling on a call: a caller's `tools.call` `timeoutMs` can shorten the deadline
-  but never extend it past this point, because the app stops the handler here regardless.
-  Only the
-  *explicit* per-tool value travels on the descriptor (`docs/PROTOCOL.md` §5), where it
-  becomes the daemon's default deadline for that tool (§5) — so a tool that declares one
-  has the app timer and the daemon timer agree instead of the daemon giving up at 10 s
-  first. `defaultToolTimeoutMs` deliberately stays app-side: putting it on the wire would
-  silently retune the daemon's deadline for every tool in the app.
+  but never extend it past this point. Only the *explicit* per-tool value travels on the
+  descriptor (`docs/PROTOCOL.md` §5), where it becomes the daemon's default deadline for
+  that tool (§5) — so a tool that declares one has the native timer and the daemon timer
+  agree instead of the daemon giving up at 10 s first.
 - Cancellation: `tool.handler(args, context)`'s `context.signal` (`AbortSignal`) aborts on
-  a `tool_cancel` frame (§7) or when the session's transport is lost (suspend) — the
-  latter can't itself deliver `tool_cancel` (there is no socket left), so it aborts every
-  in-flight handler directly instead. A handler that ignores the signal keeps running and
-  replies normally, exactly as it did before cancellation existed; one that observes it
-  and throws/rejects gets its `tool_error` sent as `tool_cancelled` (only for an
+  native's `onToolCancel` event, which fires for an explicit `tool_cancel` frame (§7), a
+  timeout, or session suspension (transport lost — there is no socket left to deliver
+  `tool_cancel` over, so native aborts every in-flight call directly and JS mirrors that by
+  aborting every signal it is holding). A handler that ignores the signal keeps running and
+  replies normally, exactly as it did before cancellation existed; one that observes it and
+  throws/rejects gets its `tool_error` sent as `tool_cancelled` by native (only for an
   explicit `tool_cancel` — a handler that throws after its own timeout still reports
-  `tool_timeout`, not `tool_cancelled`). `AbortController`/`AbortSignal` are used directly
-  from the global — RN has polyfilled both since 0.60 (`abort-controller` under
-  `polyfillGlobal`), which covers every RN version this package supports (Expo SDK 52+ /
-  RN 0.76+); only the older WHATWG surface is relied on (`aborted`,
-  `addEventListener("abort", …)`), never `AbortSignal.timeout`/`.abort`/`.any`,
-  `throwIfAborted()`, or `.reason` semantics, which that polyfill predates.
+  `tool_timeout`, not `tool_cancelled`, since native already answered by the time the throw
+  happens). `AbortController`/`AbortSignal` are used directly from the global — RN has
+  polyfilled both since 0.60 (`abort-controller` under `polyfillGlobal`), which covers every
+  RN version this package supports (Expo SDK 52+ / RN 0.76+); only the older WHATWG surface
+  is relied on (`aborted`, `addEventListener("abort", …)`), never
+  `AbortSignal.timeout`/`.abort`/`.any`, `throwIfAborted()`, or `.reason` semantics, which
+  that polyfill predates.
 
 Native layer: iOS `URLSession`, Android OkHttp. Two rules keep the two platforms honest —
 all connection state is serialized (an actor on iOS, a single-thread executor/lock on
@@ -792,9 +835,17 @@ packages/
     src/mcp/       stdio MCP server
   react-native/    @cordierite/react-native (entries: ., /auto, /noop). Depends only on
                    @cordierite/shared — no third-party runtime deps, which is why no
-                   JSON Schema validator ships with it (§11's raw schema form).
+                   JSON Schema validator ships with it (§11's raw schema form). Vendors
+                   packages/native at build time (see below) rather than depending on it.
+  native/          Framework-free Swift (SwiftPM, packages/native/ios) and Kotlin
+                   (standalone Gradle project, packages/native/android) core. Not an
+                   npm/pnpm workspace package -- no package.json. §11, BUILD-VARIANTS.md
+                   § Native core, docs/tasks/14-native-core-extraction.md.
 playground/        reference app (Expo dev build)
 ```
+
+The repo-root `Package.swift` (SwiftPM manifests must live at the repository root for URL
+dependencies) is the SwiftPM manifest for `packages/native/ios`.
 
 Tooling stays: pnpm workspaces, turbo, Vitest, tsc builds. Node ≥ 20 for the daemon
 (UDS + `AF_UNIX` on Windows). Windows support is best-effort; the control plane uses the
