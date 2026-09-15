@@ -41,17 +41,7 @@ Call it from your terminal:
 appduct invoke seed_cart --input '{"items":3}'
 ```
 
-Or hand it to an agent:
-
-```json
-{
-  "mcpServers": {
-    "appduct": { "command": "appduct", "args": ["mcp"] }
-  }
-}
-```
-
-Both read your app's deep-link scheme straight from `app.json`'s `expo.scheme`, so there's nothing to configure.
+Or hand it to an agent — see [Use it with an agent](#use-it-with-an-agent). The CLI and the MCP server both read your app's deep-link scheme straight from `app.json`'s `expo.scheme`, so there's nothing to configure.
 
 That's the whole idea. Everything else is about which builds include it and what they trust.
 
@@ -77,6 +67,28 @@ From there:
 - **[Try the playground](playground/README.md)** — a working app you can run end to end in a few minutes. Fastest way to see whether this fits your project.
 
 You'll need a development build or a bare React Native app — Expo Go can't do it.
+
+## Use it with an agent
+
+There are two ways to connect an agent. Pick whichever fits how your agent works.
+
+**Over MCP.** Add Appduct to your agent's MCP config — Claude Code, Cursor, or any other MCP client. Your app's tools show up next to the agent's own, and the connection tools explain themselves, so there's nothing else to install:
+
+```json
+{
+  "mcpServers": {
+    "appduct": { "command": "appduct", "args": ["mcp"] }
+  }
+}
+```
+
+**Through the CLI.** For agents that work in a shell, and for scripts or CI. Install the Appduct skill so the agent knows the commands:
+
+```bash
+npx skills add callstackincubator/appduct --skill appduct
+```
+
+Asking an agent to add Appduct to your app or write its tools? Install the skill either way — it covers setup and the rules your tool schemas have to follow.
 
 ## Packages
 

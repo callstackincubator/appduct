@@ -1,11 +1,11 @@
 ---
 name: appduct
-description: Connect a Appduct-enabled React Native app to your machine and drive it from the terminal (or MCP) using tools the app registers — useful for agents, scripts, and dev automation. Reach for this when the user mentions Appduct, bootstrapping/pairing with the app, or invoking app-defined capabilities from the CLI or MCP.
+description: Connect an Appduct-enabled React Native app to your machine and drive it from the terminal (or MCP) using tools the app registers — useful for agents, scripts, and dev automation. Reach for this when the user mentions Appduct, bootstrapping/pairing with the app, or invoking app-defined capabilities from the CLI or MCP.
 ---
 
 # Appduct
 
-Appduct is a CLI/daemon/MCP workflow for connecting to a Appduct-enabled React
+Appduct is a CLI/daemon/MCP workflow for connecting to an Appduct-enabled React
 Native app, discovering its registered tools, invoking those tools, and ending the
 session cleanly after use. A single `appduct` daemon on this machine owns the
 `wss://` listener and every device session; the CLI (and `appduct mcp`, if this
