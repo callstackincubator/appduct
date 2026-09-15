@@ -352,5 +352,6 @@ build of `packages/native` — see the native playground gates in
 - [`CI.md`](CI.md#release-gate-cordierite-doctor) — the `cordierite doctor` release gate
 - [`ARCHITECTURE.md`](ARCHITECTURE.md#11-react-native-sdk) — SDK entry points and client behavior
 - [`@cordierite/react-native` README](../packages/react-native/README.md) — getting started and API reference
-- [`packages/native/README.md`](../packages/native/README.md) — the native core's own layout and vendoring
+- [`packages/native/README.md`](../packages/native/README.md) — the native core's consumer entry points
+- [`docs/internal/native-core.md`](internal/native-core.md) — the native core's own layout and vendoring
 - [`docs/tasks/14-native-core-extraction.md`](tasks/14-native-core-extraction.md) — how and why the core was extracted

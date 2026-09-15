@@ -10,7 +10,7 @@ integration guide.
 
 If you're integrating from React Native instead, see
 [`packages/react-native/README.md`](../../react-native/README.md) — this package is what that one
-vendors under the hood (`packages/native/README.md`'s "How `@cordierite/react-native` vendors
+vendors under the hood (`docs/internal/native-core.md`'s "How `@cordierite/react-native` vendors
 this").
 
 ## Install
@@ -284,5 +284,5 @@ CocoaPods' `:configurations` restriction, most likely on purpose for an internal
 - [`playground-native/ios`](../../../playground-native/ios) — a full example app built on this SDK.
 - [`docs/SECURITY.md`](../../../docs/SECURITY.md) — trust modes, pins, the threat model.
 - [`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) — how inclusion is decided per build.
-- [`packages/native/README.md`](../../README.md) — this core's layout and how
-  `@cordierite/react-native` vendors it.
+- [`docs/internal/native-core.md`](../../../docs/internal/native-core.md) — this core's layout and
+  how `@cordierite/react-native` vendors it.

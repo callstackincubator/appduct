@@ -542,7 +542,7 @@ issue #48 phase 3 (`docs/tasks/18-ios-entry-points.md`, `docs/tasks/19-android-e
 RN app that also imported the facade and called `Cordierite.shared`/the `Cordierite` object
 directly would end up with two clients racing for the same lease and the same deep link — which
 is why the facade's own source files are excluded from what `sync-native-core.mjs` vendors into
-this package (`packages/native/README.md`'s "The facade-exclusion rule"): an RN app is not even
+this package (`docs/internal/native-core.md`'s "The facade-exclusion rule"): an RN app is not even
 vendored `CordieriteAPI.swift`/`Cordierite.kt`, let alone meant to call them. This section covers
 the JS-facing entry points and client behavior; the bridge files that remain in this package
 (`CordieriteTurboBridge.swift`/`RCTNativeCordierite.mm` on iOS,
