@@ -528,7 +528,7 @@ extension AppductClient {
   private func describeConnectError(_ error: Error) -> String {
     if let invalid = error as? AppductInvalidConnectInputError { return invalid.message }
     if error is AppductAlreadyConnectingError {
-      return "A Appduct session is already connecting or active."
+      return "An Appduct session is already connecting or active."
     }
     if let jsonError = error as? AppductJSONError { return jsonError.message }
     return "Appduct connect failed."

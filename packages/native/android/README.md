@@ -134,7 +134,7 @@ no Appduct payload is not forwarded anywhere; it's simply not consumed further. 
   activity's `onCreate`/`onNewIntent`, wherever your existing deep-link handling lives.
 
 You can also call `Appduct.handle` directly with a `Uri` (`Appduct.handle(uri)`) -- both
-overloads return `true` iff the input carried a Appduct bootstrap payload, `false` otherwise, so
+overloads return `true` iff the input carried an Appduct bootstrap payload, `false` otherwise, so
 your own code knows whether to keep handling it.
 
 ## 4. Initialization: the init provider

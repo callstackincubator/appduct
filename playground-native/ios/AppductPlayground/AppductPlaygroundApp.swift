@@ -15,7 +15,7 @@ struct AppductPlaygroundApp: App {
     WindowGroup {
       ContentView()
         .onOpenURL { url in
-          // `handle(_:)` returns `true` iff `url` carried a Appduct bootstrap payload; the
+          // `handle(_:)` returns `true` iff `url` carried an Appduct bootstrap payload; the
           // playground has nothing else to do with the result here since a plain `Bool` return
           // (rather than a thrown error) is exactly what lets an app compose this with its own,
           // unrelated deep links -- see packages/native/ios/README.md#2-forward-deep-links.

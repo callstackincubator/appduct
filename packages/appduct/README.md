@@ -22,7 +22,7 @@ appduct link --scheme myapp --qr
 
 `link` needs your app's deep-link scheme: pass `--scheme` (the app's `expo.scheme`, or its bare-RN equivalent), or set `"scheme"` once in `~/.appduct/config.json` and omit the flag. Without either, the command exits with a usage error.
 
-Scan the QR (or open the deep link) in a Appduct-enabled app, then:
+Scan the QR (or open the deep link) in an Appduct-enabled app, then:
 
 ```bash
 appduct tools

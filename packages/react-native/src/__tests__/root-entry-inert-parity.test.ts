@@ -105,7 +105,7 @@ describe("root entry: exact ./noop parity when the native module is unavailable"
     expect(getAppductState()).toBe("idle");
   });
 
-  test("connect() rejects with a AppductDisabledError (code: appduct_disabled)", async () => {
+  test("connect() rejects with an AppductDisabledError (code: appduct_disabled)", async () => {
     const { connect } = await import("../index");
     const { AppductDisabledError } = await import("../Appduct.types");
 

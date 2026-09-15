@@ -77,7 +77,7 @@ const QR_INSTRUCTIONS =
 export const CONNECT_TOOL_DESCRIPTOR = {
   name: CONNECT_TOOL_NAME,
   description:
-    "Mint a Appduct session link and get it onto a device. With no \"target\", auto-detects a " +
+    "Mint an Appduct session link and get it onto a device. With no \"target\", auto-detects a " +
     "booted iOS simulator or attached Android device and delivers the link to it, returning " +
     "{ sessionId, delivered: true, autoDetected: true } — this is the normal agent path and needs " +
     "no human. Pass target \"android\" or \"ios-sim\" (optionally with \"device\") to choose " +

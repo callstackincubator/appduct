@@ -102,7 +102,7 @@ public final class Appduct: Sendable {
 
   // MARK: Deep links
 
-  /// Feeds a deep link to the core. Returns `true` iff `url` carried a Appduct bootstrap payload
+  /// Feeds a deep link to the core. Returns `true` iff `url` carried an Appduct bootstrap payload
   /// -- the actual parse/connect work happens asynchronously; failures surface through
   /// `addListener`'s `.error` case, exactly as `AppductClient.handleUrl` documents.
   public func handle(_ url: URL) -> Bool {
