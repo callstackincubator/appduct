@@ -29,14 +29,14 @@ existing `resolveRequest` swap to `/noop`.
 
 ## Scope
 
-- `src/NativeCordierite.ts`: add `getConstants(): { trust: string; hasEmbeddedPins: boolean;
+- `src/NativeAppduct.ts`: add `getConstants(): { trust: string; hasEmbeddedPins: boolean;
   allowPrivateLanOnly: boolean }`. Do **not** expose the pin values themselves — the
   fingerprints are not secret, but there is no use case, and a smaller surface is the
   default.
 - Implement on both platforms from the same keys `resolveTrustedPins` reads (task 05); no
   second parse path.
 - Surface through the public API as something small and honest — e.g.
-  `getCordieriteBuildConfig()` — wrapped in `noopIfNativeUnavailable` like every other
+  `getAppductBuildConfig()` — wrapped in `noopIfNativeUnavailable` like every other
   export, with the matching inert implementation in `noop.ts` returning a documented
   "absent" shape.
 - Update the playground status screen to show it. That screen is the fastest way to tell,

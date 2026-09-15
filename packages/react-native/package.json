@@ -1,7 +1,7 @@
 {
-  "name": "@cordierite/react-native",
+  "name": "@appduct/react-native",
   "version": "0.8.0",
-  "description": "Expo native client for Cordierite sessions",
+  "description": "Expo native client for Appduct sessions",
   "main": "build/index.js",
   "module": "build/index.js",
   "types": "build/index.d.ts",
@@ -50,26 +50,26 @@
   },
   "keywords": [
     "react-native",
-    "@cordierite/react-native",
-    "cordierite"
+    "@appduct/react-native",
+    "appduct"
   ],
-  "repository": "https://github.com/callstackincubator/cordierite",
+  "repository": "https://github.com/callstackincubator/appduct",
   "bugs": {
-    "url": "https://github.com/callstackincubator/cordierite/issues"
+    "url": "https://github.com/callstackincubator/appduct/issues"
   },
   "author": "Szymon Chmal <szymon@chmal.it> (V3RON)",
   "license": "MIT",
-  "homepage": "https://github.com/callstackincubator/cordierite/tree/main/packages/react-native#readme",
+  "homepage": "https://github.com/callstackincubator/appduct/tree/main/packages/react-native#readme",
   "codegenConfig": {
-    "name": "CordieriteSpec",
+    "name": "AppductSpec",
     "type": "modules",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.callstackincubator.cordierite"
+      "javaPackageName": "com.callstackincubator.appduct"
     }
   },
   "dependencies": {
-    "@cordierite/shared": "workspace:*"
+    "@appduct/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

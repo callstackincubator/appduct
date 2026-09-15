@@ -1,9 +1,9 @@
-# Cordierite Playground (native iOS)
+# Appduct Playground (native iOS)
 
-A plain SwiftUI app -- no React Native, no Expo -- that consumes `CordieriteCore`
-(`packages/native/ios`) directly through the `Cordierite` facade
-(`packages/native/ios/Sources/CordieriteCore/Real/CordieriteAPI.swift`). It registers the same five
-tools the Expo playground (`playground/`) registers, so `cordierite tools` reports an equivalent
+A plain SwiftUI app -- no React Native, no Expo -- that consumes `AppductCore`
+(`packages/native/ios`) directly through the `Appduct` facade
+(`packages/native/ios/Sources/AppductCore/Real/AppductAPI.swift`). It registers the same five
+tools the Expo playground (`playground/`) registers, so `appduct tools` reports an equivalent
 surface regardless of which playground app answered the link.
 
 See [`packages/native/ios/README.md`](../../packages/native/ios/README.md) for the SDK itself;
@@ -22,20 +22,20 @@ xcodegen generate
 
 # 2. Build and run on a booted simulator (swap the destination for whatever
 #    `xcrun simctl list devices available` shows on your machine).
-xcodebuild build -project CordieritePlayground.xcodeproj -scheme CordieritePlayground \
+xcodebuild build -project AppductPlayground.xcodeproj -scheme AppductPlayground \
   -configuration Debug -sdk iphonesimulator \
   -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
 xcrun simctl install booted \
-  ~/Library/Developer/Xcode/DerivedData/CordieritePlayground-*/Build/Products/Debug-iphonesimulator/CordieritePlayground.app
-xcrun simctl launch booted com.callstackincubator.cordierite.playgroundnative
+  ~/Library/Developer/Xcode/DerivedData/AppductPlayground-*/Build/Products/Debug-iphonesimulator/AppductPlayground.app
+xcrun simctl launch booted com.callstackincubator.appduct.playgroundnative
 
-# 3. Point the CLI at it -- the app registers the `cordierite-native` URL scheme.
-cordierite link --scheme cordierite-native --open ios-sim
-cordierite tools
-cordierite invoke sum --input '{"a":2,"b":3}'
+# 3. Point the CLI at it -- the app registers the `appduct-native` URL scheme.
+appduct link --scheme appduct-native --open ios-sim
+appduct tools
+appduct invoke sum --input '{"a":2,"b":3}'
 ```
 
-Opening the project in Xcode (`open CordieritePlayground.xcodeproj`) and hitting Run works exactly
+Opening the project in Xcode (`open AppductPlayground.xcodeproj`) and hitting Run works exactly
 the same way; the three commands above are just the scriptable/CI-friendly equivalent.
 
 ## Why xcodegen
@@ -44,39 +44,39 @@ The `.xcodeproj` is generated from `project.yml` rather than committed, so there
 truth for the target's settings (matching how `packages/native/ios`'s own `Package.swift` is the
 single source of truth for the Swift package) and no `.pbxproj` merge conflicts. `project.yml`
 declares a local SwiftPM dependency on the repo-root `Package.swift`
-(`packages: { CordieriteCore: { path: ../../ } }`), so this app always builds against the worktree's
-own `CordieriteCore` sources -- there is nothing to vendor or publish first.
+(`packages: { AppductCore: { path: ../../ } }`), so this app always builds against the worktree's
+own `AppductCore` sources -- there is nothing to vendor or publish first.
 
 ## Debug ships the real core, Release ships the stub
 
-This target sets no `CORDIERITE_ENABLED` define of its own. Xcode passes the configuration name
+This target sets no `APPDUCT_ENABLED` define of its own. Xcode passes the configuration name
 straight through to SwiftPM, and `Package.swift`'s `.when(configuration: .debug)` does the rest
 (Decision 2, [`docs/tasks/14-native-core-extraction.md`](../../docs/tasks/14-native-core-extraction.md)):
-a `Debug` build links the real `CordieriteCore` implementation, a `Release` build links the
+a `Debug` build links the real `AppductCore` implementation, a `Release` build links the
 same-API `Stub/` implementation, and neither configuration needed a build setting naming
-`CORDIERITE_ENABLED` explicitly. Verify this against the built artifact rather than trusting the
+`APPDUCT_ENABLED` explicitly. Verify this against the built artifact rather than trusting the
 build log:
 
 ```bash
-cordierite doctor path/to/Debug-iphonesimulator/CordieritePlayground.app --assert-present
-cordierite doctor path/to/Release-iphonesimulator/CordieritePlayground.app --assert-absent
+appduct doctor path/to/Debug-iphonesimulator/AppductPlayground.app --assert-present
+appduct doctor path/to/Release-iphonesimulator/AppductPlayground.app --assert-absent
 ```
 
 ## Layout
 
 - `project.yml` -- the xcodegen project spec (targets, settings, the local package dependency).
-- `CordieritePlayground/CordieritePlaygroundApp.swift` -- the `@main` entry point:
-  `PlaygroundTools.registerAll()` at startup, `.onOpenURL { Cordierite.shared.handle($0) }` on the
+- `AppductPlayground/AppductPlaygroundApp.swift` -- the `@main` entry point:
+  `PlaygroundTools.registerAll()` at startup, `.onOpenURL { Appduct.shared.handle($0) }` on the
   root scene.
-- `CordieritePlayground/PlaygroundTools.swift` -- registers `sum`, `call_count`, `reset_counter`,
+- `AppductPlayground/PlaygroundTools.swift` -- registers `sum`, `call_count`, `reset_counter`,
   `slow_task`, `throwing_tool` -- the same names/descriptions/schemas
   `playground/app/(tabs)/index.tsx` registers on the Expo side.
-- `CordieritePlayground/PlaygroundViewModel.swift` -- the `@MainActor` observable store backing the
-  UI: call counter, connection state/session id (via `Cordierite.shared.addListener`), and a short
+- `AppductPlayground/PlaygroundViewModel.swift` -- the `@MainActor` observable store backing the
+  UI: call counter, connection state/session id (via `Appduct.shared.addListener`), and a short
   rolling activity log.
-- `CordieritePlayground/ContentView.swift` -- the single screen: connection state, call counter, a
-  button that calls `Cordierite.shared.postEvent(...)`, and the activity log.
-- `CordieritePlayground/Info.plist` -- declares the `cordierite-native` URL scheme
-  (`CFBundleURLTypes`). No `CordieriteTrust`/`CordieriteCliPins` keys: this playground is the
-  zero-config example, so it trusts whatever pin `cordierite link` puts on the deep link for that
+- `AppductPlayground/ContentView.swift` -- the single screen: connection state, call counter, a
+  button that calls `Appduct.shared.postEvent(...)`, and the activity log.
+- `AppductPlayground/Info.plist` -- declares the `appduct-native` URL scheme
+  (`CFBundleURLTypes`). No `AppductTrust`/`AppductCliPins` keys: this playground is the
+  zero-config example, so it trusts whatever pin `appduct link` puts on the deep link for that
   session (`trust: "link"`) -- see [`docs/SECURITY.md`](../../docs/SECURITY.md#trust-modes).

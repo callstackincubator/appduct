@@ -2,7 +2,7 @@ import { describe, expect, vi, test } from "vitest";
 import { z as z3 } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
-import { CordieriteDisabledError } from "../Cordierite.types";
+import { AppductDisabledError } from "../Appduct.types";
 import type { CordierePublicApi } from "../public-api";
 
 (globalThis as { __DEV__?: boolean }).__DEV__ = true;
@@ -39,15 +39,15 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
 
     const names: (keyof CordierePublicApi)[] = [
       "registerTool",
-      "useCordieriteTool",
+      "useAppductTool",
       "jsonSchema",
       "postEvent",
       "getRegisteredTools",
-      "addCordieriteListener",
+      "addAppductListener",
       "restoreSession",
-      "getCordieriteState",
+      "getAppductState",
       "connect",
-      "getCordieriteBuildConfig",
+      "getAppductBuildConfig",
     ];
     for (const name of names) {
       expect(typeof realSatisfiesPublicApi[name]).toBe("function");
@@ -113,21 +113,21 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
     expect(noopModule.jsonSchema(rawSchema)).toBe(rawSchema);
   });
 
-  test("useCordieriteTool takes the same (definition, deps, options) arity on both entries", async () => {
+  test("useAppductTool takes the same (definition, deps, options) arity on both entries", async () => {
     const realModule = await import("../index");
     const noopModule = await import("../noop");
 
     // `CordierePublicApi` alone would not catch one entry silently dropping the third `options`
     // parameter — TS structurally accepts a function with fewer parameters where more are
     // expected, so `{ enabled }` support could drift without this failing at the type level.
-    // Both entries build `useCordieriteTool` from the same `createUseCordieriteTool` factory
-    // (see `useCordieriteTool.ts`), so this asserts that invariant holds rather than merely
+    // Both entries build `useAppductTool` from the same `createUseAppductTool` factory
+    // (see `useAppductTool.ts`), so this asserts that invariant holds rather than merely
     // hoping it does — `.length` reflects the function's declared (non-rest, non-default)
     // parameter count at runtime.
-    expect(realModule.useCordieriteTool.length).toBe(
-      noopModule.useCordieriteTool.length,
+    expect(realModule.useAppductTool.length).toBe(
+      noopModule.useAppductTool.length,
     );
-    expect(realModule.useCordieriteTool.length).toBe(3);
+    expect(realModule.useAppductTool.length).toBe(3);
   });
 });
 
@@ -150,11 +150,11 @@ describe("noop entry: runtime no-op behavior", () => {
     await expect(postEvent("anything", { a: 1 })).resolves.toBeUndefined();
   });
 
-  test("addCordieriteListener returns a disposer; the callback never fires", async () => {
-    const { addCordieriteListener } = await import("../noop");
+  test("addAppductListener returns a disposer; the callback never fires", async () => {
+    const { addAppductListener } = await import("../noop");
     let fired = false;
 
-    const subscription = addCordieriteListener("stateChange", () => {
+    const subscription = addAppductListener("stateChange", () => {
       fired = true;
     });
 
@@ -179,22 +179,22 @@ describe("noop entry: runtime no-op behavior", () => {
     await expect(restoreSession()).resolves.toBe(false);
   });
 
-  test('getCordieriteState() always returns "idle"', async () => {
-    const { getCordieriteState } = await import("../noop");
-    expect(getCordieriteState()).toBe("idle");
+  test('getAppductState() always returns "idle"', async () => {
+    const { getAppductState } = await import("../noop");
+    expect(getAppductState()).toBe("idle");
   });
 
-  test('getCordieriteBuildConfig() reports the documented "absent" shape', async () => {
-    const { getCordieriteBuildConfig } = await import("../noop");
+  test('getAppductBuildConfig() reports the documented "absent" shape', async () => {
+    const { getAppductBuildConfig } = await import("../noop");
 
-    expect(getCordieriteBuildConfig()).toEqual({
+    expect(getAppductBuildConfig()).toEqual({
       trust: "absent",
       hasEmbeddedPins: false,
       allowPrivateLanOnly: true,
     });
   });
 
-  test("connect() rejects with a CordieriteDisabledError (code: cordierite_disabled)", async () => {
+  test("connect() rejects with a AppductDisabledError (code: appduct_disabled)", async () => {
     const { connect } = await import("../noop");
 
     await expect(
@@ -205,7 +205,7 @@ describe("noop entry: runtime no-op behavior", () => {
         token: "a".repeat(43),
         expiresAt: Math.floor(Date.now() / 1000) + 60,
       }),
-    ).rejects.toThrow(CordieriteDisabledError);
+    ).rejects.toThrow(AppductDisabledError);
 
     try {
       await connect({
@@ -217,9 +217,9 @@ describe("noop entry: runtime no-op behavior", () => {
       });
       throw new Error("expected connect() to reject");
     } catch (error) {
-      expect(error).toBeInstanceOf(CordieriteDisabledError);
-      expect((error as CordieriteDisabledError).code).toBe(
-        "cordierite_disabled",
+      expect(error).toBeInstanceOf(AppductDisabledError);
+      expect((error as AppductDisabledError).code).toBe(
+        "appduct_disabled",
       );
     }
   });

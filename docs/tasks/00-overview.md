@@ -3,7 +3,7 @@
 This directory holds the task breakdown for replacing the current "default-inert release
 builds" design with a simpler one:
 
-- **Whether Cordierite is in the build** is decided by **autolinking**, in one place, by the
+- **Whether Appduct is in the build** is decided by **autolinking**, in one place, by the
   app author. No build-type detection anywhere in native code.
 - **What the client trusts** is decided by an explicit `trust` config value, not derived from
   whether the build happens to be debuggable.
@@ -44,15 +44,15 @@ change, update this file first so parallel work sees it.
 Expo (`package.json`, **not** `app.json`):
 
 ```json
-{ "expo": { "autolinking": { "ios": { "exclude": ["@cordierite/react-native"] },
-                             "android": { "exclude": ["@cordierite/react-native"] } } } }
+{ "expo": { "autolinking": { "ios": { "exclude": ["@appduct/react-native"] },
+                             "android": { "exclude": ["@appduct/react-native"] } } } }
 ```
 
 Bare RN (`react-native.config.js` at the app root):
 
 ```js
 module.exports = {
-  dependencies: { "@cordierite/react-native": { platforms: { ios: null, android: null } } },
+  dependencies: { "@appduct/react-native": { platforms: { ios: null, android: null } } },
 };
 ```
 
@@ -62,7 +62,7 @@ env var in `app.config.ts`. This is a supported-workflow statement, documented a
 ### Plugin option surface
 
 ```json
-["@cordierite/react-native", {
+["@appduct/react-native", {
   "include": true,
   "trust": "pin",
   "cliPins": ["sha256/..."],
@@ -89,28 +89,28 @@ time, making the native error a second line of defence rather than the only one.
 
 **Discovered during task 02:** excluding a module from autolinking on iOS also stops its
 **codegen** from running, so an app that excludes the package but still references the pod by
-hand (as the playground does for its XCTest target) will fail to compile — `RCTNativeCordierite.mm`
-imports the generated `CordieriteSpec.h`. Normal consumers are unaffected, since excluding and
+hand (as the playground does for its XCTest target) will fail to compile — `RCTNativeAppduct.mm`
+imports the generated `AppductSpec.h`. Normal consumers are unaffected, since excluding and
 hand-adding the pod is a combination only a maintainer would use. Task 09 should document it.
 
 ### Native config keys the plugin writes
 
 | Platform | Key | Value |
 | --- | --- | --- |
-| iOS `Info.plist` | `CordieriteCliPins` | array of `sha256/...` |
-| iOS `Info.plist` | `CordieriteTrust` | `"link"` \| `"pin"` |
-| iOS `Info.plist` | `CordieriteAllowPrivateLanOnly` | Boolean |
-| Android meta-data | `com.callstackincubator.cordierite.CLI_PINS` | JSON array string |
-| Android meta-data | `com.callstackincubator.cordierite.TRUST` | `"link"` \| `"pin"` |
-| Android meta-data | `com.callstackincubator.cordierite.ALLOW_PRIVATE_LAN_ONLY` | Boolean |
+| iOS `Info.plist` | `AppductCliPins` | array of `sha256/...` |
+| iOS `Info.plist` | `AppductTrust` | `"link"` \| `"pin"` |
+| iOS `Info.plist` | `AppductAllowPrivateLanOnly` | Boolean |
+| Android meta-data | `com.callstackincubator.appduct.CLI_PINS` | JSON array string |
+| Android meta-data | `com.callstackincubator.appduct.TRUST` | `"link"` \| `"pin"` |
+| Android meta-data | `com.callstackincubator.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean |
 
 ### Deleted outright
 
 `enableInReleaseBuilds` (plugin option), `ENABLE_IN_RELEASE` (manifest meta-data),
-`CORDIERITE_ENABLE_RELEASE` (Swift compilation condition + `GCC_PREPROCESSOR_DEFINITIONS`
+`APPDUCT_ENABLE_RELEASE` (Swift compilation condition + `GCC_PREPROCESSOR_DEFINITIONS`
 macro), the Podfile `post_install` injection and its marker, `#if DEBUG ||
-CORDIERITE_ENABLE_RELEASE` in both iOS files, `parseEnableInRelease`,
-`isCordieriteRegistrationEnabled`, and every `isDebugBuild`/`FLAG_DEBUGGABLE` term in trust
+APPDUCT_ENABLE_RELEASE` in both iOS files, `parseEnableInRelease`,
+`isAppductRegistrationEnabled`, and every `isDebugBuild`/`FLAG_DEBUGGABLE` term in trust
 resolution.
 
 None of this has ever been published — npm's latest is `0.3.1`, this branch is
@@ -128,14 +128,14 @@ None of this has ever been published — npm's latest is `0.3.1`, this branch is
 ### What we give up, deliberately
 
 Removing the build-type gate means a production pipeline that forgets the autolinking
-exclude ships a working Cordierite, where today the `debuggable` check would have caught it.
-Task 08 (`cordierite doctor`) is the replacement: an artifact-level assertion you can run as
+exclude ships a working Appduct, where today the `debuggable` check would have caught it.
+Task 08 (`appduct doctor`) is the replacement: an artifact-level assertion you can run as
 a release gate. It is not optional to this design.
 
-**Revisited post-implementation:** the shipped default (unset `CORDIERITE_ENABLED` = included
+**Revisited post-implementation:** the shipped default (unset `APPDUCT_ENABLED` = included
 in every variant) turned out to be the opposite of the intended dev-only default, and was
 reported as a bug. The fix restores a build-type split, driven by the same single
-`CORDIERITE_ENABLED` variable this task establishes rather than a second overlapping switch —
+`APPDUCT_ENABLED` variable this task establishes rather than a second overlapping switch —
 but the mechanism differs by platform, discovered while fixing it:
 
 - **iOS:** `react-native.config.js` sets CocoaPods' `:configurations` (real per-variant
@@ -148,21 +148,21 @@ but the mechanism differs by platform, discovered while fixing it:
   referencing a class absent from an unlisted variant's classpath — a compile error, caught by
   CI, not an inert build. So Android links this project into every variant unconditionally
   (`buildTypes` stays empty/omitted in `react-native.config.js`) and the split moved into
-  `android/build.gradle` instead: `CORDIERITE_ENABLED`-driven Kotlin source-set selection for
+  `android/build.gradle` instead: `APPDUCT_ENABLED`-driven Kotlin source-set selection for
   the `release` build type (`debug` always compiles the real implementation; `release`
-  compiles either the same real files or a no-op `CordieritePackage` at the same
-  fully-qualified name). This also meant `cordierite doctor`'s Android detection needed
+  compiles either the same real files or a no-op `AppductPackage` at the same
+  fully-qualified name). This also meant `appduct doctor`'s Android detection needed
   tightening — the no-op stub necessarily shares the real implementation's package name and
   the config plugin writes the same manifest meta-data regardless of variant, so two of the
   three Android signals no longer independently prove inclusion; only the
-  `CordieriteNativeMarker` keep-rule signal does now (see
-  `packages/cordierite/src/artifact-inspect.ts`'s file comment).
+  `AppductNativeMarker` keep-rule signal does now (see
+  `packages/appduct/src/artifact-inspect.ts`'s file comment).
 
 Both mechanisms are narrower than the `debuggable`/`#if DEBUG` gate this task removed (no
 runtime check, no custom-flavor detection), so problem #1 above (the gate keyed on the wrong
 axis) still does not recur: a release-signed internal/QA build simply sets
-`CORDIERITE_ENABLED=1` for that pipeline, same as it would have set `CORDIERITE_ENABLED=0` to
-exclude. `cordierite doctor` remains the artifact-level check either way.
+`APPDUCT_ENABLED=1` for that pipeline, same as it would have set `APPDUCT_ENABLED=0` to
+exclude. `appduct doctor` remains the artifact-level check either way.
 
 ## Task list and ordering
 
@@ -170,12 +170,12 @@ exclude. `cordierite doctor` remains the artifact-level check either way.
 | --- | --- | --- |
 | 01 | Purge stale task references | — (must land first, alone) |
 | 02 | Fix autolinking exclusion (docs + playground) | 01 |
-| 03 | `useCordieriteTool({ enabled })` | 01 |
+| 03 | `useAppductTool({ enabled })` | 01 |
 | 04 | Remove native build-time gating | 01 |
 | 05 | Explicit trust mode in native clients | 01 |
 | 06 | Config plugin rewrite | 04, 05 |
 | 07 | Native module constants → JS | 05 |
-| 08 | `cordierite doctor` artifact check | 01 |
+| 08 | `appduct doctor` artifact check | 01 |
 | 09 | Docs, migration, CI | all |
 
 **Parallelization:**
@@ -183,8 +183,8 @@ exclude. `cordierite doctor` remains the artifact-level check either way.
 - **Wave 0 (alone):** 01. It edits comments in ~37 files; landing it concurrently with
   anything else guarantees conflicts.
 - **Wave 1 (parallel, no shared files):** 02, 03, 04, 05, 08. Task 04 touches
-  `CordieritePackage.kt`, the two iOS entry files, and the podspec; task 05 touches
-  `CordieriteConnectionManager.{kt,swift}`. Verify that split holds before starting both.
+  `AppductPackage.kt`, the two iOS entry files, and the podspec; task 05 touches
+  `AppductConnectionManager.{kt,swift}`. Verify that split holds before starting both.
 - **Wave 2 (parallel):** 06 and 07, once the key names in 04/05 are real rather than
   contract-only.
 - **Wave 3:** 09, last, once behavior is settled.

@@ -1,7 +1,7 @@
 // Standalone Gradle project for the framework-free Android core (docs/tasks/14-native-core-extraction.md).
 // Not part of the pnpm/Turbo workspace and not autolinked into any app -- it exists so `core` and
 // `core-noop` can be built, tested, and (eventually, Phase 3) published on their own, independent of
-// any React Native/Expo project. `@cordierite/react-native` vendors these sources at build time
+// any React Native/Expo project. `@appduct/react-native` vendors these sources at build time
 // (packages/react-native/scripts/sync-native-core.mjs) rather than depending on published artifacts
 // of this project -- see packages/native/README.md.
 //
@@ -24,12 +24,12 @@ buildscript {
 import groovy.json.JsonSlurper
 
 // Single source of truth for the version every published artifact here carries (core, core-noop,
-// and -- once this project is a real dependency rather than something vendored -- CordieriteCore).
+// and -- once this project is a real dependency rather than something vendored -- AppductCore).
 // This repo's three npm packages have always versioned in lockstep (docs/CI.md's release policy);
-// reading it from @cordierite/react-native's package.json avoids a fourth place that number could
-// drift out of sync, exactly like `Cordierite.podspec` already does for iOS.
+// reading it from @appduct/react-native's package.json avoids a fourth place that number could
+// drift out of sync, exactly like `Appduct.podspec` already does for iOS.
 def rnPackageJson = new JsonSlurper().parse(file("$rootDir/../../react-native/package.json"))
-ext.cordieriteVersion = rnPackageJson.version
+ext.appductVersion = rnPackageJson.version
 
 ext {
   compileSdkVersion = 35

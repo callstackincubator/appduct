@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, vi, test } from "vitest";
 
-import type { Spec } from "../NativeCordierite";
+import type { Spec } from "../NativeAppduct";
 
 (globalThis as { __DEV__?: boolean }).__DEV__ = true;
 
@@ -17,8 +17,8 @@ import type { Spec } from "../NativeCordierite";
  *
  * "react-native"'s own source cannot be parsed under a Node test runner (Flow-typed; see
  * `deep-link-install.test.ts` for the same constraint), so it is mocked with working `AppState`/
- * `Linking` stubs. The native-module loader resolves to a nullish `NativeCordierite` export --
- * the same "not found" case `CordieriteModule.ts`'s defensive check
+ * `Linking` stubs. The native-module loader resolves to a nullish `NativeAppduct` export --
+ * the same "not found" case `AppductModule.ts`'s defensive check
  * treats identically to the real module throwing from `TurboModuleRegistry.getEnforcing` (Expo Go, a
  * misconfigured build, an inert release build, or this test's environment).
  */
@@ -28,11 +28,11 @@ const resetMocks = async () => {
   nativeAccessAttempts = 0;
   vi.resetModules();
 
-  const { __cordieriteSetNativeModuleLoaderForTests } =
-    await import("../CordieriteModule");
-  __cordieriteSetNativeModuleLoaderForTests(() => {
+  const { __appductSetNativeModuleLoaderForTests } =
+    await import("../AppductModule");
+  __appductSetNativeModuleLoaderForTests(() => {
     nativeAccessAttempts += 1;
-    return { NativeCordierite: undefined as unknown as Spec };
+    return { NativeAppduct: undefined as unknown as Spec };
   });
 
   vi.doMock("react-native", () => ({
@@ -55,7 +55,7 @@ const validConnectInput = () => ({
   expiresAt: Math.floor(Date.now() / 1000) + 60,
 });
 
-describe("root entry (@cordierite/react-native): TurboModule laziness", () => {
+describe("root entry (@appduct/react-native): TurboModule laziness", () => {
   beforeEach(async () => {
     await resetMocks();
   });
@@ -66,9 +66,9 @@ describe("root entry (@cordierite/react-native): TurboModule laziness", () => {
   });
 
   test("restoreSession lazily reads the native lease and tolerates a missing module", async () => {
-    const { cordieriteClient } = await import("../index");
+    const { appductClient } = await import("../index");
 
-    await expect(cordieriteClient.restoreSession()).resolves.toBe(false);
+    await expect(appductClient.restoreSession()).resolves.toBe(false);
     expect(nativeAccessAttempts).toBeGreaterThan(0);
   });
 
@@ -93,27 +93,27 @@ describe("root entry (@cordierite/react-native): TurboModule laziness", () => {
     // guarantee is that neither that attempt nor `registerTool` itself ever throws.
   });
 
-  test("getCordieriteState() never throws, even with no native module available", async () => {
+  test("getAppductState() never throws, even with no native module available", async () => {
     // Since opt-in hardening this *does* touch the native module once, via the
-    // `isCordieriteNativeModuleAvailable` availability probe every exported function now runs —
+    // `isAppductNativeModuleAvailable` availability probe every exported function now runs —
     // unlike before, when only `connect` ever reached the native layer. The probe itself never
-    // throws (`CordieriteModule.ts` catches internally), so the guarantee this test cares about
+    // throws (`AppductModule.ts` catches internally), so the guarantee this test cares about
     // (no throw) still holds; only the "never touches" framing changed.
-    const { getCordieriteState } = await import("../index");
+    const { getAppductState } = await import("../index");
 
-    expect(getCordieriteState()).toBe("idle");
+    expect(getAppductState()).toBe("idle");
   });
 
   test("connect() degrades to the exact ./noop behavior when no native module is available", async () => {
     const { connect } = await import("../index");
     // Imported dynamically (not statically at the top of the file) so this is the *same* module
     // instance `connect`'s rejection actually throws from — `vi.resetModules()` in `resetMocks`
-    // means a static top-level import would resolve to a stale, different `Cordierite.types`
+    // means a static top-level import would resolve to a stale, different `Appduct.types`
     // instance, and `instanceof`/`toThrow(Class)` would spuriously fail across that boundary.
-    const { CordieriteDisabledError } = await import("../Cordierite.types");
+    const { AppductDisabledError } = await import("../Appduct.types");
 
     await expect(connect(validConnectInput())).rejects.toThrow(
-      CordieriteDisabledError,
+      AppductDisabledError,
     );
     expect(nativeAccessAttempts).toBeGreaterThan(0);
   });

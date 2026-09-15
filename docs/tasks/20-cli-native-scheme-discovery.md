@@ -1,21 +1,21 @@
-# 20 — `cordierite init` and scheme discovery for plain iOS/Android apps
+# 20 — `appduct init` and scheme discovery for plain iOS/Android apps
 
 **Depends on nothing in this directory. Parallel siblings (Phase 3 of issue #48) own
 `packages/native/**` and `packages/react-native/**`; this task owns only
-`packages/cordierite/**` and this file.**
+`packages/appduct/**` and this file.**
 
 ## Goal
 
-Issue #48's Phase 3 bullet: *"`cordierite init` / scheme discovery: read `CFBundleURLTypes`
-from an Xcode project's Info.plist and the `cordieriteScheme` placeholder from a Gradle
+Issue #48's Phase 3 bullet: *"`appduct init` / scheme discovery: read `CFBundleURLTypes`
+from an Xcode project's Info.plist and the `appductScheme` placeholder from a Gradle
 project, alongside today's `app.json` step."* Before this task, `resolveScheme`'s last step
 (`scheme.ts`) was a single check — `<cwd>/app.json`'s `expo.scheme` — with no static-file path
 for a plain (non-Expo) native app to declare its deep-link scheme at all. A bare-RN or fully
-native iOS/Android app had to fall back to `--scheme`, `CORDIERITE_SCHEME`, or a hand-written
-`.cordierite/config.json` for every single command.
+native iOS/Android app had to fall back to `--scheme`, `APPDUCT_SCHEME`, or a hand-written
+`.appduct/config.json` for every single command.
 
 This task extends that one step into four more probes, all still static-file reads, all
-reported in `resolveScheme`'s `tried` list, and all shared verbatim by `cordierite init`.
+reported in `resolveScheme`'s `tried` list, and all shared verbatim by `appduct init`.
 
 ## What is probed, and in what order
 
@@ -23,7 +23,7 @@ reported in `resolveScheme`'s `tried` list, and all shared verbatim by `cordieri
 
 1. `<cwd>/app.json`'s `expo.scheme` — unchanged from before this task.
 2. **`android-gradle`**: `app/build.gradle.kts`, then `app/build.gradle`, for a
-   `manifestPlaceholders["cordieriteScheme"] = "…"` (or `manifestPlaceholders.cordieriteScheme =
+   `manifestPlaceholders["appductScheme"] = "…"` (or `manifestPlaceholders.appductScheme =
    "…"`) assignment — a regex match inside the raw file text, not a Gradle evaluation.
 3. **`android-manifest`**: `app/src/main/AndroidManifest.xml`, for the first `<data
    android:scheme="…">` inside an `<intent-filter>` that also declares
@@ -47,7 +47,7 @@ anywhere" error (`describeMissingScheme`) always lists all nine locations `resol
 consult end to end (flag, env, project-config walk-up, state config, then these five), not just
 whichever ones exist on disk.
 
-`cordierite init` (`commands/init.ts`) runs this *exact* function
+`appduct init` (`commands/init.ts`) runs this *exact* function
 (`discoverStaticProjectScheme`) for its own discovery, deliberately skipping steps 1-4 of the
 full precedence chain (flag/env/project-config walk-up/state-config) for the reasons its doc
 comment already gave pre-#48: `init` decides what to *write*, so it must never bake an ambient
@@ -102,8 +102,8 @@ there short-circuits before any native probe runs at all (unchanged from pre-#48
 ## Deviations from the issue's sketch
 
 - The issue's Phase 3 sketch shows only the bracket form,
-  `manifestPlaceholders["cordieriteScheme"] = "myapp"`, for the Gradle placeholder. The
-  property form, `manifestPlaceholders.cordieriteScheme = "myapp"`, is accepted too — it is
+  `manifestPlaceholders["appductScheme"] = "myapp"`, for the Gradle placeholder. The
+  property form, `manifestPlaceholders.appductScheme = "myapp"`, is accepted too — it is
   common enough in real `build.gradle.kts` files that only supporting the bracket form would
   be a needless gap for the Kotlin DSL specifically.
 - "`*.xcodeproj/../Info.plist`" from the issue's phrasing (the `Info.plist` sitting next to an
@@ -122,30 +122,30 @@ there short-circuits before any native probe runs at all (unchanged from pre-#48
 
 ## Where this lives
 
-- `packages/cordierite/src/native-scheme.ts` — the four probes, the tolerant plist parser, the
+- `packages/appduct/src/native-scheme.ts` — the four probes, the tolerant plist parser, the
   directory walk, and `discoverNativeScheme`'s disagreement check.
-- `packages/cordierite/src/scheme.ts` — `discoverStaticProjectScheme`, the shared step-5
-  implementation `resolveScheme` and `cordierite init` both call; `SchemeSource` gained the
+- `packages/appduct/src/scheme.ts` — `discoverStaticProjectScheme`, the shared step-5
+  implementation `resolveScheme` and `appduct init` both call; `SchemeSource` gained the
   four new tags.
-- `packages/cordierite/src/commands/init.ts` — switched from calling `discoverExpoScheme`
+- `packages/appduct/src/commands/init.ts` — switched from calling `discoverExpoScheme`
   directly to `discoverStaticProjectScheme`; `InitCommandData` gained `origin` and the four new
   `source` values.
-- `packages/cordierite/src/output.ts` — `cordierite init`'s human output gained a "Read from"
+- `packages/appduct/src/output.ts` — `appduct init`'s human output gained a "Read from"
   field and a "Scheme … was read from …" hint in `Next`, present only when the scheme came from
   a discovery tier rather than `--scheme`/an already-recorded value.
-- Tests: `packages/cordierite/src/__tests__/native-scheme.test.ts` (the four probes in
+- Tests: `packages/appduct/src/__tests__/native-scheme.test.ts` (the four probes in
   isolation — table-driven per probe, the depth/size limits, binary-plist handling, the
   disagreement error) and the "native project discovery" cases added to
-  `packages/cordierite/src/__tests__/init.integration.test.ts`; the pre-existing
+  `packages/appduct/src/__tests__/init.integration.test.ts`; the pre-existing
   `scheme.test.ts`/`scheme-discovery.integration.test.ts` cover the resolver-level precedence
   unchanged.
 
 ## Acceptance
 
-- `pnpm --filter cordierite build && pnpm --filter cordierite test && pnpm --filter cordierite typecheck`
+- `pnpm --filter appduct build && pnpm --filter appduct test && pnpm --filter appduct typecheck`
   all pass.
 - A plain Xcode app (an `Info.plist` with `CFBundleURLTypes`, no `app.json`) and a plain Gradle
-  app (a `cordieriteScheme` placeholder, no `app.json`) each resolve a scheme with zero
+  app (a `appductScheme` placeholder, no `app.json`) each resolve a scheme with zero
   additional configuration, matching the Expo `app.json` zero-config path issue #29 shipped.
 - Nothing under `packages/native/**`, `packages/react-native/**` or `playground*/**` changed —
   this task is CLI-only, per Phase 3's split across parallel PRs.

@@ -4,24 +4,24 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { z } from "zod";
 import {
   getRegisteredTools,
-  useCordieriteTool,
-  type CordieriteToolExecutionContext,
-} from "@cordierite/react-native";
+  useAppductTool,
+  type AppductToolExecutionContext,
+} from "@appduct/react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Layout, Radius } from "@/constants/theme";
 import { useThemeColor } from "@/hooks/use-theme-color";
 
 // The playground is deliberately *not* the zero-config path: app.json pins `cliPins` with
-// `trust: "pin"` to the fixture key checked in at playground/.cordierite/key.pem, so only the
+// `trust: "pin"` to the fixture key checked in at playground/.appduct/key.pem, so only the
 // launcher below (which points --state-dir at that directory) serves a key this build will trust.
-// A bare `cordierite link` would mint a link from the global daemon and fail the TLS pin.
+// A bare `appduct link` would mint a link from the global daemon and fail the TLS pin.
 //
 // In a normal app there is no keygen and no pin to paste: the daemon generates its own key, and
-// `cordierite link` reads the scheme straight out of app.json's `expo.scheme`.
+// `appduct link` reads the scheme straight out of app.json's `expo.scheme`.
 const CONNECT_COMMANDS = [
   "pnpm exec expo run:ios   # or: pnpm exec expo run:android",
-  "pnpm run playground:cordierite -- link --open ios-sim   # or: --open android / --qr",
+  "pnpm run playground:appduct -- link --open ios-sim   # or: --open android / --qr",
 ].join("\n");
 
 /** Delays `ms` without leaking a dangling timer past the call: each tool invocation owns its own. */
@@ -48,14 +48,14 @@ export default function ToolsScreen() {
   const [callCount, setCallCount] = useState(0);
   const [tools, setTools] = useState<RegisteredTool[]>([]);
 
-  // Plain state, no ref: `useCordieriteTool` registers a stable wrapper that forwards to the
+  // Plain state, no ref: `useAppductTool` registers a stable wrapper that forwards to the
   // latest render's handler, so `call_count` below reads the current `callCount` on every call
   // without being re-registered on each increment.
   const bumpCallCount = () => {
     setCallCount((count) => count + 1);
   };
 
-  useCordieriteTool({
+  useAppductTool({
     name: "sum",
     description: "Adds two numbers.",
     inputSchema: z.object({
@@ -71,7 +71,7 @@ export default function ToolsScreen() {
     },
   });
 
-  useCordieriteTool({
+  useAppductTool({
     name: "call_count",
     description: "Reports how many times the playground's counted tools have run.",
     annotations: { readOnlyHint: true },
@@ -83,7 +83,7 @@ export default function ToolsScreen() {
     handler: () => ({ count: callCount }),
   });
 
-  useCordieriteTool({
+  useAppductTool({
     name: "reset_counter",
     description: "Resets the playground's call counter to zero.",
     annotations: { destructiveHint: true },
@@ -96,14 +96,14 @@ export default function ToolsScreen() {
     },
   });
 
-  useCordieriteTool({
+  useAppductTool({
     name: "slow_task",
     description: "Takes ~1.5s and reports progress along the way.",
     outputSchema: z.object({
       done: z.boolean(),
     }),
     timeoutMs: 5_000,
-    handler: async (_args, context: CordieriteToolExecutionContext) => {
+    handler: async (_args, context: AppductToolExecutionContext) => {
       for (const [progress, message] of [
         [0.33, "warming up"],
         [0.66, "almost there"],
@@ -117,7 +117,7 @@ export default function ToolsScreen() {
     },
   });
 
-  useCordieriteTool({
+  useAppductTool({
     name: "throwing_tool",
     description: "Always throws, to exercise tool_execution_error.",
     handler: () => {
@@ -152,7 +152,7 @@ export default function ToolsScreen() {
           <ThemedText type="overline" style={styles.heroEyebrow}>
             Expo app
           </ThemedText>
-          <ThemedText type="hero">Cordierite</ThemedText>
+          <ThemedText type="hero">Appduct</ThemedText>
         </View>
 
         <View style={cardStyle}>
@@ -164,12 +164,12 @@ export default function ToolsScreen() {
           </View>
           <ThemedText type="caption" style={styles.cardHint}>
             Then drive tools from another terminal, via the same launcher: pnpm run
-            playground:cordierite -- ls / tools / invoke sum --input
+            playground:appduct -- ls / tools / invoke sum --input
             {" '{\"a\":1,\"b\":2}'"}.
           </ThemedText>
           <ThemedText type="caption" style={styles.cardHint}>
             The launcher exists because this app pins its fixture key (app.json&apos;s cliPins with
-            trust: &quot;pin&quot;), so it only trusts the daemon in playground/.cordierite. Your own
+            trust: &quot;pin&quot;), so it only trusts the daemon in playground/.appduct. Your own
             app needs none of this: no keygen, no pins, and the scheme is read from app.json.
           </ThemedText>
         </View>

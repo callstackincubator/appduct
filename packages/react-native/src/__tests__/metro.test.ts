@@ -9,8 +9,8 @@ import { describe, expect, test, vi } from "vitest";
 // without adding a `require` ambient declaration to this test file.
 const require = createRequire(import.meta.url);
 
-const cordieriteMetro = require("../../metro.js") as {
-  withCordierite: (
+const appductMetro = require("../../metro.js") as {
+  withAppduct: (
     config: unknown,
     options?: { include?: boolean },
   ) => {
@@ -46,7 +46,7 @@ function makeContext(resolveRequest: MetroResolveRequest) {
   return { resolveRequest };
 }
 
-const { withCordierite, __testables } = cordieriteMetro;
+const { withAppduct, __testables } = appductMetro;
 const {
   deriveRedirectSpecifiers,
   specifierForSubpath,
@@ -54,25 +54,25 @@ const {
   PACKAGE_NAME,
 } = __testables;
 
-describe("withCordierite: default (include unset / true)", () => {
+describe("withAppduct: default (include unset / true)", () => {
   test("returns the config untouched -- no resolver installed", () => {
     const config = { resolver: { sourceExts: ["ts"] } };
-    const result = withCordierite(config);
+    const result = withAppduct(config);
     expect(result).toBe(config);
   });
 
   test("explicit include: true also leaves the config untouched", () => {
     const config = { resolver: { sourceExts: ["ts"] } };
-    const result = withCordierite(config, { include: true });
+    const result = withAppduct(config, { include: true });
     expect(result).toBe(config);
   });
 });
 
-describe("withCordierite: include: false", () => {
+describe("withAppduct: include: false", () => {
   test("redirects the root entry to /noop", () => {
     const defaultResolveRequest = makeDefaultResolveRequest();
     const config = { resolver: {} };
-    const result = withCordierite(config, { include: false });
+    const result = withAppduct(config, { include: false });
     const resolveRequest = result.resolver!.resolveRequest!;
 
     const resolution = resolveRequest(
@@ -92,7 +92,7 @@ describe("withCordierite: include: false", () => {
   test("redirects the /auto entry to /noop", () => {
     const defaultResolveRequest = makeDefaultResolveRequest();
     const config = { resolver: {} };
-    const result = withCordierite(config, { include: false });
+    const result = withAppduct(config, { include: false });
     const resolveRequest = result.resolver!.resolveRequest!;
 
     const resolution = resolveRequest(
@@ -107,7 +107,7 @@ describe("withCordierite: include: false", () => {
   test("never redirects /noop itself", () => {
     const defaultResolveRequest = makeDefaultResolveRequest();
     const config = { resolver: {} };
-    const result = withCordierite(config, { include: false });
+    const result = withAppduct(config, { include: false });
     const resolveRequest = result.resolver!.resolveRequest!;
 
     const resolution = resolveRequest(
@@ -127,7 +127,7 @@ describe("withCordierite: include: false", () => {
   test("passes an unrelated specifier through untouched", () => {
     const defaultResolveRequest = makeDefaultResolveRequest();
     const config = { resolver: {} };
-    const result = withCordierite(config, { include: false });
+    const result = withAppduct(config, { include: false });
     const resolveRequest = result.resolver!.resolveRequest!;
 
     const resolution = resolveRequest(
@@ -150,7 +150,7 @@ describe("withCordierite: include: false", () => {
       filePath: `/custom-resolver/${moduleName}`,
     }));
     const config = { resolver: { resolveRequest: existingResolveRequest } };
-    const result = withCordierite(config, { include: false });
+    const result = withAppduct(config, { include: false });
     const resolveRequest = result.resolver!.resolveRequest!;
     const fallbackContext = makeContext(makeDefaultResolveRequest());
 
@@ -177,7 +177,7 @@ describe("withCordierite: include: false", () => {
     const config = {
       resolver: { resolveRequest: originalResolveRequest, sourceExts: ["ts"] },
     };
-    withCordierite(config, { include: false });
+    withAppduct(config, { include: false });
 
     expect(config.resolver.resolveRequest).toBe(originalResolveRequest);
   });
@@ -238,16 +238,16 @@ describe("deriveRedirectSpecifiers: derived from exports, not hardcoded", () => 
   });
 });
 
-describe("withCordierite: driven end-to-end by a real (modified) package.json", () => {
-  test("a new exports entry point added to package.json is redirected by withCordierite itself, not just by the pure deriveRedirectSpecifiers function", () => {
-    // `withCordierite` reads `require("./package.json")` relative to `metro.js`'s own location,
+describe("withAppduct: driven end-to-end by a real (modified) package.json", () => {
+  test("a new exports entry point added to package.json is redirected by withAppduct itself, not just by the pure deriveRedirectSpecifiers function", () => {
+    // `withAppduct` reads `require("./package.json")` relative to `metro.js`'s own location,
     // not an injectable parameter -- so the only way to prove *it*, not just
     // `deriveRedirectSpecifiers` in isolation, actually redirects a newly-added entry point is to
     // run it against a real package.json on disk that has one. Copies `metro.js` alongside a
     // `package.json` cloned from the real one plus one extra entry, in a scratch directory, and
     // requires that copy fresh.
     const scratchDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "cordierite-metro-test-"),
+      path.join(os.tmpdir(), "appduct-metro-test-"),
     );
     try {
       const realPackageJsonPath = require.resolve("../../package.json");
@@ -264,7 +264,7 @@ describe("withCordierite: driven end-to-end by a real (modified) package.json", 
         JSON.stringify(pkg, null, 2),
       );
       fs.copyFileSync(realMetroJsPath, path.join(scratchDir, "metro.js"));
-      // `metro.js` requires `./autolink-env` for its `CORDIERITE_ENABLED` default, so the copy
+      // `metro.js` requires `./autolink-env` for its `APPDUCT_ENABLED` default, so the copy
       // needs it beside them or the scratch require fails before any redirect is exercised.
       fs.copyFileSync(
         require.resolve("../../autolink-env.js"),
@@ -273,12 +273,12 @@ describe("withCordierite: driven end-to-end by a real (modified) package.json", 
 
       const scratchRequire = createRequire(path.join(scratchDir, "metro.js"));
       const scratchMetro = scratchRequire("./metro.js") as {
-        withCordierite: typeof withCordierite;
+        withAppduct: typeof withAppduct;
       };
 
       const defaultResolveRequest = makeDefaultResolveRequest();
       const config = { resolver: {} };
-      const result = scratchMetro.withCordierite(config, { include: false });
+      const result = scratchMetro.withAppduct(config, { include: false });
       const resolveRequest = result.resolver!.resolveRequest!;
 
       const resolution = resolveRequest(

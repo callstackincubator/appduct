@@ -1,0 +1,155 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`mcp: tools/list and tools/call > the generated MCP tool list (built-ins + one proxied tool) matches the locked mapping 1`] = `
+[
+  {
+    "annotations": undefined,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bundleId": {
+          "type": "string",
+        },
+        "device": {
+          "type": "string",
+        },
+        "relaunch": {
+          "type": "boolean",
+        },
+        "target": {
+          "enum": [
+            "android",
+            "ios-sim",
+            "ios-device",
+            "none",
+          ],
+          "type": "string",
+        },
+        "ttlSeconds": {
+          "exclusiveMinimum": 0,
+          "type": "number",
+        },
+      },
+      "type": "object",
+    },
+    "name": "appduct_connect",
+    "outputSchema": undefined,
+  },
+  {
+    "annotations": undefined,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "kinds": {
+          "items": {
+            "enum": [
+              "daemon_started",
+              "link_created",
+              "link_expired",
+              "session_claimed",
+              "session_suspended",
+              "session_resumed",
+              "session_revoked",
+              "session_expired",
+              "tools_changed",
+              "app_event",
+              "tool_call_started",
+              "tool_call_progress",
+              "tool_call_finished",
+            ],
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "limit": {
+          "exclusiveMinimum": 0,
+          "type": "integer",
+        },
+        "selector": {
+          "type": "string",
+        },
+        "since": {
+          "minimum": 0,
+          "type": "integer",
+        },
+      },
+      "type": "object",
+    },
+    "name": "appduct_events",
+    "outputSchema": undefined,
+  },
+  {
+    "annotations": undefined,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "match": {
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null",
+            ],
+          },
+          "type": "object",
+        },
+        "name": {
+          "type": "string",
+        },
+        "selector": {
+          "type": "string",
+        },
+        "since": {
+          "minimum": 0,
+          "type": "integer",
+        },
+        "timeoutMs": {
+          "exclusiveMinimum": 0,
+          "type": "number",
+        },
+      },
+      "required": [
+        "name",
+      ],
+      "type": "object",
+    },
+    "name": "appduct_wait_for_event",
+    "outputSchema": undefined,
+  },
+  {
+    "annotations": undefined,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "sessionId": {
+          "type": "string",
+        },
+        "timeoutMs": {
+          "exclusiveMinimum": 0,
+          "type": "number",
+        },
+      },
+      "required": [
+        "sessionId",
+      ],
+      "type": "object",
+    },
+    "name": "appduct_wait_for_session",
+    "outputSchema": undefined,
+  },
+  {
+    "annotations": undefined,
+    "inputSchema": {
+      "properties": {
+        "text": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "name": "echo",
+    "outputSchema": undefined,
+  },
+]
+`;

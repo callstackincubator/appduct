@@ -1,7 +1,7 @@
 {
-  "name": "@cordierite/shared",
+  "name": "@appduct/shared",
   "version": "0.8.0",
-  "description": "Shared library for Cordierite.",
+  "description": "Shared library for Appduct.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -15,16 +15,16 @@
     "./package.json": "./package.json"
   },
   "keywords": [
-    "cordierite",
+    "appduct",
     "react-native"
   ],
-  "repository": "https://github.com/callstackincubator/cordierite",
+  "repository": "https://github.com/callstackincubator/appduct",
   "bugs": {
-    "url": "https://github.com/callstackincubator/cordierite/issues"
+    "url": "https://github.com/callstackincubator/appduct/issues"
   },
   "author": "Szymon Chmal <szymon@chmal.it> (V3RON)",
   "license": "MIT",
-  "homepage": "https://github.com/callstackincubator/cordierite/tree/main/packages/shared#readme",
+  "homepage": "https://github.com/callstackincubator/appduct/tree/main/packages/shared#readme",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",

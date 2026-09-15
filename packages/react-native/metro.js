@@ -1,17 +1,17 @@
 /**
- * `@cordierite/react-native/metro` — the JS half of stripping Cordierite from a bundle (see
+ * `@appduct/react-native/metro` — the JS half of stripping Appduct from a bundle (see
  * `docs/tasks/12-metro-strip-helper.md`). Plain CommonJS at the package root, like
  * `app.plugin.js`, so it stays `require`-able from a Node-run `metro.config.js` without routing
  * through the `tsc` build that produces `build/` for the RN runtime.
  *
- * The native half — whether the Cordierite pod/module is compiled in at all — is decided by
+ * The native half — whether the Appduct pod/module is compiled in at all — is decided by
  * autolinking (`docs/tasks/00-overview.md`'s "Inclusion" contract), not by this file. Neither
- * half alone removes both; see `docs/BUILD-VARIANTS.md`'s "Compiling Cordierite out of production
+ * half alone removes both; see `docs/BUILD-VARIANTS.md`'s "Compiling Appduct out of production
  * builds" section.
  */
-const { isCordieriteAutolinkEnabled } = require("./autolink-env");
+const { isAppductAutolinkEnabled } = require("./autolink-env");
 
-const PACKAGE_NAME = "@cordierite/react-native";
+const PACKAGE_NAME = "@appduct/react-native";
 
 /** The specifier every redirected import gets rewritten to. Never itself redirected. */
 const NOOP_SPECIFIER = `${PACKAGE_NAME}/noop`;
@@ -34,17 +34,17 @@ const NON_MODULE_SUBPATHS = new Set([
 
 /**
  * Turns an `exports` subpath key (`"."`, `"./auto"`, ...) into the specifier apps actually
- * `import`/`require` (`"@cordierite/react-native"`, `"@cordierite/react-native/auto"`, ...).
+ * `import`/`require` (`"@appduct/react-native"`, `"@appduct/react-native/auto"`, ...).
  */
 function specifierForSubpath(subpath) {
   return subpath === "." ? PACKAGE_NAME : `${PACKAGE_NAME}/${subpath.slice(2)}`;
 }
 
 /**
- * Derives the list of specifiers that should redirect to `/noop` when Cordierite is excluded,
+ * Derives the list of specifiers that should redirect to `/noop` when Appduct is excluded,
  * from the package's own `exports` map rather than a hardcoded `["." , "/auto"]` list — so a
  * future entry point is covered automatically instead of silently falling through the crack this
- * task exists to close. Exported separately from `withCordierite` so it can be unit-tested
+ * task exists to close. Exported separately from `withAppduct` so it can be unit-tested
  * against a fabricated `exports` map (see `src/__tests__/metro.test.ts`) without needing a real
  * `require("./package.json")` round-trip.
  *
@@ -70,10 +70,10 @@ function deriveRedirectSpecifiers(exportsField) {
 }
 
 /**
- * `withCordierite(config, options?)` — wraps a Metro `config` so that, when Cordierite is excluded,
+ * `withAppduct(config, options?)` — wraps a Metro `config` so that, when Appduct is excluded,
  * every specifier derived from this package's `exports` (see `deriveRedirectSpecifiers`) resolves
- * to `@cordierite/react-native/noop` instead, stripping the deep-link listener, tool registry, and
- * client state machine from the bundle. With no `include` option it reads `CORDIERITE_ENABLED`,
+ * to `@appduct/react-native/noop` instead, stripping the deep-link listener, tool registry, and
+ * client state machine from the bundle. With no `include` option it reads `APPDUCT_ENABLED`,
  * the same variable that drives native autolinking, so one pipeline variable strips both surfaces.
  *
  * Composition: the single most important behavior here. A caller's existing
@@ -85,18 +85,18 @@ function deriveRedirectSpecifiers(exportsField) {
  * **Call this last**, after anything else that sets `config.resolver.resolveRequest` (see
  * `docs/BUILD-VARIANTS.md`'s "JS -- swap the module at bundle time" section). The existing
  * resolver is captured by reference at call time, not read lazily, so
- * `config.resolver.resolveRequest = myResolver` *after* `withCordierite` silently discards the
+ * `config.resolver.resolveRequest = myResolver` *after* `withAppduct` silently discards the
  * strip rather than erroring — there is no way to detect that misordering from in here, since a
  * later assignment to the returned config object is invisible to this function.
  */
-function withCordierite(config, options) {
-  // Defaults to the same `CORDIERITE_ENABLED` reading that drives native autolinking, so one
+function withAppduct(config, options) {
+  // Defaults to the same `APPDUCT_ENABLED` reading that drives native autolinking, so one
   // pipeline variable strips both surfaces. An explicit `include` still wins, for apps keying the
   // JS strip off their own predicate.
   const include =
     options && options.include !== undefined
       ? options.include
-      : isCordieriteAutolinkEnabled();
+      : isAppductAutolinkEnabled();
   if (include) {
     return config;
   }
@@ -125,7 +125,7 @@ function withCordierite(config, options) {
 }
 
 module.exports = {
-  withCordierite,
+  withAppduct,
   // Exposed for unit testing (`src/__tests__/metro.test.ts`) and only that -- not part of the
   // documented public API.
   __testables: {

@@ -3,7 +3,7 @@ export type EventSubscription = {
 };
 
 /** Native → JS: run the registered handler for `name` and answer with `respondToToolCall`. */
-export type CordieriteNativeToolCallEvent = {
+export type AppductNativeToolCallEvent = {
   id: string;
   name: string;
   /** JSON object, exactly the wire `tool_call.args`. */
@@ -11,18 +11,18 @@ export type CordieriteNativeToolCallEvent = {
 };
 
 /** Native → JS: abort the handler's signal. Native has already answered the daemon. */
-export type CordieriteNativeToolCancelEvent = {
+export type AppductNativeToolCancelEvent = {
   id: string;
   /** "client_cancelled" | "timeout" | "session_suspended" | the wire `tool_cancel.reason`. */
   reason: string;
 };
 
-export type CordieriteNativeStateChangeEvent = {
+export type AppductNativeStateChangeEvent = {
   state: string;
   reason?: string;
 };
 
-export type CordieriteNativeSessionChangeEvent = {
+export type AppductNativeSessionChangeEvent = {
   /** "claimed" | "resumed" | "lost" */
   type: string;
   sessionId: string | null;
@@ -32,7 +32,7 @@ export type CordieriteNativeSessionChangeEvent = {
   reason?: string;
 };
 
-export type CordieriteNativeErrorEvent = {
+export type AppductNativeErrorEvent = {
   phase: string;
   message: string;
   code?: string;
@@ -44,21 +44,21 @@ export type CordieriteNativeErrorEvent = {
   invocationId?: string;
 };
 
-export type CordieriteNativeEvents = {
-  toolCall: (event: CordieriteNativeToolCallEvent) => void;
-  toolCancel: (event: CordieriteNativeToolCancelEvent) => void;
-  stateChange: (event: CordieriteNativeStateChangeEvent) => void;
-  sessionChange: (event: CordieriteNativeSessionChangeEvent) => void;
-  error: (event: CordieriteNativeErrorEvent) => void;
+export type AppductNativeEvents = {
+  toolCall: (event: AppductNativeToolCallEvent) => void;
+  toolCancel: (event: AppductNativeToolCancelEvent) => void;
+  stateChange: (event: AppductNativeStateChangeEvent) => void;
+  sessionChange: (event: AppductNativeSessionChangeEvent) => void;
+  error: (event: AppductNativeErrorEvent) => void;
 };
 
 /**
- * Structural seam for the phase-2 TurboModule spec (`NativeCordierite.ts`,
+ * Structural seam for the phase-2 TurboModule spec (`NativeAppduct.ts`,
  * `docs/tasks/15-native-session-logic.md`): the native core owns session lifecycle, the tool
  * registry, and per-call timeout/cancel/progress, so this is the entire JS-facing surface —
  * everything crosses as JSON strings.
  */
-export type CordieriteNativeModuleLike = {
+export type AppductNativeModuleLike = {
   registerTool(descriptorJson: string): void;
   unregisterTool(name: string): void;
   handleUrl(url: string): boolean;
@@ -79,22 +79,22 @@ export type CordieriteNativeModuleLike = {
   getState(): string;
   getSessionId(): string | null;
   getRegisteredToolsJson(): string;
-  addListener<Event extends keyof CordieriteNativeEvents>(
+  addListener<Event extends keyof AppductNativeEvents>(
     eventName: Event,
-    listener: CordieriteNativeEvents[Event],
+    listener: AppductNativeEvents[Event],
   ): EventSubscription;
 };
 
 /**
- * Options for `createCordieriteClient`. Empty since issue #48 phase 2: `timers`/`appState`/
+ * Options for `createAppductClient`. Empty since issue #48 phase 2: `timers`/`appState`/
  * `resumeLeaseStore`/`sessionClaimDeviceFields` are gone — reconnect timing, foreground/background
  * gating, and lease recovery are entirely native-owned now, and device metadata overrides are
  * threaded straight through `connect()`'s input instead of a separate hook. `defaultToolTimeoutMs`
  * is also gone: the default per-call timeout is enforced natively
- * (`CordieriteClient`'s own `defaultToolTimeoutMs`, currently fixed at
- * `CORDIERITE_DEFAULT_TOOL_TIMEOUT_MS`), and the frozen TurboModule spec has no channel for JS to
+ * (`AppductClient`'s own `defaultToolTimeoutMs`, currently fixed at
+ * `APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`), and the frozen TurboModule spec has no channel for JS to
  * override it -- see `docs/tasks/15-native-session-logic.md`'s deviations section. Kept as an empty
- * object (not removed outright) so `createCordieriteClient(module, {})` call sites do not need to
+ * object (not removed outright) so `createAppductClient(module, {})` call sites do not need to
  * change.
  */
-export type CreateCordieriteClientOptions = Record<string, never>;
+export type CreateAppductClientOptions = Record<string, never>;

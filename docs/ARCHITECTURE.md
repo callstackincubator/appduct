@@ -1,6 +1,6 @@
-# Cordierite Architecture
+# Appduct Architecture
 
-This is the canonical architecture reference for the current Cordierite implementation.
+This is the canonical architecture reference for the current Appduct implementation.
 It describes the daemon-based v2 protocol and public surfaces. For field-level wire
 details, see [PROTOCOL.md](PROTOCOL.md); for operational security guidance, see
 [SECURITY.md](SECURITY.md).
@@ -43,10 +43,10 @@ Deliberately out of scope, so the boundaries of the design are explicit:
                         operator machine                                devices
 ┌──────────────────────────────────────────────────────────┐
 │                                                          │
-│  cordierite CLI ──┐                                      │
+│  appduct CLI ──┐                                      │
 │  (thin client)    │                                      │
 │                   │  UDS: <state-dir>/daemon.sock        │    pinned wss:// :8443
-│  MCP clients ─────┼──────► cordierite daemon ◄───────────┼──────── iPhone (session A)
+│  MCP clients ─────┼──────► appduct daemon ◄───────────┼──────── iPhone (session A)
 │  (Claude Code,    │        │  key + TLS listener         │◄─────── Pixel  (session B)
 │   Cursor, CI) ────┘        │  session manager            │◄─────── iOS sim (session C,
 │                            │  link minter                │          via localhost)
@@ -66,7 +66,7 @@ Deliberately out of scope, so the boundaries of the design are explicit:
 
 ## 3. State directory
 
-Default `~/.cordierite/`, overridable with `CORDIERITE_STATE_DIR` (tests rely on the
+Default `~/.appduct/`, overridable with `APPDUCT_STATE_DIR` (tests rely on the
 override). Created lazily with mode `0700`. Layout:
 
 | Path | Purpose | Mode |
@@ -75,7 +75,7 @@ override). Created lazily with mode `0700`. Layout:
 | `daemon.pid` | pidfile (single-instance lock) | `0600` |
 | `daemon.log` | daemon stdout/stderr when auto-spawned | `0600` |
 | `daemon.log.1` | previous `daemon.log`, kept by rotation (see below) | `0600` |
-| `key.pem` | default host private key (`cordierite keygen` default output) | `0600` |
+| `key.pem` | default host private key (`appduct keygen` default output) | `0600` |
 | `config.json` | daemon configuration (port, grace, policy) | `0600` |
 | `audit/<YYYY-MM-DD>.jsonl` | append-only audit log | `0600` |
 
@@ -102,7 +102,7 @@ The daemon refuses to load a key file that is group/world-readable.
 ```
 
 `advertisedIp` overrides auto-detection of the address advertised in minted bootstrap
-payloads. `scheme` is the deep-link URI scheme composed into `cordierite link`'s output
+payloads. `scheme` is the deep-link URI scheme composed into `appduct link`'s output
 when `--scheme` is not passed (§10) — set it once here instead of on every invocation.
 `iosBundleId` is the same idea for `--open ios-device` (§8): the app `xcrun devicectl`
 should launch, overridable per invocation by `--bundle-id` / the `bundleId` MCP argument.
@@ -126,7 +126,7 @@ only-when-no-sessions-are-live (§4, "Version drift").
   "we could not look" are different answers. A directory that does not exist yet is
   genuinely empty (it is created lazily) and reports zero.
 - `daemonLogMaxBytes` (positive integer, default 10 MiB) bounds `daemon.log`. When a
-  daemon is spawned — auto-spawn, or `cordierite daemon start`, which spawns through the
+  daemon is spawned — auto-spawn, or `appduct daemon start`, which spawns through the
   same path (§4) — an over-cap `daemon.log` is renamed to `daemon.log.1` (mode `0600`,
   single backup, previous backup replaced) before the new log is opened. A running daemon
   never rotates its own log. An unreachable socket does not by itself prove the log is
@@ -141,9 +141,9 @@ only-when-no-sessions-are-live (§4, "Version drift").
 
 ## 4. Daemon lifecycle
 
-- `cordierite daemon run` — run in the foreground (what auto-spawn executes, and what
+- `appduct daemon run` — run in the foreground (what auto-spawn executes, and what
   systemd/launchd would use).
-- `cordierite daemon start|stop|status` — explicit control. `start` spawns `daemon run`
+- `appduct daemon start|stop|status` — explicit control. `start` spawns `daemon run`
   detached with stdio redirected to `daemon.log` (rotating it first if it is over
   `daemonLogMaxBytes` — §3); `stop` sends `daemon.shutdown` over
   RPC (SIGTERM fallback via pidfile); `status` renders `daemon.status`.
@@ -156,7 +156,7 @@ only-when-no-sessions-are-live (§4, "Version drift").
   liveness with `process.kill(pid, 0)` and take over only if dead).
 - SIGINT/SIGTERM: close all device sockets with code 1001, remove `daemon.sock` and
   `daemon.pid`, flush audit, exit 0.
-- **Version drift:** the daemon outlives the CLI that spawned it, so `npm i -g cordierite@<newer>`
+- **Version drift:** the daemon outlives the CLI that spawned it, so `npm i -g appduct@<newer>`
   leaves the *old* daemon serving every later command — and a client that speaks a newer RPC
   surface (0.6.0's `tools.cancel`/`events.since`, say) gets an opaque "method not found" instead of
   a usable diagnosis. On its first connection, a CLI or MCP process therefore reads
@@ -168,7 +168,7 @@ only-when-no-sessions-are-live (§4, "Version drift").
     `--json`, which promises one machine-readable object and nothing else). A newer daemon already
     serves everything an older client asks for, and replacing it would downgrade the daemon out
     from under whichever newer install started it; two installs on one machine (a project-local
-    `node_modules/.bin/cordierite` next to a global one) would otherwise take turns killing each
+    `node_modules/.bin/appduct` next to a global one) would otherwise take turns killing each
     other's daemon on every command. Versions are compared as semver, including §11's prerelease
     precedence — numeric identifiers compare numerically and rank below alphanumeric ones, and a
     prerelease ranks below its release, so `1.4.0-rc.1` does not restart `1.4.0` and `-rc.2` does
@@ -190,7 +190,7 @@ only-when-no-sessions-are-live (§4, "Version drift").
     Restarting drops
     every session — resume tokens are in-daemon memory (§3, §6), so an app's resume after a restart
     fails closed with 1008 — and invalidates a deep link or QR code someone may be about to scan.
-    Force it with the global `--daemon-restart` flag, `CORDIERITE_DAEMON_RESTART=1`, or
+    Force it with the global `--daemon-restart` flag, `APPDUCT_DAEMON_RESTART=1`, or
     `config.json`'s `restartDaemonOnVersionMismatch` (§3); `--no-daemon-restart` overrules the
     latter two for one command.
   - **At most one restart per process.** If the daemon now answering *still* reports a different
@@ -209,11 +209,11 @@ only-when-no-sessions-are-live (§4, "Version drift").
     the socket-wait timeout names the lock path when one is present.
   - `daemon run` is the daemon; `daemon stop` is already the remedy; `daemon status` reports drift
     as a `warning` and never restarts the daemon it was asked to describe. `keygen` and `doctor`
-    never open a daemon connection. The `cordierite/client` test SDK deliberately opts out, so a
+    never open a daemon connection. The `appduct/client` test SDK deliberately opts out, so a
     spec can never have the daemon restarted out from under a live app session.
   - Out of scope: drift introduced *after* a long-lived MCP server has started. Nothing re-checks
     an established connection; the operator restarts the MCP server. Drift found *at* MCP startup
-    that cannot be resolved fails the whole server, so the agent loses every Cordierite tool rather
+    that cannot be resolved fails the whole server, so the agent loses every Appduct tool rather
     than some of them — an MCP client renders that as a bare "server failed to start", so the
     server writes one stderr line naming both versions and the remedies before it exits. (Starting
     degraded, with the built-in management tools still answering, is a possible follow-up.)
@@ -239,7 +239,7 @@ Methods:
 | --- | --- | --- |
 | `daemon.status` | — | `{ version, pid, startedAt, wssPort, pinnedKeys: [spkiPin], sessions: SessionSummary[], pendingLinks }` — `pendingLinks` counts minted-but-unclaimed links (not sessions, §6, but live state a restart destroys; §4's version drift check reads it). Absent from daemons that predate this field. |
 | `daemon.shutdown` | — | `{ ok: true }` (then exits) |
-| `link.create` | `{ ttlSeconds?, addressOverride? }` | `{ sessionId, deepLinkPayload, endpoint: { family, address, port }, expiresAt }` — `deepLinkPayload` is the base64url bootstrap blob; callers compose `<scheme>:///?cordierite=<payload>`. `addressOverride` forces the advertised address (the emulator/simulator fast path uses it to force `127.0.0.1`). |
+| `link.create` | `{ ttlSeconds?, addressOverride? }` | `{ sessionId, deepLinkPayload, endpoint: { family, address, port }, expiresAt }` — `deepLinkPayload` is the base64url bootstrap blob; callers compose `<scheme>:///?appduct=<payload>`. `addressOverride` forces the advertised address (the emulator/simulator fast path uses it to force `127.0.0.1`). |
 | `sessions.list` | — | `SessionSummary[]` |
 | `sessions.describe` | `{ selector? }` | full session detail incl. device metadata, state timestamps, tool count |
 | `sessions.revoke` | `{ selector? }` | `{ ok: true }` — closes socket (code 1000), frees alias |
@@ -270,7 +270,7 @@ tool does not buy it sixty seconds. Extending a tool's budget is the app's decis
 by declaring `timeoutMs` on the registration.
 
 Callers that hold their own transport watchdog over a `tools.call` (the MCP server,
-`cordierite invoke`, `cordierite/client`) must size it from the same arithmetic —
+`appduct invoke`, `appduct/client`) must size it from the same arithmetic —
 `deriveCallTransportTimeoutMs` (`daemon/calls.ts`) is that clamp plus 5 000 ms of slack —
 so the daemon's `tool_timeout` always arrives first and the real error type reaches the
 caller instead of a generic transport failure. A caller that knows the effective deadline
@@ -375,7 +375,7 @@ only things worth stating at the architecture level are the daemon-side invarian
 Byte layout and delivery paths live in [PROTOCOL.md](PROTOCOL.md) §2. Two design points
 belong here:
 
-- The link is `<scheme>:///?cordierite=<payload>&pin=<sha256/...>`. The `pin` is a **separate
+- The link is `<scheme>:///?appduct=<payload>&pin=<sha256/...>`. The `pin` is a **separate
   query param, not part of the binary payload**, so adding it did not change the payload
   format and older builds that ignore it still work. Anything parsing the link must stop at
   the `&` — a naive "slice to end of string" swallows the pin and corrupts the payload.
@@ -388,14 +388,14 @@ belong here:
   ios-device` (issue #31) — keeps the detected LAN address, because a physical phone has no
   such tunnel. `cli/open-target.ts`'s `usesLoopbackAddress` is the single predicate both
   `link.ts` and `mcp/connect-tool.ts` consult, so the CLI and MCP paths cannot disagree; it is
-  also why `cordierite_connect` decides on a target *first* and mints a second, correctly
+  also why `appduct_connect` decides on a target *first* and mints a second, correctly
   addressed link when it falls back to a QR.
 - `--open ios-device` is **explicit opt-in only**: `detectBootedTargets` enumerates booted
   simulators and attached Android devices and never runs `devicectl`, so a paired iPhone — which
   is often a personal phone, and which delivery may cold-launch — is never picked automatically.
   It is experimental: `devicectl`'s `--payload-url` is undocumented by Apple and cannot be
   exercised in CI, so all of it sits behind the injectable `ExecFn` seam. Prerequisites are in
-  the [`cordierite` package README](../packages/cordierite/README.md).
+  the [`appduct` package README](../packages/appduct/README.md).
 - `devicectl list devices` returns **every CoreDevice the Mac has ever paired**, across platforms
   and regardless of whether it is connected, so entries are filtered before the "exactly one
   device" rule counts them — otherwise a paired Watch, or a phone in someone's pocket, turns the
@@ -422,7 +422,7 @@ belong here:
 
 ## 9. MCP server
 
-`cordierite mcp` starts a **stdio** MCP server (SDK: `@modelcontextprotocol/sdk`) that
+`appduct mcp` starts a **stdio** MCP server (SDK: `@modelcontextprotocol/sdk`) that
 proxies daemon RPC (auto-spawning the daemon like any client):
 
 - `tools/list` mirrors the live registry. One session → tools under their own names;
@@ -448,17 +448,17 @@ proxies daemon RPC (auto-spawning the daemon like any client):
   progress-tracked path opens the dedicated connection that learns `callId` while the call is
   still in flight; a non-progress call has no `callId` to cancel by until it has already
   resolved, at which point cancelling it is moot).
-- Two built-in management tools, `cordierite_connect` and `cordierite_wait_for_session`,
+- Two built-in management tools, `appduct_connect` and `appduct_wait_for_session`,
   let an agent mint a bootstrap link, deliver it to an emulator/simulator, and wait for the
   claim — without shell access. This is what makes the agent path self-service. `target:
   "ios-device"` extends that to a paired physical iPhone/iPad (§8), but only when the agent
   names it and supplies `bundleId`; the "nothing detected" note says so, so an agent that
   finds no simulator knows the option exists rather than defaulting to a QR nobody scans.
-- Two more built-in tools, `cordierite_events` and `cordierite_wait_for_event` (issue #6),
-  give an agent a pull surface over `postEvent()`-pushed `app_event`s: `cordierite_events`
-  is a thin proxy over `events.since`; `cordierite_wait_for_event` blocks for a matching
+- Two more built-in tools, `appduct_events` and `appduct_wait_for_event` (issue #6),
+  give an agent a pull surface over `postEvent()`-pushed `app_event`s: `appduct_events`
+  is a thin proxy over `events.since`; `appduct_wait_for_event` blocks for a matching
   event, draining the retained buffer for an already-arrived match before falling back to
-  a live wait — closing the same race `cordierite_wait_for_session` doesn't have to worry
+  a live wait — closing the same race `appduct_wait_for_session` doesn't have to worry
   about (a session is either claimed or not, but an event can fire between "the agent
   decides to wait" and "the wait subscription lands"). `timeoutMs` is capped server-side
   well under the 30-minute idle window a stdio MCP tool call gets before Claude Code aborts
@@ -472,18 +472,18 @@ The CLI is a **thin renderer over the RPC in §5** — it holds no state, opens 
 owns no keys. Every command is one RPC call plus formatting, which is why the CLI and the MCP
 server can't drift in behavior: they are the same calls.
 
-The per-command reference lives in the [`cordierite` package README](../packages/cordierite/README.md),
+The per-command reference lives in the [`appduct` package README](../packages/appduct/README.md),
 which is where it stays current. Global flags: `--json` (machine output, NDJSON for streams),
 `--no-color`, `--state-dir`, `--daemon-restart` (force a version-drift restart, §4).
 
-The deep-link scheme used to compose a link is resolved by `scheme.ts`, shared by `cordierite
-link`, `cordierite mcp`, `cordierite/client`'s `link()` and the MCP `cordierite_connect` tool so
+The deep-link scheme used to compose a link is resolved by `scheme.ts`, shared by `appduct
+link`, `appduct mcp`, `appduct/client`'s `link()` and the MCP `appduct_connect` tool so
 they cannot drift. First match wins:
 
 1. the `--scheme` flag (or the equivalent programmatic option)
-2. the `CORDIERITE_SCHEME` environment variable
-3. the nearest `.cordierite/config.json` that declares a `scheme`, walking up from the working
-   directory (one without that key does not stop the walk; the walk also skips `~/.cordierite` and
+2. the `APPDUCT_SCHEME` environment variable
+3. the nearest `.appduct/config.json` that declares a `scheme`, walking up from the working
+   directory (one without that key does not stop the walk; the walk also skips `~/.appduct` and
    the state directory in use — those are *global* config, and matching them here would apply them
    one tier above their own)
 4. `scheme` in the state directory's `config.json`
@@ -491,17 +491,17 @@ they cannot drift. First match wins:
    normalization `app.plugin.js` applies; no walk-up)
 6. otherwise an error naming every location above
 
-Only the *client-side* `scheme` is overridable per project. A project `.cordierite/config.json`
+Only the *client-side* `scheme` is overridable per project. A project `.appduct/config.json`
 is read for that key alone and never redirects daemon-side state (`wssPort`, `keyPath`, `policy`,
-the audit log): `--state-dir` / `CORDIERITE_STATE_DIR` remain the only way to move the state
+the audit log): `--state-dir` / `APPDUCT_STATE_DIR` remain the only way to move the state
 directory, so a file checked into a repo can never move another developer's private key.
 
 `app.config.js` / `app.config.ts` are deliberately **not** evaluated — running arbitrary project
 code to read one string is a far larger blast radius than this warrants. Dynamic-config projects
-use `--scheme`, `CORDIERITE_SCHEME`, or `cordierite init --scheme <s>`.
+use `--scheme`, `APPDUCT_SCHEME`, or `appduct init --scheme <s>`.
 
-`cordierite init`, run in an app root, writes that project `.cordierite/config.json` (scheme only)
-and prints the MCP server entry to paste plus the `import "@cordierite/react-native/auto"`
+`appduct init`, run in an app root, writes that project `.appduct/config.json` (scheme only)
+and prints the MCP server entry to paste plus the `import "@appduct/react-native/auto"`
 reminder. It never generates keys (the daemon auto-generates `key.pem` — §3), and writes the file
 `0600` inside a `0700` directory, matching §3's conventions.
 
@@ -509,23 +509,23 @@ Re-running it is always safe: it keeps the scheme already recorded and only *not
 `app.json` has come to declare a different one — a command documented as safe to re-run must not
 start failing because a scheme was renamed. `--scheme <different>` needs `--force` to replace a
 recorded value, `--force` alone re-adopts `app.json`'s, and `--force` merges rather than
-truncating. Note the inverse of the rule above: a project `.cordierite/` is committed, so
+truncating. Note the inverse of the rule above: a project `.appduct/` is committed, so
 `--state-dir` must never point at one — that directory would then hold `key.pem`.
 
-Unlike every other consumer, `cordierite mcp` does **not** fail when no scheme resolves: the
+Unlike every other consumer, `appduct mcp` does **not** fail when no scheme resolves: the
 server is still useful for proxying tools to a session paired some other way, so the failure is
-deferred to `cordierite_connect`, which reports `invalid_request` naming every location tried. A
+deferred to `appduct_connect`, which reports `invalid_request` naming every location tried. A
 resolution *error* (an invalid `--scheme`, a malformed `app.json`) is additionally written to
 stderr at startup — never stdout, which carries MCP protocol frames only.
 
-`cordierite invoke`: a SIGINT while the call is still pending cancels it (§5's
+`appduct invoke`: a SIGINT while the call is still pending cancels it (§5's
 `tools.cancel`, via the RPC connection dropping) rather than leaving the app-side handler
 running for a caller that has already exited; the process then exits reporting
 `tool_cancelled`.
 
 ## 11. React Native SDK
 
-Package `@cordierite/react-native`. The session logic it bridges to — TLS, SPKI pinning,
+Package `@appduct/react-native`. The session logic it bridges to — TLS, SPKI pinning,
 trust-mode resolution, the private-LAN check, claim/resume, reconnect with full-jitter
 backoff, the tool registry and its wire deltas, per-call timeout/cancel/progress, v2
 bootstrap deep-link handling, and the process-memory resume lease — is not native to this
@@ -533,39 +533,39 @@ package: it is vendored at build time from `packages/native`, a framework-free c
 React Native dependency (`docs/tasks/14-native-core-extraction.md`,
 `docs/tasks/15-native-session-logic.md`,
 [BUILD-VARIANTS.md § Native core](BUILD-VARIANTS.md#native-core)). The same core is also
-consumed directly — no React Native, no Expo — by a plain iOS app (`Cordierite.shared`,
+consumed directly — no React Native, no Expo — by a plain iOS app (`Appduct.shared`,
 [`packages/native/ios/README.md`](../packages/native/ios/README.md)) and a plain Android app
-(the `Cordierite` object, [`packages/native/android/README.md`](../packages/native/android/README.md)),
+(the `Appduct` object, [`packages/native/android/README.md`](../packages/native/android/README.md)),
 issue #48 phase 3 (`docs/tasks/18-ios-entry-points.md`, `docs/tasks/19-android-entry-points.md`).
 **The RN bridge and the plain-app facade never coexist in one app.** Each owns its own
-`CordieriteClient` instance and the one process-memory resume lease that comes with it, so an
-RN app that also imported the facade and called `Cordierite.shared`/the `Cordierite` object
+`AppductClient` instance and the one process-memory resume lease that comes with it, so an
+RN app that also imported the facade and called `Appduct.shared`/the `Appduct` object
 directly would end up with two clients racing for the same lease and the same deep link — which
 is why the facade's own source files are excluded from what `sync-native-core.mjs` vendors into
 this package (`docs/internal/native-core.md`'s "The facade-exclusion rule"): an RN app is not even
-vendored `CordieriteAPI.swift`/`Cordierite.kt`, let alone meant to call them. This section covers
+vendored `AppductAPI.swift`/`Appduct.kt`, let alone meant to call them. This section covers
 the JS-facing entry points and client behavior; the bridge files that remain in this package
-(`CordieriteTurboBridge.swift`/`RCTNativeCordierite.mm` on iOS,
-`CordieritePackage.kt`/`NativeCordieriteModule.kt` on Android) translate the TurboModule
-spec's JSON-string calls and events onto that vendored core's `CordieriteClient` and answer
+(`AppductTurboBridge.swift`/`RCTNativeAppduct.mm` on iOS,
+`AppductPackage.kt`/`NativeAppductModule.kt` on Android) translate the TurboModule
+spec's JSON-string calls and events onto that vendored core's `AppductClient` and answer
 each JS-registered tool's call through a continuation resumed by `respondToToolCall` — they
 own no session state themselves. Entry points:
 
-- `@cordierite/react-native` — **side-effect-free**. Its default API includes
-  `registerTool`, `useCordieriteTool`, `postEvent`, `getRegisteredTools`,
-  `addCordieriteListener`, `getCordieriteState`, `restoreSession`, and `connect`; it
-  also exports `cordieriteClient`, parsing helpers, and types for advanced integrations.
+- `@appduct/react-native` — **side-effect-free**. Its default API includes
+  `registerTool`, `useAppductTool`, `postEvent`, `getRegisteredTools`,
+  `addAppductListener`, `getAppductState`, `restoreSession`, and `connect`; it
+  also exports `appductClient`, parsing helpers, and types for advanced integrations.
   It installs nothing. TurboModule lookup is lazy (first native call), never at import
   time.
-- `@cordierite/react-native/auto` — side-effect entry, and the only entry that installs
+- `@appduct/react-native/auto` — side-effect entry, and the only entry that installs
   the deep-link bootstrap and starts native-lease recovery. `require()` it instead of
   `import`ing to control when that happens (`__DEV__`, a QA-build toggle, after other
   startup work); installing twice installs once. It takes no options: address policy is
   native build config (`allowPrivateLanOnly`), read by the deep-link handler from the
   same `getConstants()` source native `connect()` enforces, so JS can only ever narrow
   what native allows, never widen it.
-- `@cordierite/react-native/noop` — identical public API, inert implementation.
-- `@cordierite/react-native/metro` — `withCordierite(config, { include })`, the supported way
+- `@appduct/react-native/noop` — identical public API, inert implementation.
+- `@appduct/react-native/metro` — `withAppduct(config, { include })`, the supported way
   to swap the real entries for `/noop` at bundle time. It chains to any existing
   `resolveRequest` and derives the redirected specifiers from `package.json`'s `exports`, so
   a new entry point can't be silently missed.
@@ -622,7 +622,7 @@ deviations):
 - Native's own `handleUrl(url)` decodes the v2 bootstrap payload, checks expiry and the
   private-IP policy (`allowPrivateLanOnly`, read once from the same manifest/plist key
   `resolveTrustedPins` uses), and decides whether the link outranks a session already held
-  — the JS-side `deep-link-core.ts` this used to be is gone. `@cordierite/react-native/auto`
+  — the JS-side `deep-link-core.ts` this used to be is gone. `@appduct/react-native/auto`
   installs a `Linking` `url` listener that forwards straight into `handleUrl`, then calls
   `restoreSession()` once before considering the initial launch URL (recovery goes first so
   the link is judged against a settled session, not so it wins) — a successful restore does
@@ -632,7 +632,7 @@ deviations):
   default flow needs no `Linking` handler of its own. Native app process death erases the
   lease and requires a fresh bootstrap. Apps that drive bootstrap themselves and never
   install the listener must call the exported `restoreSession()` (equivalently
-  `cordieriteClient.restoreSession()`) at startup — it is the only other reader of the
+  `appductClient.restoreSession()`) at startup — it is the only other reader of the
   lease, so skipping it drops a resumable session on every JS runtime replacement.
 - `registerTool({ name, description, inputSchema?, outputSchema?, annotations?, handler })`
   → `{ remove() }`. JS converts/validates the schema and keeps the handler in a local map;
@@ -641,7 +641,7 @@ deviations):
   by registration identity, not name). Duplicate name registration logs a dev warning and
   overwrites. Native owns the registry itself and its `tool_registry_snapshot`/
   `tool_registry_delta` sends; `getRegisteredTools()` reads straight from it.
-- `useCordieriteTool(definition, deps?, { enabled? })` — `useEffect` wrapper around
+- `useAppductTool(definition, deps?, { enabled? })` — `useEffect` wrapper around
   `registerTool`/`remove`. It registers **once per mount**: the registered handler is a
   stable wrapper forwarding to the latest render's `definition.handler`, so a handler
   closing over component state is fresh on every call without re-registering. With `deps`
@@ -660,15 +660,15 @@ deviations):
   `enabled` (default `true`) is the supported way to gate a tool by build variant without
   breaking the rules of hooks; registration is the app-side allowlist, and it is the only
   enforcement point inside the app's own trust boundary (§12). The JSON Schema exporter is
-  injected into `createUseCordieriteTool` by the `.` entry and deliberately omitted by
+  injected into `createUseAppductTool` by the `.` entry and deliberately omitted by
   `./noop`, whose registrar registers nothing: the inert entry keys the effect off
   `enabled` alone and never imports schema export at all. `__tests__/noop-parity.test.ts`
   pins the API shape and arity; the behavioral half — that the inert entry never exports,
   and still honors `enabled` — is pinned by the "inert entry" cases in
-  `__tests__/use-cordierite-tool.test.ts`.
+  `__tests__/use-appduct-tool.test.ts`.
 - `postEvent(name, payload?)` — emits an `event` frame when active; silently drops (dev
   warning) otherwise.
-- Unified listener: `addCordieriteListener(kind, cb)` with kinds `stateChange`,
+- Unified listener: `addAppductListener(kind, cb)` with kinds `stateChange`,
   `error` (covers bootstrap parse/connect and socket errors), `sessionChange`.
 - Schema handling: Standard Schema stays the only runtime-validation contract, but
   `inputSchema`/`outputSchema` accept three forms, classified once at registration by
@@ -685,7 +685,7 @@ deviations):
     `Object.prototype` or `null`), and an own `type`, if present, that is a JSON Schema type
     name or an array of them — published verbatim and handed to the handler **unvalidated**.
     `{}` qualifies: it is valid accept-anything JSON Schema. No JSON Schema validator is
-    bundled: `@cordierite/react-native` keeps zero third-party runtime dependencies (§13).
+    bundled: `@appduct/react-native` keeps zero third-party runtime dependencies (§13).
     The optional `jsonSchema<T>()` helper is a pure type-level cast that gives such a handler
     real argument/result types.
 
@@ -720,7 +720,7 @@ deviations):
   emits `onToolCancel(id, "timeout")` (so JS aborts the matching `AbortSignal`), replies
   `tool_timeout` itself, and ignores whatever the handler later resolves or throws. The
   hint is the tool's own `timeoutMs`, falling back to native's built-in default
-  (`CORDIERITE_DEFAULT_TOOL_TIMEOUT_MS`, 10 s — the frozen TurboModule spec has no channel
+  (`APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`, 10 s — the frozen TurboModule spec has no channel
   for JS to override this client-wide default the way the old `defaultToolTimeoutMs` client
   option once did; see `docs/tasks/15-native-session-logic.md`'s deviations). This timer is
   the real ceiling on a call: a caller's `tools.call` `timeoutMs` can shorten the deadline
@@ -823,18 +823,18 @@ it.
 
 ```
 packages/
-  shared/          @cordierite/shared — wire protocol v2 (messages, bootstrap codec,
+  shared/          @appduct/shared — wire protocol v2 (messages, bootstrap codec,
                    tool descriptors, error types), RPC method/param/result types,
                    Standard Schema helpers. No runtime deps.
-  cordierite/      CLI + daemon + MCP:
+  appduct/      CLI + daemon + MCP:
     src/daemon/    lifecycle (pidfile, UDS server, auto-spawn helpers), session engine,
                    link minter, tls (cert minting — reuse host-certificate.ts),
                    event bus, policy, audit
     src/rpc/       RPC client library (connect-or-spawn), shared by cli/ and mcp/
     src/cli/       command definitions + renderers (keep DI/testability patterns)
     src/mcp/       stdio MCP server
-  react-native/    @cordierite/react-native (entries: ., /auto, /noop). Depends only on
-                   @cordierite/shared — no third-party runtime deps, which is why no
+  react-native/    @appduct/react-native (entries: ., /auto, /noop). Depends only on
+                   @appduct/shared — no third-party runtime deps, which is why no
                    JSON Schema validator ships with it (§11's raw schema form). Vendors
                    packages/native at build time (see below) rather than depending on it.
   native/          Framework-free Swift (SwiftPM, packages/native/ios) and Kotlin
@@ -849,7 +849,7 @@ dependencies) is the SwiftPM manifest for `packages/native/ios`.
 
 Tooling stays: pnpm workspaces, turbo, Vitest, tsc builds. Node ≥ 20 for the daemon
 (UDS + `AF_UNIX` on Windows). Windows support is best-effort; the control plane uses the
-named-pipe path `\\.\pipe\cordierite-<user>` behind the same client API.
+named-pipe path `\\.\pipe\appduct-<user>` behind the same client API.
 
 ## 14. Current limitations
 
@@ -864,4 +864,4 @@ named-pipe path `\\.\pipe\cordierite-<user>` behind the same client API.
 - Multiple endpoint candidates in the bootstrap payload.
 - A tool whose `input_schema` is not object-rooted is listed but not usefully callable over MCP,
   because MCP tool arguments are always an object (§9). Wrapping such arguments so the tool stays
-  callable is tracked in [issue #34](https://github.com/callstackincubator/cordierite/issues/34).
+  callable is tracked in [issue #34](https://github.com/callstackincubator/appduct/issues/34).

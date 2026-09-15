@@ -1,19 +1,19 @@
-import type { ToolDescriptor } from "@cordierite/shared";
+import type { ToolDescriptor } from "@appduct/shared";
 import type { DependencyList } from "react";
 
 import type {
-  CordieriteBuildConfig,
-  CordieriteClientState,
-  CordieriteConnectInput,
-  CordieriteJsonSchemaObject,
-  CordieriteListenerKind,
-  CordieriteRuntimeSchema,
-  CordieriteToolRegistration,
-  CordieriteUnifiedListenerMap,
-} from "./Cordierite.types";
-import type { UseCordieriteToolOptions } from "./useCordieriteTool";
+  AppductBuildConfig,
+  AppductClientState,
+  AppductConnectInput,
+  AppductJsonSchemaObject,
+  AppductListenerKind,
+  AppductRuntimeSchema,
+  AppductToolRegistration,
+  AppductUnifiedListenerMap,
+} from "./Appduct.types";
+import type { UseAppductToolOptions } from "./useAppductTool";
 
-export type CordieriteSubscription = { remove(): void };
+export type AppductSubscription = { remove(): void };
 
 /**
  * Public API surface shared by the `.` (real) and `./noop` (inert) entries (ARCHITECTURE.md §11).
@@ -22,40 +22,40 @@ export type CordieriteSubscription = { remove(): void };
  */
 export type CordierePublicApi = {
   registerTool<
-    TInputSchema extends CordieriteRuntimeSchema | undefined,
-    TOutputSchema extends CordieriteRuntimeSchema | undefined,
+    TInputSchema extends AppductRuntimeSchema | undefined,
+    TOutputSchema extends AppductRuntimeSchema | undefined,
   >(
-    registration: CordieriteToolRegistration<TInputSchema, TOutputSchema>,
-  ): CordieriteSubscription;
+    registration: AppductToolRegistration<TInputSchema, TOutputSchema>,
+  ): AppductSubscription;
 
-  useCordieriteTool<
-    TInputSchema extends CordieriteRuntimeSchema | undefined,
-    TOutputSchema extends CordieriteRuntimeSchema | undefined,
+  useAppductTool<
+    TInputSchema extends AppductRuntimeSchema | undefined,
+    TOutputSchema extends AppductRuntimeSchema | undefined,
   >(
-    definition: CordieriteToolRegistration<TInputSchema, TOutputSchema>,
+    definition: AppductToolRegistration<TInputSchema, TOutputSchema>,
     deps?: DependencyList,
-    options?: UseCordieriteToolOptions,
+    options?: UseAppductToolOptions,
   ): void;
 
   /** Type-only helper for raw JSON Schema tool schemas; identity at runtime. */
   jsonSchema<T = Record<string, unknown>>(
     schema: Record<string, unknown>,
-  ): CordieriteJsonSchemaObject<T>;
+  ): AppductJsonSchemaObject<T>;
 
   postEvent(name: string, payload?: unknown): Promise<void>;
 
   getRegisteredTools(): ToolDescriptor[];
 
-  addCordieriteListener<Kind extends CordieriteListenerKind>(
+  addAppductListener<Kind extends AppductListenerKind>(
     kind: Kind,
-    callback: CordieriteUnifiedListenerMap[Kind],
-  ): CordieriteSubscription;
+    callback: AppductUnifiedListenerMap[Kind],
+  ): AppductSubscription;
 
   restoreSession(): Promise<boolean>;
 
-  getCordieriteState(): CordieriteClientState;
+  getAppductState(): AppductClientState;
 
-  connect(input: CordieriteConnectInput): Promise<void>;
+  connect(input: AppductConnectInput): Promise<void>;
 
-  getCordieriteBuildConfig(): CordieriteBuildConfig;
+  getAppductBuildConfig(): AppductBuildConfig;
 };

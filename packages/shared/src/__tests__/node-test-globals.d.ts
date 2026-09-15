@@ -1,4 +1,4 @@
-// @cordierite/shared is deliberately Node-API-free in its production sources (see
+// @appduct/shared is deliberately Node-API-free in its production sources (see
 // domains/bootstrap.ts's base64url helpers, which use atob/btoa instead of Buffer for exactly
 // this reason), so the package has no @types/node dependency. fixtures-conformance.test.ts is the
 // one test file that needs to read a fixture JSON file from disk and resolve its own path — both

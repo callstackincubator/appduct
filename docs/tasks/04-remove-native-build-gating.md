@@ -5,7 +5,7 @@ starting both.**
 
 ## Goal
 
-No native code decides whether Cordierite should exist. Autolinking decides, at the app
+No native code decides whether Appduct should exist. Autolinking decides, at the app
 level, in one place.
 
 ## Why
@@ -24,18 +24,18 @@ settings itself.
 
 ## Scope — delete
 
-**Android** (`packages/react-native/android/src/main/java/.../CordieritePackage.kt`):
+**Android** (`packages/react-native/android/src/main/java/.../AppductPackage.kt`):
 
 - the `FLAG_DEBUGGABLE` check, `ENABLE_IN_RELEASE_KEY`, `parseEnableInRelease`,
-  `isCordieriteRegistrationEnabled`, and `readApplicationInfo` if nothing else needs it.
+  `isAppductRegistrationEnabled`, and `readApplicationInfo` if nothing else needs it.
 - `getModule` returns the module unconditionally for the matching name.
-- Drop the corresponding cases in `android/src/test/java/.../CordieritePackageTest.kt`.
+- Drop the corresponding cases in `android/src/test/java/.../AppductPackageTest.kt`.
 
 **iOS**:
 
-- `ios/CordieriteTurboBridge.swift` and `ios/RCTNativeCordierite.mm`: remove the
-  `#if DEBUG || CORDIERITE_ENABLE_RELEASE` wrappers and their explanatory comments.
-- `Cordierite.podspec`: remove the `CORDIERITE_ENABLE_RELEASE` comment block.
+- `ios/AppductTurboBridge.swift` and `ios/RCTNativeAppduct.mm`: remove the
+  `#if DEBUG || APPDUCT_ENABLE_RELEASE` wrappers and their explanatory comments.
+- `Appduct.podspec`: remove the `APPDUCT_ENABLE_RELEASE` comment block.
 
 **Plugin** (`packages/react-native/app.plugin.js`) — the Podfile half only; the rest is
 task 06:
@@ -60,13 +60,13 @@ task 06:
 
 ## Acceptance
 
-- `git grep -n "CORDIERITE_ENABLE_RELEASE\|ENABLE_IN_RELEASE"` returns nothing in native
+- `git grep -n "APPDUCT_ENABLE_RELEASE\|ENABLE_IN_RELEASE"` returns nothing in native
   source or the Podfile mod. **Corrected after the fact:** this task cannot clear the name
   repo-wide, because `app.plugin.js` still writes the `ENABLE_IN_RELEASE` meta-data from the
   `enableInReleaseBuilds` option, and that option belongs to task 06. Between 04 and 06 the
   plugin therefore writes a manifest key no native code reads — dead but harmless. Task 06
   closes it; task 09 clears the docs.
-- A generated Podfile after prebuild contains no Cordierite `post_install` block.
+- A generated Podfile after prebuild contains no Appduct `post_install` block.
 - Playground builds and connects in **Release** on both platforms with the package
   autolinked, and neither builds nor exposes a module when excluded (task 08 gives you the
   artifact-level check for the second half).

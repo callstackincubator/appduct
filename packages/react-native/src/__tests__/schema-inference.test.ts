@@ -13,11 +13,11 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { z as z4 } from "zod4";
 
 import type {
-  CordieriteRuntimeSchema,
+  AppductRuntimeSchema,
   InferToolArgs,
   InferToolResult,
-} from "../Cordierite.types";
-import { jsonSchema } from "../Cordierite.types";
+} from "../Appduct.types";
+import { jsonSchema } from "../Appduct.types";
 import type { CordierePublicApi } from "../public-api";
 
 (globalThis as { __DEV__?: boolean }).__DEV__ = true;
@@ -109,13 +109,13 @@ describe("handler inference across every accepted schema form (issue #27)", () =
     expect(true).toBe(true);
   });
 
-  test("an explicitly annotated CordieriteRuntimeSchema<T> stays exactly T", async () => {
+  test("an explicitly annotated AppductRuntimeSchema<T> stays exactly T", async () => {
     const { registerTool } = await import("../noop");
 
     // Annotating the schema (rather than letting it be inferred from the value) must not widen the
     // handler argument: every member of the union — Standard Schema, pair, and raw — carries the
     // annotation's own type, so the raw member cannot leak `Record<string, unknown>` back in.
-    const annotated: CordieriteRuntimeSchema<{ a: number }> = z4.object({
+    const annotated: AppductRuntimeSchema<{ a: number }> = z4.object({
       a: z4.number(),
     });
 
@@ -131,7 +131,7 @@ describe("handler inference across every accepted schema form (issue #27)", () =
     }).remove();
 
     // The same annotation satisfied by a raw JSON Schema rather than a Standard Schema.
-    const annotatedRaw: CordieriteRuntimeSchema<{ a: number }> = jsonSchema<{
+    const annotatedRaw: AppductRuntimeSchema<{ a: number }> = jsonSchema<{
       a: number;
     }>({ type: "object", properties: { a: { type: "number" } } });
 
@@ -147,20 +147,20 @@ describe("handler inference across every accepted schema form (issue #27)", () =
     expect(true).toBe(true);
   });
 
-  test("a two-parameter CordieriteRuntimeSchema<In, Out> keeps the sides apart", async () => {
+  test("a two-parameter AppductRuntimeSchema<In, Out> keeps the sides apart", async () => {
     const { registerTool } = await import("../noop");
 
     // With distinct input and output types the two sides must not collapse into `In | Out`: an
     // `inputSchema` handler receives the *output* (post-validation) type, an `outputSchema` handler
     // returns the *input* (pre-validation) one. A raw member carrying a single phantom slot would
     // widen both to the union.
-    const coercing: CordieriteRuntimeSchema<string, number> = {
+    const coercing: AppductRuntimeSchema<string, number> = {
       "~standard": {
         version: 1,
         vendor: "test",
         validate: (value: unknown) => ({ value: Number(value) }),
       },
-    } as CordieriteRuntimeSchema<string, number>;
+    } as AppductRuntimeSchema<string, number>;
 
     registerTool({
       name: "two-param-input",
@@ -186,7 +186,7 @@ describe("handler inference across every accepted schema form (issue #27)", () =
     exactType<string>()(null as unknown as InferToolResult<typeof coercing>);
 
     // Same annotation, satisfied by a raw JSON Schema rather than a Standard Schema.
-    const coercingRaw = {} as CordieriteRuntimeSchema<string, number>;
+    const coercingRaw = {} as AppductRuntimeSchema<string, number>;
 
     registerTool({
       name: "two-param-raw-input",

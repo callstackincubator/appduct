@@ -1,6 +1,6 @@
 declare const __DEV__: boolean | undefined;
 
-const PREFIX = "[Cordierite]";
+const PREFIX = "[Appduct]";
 
 // Computed per call (not cached at module load): `__DEV__` is a bundler-injected global that some
 // test environments set only after this module has already been imported transitively, and a

@@ -3,10 +3,10 @@
   CI is implemented with three workflows:
 
   - `test.yaml` runs JavaScript, Android JVM, and iOS XCTest coverage in parallel; the `android`
-    job also runs the `cordierite doctor` release gate (below) against four builds of the Expo
-    playground across all three `CORDIERITE_ENABLED` states, plus Debug/Release of the native
+    job also runs the `appduct doctor` release gate (below) against four builds of the Expo
+    playground across all three `APPDUCT_ENABLED` states, plus Debug/Release of the native
     `playground-native/android` app (issue #48 phase 3); the `ios` job runs it against two Debug
-    builds of the Expo playground (default and `CORDIERITE_ENABLED=0`), plus Debug/Release of the
+    builds of the Expo playground (default and `APPDUCT_ENABLED=0`), plus Debug/Release of the
     native `playground-native/ios` app.
   - `lint.yaml` runs lint and package typecheck in parallel; the playground is intentionally excluded from typecheck.
   - `deploy.yaml` gates a production release on both reusable workflows, packages the three tarballs, and publishes them
@@ -21,14 +21,14 @@
 
   - The JavaScript test suite passes locally.
   - A cache-free, frozen-lockfile installation builds successfully.
-  - Packed CLI and React Native tarballs contain an exact `@cordierite/shared` version rather than `workspace:*`.
+  - Packed CLI and React Native tarballs contain an exact `@appduct/shared` version rather than `workspace:*`.
   - Android JVM tests pass with `:core:testDebugUnitTest` in the standalone `packages/native/android` project
-    (docs/tasks/14-native-core-extraction.md) -- the canonical source `@cordierite/react-native`'s own
-    `:cordierite_react-native:testDebugUnitTest` vendors (and runs, with no test classes of its own left to run,
+    (docs/tasks/14-native-core-extraction.md) -- the canonical source `@appduct/react-native`'s own
+    `:appduct_react-native:testDebugUnitTest` vendors (and runs, with no test classes of its own left to run,
     since the tests moved with the sources they cover); no emulator is required either way. The TLS pinning
     cases (`computeSpkiPin`, `PinningTrustManager`) run under Robolectric inside that same task, since both
     reach `android.util.Base64`; everything else stays on the plain JVM.
-  - iOS XCTest cases pass through `swift test` against the repo-root `CordieriteCore` SwiftPM package
+  - iOS XCTest cases pass through `swift test` against the repo-root `AppductCore` SwiftPM package
     (`packages/native/ios`), not a CocoaPods-generated scheme.
   - Linting exists for the React Native package and playground. It passes with 10 warnings.
   - Root typecheck, including the CLI and React Native test suites, passes locally.
@@ -37,30 +37,30 @@
   - GitHub Actions allows every action, does not require SHA pinning, and gives the default GITHUB_TOKEN write access.
   - No protected npm GitHub environment exists.
 
-## Release gate: `cordierite doctor`
+## Release gate: `appduct doctor`
 
-Cordierite's inclusion in a build is controlled entirely by autolinking exclusion (see
+Appduct's inclusion in a build is controlled entirely by autolinking exclusion (see
 [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md)) — there is no runtime `debuggable`/`#if DEBUG`
 check to catch a pipeline that forgot to exclude the package
-(docs/tasks/00-overview.md, docs/tasks/08-cordierite-doctor.md).
+(docs/tasks/00-overview.md, docs/tasks/08-appduct-doctor.md).
 
-`cordierite doctor <artifact> [--assert-present | --assert-absent]` is the replacement: an
+`appduct doctor <artifact> [--assert-present | --assert-absent]` is the replacement: an
 artifact-level assertion you run against the thing you're about to ship, not the config you
 think produced it.
 
 ```bash
-cordierite doctor ./build/MyApp.ipa --assert-absent
-cordierite doctor ./build/app-release.apk --assert-absent
+appduct doctor ./build/MyApp.ipa --assert-absent
+appduct doctor ./build/app-release.apk --assert-absent
 ```
 
-It inspects a built `.app`/`.ipa`/`.apk`/`.aab` for Cordierite's native code and reports
+It inspects a built `.app`/`.ipa`/`.apk`/`.aab` for Appduct's native code and reports
 `present`/`absent`. On iOS the verdict is decided by real-code-only symbols: the
-`CordieriteCoreMarker` Objective-C class (`packages/native/ios/Sources/CordieriteCore/Real`,
-docs/tasks/14-native-core-extraction.md) or the `RCTNativeCordierite` Objective-C class,
+`AppductCoreMarker` Objective-C class (`packages/native/ios/Sources/AppductCore/Real`,
+docs/tasks/14-native-core-extraction.md) or the `RCTNativeAppduct` Objective-C class,
 OR'd together so a stripped binary that dropped one doesn't read as absent; the
 plugin-authored `Info.plist` keys are reported alongside them but cannot flip the verdict on
-their own. On Android the verdict is decided by the `CordieriteNativeMarker` keep-rule
-signal alone; the `com.callstackincubator.cordierite` dex package and the
+their own. On Android the verdict is decided by the `AppductNativeMarker` keep-rule
+signal alone; the `com.callstackincubator.appduct` dex package and the
 `AndroidManifest.xml` meta-data keys are reported alongside it but cannot flip it — the two
 platforms now follow the same "real-code-only symbol, corroborating signals only" rule (see
 [Android detection](#android-detection)).
@@ -78,10 +78,10 @@ check passed".
 CI snippet, run against the production release build right before it's distributed:
 
 ```yaml
-- name: Assert Cordierite is excluded from the production build
-  run: npx cordierite doctor ./build/app-release.apk --assert-absent
-- name: Assert Cordierite is excluded from the production build (iOS)
-  run: npx cordierite doctor ./build/MyApp.ipa --assert-absent
+- name: Assert Appduct is excluded from the production build
+  run: npx appduct doctor ./build/app-release.apk --assert-absent
+- name: Assert Appduct is excluded from the production build (iOS)
+  run: npx appduct doctor ./build/MyApp.ipa --assert-absent
 ```
 
 For an internally-distributed "testing" build that an agent drives, invert the assertion
@@ -91,19 +91,19 @@ too.
 ### Android detection
 
 **Android detection is marker-only.** The default release build's no-op
-`CordieritePackage` stub necessarily lives at the exact same fully-qualified class name the
+`AppductPackage` stub necessarily lives at the exact same fully-qualified class name the
 real implementation uses (that is what keeps `PackageList.java` compiling — see
 [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md#inclusion-is-an-autolinking-decision)), and the
 config plugin writes the same `AndroidManifest.xml` meta-data regardless of build variant.
-Both would otherwise look like "Cordierite is present" to a naive scan.
+Both would otherwise look like "Appduct is present" to a naive scan.
 
-`doctor` accounts for this: only the `CordieriteNativeMarker` keep-rule signal decides
+`doctor` accounts for this: only the `AppductNativeMarker` keep-rule signal decides
 `present`/`absent` on Android. The other two signals are still reported for corroboration
 but can't flip the verdict on their own.
 
 The three signals, in order of reliability:
 
-1. `CordieriteNativeMarker`, kept unminified by the keep rule `@cordierite/react-native`
+1. `AppductNativeMarker`, kept unminified by the keep rule `@appduct/react-native`
    ships via `consumerProguardFiles`. It reaches every consuming app's R8 run without the
    app authoring any rule, so it holds for bare-RN apps that never touch the Expo config
    plugin.
@@ -113,13 +113,13 @@ The three signals, in order of reliability:
    ran.
 
 Signals 2 and 3 are retained as fallbacks for artifacts built before the marker existed.
-See `packages/cordierite/src/artifact-inspect.ts`'s file-level comment for the full
+See `packages/appduct/src/artifact-inspect.ts`'s file-level comment for the full
 detection writeup.
 
 **Verified** against a real R8-minified release APK
 (`assembleRelease -Pandroid.enableMinifyInReleaseBuilds=true`): the R8 mapping shows
-sibling classes obfuscated (`CordieriteBuildConfig -> …cordierite.a`) while
-`CordieriteNativeMarker` keeps its fully-qualified name, and `doctor --assert-present`
+sibling classes obfuscated (`AppductBuildConfig -> …appduct.a`) while
+`AppductNativeMarker` keeps its fully-qualified name, and `doctor --assert-present`
 passes on that artifact.
 
 **Still not covered:** R8 *full mode* with `-repackageclasses` was not exercised, and no
@@ -131,12 +131,12 @@ measurement.
 ### This repo's own CI wiring
 
 **This repo's own CI wires the gate** (`test.yaml`'s `android` job) against all three
-`CORDIERITE_ENABLED` states: after the existing `testDebugUnitTest`/`assembleDebug` step (unset
-`CORDIERITE_ENABLED`, the default), it asserts `--assert-present` against the debug APK, then
+`APPDUCT_ENABLED` states: after the existing `testDebugUnitTest`/`assembleDebug` step (unset
+`APPDUCT_ENABLED`, the default), it asserts `--assert-present` against the debug APK, then
 assembles the same android/ directory's **Release** build and asserts `--assert-absent` against
-it — proving the dev-only default actually excludes Cordierite from release. It then re-prebuilds
-with `CORDIERITE_ENABLED=1`, reassembles Release, and asserts `--assert-present`, proving the
-opt-in path back into release works. Finally it re-prebuilds with `CORDIERITE_ENABLED=0`,
+it — proving the dev-only default actually excludes Appduct from release. It then re-prebuilds
+with `APPDUCT_ENABLED=1`, reassembles Release, and asserts `--assert-present`, proving the
+opt-in path back into release works. Finally it re-prebuilds with `APPDUCT_ENABLED=0`,
 reassembles Release, and asserts `--assert-absent` again — the regression test for
 `docs/tasks/02-fix-autolinking-exclusion.md`'s original failure mode, that the documented
 exclusion recipe had never worked. All four assertions run against a real built artifact each
@@ -144,31 +144,31 @@ run, not by inspecting the config.
 
 **The iOS side is wired too** (`test.yaml`'s `ios` job, `docs/tasks/13-ios-ci-doctor-gate.md`,
 `docs/tasks/14-native-core-extraction.md`): it first runs `swift build -c release` and
-`swift test` at the repo root against the `CordieriteCore` SwiftPM package
+`swift test` at the repo root against the `AppductCore` SwiftPM package
 (`packages/native/ios`) — independent of Expo prebuild or `pod install`, so a stub-compile or
 test regression fails fast, before the slower CocoaPods-based steps below even start. It then
-prebuilds and builds the normal playground `.app` (unset `CORDIERITE_ENABLED`, the default,
-which links Cordierite in Debug) and asserts `--assert-present`, then re-prebuilds with
-`CORDIERITE_ENABLED=0` and rebuilds for the simulator, asserting `--assert-absent`. Only the
+prebuilds and builds the normal playground `.app` (unset `APPDUCT_ENABLED`, the default,
+which links Appduct in Debug) and asserts `--assert-present`, then re-prebuilds with
+`APPDUCT_ENABLED=0` and rebuilds for the simulator, asserting `--assert-absent`. Only the
 Debug configuration is exercised on iOS today — Release-configuration coverage for the new
 dev-only default (mirroring the Android job's Release legs above) is not wired yet.
 
-Earlier revisions of this gate additionally hand-added the `Cordierite` pod for a dedicated
-XCTest target (`playground/plugins/with-native-tests.js`, a `Cordierite-Native-Tests` scheme
-generated by `playground/scripts/create-cordierite-test-scheme.rb`), which needed to skip that
-hand-added pod line whenever Cordierite was excluded — excluding the package from iOS
-autolinking also disables its codegen, and `RCTNativeCordierite.mm` imports a
-`CordieriteSpec.h` header codegen never generates for an excluded module (see "iOS codegen
+Earlier revisions of this gate additionally hand-added the `Appduct` pod for a dedicated
+XCTest target (`playground/plugins/with-native-tests.js`, a `Appduct-Native-Tests` scheme
+generated by `playground/scripts/create-appduct-test-scheme.rb`), which needed to skip that
+hand-added pod line whenever Appduct was excluded — excluding the package from iOS
+autolinking also disables its codegen, and `RCTNativeAppduct.mm` imports a
+`AppductSpec.h` header codegen never generates for an excluded module (see "iOS codegen
 coupling" in `docs/ARCHITECTURE.md` §11 and `docs/tasks/00-overview.md`). Both files were
-deleted once the native tests moved to `packages/native/ios/Tests/CordieriteCoreTests` and run
+deleted once the native tests moved to `packages/native/ios/Tests/AppductCoreTests` and run
 via plain `swift test` instead — there is no longer a Pods-generated test target for the
 excluded-build case to interact with, so that coupling no longer applies to CI at all.
 
 ### Native playground gates (issue #48 phase 3)
 
-Both platforms' `doctor` gate above only exercises the Expo playground, which links Cordierite
-through RN autolinking and `CORDIERITE_ENABLED`. `packages/native` also ships a public,
-directly-consumable API (`Cordierite.shared` on iOS, the `Cordierite` object on Android,
+Both platforms' `doctor` gate above only exercises the Expo playground, which links Appduct
+through RN autolinking and `APPDUCT_ENABLED`. `packages/native` also ships a public,
+directly-consumable API (`Appduct.shared` on iOS, the `Appduct` object on Android,
 `docs/tasks/18-ios-entry-points.md`/`docs/tasks/19-android-entry-points.md`) with its own,
 independent inclusion mechanism — SwiftPM/CocoaPods build configuration on iOS,
 `debugImplementation`/`releaseImplementation` on Android — that autolinking never touches. The
@@ -179,18 +179,18 @@ jobs each build the corresponding native playground (`playground-native/android`
 `playground-native/ios`) after their Expo-playground steps, for exactly this reason:
 
 - **Android**: `./gradlew :app:assembleDebug :app:assembleRelease` in `playground-native/android`
-  (which resolves `com.callstackincubator.cordierite:core`/`:core-noop` to the local
+  (which resolves `com.callstackincubator.appduct:core`/`:core-noop` to the local
   `packages/native/android` projects via `settings.gradle`'s `includeBuild` substitution, not a
-  published artifact), then `cordierite doctor --assert-present` on the debug APK and
+  published artifact), then `appduct doctor --assert-present` on the debug APK and
   `--assert-absent` on the release APK — the same marker-only signal the Expo gate uses, proving
   the `debugImplementation(core)`/`releaseImplementation(core-noop)` pairing issue #48 phase 3
   asks a consumer app to declare actually excludes the real implementation from Release.
 - **iOS**: `brew install xcodegen` (idempotent — skipped if already present) and `xcodegen
   generate` in `playground-native/ios` regenerate the gitignored `.xcodeproj` from `project.yml`
   before every build, then `xcodebuild` builds both `Debug` and `Release` for the simulator (no
-  Expo prebuild, no CocoaPods — this app has no React Native anywhere in it), and `cordierite
+  Expo prebuild, no CocoaPods — this app has no React Native anywhere in it), and `appduct
   doctor` asserts present on Debug, absent on Release — proving `Package.swift`'s
-  `.when(configuration: .debug)` split (not `CORDIERITE_ENABLED`, which this app never sets) holds
+  `.when(configuration: .debug)` split (not `APPDUCT_ENABLED`, which this app never sets) holds
   for a real plain-app build.
 
 The standalone `packages/native/android` test step (above) also runs
@@ -201,10 +201,10 @@ is exercised on every run rather than only when someone remembers to check it by
 still `publishToMavenLocal`, not a real publish — CocoaPods trunk / Maven Central / a SwiftPM tag
 publish remains an ops task, not something CI does (see `docs/tasks/21-native-core-integration.md`).
 
-CI invokes the command directly against the built artifact — `node packages/cordierite/bin.js
+CI invokes the command directly against the built artifact — `node packages/appduct/bin.js
 doctor <path> --assert-present|--assert-absent` from the repo root, after `pnpm build` — rather
-than through a published `cordierite` binary, matching how the playground's own
-`scripts/cordierite.sh` launcher invokes the CLI from a workspace checkout.
+than through a published `appduct` binary, matching how the playground's own
+`scripts/appduct.sh` launcher invokes the CLI from a workspace checkout.
 
 ## Release policy
 
@@ -256,7 +256,7 @@ proven path.
     pnpm exec expo prebuild --platform android --no-install
     cd android
     ./gradlew \
-      :cordierite_react-native:testDebugUnitTest \
+      :appduct_react-native:testDebugUnitTest \
       assembleDebug \
       --no-daemon \
       --no-build-cache \
@@ -264,7 +264,7 @@ proven path.
 
     (docs/tasks/14-native-core-extraction.md: the standalone `packages/native/android`
     project's own `:core:testDebugUnitTest` now covers the canonical Kotlin sources;
-    `:cordierite_react-native:testDebugUnitTest` runs against the vendored copy, with no test
+    `:appduct_react-native:testDebugUnitTest` runs against the vendored copy, with no test
     classes of its own left.)
 
     Remove gradle/actions/setup-gradle; the generated wrapper is sufficient.
@@ -286,8 +286,8 @@ proven path.
       COMPILER_INDEX_STORE_ENABLE=NO
 
     (docs/tasks/14-native-core-extraction.md: native Swift unit tests moved out of a
-    CocoaPods-generated scheme into the repo-root `CordieriteCore` SwiftPM package, run with
-    plain `swift test` instead of `xcodebuild test -scheme Cordierite-Unit-Tests`.)
+    CocoaPods-generated scheme into the repo-root `AppductCore` SwiftPM package, run with
+    plain `swift test` instead of `xcodebuild test -scheme Appduct-Unit-Tests`.)
 
     Preserve the existing playground simulator build as a second xcodebuild build step so the workflow tests both the
     native library and consumer integration.
@@ -322,7 +322,7 @@ proven path.
          build and create 3 .tgz files
                  │
                  ▼
-         publish @cordierite/shared
+         publish @appduct/shared
                  │
             ┌────┴────┐
             ▼         ▼
@@ -351,7 +351,7 @@ Important details:
   npm trusted publishing currently requires npm 11.5.1+, Node 22.14+, GitHub-hosted runners, and an exact workflow
   filename. Configure a trusted publisher separately for all three existing npm packages using:
 
-  - Repository: callstackincubator/cordierite
+  - Repository: callstackincubator/appduct
   - Workflow filename: deploy.yaml
   - Environment: npm
   - Allowed operation: npm publish

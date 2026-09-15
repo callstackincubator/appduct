@@ -1,7 +1,7 @@
 # 05 — Explicit trust mode in the native clients
 
 **Wave 1. Depends on 01. Runs in parallel with 04 (different files: this task owns
-`CordieriteConnectionManager.{kt,swift}`; 04 owns `CordieritePackage.kt` and the iOS entry
+`AppductConnectionManager.{kt,swift}`; 04 owns `AppductPackage.kt` and the iOS entry
 files).**
 
 ## Goal
@@ -23,7 +23,7 @@ moves from "we guessed from the build type" to "someone wrote it down".
 
 ## Scope
 
-Read `CordieriteTrust` (iOS `Info.plist`) / `com.callstackincubator.cordierite.TRUST`
+Read `AppductTrust` (iOS `Info.plist`) / `com.callstackincubator.appduct.TRUST`
 (Android meta-data) alongside the existing pins keys. Values: `"link"` | `"pin"`.
 
 Rewrite `resolveTrustedPins` on both platforms to take `(trust, embeddedPins, linkPin)`:
@@ -46,7 +46,7 @@ Keep the unconditional log when link trust is used, reworded — it is now a del
 configuration, not a dev-mode fallback:
 
 ```
-Cordierite: trust=link — trusting the SPKI pin carried by the bootstrap link for this session.
+Appduct: trust=link — trusting the SPKI pin carried by the bootstrap link for this session.
 ```
 
 ## Naming
@@ -59,9 +59,9 @@ link's key** so nobody reads it as verification disabled.
 ## Acceptance
 
 - Unit tests on both platforms cover all four rows of the table plus the missing-key
-  defaults. `CordieriteConnectionManagerTest.kt` and
-  `CordieriteConnectionManagerTests.swift` already have the fixtures pattern to extend.
+  defaults. `AppductConnectionManagerTest.kt` and
+  `AppductConnectionManagerTests.swift` already have the fixtures pattern to extend.
 - `git grep -n "isDebugBuild\|FLAG_DEBUGGABLE"` returns nothing in trust resolution.
 - Parity test between platforms — the existing SPKI parity test is the model.
 - Manual: a Release-signed playground build with `trust: "link"` connects from a fresh
-  `cordierite link` with no pins configured anywhere.
+  `appduct link` with no pins configured anywhere.

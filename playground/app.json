@@ -12,7 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.aitwar.playground",
       "infoPlist": {
-        "CFBundleDisplayName": "Cordierite"
+        "CFBundleDisplayName": "Appduct"
       }
     },
     "android": {
@@ -33,7 +33,7 @@
     "plugins": [
       "expo-router",
       [
-        "@cordierite/react-native",
+        "@appduct/react-native",
         {
           "cliPins": [
             "sha256/jMvNOyMBXvRaZlyrje70/867kKkSA/qTlu30xCrTk4s="

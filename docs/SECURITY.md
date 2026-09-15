@@ -4,15 +4,15 @@ One page: what pinning defends against, what it doesn't, how to configure trust,
 handle keys, and what production deployments should turn on. See
 [`PROTOCOL.md`](PROTOCOL.md) for wire-level detail,
 [`ARCHITECTURE.md`](ARCHITECTURE.md#12-policy--audit) for the policy/audit implementation,
-and [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md) for whether Cordierite's code ships in a given
+and [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md) for whether Appduct's code ships in a given
 build at all.
 
-**In one line:** TLS is required for the Cordierite socket, and pins are SHA-256 over SPKI
+**In one line:** TLS is required for the Appduct socket, and pins are SHA-256 over SPKI
 (`sha256/...`), so only *your* host keys match.
 
 ## Threat model
 
-**What Cordierite defends against:**
+**What Appduct defends against:**
 
 - An attacker on the same Wi-Fi/LAN who can see or intercept traffic — the socket is
   `wss://` (TLS), not cleartext.
@@ -24,16 +24,16 @@ build at all.
   once its TTL elapses or its token is consumed, and 5 failed claim attempts against a
   session id burn the link outright.
 - An unauthenticated local process on the same machine that isn't the operator — the
-  control plane is a Unix domain socket under `~/.cordierite/` at mode `0600`, inside a
+  control plane is a Unix domain socket under `~/.appduct/` at mode `0600`, inside a
   `0700` directory; anything that can't read that socket can't talk to the daemon.
 
-**What Cordierite does not defend against:**
+**What Appduct does not defend against:**
 
 - **A compromised operator machine.** Anything that can read `key.pem` or connect to
   `daemon.sock` has full control: it can mint links, list/invoke tools on any connected
   device, and read the audit log. The trust boundary is the operator's machine, full
   stop — see "Localhost/UDS trust boundary" below.
-- **A malicious or compromised app build.** Cordierite constrains what an *external*
+- **A malicious or compromised app build.** Appduct constrains what an *external*
   caller can do to the app; it assumes the app's own code (and thus whatever tools it
   chooses to register) is trusted. A tool with `destructiveHint` still executes whatever
   its handler does — policy can deny the *call*, not audit the handler's internals.
@@ -42,7 +42,7 @@ build at all.
   alternative). If `key.pem` leaks, an attacker with network access to a claimed or
   claimable session can impersonate the daemon until every app build with the old pin is
   retired. Rotation (below) is the mitigation, not prevention.
-- **Anonymous internet exposure without policy.** Cordierite does not by itself decide
+- **Anonymous internet exposure without policy.** Appduct does not by itself decide
   whether exposing the `wss://` port to the internet is a good idea for your app; that
   decision is yours, and if you make it, policy + audit (below) are not optional.
 
@@ -64,8 +64,8 @@ fresh clone of this repo (or a fresh app project) works with zero setup:
 
 - The daemon auto-generates `key.pem` the first time it starts if the file is missing, and
   prints its `sha256/...` fingerprint.
-- `cordierite link` composes that fingerprint into the deep link as a separate `pin` query
-  param, alongside the existing binary `cordierite` bootstrap payload. The binary payload
+- `appduct link` composes that fingerprint into the deep link as a separate `pin` query
+  param, alongside the existing binary `appduct` bootstrap payload. The binary payload
   format is unchanged — an app build that doesn't know about `pin` simply ignores it.
 - The native client trusts that link-carried pin, for that one link's session only, when the
   effective trust mode is `"link"` (explicit, or the default because no `cliPins` are
@@ -73,7 +73,7 @@ fresh clone of this repo (or a fresh app project) works with zero setup:
   unconditionally (not gated behind any log level):
 
   ```
-  Cordierite: trust=link — trusting the SPKI pin carried by the bootstrap link for this session.
+  Appduct: trust=link — trusting the SPKI pin carried by the bootstrap link for this session.
   ```
 
 - The moment `cliPins` is configured, that embedded set always wins regardless of `trust`'s
@@ -113,11 +113,11 @@ torn down, so a malformed or expired link costs the existing session nothing.
 
 **What actually contains link trust now, since there is no build-type gate:** it is opt-in
 configuration alone. Set `cliPins` (which makes `trust: "pin"` the default) on any build you
-don't want accepting a link-carried pin. Separately, if you don't want Cordierite's native
+don't want accepting a link-carried pin. Separately, if you don't want Appduct's native
 code present in a build at all — regardless of trust mode — exclude it from autolinking (see
-[Compiling Cordierite out of production
-builds](BUILD-VARIANTS.md#compiling-cordierite-out-of-production-builds)); `cordierite doctor`
-([`CI.md`](CI.md#release-gate-cordierite-doctor)) verifies that exclusion actually took
+[Compiling Appduct out of production
+builds](BUILD-VARIANTS.md#compiling-appduct-out-of-production-builds)); `appduct doctor`
+([`CI.md`](CI.md#release-gate-appduct-doctor)) verifies that exclusion actually took
 effect in a built artifact, rather than trusting the config that was supposed to produce
 it.
 
@@ -127,13 +127,13 @@ Nothing here is required for a zero-config app: with no pins configured, `trust:
 is the default and the flow above just works — in any build type. Configure the values
 below when you want a build to trust only keys you embedded ahead of time.
 
-Generate the pin with `cordierite keygen`, which prints the exact `sha256/...` fingerprint
+Generate the pin with `appduct keygen`, which prints the exact `sha256/...` fingerprint
 value to use. After changing any of this, run your normal prebuild / rebuild flow so
 native config receives the values.
 
 ### Expo
 
-Add the **`@cordierite/react-native`** config plugin to Expo config:
+Add the **`@appduct/react-native`** config plugin to Expo config:
 
 ```json
 {
@@ -141,7 +141,7 @@ Add the **`@cordierite/react-native`** config plugin to Expo config:
     "scheme": "myapp",
     "plugins": [
       [
-        "@cordierite/react-native",
+        "@appduct/react-native",
         {
           "cliPins": ["sha256/REPLACE_WITH_KEYGEN_OUTPUT"],
           "trust": "pin",
@@ -174,43 +174,43 @@ iOS `Info.plist`:
 
 | Key | Purpose |
 | --- | ------- |
-| `CordieriteCliPins` | String array of `sha256/...` SPKI pins |
-| `CordieriteTrust` | `"link"` \| `"pin"` — any other value is a hard error at connect time |
-| `CordieriteAllowPrivateLanOnly` | Boolean; if true, bootstrap host must be a local IPv4 address |
+| `AppductCliPins` | String array of `sha256/...` SPKI pins |
+| `AppductTrust` | `"link"` \| `"pin"` — any other value is a hard error at connect time |
+| `AppductAllowPrivateLanOnly` | Boolean; if true, bootstrap host must be a local IPv4 address |
 
 Android `<application>` meta-data:
 
 | Name | Purpose |
 | --- | ------- |
-| `com.callstackincubator.cordierite.CLI_PINS` | JSON array string of pin values |
-| `com.callstackincubator.cordierite.TRUST` | `"link"` \| `"pin"` — any other value is a hard error at connect time |
-| `com.callstackincubator.cordierite.ALLOW_PRIVATE_LAN_ONLY` | Boolean meta-data value (a `"true"`/`"false"` String is also accepted); defaults to `true` (fail-closed) when absent |
+| `com.callstackincubator.appduct.CLI_PINS` | JSON array string of pin values |
+| `com.callstackincubator.appduct.TRUST` | `"link"` \| `"pin"` — any other value is a hard error at connect time |
+| `com.callstackincubator.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean meta-data value (a `"true"`/`"false"` String is also accepted); defaults to `true` (fail-closed) when absent |
 
 Wire **deep links** so the OS can open your app with the host's bootstrap URL, and make
-sure the app scheme matches the one `cordierite link` (or the `deepLinkScheme` plugin
+sure the app scheme matches the one `appduct link` (or the `deepLinkScheme` plugin
 option, or `config.json`) uses to compose that link.
 
 ### Plain native apps (no React Native)
 
-A plain iOS app consuming `packages/native` directly (`Cordierite.shared`) sets the exact same
-three `Info.plist` keys — `CordieriteCliPins`, `CordieriteTrust`, `CordieriteAllowPrivateLanOnly`
-— read from the same table above, since both `@cordierite/react-native`'s bridge and the plain-app
+A plain iOS app consuming `packages/native` directly (`Appduct.shared`) sets the exact same
+three `Info.plist` keys — `AppductCliPins`, `AppductTrust`, `AppductAllowPrivateLanOnly`
+— read from the same table above, since both `@appduct/react-native`'s bridge and the plain-app
 facade resolve trust through the same native `resolveTrustedPins` logic. See
 [`packages/native/ios/README.md`](../packages/native/ios/README.md#hardened-builds) for the
-worked example and `Cordierite.shared.buildConfig`, the plain-app equivalent of
-`getCordieriteBuildConfig()`.
+worked example and `Appduct.shared.buildConfig`, the plain-app equivalent of
+`getAppductBuildConfig()`.
 
-A plain Android app consuming `packages/native` directly (the `Cordierite` object) sets the same
-`<application>` meta-data keys — `com.callstackincubator.cordierite.CLI_PINS`, `.TRUST`,
+A plain Android app consuming `packages/native` directly (the `Appduct` object) sets the same
+`<application>` meta-data keys — `com.callstackincubator.appduct.CLI_PINS`, `.TRUST`,
 `.ALLOW_PRIVATE_LAN_ONLY` — from the table above, read by the same `resolveTrustedPins`-equivalent
 logic the RN bridge's `connect()` uses. See
 [`packages/native/android/README.md`](../packages/native/android/README.md#5-hardened-builds) for
-the worked example and `Cordierite.buildConfig`.
+the worked example and `Appduct.buildConfig`.
 
 ### `allowPrivateLanOnly`
 
 When enabled, bootstrap must target a **local IPv4** address — RFC1918 private ranges or
-`127.0.0.1`. It is a **dev-hardening** switch, not a claim that Cordierite is LAN-only.
+`127.0.0.1`. It is a **dev-hardening** switch, not a claim that Appduct is LAN-only.
 
 There is nothing to configure for this in JS: which addresses a bootstrap link may point
 at is native build config, enforced by native `connect()` and read from the same place by
@@ -218,15 +218,15 @@ the deep-link handler. JS can only ever narrow what native allows, never widen i
 
 ### `trust: "pin"` needs pins
 
-`trust: "pin"` requires non-empty `cliPins` (bare RN: `CordieriteTrust`/`TRUST` set to
-`"pin"` **and** `CordieriteCliPins`/`CLI_PINS` non-empty). A build that only ever trusts
+`trust: "pin"` requires non-empty `cliPins` (bare RN: `AppductTrust`/`TRUST` set to
+`"pin"` **and** `AppductCliPins`/`CLI_PINS` non-empty). A build that only ever trusts
 embedded pins but has none configured would have no way to trust anything, so the plugin
 refuses that combination at config time, and the native readers refuse it again if that
 check is ever bypassed by hand.
 
 ### Reading the effective configuration at runtime
 
-**`getCordieriteBuildConfig()`** reports the effective trust configuration a running build
+**`getAppductBuildConfig()`** reports the effective trust configuration a running build
 actually has — `{ trust, hasEmbeddedPins, allowPrivateLanOnly }`. It is read via
 `getConstants()` from the exact same native manifest/plist parse `connect()`'s
 `resolveTrustedPins` uses, never a second parse path, so it can never disagree with what a
@@ -241,9 +241,9 @@ Pin fingerprints themselves are never exposed, only whether any are embedded.
 
 With the native module absent — excluded via autolinking, Expo Go, or a
 debug-tooling-free JS-only environment — every exported function on the root
-`@cordierite/react-native` entry degrades to the exact `./noop` entry's behavior: one
-warning log the first time, no throws, `getCordieriteState()` reporting `"idle"`, and
-`connect()` always rejecting with `CordieriteDisabledError` (`code: "cordierite_disabled"`).
+`@appduct/react-native` entry degrades to the exact `./noop` entry's behavior: one
+warning log the first time, no throws, `getAppductState()` reporting `"idle"`, and
+`connect()` always rejecting with `AppductDisabledError` (`code: "appduct_disabled"`).
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md#11-react-native-sdk) §11 for the parity contract
 between the two entries, and [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md) for how to produce
@@ -252,7 +252,7 @@ such a build deliberately.
 ## Gating a tool by build variant
 
 Registration is the app-side allowlist, and it is the only control that sits inside the
-app's own trust boundary. `useCordieriteTool` takes a third `options` argument,
+app's own trust boundary. `useAppductTool` takes a third `options` argument,
 `{ enabled?: boolean }` (default `true`).
 
 `enabled: false` never registers the tool, and removing it (or a hook that was already
@@ -261,20 +261,20 @@ unregisters cleanly — so put the condition in the argument instead of wrapping
 call in an `if`, which is a rules-of-hooks violation:
 
 ```ts
-useCordieriteTool(
+useAppductTool(
   {
     name: "wipe-local-db",
     description: "Destructive: clears the local database",
     handler: async () => wipeLocalDb(),
   },
   [],
-  { enabled: process.env.EXPO_PUBLIC_CORDIERITE_TOOLS === "full" }
+  { enabled: process.env.EXPO_PUBLIC_APPDUCT_TOOLS === "full" }
 );
 ```
 
 The recommended predicate is an app-owned build flag inlined by the bundler at build time
 (`EXPO_PUBLIC_*` env vars, a Babel define plugin, etc.) — something your release pipeline
-controls explicitly, like `process.env.EXPO_PUBLIC_CORDIERITE_TOOLS === "full"` above.
+controls explicitly, like `process.env.EXPO_PUBLIC_APPDUCT_TOOLS === "full"` above.
 
 **`__DEV__` is the wrong default here**, for the same reason a `debuggable` build-type
 check is the wrong native gate: `__DEV__` is `false` in *any* release-bundled JS, including
@@ -299,10 +299,10 @@ should discover tools via `tools/list` rather than assume a fixed set is always 
   group- or world-readable — treat that refusal as the system working, not a bug to
   work around by loosening permissions.
 - **One key per developer/environment**, not one key shared across a team or checked
-  into a shared secrets store that many people can read. `cordierite keygen` is cheap;
+  into a shared secrets store that many people can read. `appduct keygen` is cheap;
   run it per machine.
 - **Back up the fingerprint, not just the key.** The `sha256/...` value printed by
-  `cordierite keygen` is what you actually ship in app config (`cliPins`); losing the key
+  `appduct keygen` is what you actually ship in app config (`cliPins`); losing the key
   file just means generating a new one and re-shipping the app, which is the normal
   rotation path anyway.
 
@@ -311,7 +311,7 @@ should discover tools via `tools/list` rather than assume a fixed set is always 
 Both native clients accept a pin *set*, not a single pin — this is what makes rotation
 possible without a flag day:
 
-1. Generate a new key: `cordierite keygen --out new-key.pem`. Note its printed
+1. Generate a new key: `appduct keygen --out new-key.pem`. Note its printed
    fingerprint (`sha256/NEW...`).
 2. Add the new fingerprint to the app's `cliPins` **alongside** the existing one (don't
    remove the old one yet):
@@ -321,7 +321,7 @@ possible without a flag day:
 3. Ship that app build. Any app on this build now trusts either key, so operators can
    run daemons on either the old or the new key without breaking anyone.
 4. Point new/updated daemons at `new-key.pem` (`config.json`'s `keyPath`, or
-   `cordierite keygen`'s default output).
+   `appduct keygen`'s default output).
 5. Once every app build in the field has picked up step 2-3's release (track this the
    same way you track any minimum-supported-version rollout), ship a follow-up release
    that drops `sha256/OLD...` from `cliPins` and retires `key.pem`.
@@ -332,7 +332,7 @@ and keeps any one key's exposure window bounded.
 
 ## Production guidance
 
-Cordierite is dev-first but production-capable: the same protocol runs everywhere,
+Appduct is dev-first but production-capable: the same protocol runs everywhere,
 production just turns on the pieces below rather than using a different architecture.
 
 **Policy and audit are operator ergonomics, not a production control.** Both run on the
@@ -342,7 +342,7 @@ names above ("A compromised operator machine"). Anyone who can read `key.pem` or
 audited by its own audit log; policy/audit shape what a *legitimate* CLI/MCP caller talking
 to an *honest* daemon can do, they do not defend the app against the operator machine
 itself. The control that actually sits inside the app, on the app's side of the trust
-boundary, is **which tools the app registers at all** — `useCordieriteTool`'s `enabled`
+boundary, is **which tools the app registers at all** — `useAppductTool`'s `enabled`
 option (see [Gating a tool by build variant](#gating-a-tool-by-build-variant)) lets an app conditionally
 withhold a destructive tool's registration based on its own release-pipeline-controlled
 build flag, independent of whatever the operator machine's daemon policy says. Treat policy
@@ -352,7 +352,7 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
 - **Policy.** Set `config.json`'s `policy.default` / `policy.destructive` (and per-tool
   `policy.tools["<alias>/<name>"]` overrides) to `"deny"` for anything you don't want an
   arbitrary caller invoking against a production build. Every `tools.call` — CLI, MCP, and
-  `cordierite/client` alike — is evaluated against this before it ever reaches the app;
+  `appduct/client` alike — is evaluated against this before it ever reaches the app;
   a denial returns `policy_denied` and never sends a `tool_call` frame. `"prompt"` requires a human gate
   and fails closed everywhere one can't be guaranteed: today the only implemented gate
   is an MCP client that enforces `_meta["anthropic/requiresUserInteraction"]` (Claude
@@ -388,24 +388,24 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   filesystem).
 - **Inclusion defaults to dev builds only — not a compiled-in build-type check.** iOS
   restricts CocoaPods linking to the `Debug` configuration; Android swaps in a no-op
-  `CordieritePackage` for `release`. Both are real per-variant decisions, not a
+  `AppductPackage` for `release`. Both are real per-variant decisions, not a
   `debuggable`/`#if DEBUG` gate compiled into every variant, and neither quietly depends on
   a custom build-type/configuration name being spelled `debug`/`Debug`.
 
-  A release pipeline that wants Cordierite anyway (an agent-driven, release-signed internal
-  build) sets `CORDIERITE_ENABLED=1`; one that wants it gone even from debug sets
-  `CORDIERITE_ENABLED=0`.
+  A release pipeline that wants Appduct anyway (an agent-driven, release-signed internal
+  build) sets `APPDUCT_ENABLED=1`; one that wants it gone even from debug sets
+  `APPDUCT_ENABLED=0`.
   [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md#inclusion-is-an-autolinking-decision) has the full
   mechanism.
 
-  Verify the outcome against the built artifact (`cordierite doctor`,
-  [`CI.md`](CI.md#release-gate-cordierite-doctor)). On Android, `doctor` deliberately trusts
-  only its `CordieriteNativeMarker` keep-rule signal, since the release-default no-op stub
+  Verify the outcome against the built artifact (`appduct doctor`,
+  [`CI.md`](CI.md#release-gate-appduct-doctor)). On Android, `doctor` deliberately trusts
+  only its `AppductNativeMarker` keep-rule signal, since the release-default no-op stub
   shares the real implementation's package name and would otherwise look present to a naive
   scan. When the module genuinely isn't present, the JS public API degrades to the exact
   `./noop` entry's behavior — see [What a build without the native module
   does](#what-a-build-without-the-native-module-does).
-- **Compile out of a build you don't want carrying Cordierite at all.** Being present and
+- **Compile out of a build you don't want carrying Appduct at all.** Being present and
   trusting nothing (`trust: "pin"` with a `cliPins` set that has no matching daemon, or an
   app that simply never mints a bootstrap link for that build) still ships the native code
   and JS bundle inside the binary.
@@ -415,14 +415,14 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   for `/noop` at bundle time is the only thing that removes the deep-link listener and tool
   registry from the bundle.
 
-  Neither alone removes both. `CORDIERITE_ENABLED=0` drives both at once, but only once
-  the `withCordierite` Metro helper is wired into `metro.config.js` — without it the
+  Neither alone removes both. `APPDUCT_ENABLED=0` drives both at once, but only once
+  the `withAppduct` Metro helper is wired into `metro.config.js` — without it the
   variable removes the native half only.
 
   The exact snippets, the `package.json`-only placement of `expo.autolinking`, the
   `apple`-overrides-`ios` rule and the iOS codegen coupling live in
-  [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md#compiling-cordierite-out-of-production-builds).
-  [`CI.md`](CI.md#release-gate-cordierite-doctor)'s `cordierite doctor` verifies the
+  [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md#compiling-appduct-out-of-production-builds).
+  [`CI.md`](CI.md#release-gate-appduct-doctor)'s `appduct doctor` verifies the
   exclusion actually took effect in a built artifact rather than trusting the config that
   was supposed to produce it — this whole area was a config recipe that never worked once
   before (see [`tasks/02-fix-autolinking-exclusion.md`](tasks/02-fix-autolinking-exclusion.md)),
@@ -430,9 +430,9 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
 - **App-store-review note.** An always-installed deep-link listener that can open a
   pinned socket and let an external process invoke code is a legitimate "remote control"
   surface from a reviewer's point of view, even though it can't be exercised without a
-  trusted key. A release build submitted to app-store review does *not* carry Cordierite by
-  default (see above); a team that overrides this with `CORDIERITE_ENABLED=1` for a review
-  build should be ready to explain the trust model in review notes, or exclude Cordierite
+  trusted key. A release build submitted to app-store review does *not* carry Appduct by
+  default (see above); a team that overrides this with `APPDUCT_ENABLED=1` for a review
+  build should be ready to explain the trust model in review notes, or exclude Appduct
   entirely (above) for that build track instead.
 
 ## The localhost/UDS trust boundary
@@ -447,8 +447,8 @@ protocols — already assumes for the same-user case), not an oversight, but it 
 - Don't run the daemon as a different, more-privileged user than the processes that
   should be allowed to talk to it.
 - Multi-tenant machines (shared CI runners, shared dev boxes) should give each
-  tenant/user their own `CORDIERITE_STATE_DIR`, since anyone who can reach another user's
-  socket has that user's full Cordierite access.
+  tenant/user their own `APPDUCT_STATE_DIR`, since anyone who can reach another user's
+  socket has that user's full Appduct access.
 - This boundary is orthogonal to the `wss://` pinning boundary: compromising the UDS
   control plane gets you the same access as running the CLI yourself, but does not by
   itself hand you the private key or let you impersonate the daemon to a device that

@@ -1,7 +1,7 @@
 # Registering tools
 
-How the app side of Cordierite publishes tools: the schema forms it accepts, what the
-`useCordieriteTool` hook actually re-registers, the shape MCP requires, and how long a call
+How the app side of Appduct publishes tools: the schema forms it accepts, what the
+`useAppductTool` hook actually re-registers, the shape MCP requires, and how long a call
 may run. The five-minute version lives in the
 [package README](../packages/react-native/README.md#4-define-tools-in-app-startup-code); keeping a
 destructive tool out of a build variant is [its own
@@ -19,11 +19,11 @@ An agent can only use a tool it can see the shape of, so every form below except
 
 A Standard Schema does not have to be a plain object: arktype's `Type` is callable, and is detected the same way (anything carrying `~standard.validate`).
 
-Whatever form you use, an **input schema must be object-typed at its root** to be callable over MCP — a root `enum`, `const`, `$ref` or `anyOf` is legal JSON Schema but leaves the agent with no named arguments to pass (see [#34](https://github.com/callstackincubator/cordierite/issues/34)).
+Whatever form you use, an **input schema must be object-typed at its root** to be callable over MCP — a root `enum`, `const`, `$ref` or `anyOf` is legal JSON Schema but leaves the agent with no named arguments to pass (see [#34](https://github.com/callstackincubator/appduct/issues/34)).
 
-Cordierite has no third-party runtime dependencies and does not bundle a JSON Schema validator, so a raw JSON Schema describes the tool for the agent but never enforces anything. Use a pair when you want both a real shape *and* real validation.
+Appduct has no third-party runtime dependencies and does not bundle a JSON Schema validator, so a raw JSON Schema describes the tool for the agent but never enforces anything. Use a pair when you want both a real shape *and* real validation.
 
-The wire field is documented as draft 2020-12, but Cordierite forwards whatever you supply as-is — it does not normalize, re-target, or check the dialect, and different libraries emit different JSON Schema for the same shape (draft version, `additionalProperties`, how `default` is handled). Pick the target closest to 2020-12 that your converter offers.
+The wire field is documented as draft 2020-12, but Appduct forwards whatever you supply as-is — it does not normalize, re-target, or check the dialect, and different libraries emit different JSON Schema for the same shape (draft version, `additionalProperties`, how `default` is handled). Pick the target closest to 2020-12 that your converter offers.
 
 **Zod 3** — pair the schema with `zod-to-json-schema`:
 
@@ -59,7 +59,7 @@ const inputSchema = { schema: sumInput, jsonSchema: toJsonSchema(sumInput) };
 **No validation library at all** — hand over JSON Schema directly. `jsonSchema<T>()` is an optional, purely type-level helper that tells the handler what to expect; it validates nothing:
 
 ```ts
-import { jsonSchema, registerTool } from "@cordierite/react-native";
+import { jsonSchema, registerTool } from "@appduct/react-native";
 
 registerTool({
   name: "weather",
@@ -82,7 +82,7 @@ An object mentioning `schema` or `jsonSchema` that is not a valid pair is reject
 
 All of these throw a `TypeError` at registration naming what to fix.
 
-**A Standard Schema with no exporter throws in development.** Passing a bare zod 3 or plain valibot schema used to register the tool with no shape at all, which agents saw as "takes any object" — the tool looked fine and was unusable. In `__DEV__` that now throws at `registerTool` with a message pointing at the two forms above — including when the call comes from `useCordieriteTool`, where the throw surfaces from the component's effect. Release builds keep the old behaviour (one console warning per tool name, tool registered without a schema) so an app already shipping such a tool is not broken by upgrading.
+**A Standard Schema with no exporter throws in development.** Passing a bare zod 3 or plain valibot schema used to register the tool with no shape at all, which agents saw as "takes any object" — the tool looked fine and was unusable. In `__DEV__` that now throws at `registerTool` with a message pointing at the two forms above — including when the call comes from `useAppductTool`, where the throw surfaces from the component's effect. Release builds keep the old behaviour (one console warning per tool name, tool registered without a schema) so an app already shipping such a tool is not broken by upgrading.
 
 ## Registration is per mount, not per render
 **Registration is per mount, not per render.** The hook registers once when the component mounts and re-registers only when something that changes the registration itself changed: `name`, `description`, the exported input/output JSON Schemas, `annotations`, `timeoutMs`, or `enabled`. Re-rendering the component — including on every keystroke of some unrelated state — sends nothing over the wire and does not make agents re-fetch `tools/list`.
@@ -92,7 +92,7 @@ All of these throw a `TypeError` at registration naming what to fix.
 ```ts
 const [cartId, setCartId] = useState<string | null>(null);
 
-useCordieriteTool({
+useAppductTool({
   name: "seed_cart",
   description: "Fill the current cart with test items",
   inputSchema: z.object({ items: z.number() }),
@@ -123,22 +123,22 @@ Because exportable schemas are compared by their *exported* JSON Schema, the reg
 | `z.discriminatedUnion(...)` | `oneOf` | no, even when every branch is an object |
 | `z.intersection(a, b)` | `allOf` | no, even when both sides are objects |
 
-A client validates the *whole* `tools/list` result, so one such schema would otherwise leave the agent with zero tools from your app. Cordierite degrades it instead:
+A client validates the *whole* `tools/list` result, so one such schema would otherwise leave the agent with zero tools from your app. Appduct degrades it instead:
 
-| Schema | What Cordierite does |
+| Schema | What Appduct does |
 | --- | --- |
 | `outputSchema` MCP cannot accept | Drops it from `tools/list`. The tool stays listed and callable; its result arrives as JSON text, with no schema describing it (agents still get `structuredContent` when the result happens to be a JSON object, they just have nothing to validate it against). |
-| `inputSchema` MCP cannot accept | Replaces it with a permissive empty object schema, so agents cannot see the tool's real arguments. MCP arguments are always an object, so the tool is not usefully callable this way ([#34](https://github.com/callstackincubator/cordierite/issues/34) tracks argument wrapping). |
+| `inputSchema` MCP cannot accept | Replaces it with a permissive empty object schema, so agents cannot see the tool's real arguments. MCP arguments are always an object, so the tool is not usefully callable this way ([#34](https://github.com/callstackincubator/appduct/issues/34) tracks argument wrapping). |
 
-Both log a dev warning naming the tool when it registers. That warning is a best-effort hint covering the root type only, which is everything zod itself can produce; MCP rejects a little more than that (a `properties` entry that is not an object subschema, such as the `{ a: true }` shorthand, or a `required` that is not an array), and those slip past it. **The authoritative signal is the `cordierite mcp:` notice on the MCP server's stderr** — it names the tool and quotes the SDK's own reason for rejecting the schema.
+Both log a dev warning naming the tool when it registers. That warning is a best-effort hint covering the root type only, which is everything zod itself can produce; MCP rejects a little more than that (a `properties` entry that is not an object subschema, such as the `{ a: true }` shorthand, or a `required` that is not an array), and those slip past it. **The authoritative signal is the `appduct mcp:` notice on the MCP server's stderr** — it names the tool and quotes the SDK's own reason for rejecting the schema.
 
-Wrap the value instead — `outputSchema: z.object({ todos: z.array(z.string()) })` rather than `z.array(z.string())` — and agents get the full shape, described and validated. `cordierite invoke`, `--json` output, and the JS client are unaffected either way: they carry the real schema and the raw result.
+Wrap the value instead — `outputSchema: z.object({ todos: z.array(z.string()) })` rather than `z.array(z.string())` — and agents get the full shape, described and validated. `appduct invoke`, `--json` output, and the JS client are unaffected either way: they carry the real schema and the raw result.
 
 ## Long-running tools
-**Long-running tools:** a tool call gets 10 seconds by default. Declaring `timeoutMs` on the registration is the *only* way to raise that — a real `login()`, a `seedCart()` that hits your backend. That deadline is then the one enforced end to end: the app aborts the handler's `signal` at it, and it also travels to the daemon as the descriptor's `timeout_ms`, so an agent calling the tool over MCP (or `cordierite invoke` with no `--timeout`) gets the same budget instead of a `tool_timeout` at 10 s:
+**Long-running tools:** a tool call gets 10 seconds by default. Declaring `timeoutMs` on the registration is the *only* way to raise that — a real `login()`, a `seedCart()` that hits your backend. That deadline is then the one enforced end to end: the app aborts the handler's `signal` at it, and it also travels to the daemon as the descriptor's `timeout_ms`, so an agent calling the tool over MCP (or `appduct invoke` with no `--timeout`) gets the same budget instead of a `tool_timeout` at 10 s:
 
 ```ts
-useCordieriteTool(
+useAppductTool(
   {
     name: "login",
     description: "Signs a test user in against the real backend",
@@ -149,4 +149,4 @@ useCordieriteTool(
 );
 ```
 
-The SDK clamps the value to `[1_000, 600_000]` ms before either timer is set, so the handler's abort timer and the daemon's call deadline are always the same number (a value outside that range is clamped with a dev warning). A caller that passes its own timeout (`cordierite invoke --timeout`, `app.call(name, args, { timeoutMs })`) can **shorten** the deadline but cannot extend it past this one: the app aborts the handler at its own timer regardless — so for a tool that declares nothing, a caller asking for 60 s still gets the app's 10 s default. `createCordieriteClient`'s `defaultToolTimeoutMs` changes only that app-side fallback for tools that declare nothing; it is deliberately not sent to the daemon, so declare `timeoutMs` per tool when the host needs to know.
+The SDK clamps the value to `[1_000, 600_000]` ms before either timer is set, so the handler's abort timer and the daemon's call deadline are always the same number (a value outside that range is clamped with a dev warning). A caller that passes its own timeout (`appduct invoke --timeout`, `app.call(name, args, { timeoutMs })`) can **shorten** the deadline but cannot extend it past this one: the app aborts the handler at its own timer regardless — so for a tool that declares nothing, a caller asking for 60 s still gets the app's 10 s default. `createAppductClient`'s `defaultToolTimeoutMs` changes only that app-side fallback for tools that declare nothing; it is deliberately not sent to the daemon, so declare `timeoutMs` per tool when the host needs to know.

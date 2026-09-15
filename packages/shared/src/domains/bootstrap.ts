@@ -217,23 +217,23 @@ export const encodeBootstrap = (payload: BootstrapPayload): string => {
   const tokenBytes = decodeBase64UrlToBytes(payload.token);
 
   if (!tokenBytes || tokenBytes.length !== TOKEN_BYTES) {
-    throw new Error("Cordierite bootstrap token must base64url-decode to exactly 32 bytes.");
+    throw new Error("Appduct bootstrap token must base64url-decode to exactly 32 bytes.");
   }
 
   const sessionIdBytes = textEncoder.encode(payload.sessionId);
 
   if (sessionIdBytes.length === 0 || sessionIdBytes.length > 255) {
-    throw new Error("Cordierite bootstrap sessionId must be 1-255 UTF-8 bytes.");
+    throw new Error("Appduct bootstrap sessionId must be 1-255 UTF-8 bytes.");
   }
 
   if (!isValidPort(payload.port)) {
-    throw new Error("Cordierite bootstrap has an invalid port.");
+    throw new Error("Appduct bootstrap has an invalid port.");
   }
 
   const addressBytes = addressToBytes(payload.family, payload.address);
 
   if (!addressBytes) {
-    throw new Error(`Cordierite bootstrap has an invalid family-${payload.family} address.`);
+    throw new Error(`Appduct bootstrap has an invalid family-${payload.family} address.`);
   }
 
   const total = 1 + 1 + addressBytes.length + 2 + 1 + sessionIdBytes.length + TOKEN_BYTES + EXPIRES_AT_BYTES;

@@ -2,23 +2,23 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 apply plugin: 'maven-publish'
 
-group = 'com.callstackincubator.cordierite'
-version = rootProject.ext.cordieriteVersion
+group = 'com.callstackincubator.appduct'
+version = rootProject.ext.appductVersion
 
 android {
-  // Distinct from @cordierite/react-native's own AAR namespace ("com.callstackincubator.cordierite",
+  // Distinct from @appduct/react-native's own AAR namespace ("com.callstackincubator.appduct",
   // packages/react-native/android/build.gradle) even though the Kotlin *package* the classes in this
   // module live in is left unchanged (docs/tasks/14-native-core-extraction.md: "keeping the existing
   // package is acceptable and lower-risk" -- it avoids touching every import across the moved files
   // and the RN bridge that references them). The AAR namespace and the Kotlin package are unrelated
   // concepts in AGP: this only controls where this module's own generated `R`/`BuildConfig` classes
   // live, and it must differ from the RN module's own namespace so a debug build that links both
-  // `@cordierite/react-native`'s android module *and* this `core` module (which is exactly what
+  // `@appduct/react-native`'s android module *and* this `core` module (which is exactly what
   // happens once it is vendored in) never collides on a shared manifest package. `core-noop` uses the
   // same namespace as `core` -- the two are never linked into the same build variant at once (one
   // is `debugImplementation`, the other `releaseImplementation`), so they cannot collide with each
   // other, only with the RN module they're paired with.
-  namespace 'com.callstackincubator.cordierite.core'
+  namespace 'com.callstackincubator.appduct.core'
   compileSdk rootProject.ext.compileSdkVersion
 
   defaultConfig {
@@ -29,7 +29,7 @@ android {
 
   testOptions {
     unitTests {
-      // Required by Robolectric, which backs CordieriteSpkiPinTest (the only test class that needs a
+      // Required by Robolectric, which backs AppductSpkiPinTest (the only test class that needs a
       // real android.util.Base64 / android.jar runtime). Every other unit test runs on the plain JVM.
       includeAndroidResources = true
     }
@@ -61,13 +61,13 @@ android {
 
 dependencies {
   implementation "com.squareup.okhttp3:okhttp:4.12.0"
-  // CordieriteClient's public API (docs/tasks/16-android-session-logic.md): suspend fun connect/
+  // AppductClient's public API (docs/tasks/16-android-session-logic.md): suspend fun connect/
   // restoreSession/disconnect/postEvent, per-call timeout/cancel via coroutine cancellation.
-  // core-noop deliberately does not depend on this (its CordieriteClient mirror needs no coroutine
+  // core-noop deliberately does not depend on this (its AppductClient mirror needs no coroutine
   // machinery for a same-signature no-op) -- see that module's build.gradle.
   api "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1"
   api "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
-  // ProcessLifecycleOwner: foreground/background observation backing CordieriteClient's
+  // ProcessLifecycleOwner: foreground/background observation backing AppductClient's
   // reconnect-pause-while-backgrounded rule (mirrors client/index.ts's AppState handling).
   implementation "androidx.lifecycle:lifecycle-process:2.8.7"
 
@@ -77,33 +77,33 @@ dependencies {
   // unit-test runtime.
   testImplementation "org.json:json:20180813"
   // Robolectric supplies a real android.util.Base64 (and the rest of android.jar) so
-  // CordieriteSpkiPinTest can call the shipped `computeSpkiPin`/`PinningTrustManager` instead of
+  // AppductSpkiPinTest can call the shipped `computeSpkiPin`/`PinningTrustManager` instead of
   // re-deriving the digest math. Still no emulator: it runs in the same JVM test task.
   testImplementation "org.robolectric:robolectric:4.16"
 }
 
-// `${cordieriteScheme}` in src/main/AndroidManifest.xml is deliberately left unresolved by this
+// `${appductScheme}` in src/main/AndroidManifest.xml is deliberately left unresolved by this
 // module's own build config -- a real consumer resolves it from their own app's
 // `manifestPlaceholders`. AGP resolves a library's manifest placeholders once, at that library's
 // own manifest-merge step, baking a literal value into the merged manifest that a downstream
 // consumer then inherits verbatim -- proven the hard way: an earlier `defaultConfig.manifestPlaceholders`
 // default here leaked into playground-native's own debug build via project substitution, silently
-// overriding that app's own `cordieriteScheme` (docs/tasks/19-android-entry-points.md's deviations
+// overriding that app's own `appductScheme` (docs/tasks/19-android-entry-points.md's deviations
 // section). So the only placeholder value this module may ever set is one scoped to a component
 // real consumers never resolve through: `unitTest`, which needs *some* concrete value purely so
-// Robolectric's CordieriteLinkActivityTest gets a mergeable manifest, and is never published or
+// Robolectric's AppductLinkActivityTest gets a mergeable manifest, and is never published or
 // depended on by anything downstream.
 androidComponents {
   onVariants(selector().withBuildType("debug")) { variant ->
-    variant.unitTest?.manifestPlaceholders?.put("cordieriteScheme", "cordierite-core-test")
+    variant.unitTest?.manifestPlaceholders?.put("appductScheme", "appduct-core-test")
   }
 }
 
 // Minimal `maven-publish` wiring for Phase 3 (docs/tasks/14-native-core-extraction.md), when this
 // module is actually published to Maven Central rather than only vendored into
-// @cordierite/react-native by scripts/sync-native-core.mjs. Not exercised by CI yet -- no
+// @appduct/react-native by scripts/sync-native-core.mjs. Not exercised by CI yet -- no
 // `publishing.repositories` target is configured -- but the coordinates are fixed now so a
-// consumer's `debugImplementation("com.callstackincubator.cordierite:core:<version>")` (see the
+// consumer's `debugImplementation("com.callstackincubator.appduct:core:<version>")` (see the
 // issue's Phase 3 sketch) is stable ahead of the actual publish.
 afterEvaluate {
   publishing {

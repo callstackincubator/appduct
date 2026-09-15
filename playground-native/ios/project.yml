@@ -1,12 +1,12 @@
-name: CordieritePlayground
+name: AppductPlayground
 options:
-  bundleIdPrefix: com.callstackincubator.cordierite
+  bundleIdPrefix: com.callstackincubator.appduct
   deploymentTarget:
     iOS: "15.1"
   # xcodegen otherwise fabricates its own scheme with `buildTarget`-derived config choices; naming
   # ours explicitly guarantees Debug/Release map to the Debug/Release build configurations below
   # (matters here specifically because that mapping is what decides whether the SwiftPM package's
-  # `CORDIERITE_ENABLED` define is set -- see the `packages` section's comment).
+  # `APPDUCT_ENABLED` define is set -- see the `packages` section's comment).
   generateEmptyDirectories: false
 
 configs:
@@ -14,30 +14,30 @@ configs:
   Release: release
 
 # Local SwiftPM dependency on the repo-root package (`../../Package.swift`, which points into
-# `packages/native/ios/Sources/CordieriteCore` -- see that manifest's own header comment for why it
+# `packages/native/ios/Sources/AppductCore` -- see that manifest's own header comment for why it
 # lives at the repo root). No version/branch requirement: this is the same worktree, always built
 # from source, exactly like `packages/react-native`'s CocoaPods vendoring but for SwiftPM instead.
 packages:
-  CordieriteCore:
+  AppductCore:
     path: ../../
 
 targets:
-  CordieritePlayground:
+  AppductPlayground:
     type: application
     platform: iOS
     deploymentTarget: "15.1"
     sources:
-      - path: CordieritePlayground
+      - path: AppductPlayground
     dependencies:
-      - package: CordieriteCore
-        product: CordieriteCore
+      - package: AppductCore
+        product: AppductCore
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.callstackincubator.cordierite.playgroundnative
-        PRODUCT_NAME: CordieritePlayground
+        PRODUCT_BUNDLE_IDENTIFIER: com.callstackincubator.appduct.playgroundnative
+        PRODUCT_NAME: AppductPlayground
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
-        INFOPLIST_FILE: CordieritePlayground/Info.plist
+        INFOPLIST_FILE: AppductPlayground/Info.plist
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         ASSETSCATALOG_COMPILER_APPICON_NAME: ""
@@ -47,13 +47,13 @@ targets:
         Debug:
           # No override needed: Xcode passes the `Debug` configuration name straight through to
           # SwiftPM, which is exactly the name `Package.swift`'s `.when(configuration: .debug)`
-          # checks -- so this target's Debug build gets the real `CordieriteCore` implementation
-          # (Decision 2, docs/tasks/14-native-core-extraction.md), same as Cordierite.podspec's
+          # checks -- so this target's Debug build gets the real `AppductCore` implementation
+          # (Decision 2, docs/tasks/14-native-core-extraction.md), same as Appduct.podspec's
           # `:configurations => ['Debug']` restriction on the RN side.
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
         Release:
           # Deliberately no `AlwaysEnabled` trait wiring here: this target links the plain
-          # `CordieriteCore` product, so Release gets the SwiftPM package's `Stub/` branch, and
-          # `cordierite doctor --assert-absent` is expected to hold for this configuration (verified
+          # `AppductCore` product, so Release gets the SwiftPM package's `Stub/` branch, and
+          # `appduct doctor --assert-absent` is expected to hold for this configuration (verified
           # below rather than assumed).
           {}

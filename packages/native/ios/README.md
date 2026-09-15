@@ -1,16 +1,16 @@
-# `CordieriteCore` for iOS
+# `AppductCore` for iOS
 
 Tools and state from outside a plain iOS app — no React Native, no Expo required. This is the
-Swift SDK behind `@cordierite/react-native`'s iOS half, usable directly from any SwiftUI/UIKit app:
+Swift SDK behind `@appduct/react-native`'s iOS half, usable directly from any SwiftUI/UIKit app:
 register tools, forward a deep link, and a CLI or agent can claim a session, list your tools, and
-invoke them over a pinned `wss://` handshake, the same way `@cordierite/react-native` does for a
+invoke them over a pinned `wss://` handshake, the same way `@appduct/react-native` does for a
 React Native app. See the [repo README](../../../README.md) and
-[`docs/PROTOCOL.md`](../../../docs/PROTOCOL.md) for what Cordierite is; this document is the iOS
+[`docs/PROTOCOL.md`](../../../docs/PROTOCOL.md) for what Appduct is; this document is the iOS
 integration guide.
 
 If you're integrating from React Native instead, see
 [`packages/react-native/README.md`](../../react-native/README.md) — this package is what that one
-vendors under the hood (`docs/internal/native-core.md`'s "How `@cordierite/react-native` vendors
+vendors under the hood (`docs/internal/native-core.md`'s "How `@appduct/react-native` vendors
 this").
 
 ## Install
@@ -18,10 +18,10 @@ this").
 ### Swift Package Manager
 
 ```swift
-.package(url: "https://github.com/callstackincubator/cordierite", from: "0.8.0")
+.package(url: "https://github.com/callstackincubator/appduct", from: "0.8.0")
 ```
 
-Add the `CordieriteCore` product to your app target. **No further configuration ships the real
+Add the `AppductCore` product to your app target. **No further configuration ships the real
 implementation only in `Debug`, matching the RN package's own default** (see
 [Compiling out of Release](#compiling-out-of-release) below) — by default a `Release` build links
 the same-API `Stub/` implementation instead, so your app never carries the real connection code in
@@ -31,7 +31,7 @@ To carry the real implementation into a `Release` build too (an internal/QA buil
 the `AlwaysEnabled` package trait instead:
 
 ```swift
-.package(url: "https://github.com/callstackincubator/cordierite", from: "0.8.0", traits: ["AlwaysEnabled"])
+.package(url: "https://github.com/callstackincubator/appduct", from: "0.8.0", traits: ["AlwaysEnabled"])
 ```
 
 There is no environment-variable equivalent on this path — see
@@ -40,7 +40,7 @@ There is no environment-variable equivalent on this path — see
 ### CocoaPods
 
 ```ruby
-pod 'CordieriteCore', :configurations => ['Debug']
+pod 'AppductCore', :configurations => ['Debug']
 ```
 
 The `:configurations` restriction is what actually keeps this pod's code out of a `Release`
@@ -50,10 +50,10 @@ you want the pod linked into every configuration.
 
 ## Integration
 
-### 1. Depend on `CordieriteCore` and import it
+### 1. Depend on `AppductCore` and import it
 
 ```swift
-import CordieriteCore
+import AppductCore
 ```
 
 ### 2. Declare your app's URL scheme
@@ -72,16 +72,16 @@ Add a `CFBundleURLTypes` entry to your `Info.plist` (Xcode: target → Info → 
 </array>
 ```
 
-This is the scheme `cordierite link --scheme myapp` (or `cordierite init --scheme myapp` once, or
-`CORDIERITE_SCHEME`) composes the bootstrap deep link with. There is nothing to configure on the
+This is the scheme `appduct link --scheme myapp` (or `appduct init --scheme myapp` once, or
+`APPDUCT_SCHEME`) composes the bootstrap deep link with. There is nothing to configure on the
 Swift side for this step — the scheme lives entirely in `Info.plist`.
 
-### 3. Forward deep links to `Cordierite.shared.handle(_:)`
+### 3. Forward deep links to `Appduct.shared.handle(_:)`
 
 SwiftUI, on your root scene:
 
 ```swift
-import CordieriteCore
+import AppductCore
 import SwiftUI
 
 @main
@@ -90,7 +90,7 @@ struct MyApp: App {
     WindowGroup {
       ContentView()
         .onOpenURL { url in
-          _ = Cordierite.shared.handle(url)
+          _ = Appduct.shared.handle(url)
         }
     }
   }
@@ -103,17 +103,17 @@ URL, `scene(_:willConnectTo:options:)`'s `connectionOptions.urlContexts`):
 ```swift
 func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
   for context in URLContexts {
-    _ = Cordierite.shared.handle(context.url)
+    _ = Appduct.shared.handle(context.url)
   }
 }
 ```
 
-`handle(_:)` returns `true` iff the URL actually carried a Cordierite bootstrap payload, so you can
+`handle(_:)` returns `true` iff the URL actually carried a Appduct bootstrap payload, so you can
 compose it with your own, unrelated deep links:
 
 ```swift
 .onOpenURL { url in
-  if !Cordierite.shared.handle(url) {
+  if !Appduct.shared.handle(url) {
     handleMyOwnDeepLink(url)
   }
 }
@@ -123,15 +123,15 @@ The actual parse/connect work happens asynchronously after `handle(_:)` returns;
 expired payload surfaces through `addListener`'s `.error(...)` case, never as a thrown error from
 `handle(_:)` itself.
 
-`Cordierite.shared`'s first access already starts `restoreSession()` in the background, recovering
+`Appduct.shared`'s first access already starts `restoreSession()` in the background, recovering
 a still-valid process-memory resume lease — you don't need to call it yourself on a cold launch.
 
 ## Registering a tool
 
 ```swift
-import CordieriteCore
+import AppductCore
 
-try Cordierite.shared.register(
+try Appduct.shared.register(
   name: "seed_cart",
   description: "Fill the cart with test items.",
   inputSchema: [
@@ -151,20 +151,20 @@ try Cordierite.shared.register(
 
 - `inputSchema`/`outputSchema` are plain JSON Schema, as `[String: Any]` — there is no schema
   library on this SDK's boundary (Decision 4, `docs/tasks/18-ios-entry-points.md`); the daemon does
-  no input validation either, matching `@cordierite/react-native`'s own native behavior.
+  no input validation either, matching `@appduct/react-native`'s own native behavior.
 - `handler` is `async throws`, and receives converted `[String: Any]` args; return any
   JSON-representable value (`nil`, a number/string/bool, an `[Any]`, a `[String: Any]`, or nested
   combinations). A value that isn't representable this way (a `Date`, `Data`, or a custom type)
   surfaces to the caller as `tool_error.error.type == "tool_serialization_error"`, the same wire
-  error type a JSON-serialization failure produces anywhere else in Cordierite.
+  error type a JSON-serialization failure produces anywhere else in Appduct.
 - `register` returns a `ToolRegistration`; call `.remove()` to unregister. Letting the value go out
   of scope does **not** unregister it — there is no `deinit`-based auto-removal, matching
-  `@cordierite/react-native`'s `registerTool(...).remove()` contract.
+  `@appduct/react-native`'s `registerTool(...).remove()` contract.
 - A second overload drops the `ToolCallContext` parameter for a handler that doesn't need progress
   reporting or the cancellation reason:
 
   ```swift
-  try Cordierite.shared.register(name: "ping", description: "Always answers pong.") { _ in
+  try Appduct.shared.register(name: "ping", description: "Always answers pong.") { _ in
     "pong"
   }
   ```
@@ -175,7 +175,7 @@ try Cordierite.shared.register(
 ### Observing connection state, session, and errors
 
 ```swift
-let subscription = Cordierite.shared.addListener { event in
+let subscription = Appduct.shared.addListener { event in
   switch event {
   case .stateChange(let change):
     print("state ->", change.state.rawValue, change.reason ?? "")
@@ -190,16 +190,16 @@ let subscription = Cordierite.shared.addListener { event in
 subscription.cancel()
 ```
 
-`Cordierite.shared.state` and `.sessionId` are synchronous snapshots you can read at any time
+`Appduct.shared.state` and `.sessionId` are synchronous snapshots you can read at any time
 without a listener — useful for a view's initial render before its first event arrives.
 
 ### Posting an app event
 
 ```swift
-try await Cordierite.shared.postEvent("checkout_completed", payload: ["orderId": "abc123"])
+try await Appduct.shared.postEvent("checkout_completed", payload: ["orderId": "abc123"])
 ```
 
-Read back with `cordierite events`. Throws (does not send) unless a session is currently active.
+Read back with `appduct events`. Throws (does not send) unless a session is currently active.
 
 ## Hardened builds
 
@@ -211,16 +211,16 @@ threat model):
 
 | Key | Purpose |
 | --- | ------- |
-| `CordieriteCliPins` | String array of `sha256/...` SPKI pins (generate with `cordierite keygen`) |
-| `CordieriteTrust` | `"link"` \| `"pin"` — any other value is a hard error at connect time |
-| `CordieriteAllowPrivateLanOnly` | Boolean; defaults to `true` (fail-closed) when absent — bootstrap host must be a local IPv4 address |
+| `AppductCliPins` | String array of `sha256/...` SPKI pins (generate with `appduct keygen`) |
+| `AppductTrust` | `"link"` \| `"pin"` — any other value is a hard error at connect time |
+| `AppductAllowPrivateLanOnly` | Boolean; defaults to `true` (fail-closed) when absent — bootstrap host must be a local IPv4 address |
 
-`trust: "pin"` requires non-empty `CordieriteCliPins`; a build that only ever trusts embedded pins
+`trust: "pin"` requires non-empty `AppductCliPins`; a build that only ever trusts embedded pins
 but has none configured has no way to trust anything, so native refuses that combination at connect
-time. Once any `CordieriteCliPins` are present, they always win regardless of `CordieriteTrust`
+time. Once any `AppductCliPins` are present, they always win regardless of `AppductTrust`
 (config can never *widen* trust). Read the effective configuration a running build actually has —
 never a second parse path, so it can never disagree with what a real `connect()` attempt does —
-with `Cordierite.shared.buildConfig`.
+with `Appduct.shared.buildConfig`.
 
 ## Compiling out of Release
 
@@ -230,25 +230,25 @@ setting, CocoaPods' `:configurations => ['Debug']`). Verify against the built ar
 trusting the build log:
 
 ```bash
-cordierite doctor path/to/YourApp.app --assert-present   # Debug
-cordierite doctor path/to/YourApp.app --assert-absent    # Release
+appduct doctor path/to/YourApp.app --assert-present   # Debug
+appduct doctor path/to/YourApp.app --assert-absent    # Release
 ```
 
-`doctor` decides presence from a marker symbol (`CordieriteCoreMarker`) compiled only into the real
+`doctor` decides presence from a marker symbol (`AppductCoreMarker`) compiled only into the real
 implementation — never into `Stub/` — so a build genuinely either carries the real code or doesn't;
 there is no runtime `#if DEBUG` check to bypass. See
 [`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) for the full mechanism and
-[`docs/CI.md`](../../../docs/CI.md#release-gate-cordierite-doctor) for wiring this into a release
+[`docs/CI.md`](../../../docs/CI.md#release-gate-appduct-doctor) for wiring this into a release
 pipeline as a blocking gate.
 
 ## Threading
 
-Every `Cordierite` method is safe to call from any thread/actor. Tool handlers, `addListener`
-callbacks, and everything inside `CordieriteClient` itself run **off the main actor** — a handler
+Every `Appduct` method is safe to call from any thread/actor. Tool handlers, `addListener`
+callbacks, and everything inside `AppductClient` itself run **off the main actor** — a handler
 (or listener) that touches UI must hop back explicitly:
 
 ```swift
-try Cordierite.shared.register(name: "show_alert", description: "Shows a native alert.") { _ in
+try Appduct.shared.register(name: "show_alert", description: "Shows a native alert.") { _ in
   await MainActor.run {
     // present UI here
   }
@@ -261,16 +261,16 @@ call from any thread and need no such hop.
 
 ## Troubleshooting
 
-**`handle(_:)` always returns `false`.** The URL doesn't carry a `cordierite` query parameter —
-check the scheme in `Info.plist` matches what `cordierite link --scheme <scheme>` used, and that
+**`handle(_:)` always returns `false`.** The URL doesn't carry a `appduct` query parameter —
+check the scheme in `Info.plist` matches what `appduct link --scheme <scheme>` used, and that
 you're forwarding the *actual* opened URL (not a re-derived one) into `handle(_:)`.
 
-**A tool call never reaches your handler.** Confirm `Cordierite.shared.state == .active` and that
-`cordierite tools` lists the name you registered — a call for an unregistered name gets
+**A tool call never reaches your handler.** Confirm `Appduct.shared.state == .active` and that
+`appduct tools` lists the name you registered — a call for an unregistered name gets
 `tool_not_found` without ever reaching app code, by design.
 
 **Registering the same name twice.** `register` upserts by name; the second registration's handler
-replaces the first's, and the tool keeps its original position in `cordierite tools`' listing.
+replaces the first's, and the tool keeps its original position in `appduct tools`' listing.
 
 **A Release build still connects.** You depended on the `AlwaysEnabled` trait (SwiftPM) or dropped
 CocoaPods' `:configurations` restriction, most likely on purpose for an internal/QA build — see
@@ -285,4 +285,4 @@ CocoaPods' `:configurations` restriction, most likely on purpose for an internal
 - [`docs/SECURITY.md`](../../../docs/SECURITY.md) — trust modes, pins, the threat model.
 - [`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) — how inclusion is decided per build.
 - [`docs/internal/native-core.md`](../../../docs/internal/native-core.md) — this core's layout and
-  how `@cordierite/react-native` vendors it.
+  how `@appduct/react-native` vendors it.

@@ -18,7 +18,7 @@ const rnConfig = require("../../react-native.config.js") as {
 const { resolvePlatforms, devOnly, everyBuild, excluded } =
   rnConfig.__testables;
 
-const ENV_VAR = "CORDIERITE_ENABLED";
+const ENV_VAR = "APPDUCT_ENABLED";
 
 describe("react-native.config.js resolvePlatforms", () => {
   afterEach(() => {
