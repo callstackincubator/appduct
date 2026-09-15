@@ -53,7 +53,7 @@ export type SessionSelectorParams = {
 /** Wire-safe mirror of `daemon/config.ts`'s `PolicyDecision` (ARCHITECTURE.md §12). */
 export type EffectivePolicyDecision = "allow" | "deny" | "prompt";
 
-/** Wire-safe mirror of `daemon/config.ts`'s `CordieritePolicyConfig` (ARCHITECTURE.md §12):
+/** Wire-safe mirror of `daemon/config.ts`'s `AppductPolicyConfig` (ARCHITECTURE.md §12):
  * `daemon.status`'s effective policy, exactly as loaded from `config.json` plus defaults. */
 export type EffectivePolicyConfig = {
   default: EffectivePolicyDecision;
@@ -111,15 +111,15 @@ export type LinkCreateParams = {
 
 export type LinkCreateResult = {
   sessionId: string;
-  /** Base64url bootstrap blob; callers compose `<scheme>:///?cordierite=<deepLinkPayload>`. */
+  /** Base64url bootstrap blob; callers compose `<scheme>:///?appduct=<deepLinkPayload>`. */
   deepLinkPayload: string;
   endpoint: AgentEndpoint;
   /** Unix seconds. */
   expiresAt: number;
   /**
    * The daemon's SPKI pin (`sha256/<44-char-base64>`, same value as `daemon.status`'s
-   * `pinnedKeys[0]` / `cordierite keygen`'s output), composed by callers into the deep link's
-   * separate `pin` query param, alongside the existing `cordierite` bootstrap blob (see
+   * `pinnedKeys[0]` / `appduct keygen`'s output), composed by callers into the deep link's
+   * separate `pin` query param, alongside the existing `appduct` bootstrap blob (see
    * ARCHITECTURE.md §8 for that blob's binary layout, unchanged here). Old apps must keep
    * ignoring this param. Native clients only trust it when built in debug mode with no
    * build-time `cliPins` configured; embedded pins always win.
@@ -156,7 +156,7 @@ export type ToolsCallParams = SessionSelectorParams & {
   args: Record<string, unknown>;
   timeoutMs?: number;
   /** Attribution for the audit log (ARCHITECTURE.md §12): who issued this call. The MCP server
-   * always sets `"mcp"`, the `cordierite/client` package always sets `"client"`; omitted (the
+   * always sets `"mcp"`, the `appduct/client` package always sets `"client"`; omitted (the
    * CLI's case) defaults to `"cli"` at the daemon. */
   caller?: "cli" | "mcp" | "client";
   /**
@@ -211,7 +211,7 @@ export type ToolsCancelResult = {
 
 /** The single source of truth for the `EventKind` union below — a `const` array (not just a type)
  * so runtime validators (the daemon's `events.subscribe`/`events.since` param parsing, the MCP
- * `cordierite_events`/`cordierite_wait_for_event` tool schemas) can derive their allow-list from it
+ * `appduct_events`/`appduct_wait_for_event` tool schemas) can derive their allow-list from it
  * instead of hand-maintaining a second copy that can silently drift from this type. */
 export const EVENT_KINDS = [
   "daemon_started",
@@ -259,7 +259,7 @@ export type EventNotification = {
 
 /** Pulls events retained in the daemon's per-session ring buffer (ARCHITECTURE.md §5) — the
  * request/response counterpart to `events.subscribe`'s push model, for callers (MCP tools, a
- * scripted `cordierite events --since`) that ask "what happened?" after the fact instead of
+ * scripted `appduct events --since`) that ask "what happened?" after the fact instead of
  * listening live. */
 export type EventsSinceParams = {
   /** Session id or alias; omitted selects the sole active/suspended session (same default as

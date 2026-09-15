@@ -1,21 +1,21 @@
 # 10 — Make Android detection survive R8
 
 **Wave 3 (with 09). Depends on 08. Owns `packages/react-native/android/` build config and
-the Android half of `packages/cordierite/src/artifact-inspect.ts`.**
+the Android half of `packages/appduct/src/artifact-inspect.ts`.**
 
 ## Goal
 
-`cordierite doctor --assert-absent` cannot be defeated by minification.
+`appduct doctor --assert-absent` cannot be defeated by minification.
 
 ## Why
 
-Task 08 shipped two Android signals: the `com.callstackincubator.cordierite` package string in
+Task 08 shipped two Android signals: the `com.callstackincubator.appduct` package string in
 the dex, and the plugin-authored manifest meta-data. Its reviewer found a combination that
 evades both — **bare RN + R8 with no keep rule and no config plugin** — because R8 can rename
 the dex package and there are no plugin-written manifest keys to fall back on.
 
 That is precisely the fail-open the task forbade: `doctor` reports absent, the release gate
-goes green, and Cordierite ships. It matters more than a normal detection gap because this
+goes green, and Appduct ships. It matters more than a normal detection gap because this
 command is the *replacement* for the runtime `debuggable` check that task 04 deleted. A
 release gate that can silently pass is worse than no gate, because it is trusted.
 
@@ -45,7 +45,7 @@ release gate is worse than no readout.
 
 ## Acceptance
 
-- A minified (R8-enabled) Release APK with Cordierite linked is reported **present**.
+- A minified (R8-enabled) Release APK with Appduct linked is reported **present**.
 - The same build with the package excluded from autolinking is reported **absent**.
 - Both cases exercised against real artifacts, and the fixture set in
   `__tests__/artifact-fixtures.ts` notes which cases are real versus synthetic.

@@ -20,7 +20,7 @@
     "code": 1001,
     "reason": "daemon_shutdown",
     "terminal": false,
-    "note": "not in PROTOCOL.md's table verbatim, but a documented transport-level close worth retrying inside the grace window (see CordieriteTerminalClose.kt's doc comment)"
+    "note": "not in PROTOCOL.md's table verbatim, but a documented transport-level close worth retrying inside the grace window (see AppductTerminalClose.kt's doc comment)"
   },
   {
     "code": 1006,

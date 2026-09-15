@@ -4,18 +4,18 @@
 
 ## Goal
 
-`@cordierite/react-native/metro` exports a `withCordierite(config, options)` that performs the
+`@appduct/react-native/metro` exports a `withAppduct(config, options)` that performs the
 JS-side strip, replacing the copy-paste `resolveRequest` snippet in the package README.
 
 ## Why
 
 Inclusion has two layers. The native layer is now decided by autolinking, with a drift-guard
-test in the config plugin (task 06) and a CI assertion via `cordierite doctor` (tasks 08–10).
-The JS layer — swapping `@cordierite/react-native` and `/auto` for `/noop` so the deep-link
+test in the config plugin (task 06) and a CI assertion via `appduct doctor` (tasks 08–10).
+The JS layer — swapping `@appduct/react-native` and `/auto` for `/noop` so the deep-link
 listener, tool registry, and client state machine leave the bundle — is still a snippet users
 copy out of `packages/react-native/README.md` by hand, and **nothing in this repo executes
 it**. `playground/metro.config.js` has a `resolveRequest`, but only for workspace symlink
-dedup; it contains no Cordierite logic.
+dedup; it contains no Appduct logic.
 
 That is the same shape as the bug that started this series: a documented recipe that had
 never worked. Concrete things the snippet gets wrong that a helper would not:
@@ -29,9 +29,9 @@ never worked. Concrete things the snippet gets wrong that a helper would not:
 
 ## Scope
 
-- New entry `@cordierite/react-native/metro`, wired into `package.json`'s `exports`.
-- `withCordierite(config, options?)` returns the config with resolution redirected to `/noop`
-  when Cordierite is excluded.
+- New entry `@appduct/react-native/metro`, wired into `package.json`'s `exports`.
+- `withAppduct(config, options?)` returns the config with resolution redirected to `/noop`
+  when Appduct is excluded.
 - **Option naming mirrors the config plugin**: `include` (boolean), default `true`. A reader
   who has configured the plugin should not have to learn a second vocabulary; `include:
   false` should mean the same thing in both places.

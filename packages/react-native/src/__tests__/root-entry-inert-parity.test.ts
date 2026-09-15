@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { Spec } from "../NativeCordierite";
+import type { Spec } from "../NativeAppduct";
 
 (globalThis as { __DEV__?: boolean }).__DEV__ = true;
 
@@ -17,10 +17,10 @@ import type { Spec } from "../NativeCordierite";
 const resetMocks = async () => {
   vi.resetModules();
 
-  const { __cordieriteSetNativeModuleLoaderForTests } =
-    await import("../CordieriteModule");
-  __cordieriteSetNativeModuleLoaderForTests(() => ({
-    NativeCordierite: undefined as unknown as Spec,
+  const { __appductSetNativeModuleLoaderForTests } =
+    await import("../AppductModule");
+  __appductSetNativeModuleLoaderForTests(() => ({
+    NativeAppduct: undefined as unknown as Spec,
   }));
 
   vi.doMock("react-native", () => ({
@@ -88,11 +88,11 @@ describe("root entry: exact ./noop parity when the native module is unavailable"
     expect(urlListenerCount).toBe(0);
   });
 
-  test("addCordieriteListener returns a disposer; the callback never fires", async () => {
-    const { addCordieriteListener } = await import("../index");
+  test("addAppductListener returns a disposer; the callback never fires", async () => {
+    const { addAppductListener } = await import("../index");
     let fired = false;
 
-    const subscription = addCordieriteListener("stateChange", () => {
+    const subscription = addAppductListener("stateChange", () => {
       fired = true;
     });
 
@@ -100,14 +100,14 @@ describe("root entry: exact ./noop parity when the native module is unavailable"
     expect(() => subscription.remove()).not.toThrow();
   });
 
-  test('getCordieriteState() returns "idle"', async () => {
-    const { getCordieriteState } = await import("../index");
-    expect(getCordieriteState()).toBe("idle");
+  test('getAppductState() returns "idle"', async () => {
+    const { getAppductState } = await import("../index");
+    expect(getAppductState()).toBe("idle");
   });
 
-  test("connect() rejects with a CordieriteDisabledError (code: cordierite_disabled)", async () => {
+  test("connect() rejects with a AppductDisabledError (code: appduct_disabled)", async () => {
     const { connect } = await import("../index");
-    const { CordieriteDisabledError } = await import("../Cordierite.types");
+    const { AppductDisabledError } = await import("../Appduct.types");
 
     try {
       await connect({
@@ -119,33 +119,33 @@ describe("root entry: exact ./noop parity when the native module is unavailable"
       });
       throw new Error("expected connect() to reject");
     } catch (error) {
-      expect(error).toBeInstanceOf(CordieriteDisabledError);
-      expect((error as InstanceType<typeof CordieriteDisabledError>).code).toBe(
-        "cordierite_disabled",
+      expect(error).toBeInstanceOf(AppductDisabledError);
+      expect((error as InstanceType<typeof AppductDisabledError>).code).toBe(
+        "appduct_disabled",
       );
     }
   });
 
-  test("useCordieriteTool inherits the same degrade path as registerTool (single code path, not a separate one)", async () => {
-    const { registerTool, useCordieriteTool } = await import("../index");
+  test("useAppductTool inherits the same degrade path as registerTool (single code path, not a separate one)", async () => {
+    const { registerTool, useAppductTool } = await import("../index");
 
     // Not rendering a real component here (no React test renderer in this package's test setup) —
-    // the meaningful guarantee is that `useCordieriteTool` is built on the exact same `registerTool`
+    // the meaningful guarantee is that `useAppductTool` is built on the exact same `registerTool`
     // reference this file already exercises above, so it cannot drift from it.
-    expect(typeof useCordieriteTool).toBe("function");
+    expect(typeof useAppductTool).toBe("function");
     expect(typeof registerTool).toBe("function");
   });
 
   test("the dev-mode warning is logged exactly once across many calls, not once per call", async () => {
-    const { registerTool, postEvent, getCordieriteState } =
+    const { registerTool, postEvent, getAppductState } =
       await import("../index");
     const { logger } = await import("../logger");
     const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
 
     registerTool(toolRegistration()).remove();
-    getCordieriteState();
+    getAppductState();
     await postEvent("x");
-    getCordieriteState();
+    getAppductState();
 
     const inertWarnings = warnSpy.mock.calls.filter((call) =>
       String(call[0]).includes("native module is not available"),

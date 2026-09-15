@@ -19,9 +19,9 @@ importers:
         specifier: ^4.1.6
         version: 4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(terser@5.49.0)(yaml@2.9.0))
 
-  packages/cordierite:
+  packages/appduct:
     dependencies:
-      '@cordierite/shared':
+      '@appduct/shared':
         specifier: workspace:*
         version: link:../shared
       '@modelcontextprotocol/sdk':
@@ -58,7 +58,7 @@ importers:
 
   packages/react-native:
     dependencies:
-      '@cordierite/shared':
+      '@appduct/shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:
@@ -104,7 +104,7 @@ importers:
 
   playground:
     dependencies:
-      '@cordierite/react-native':
+      '@appduct/react-native':
         specifier: workspace:*
         version: link:../packages/react-native
       '@expo/vector-icons':

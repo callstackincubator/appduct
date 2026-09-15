@@ -1,16 +1,16 @@
-# Cordierite Wire Protocol v2
+# Appduct Wire Protocol v2
 
 This document describes the protocol exactly as implemented: the bootstrap payload byte
 layout, every message the daemon and app exchange after a pinned `wss://` connection is
 established, the session state machine, and the close-code table.
 
-Every type and validator referenced below lives in `@cordierite/shared`
+Every type and validator referenced below lives in `@appduct/shared`
 (`packages/shared/src/domains/*.ts`) and is authoritative if this reference ever drifts.
 See [ARCHITECTURE.md](ARCHITECTURE.md) for design rationale.
 
 ## Topology in one sentence
 
-One long-lived `cordierite daemon` process holds the TLS private key and a single `wss://`
+One long-lived `appduct daemon` process holds the TLS private key and a single `wss://`
 listener; any number of devices connect to it concurrently, each over its own pinned
 socket, and each gets its own session.
 
@@ -25,13 +25,13 @@ socket, and each gets its own session.
 
 ## 2. Bootstrap payload (v2)
 
-Deep link shape: `<scheme>:///?cordierite=<base64url-no-padding>&pin=<sha256/...>`. The
-`cordierite` payload is unchanged from v1; `pin` is a separate, percent-encoded query param
+Deep link shape: `<scheme>:///?appduct=<base64url-no-padding>&pin=<sha256/...>`. The
+`appduct` payload is unchanged from v1; `pin` is a separate, percent-encoded query param
 carrying the daemon's SPKI fingerprint (see `docs/ARCHITECTURE.md` §8), appended by both
-`cordierite link` and `cordierite_connect`. **Anything reading the payload must stop at the
+`appduct link` and `appduct_connect`. **Anything reading the payload must stop at the
 `&`** — slicing to the end of the string swallows the pin and corrupts the blob.
 
-The `cordierite` query value decodes to this binary layout — all multi-byte integers
+The `appduct` query value decodes to this binary layout — all multi-byte integers
 big-endian:
 
 | Bytes | Field | Notes |
@@ -54,11 +54,11 @@ endpoint and brackets IPv6 literals: `wss://[fd00::1]:8443` vs. `wss://192.168.1
 
 ### Delivery paths
 
-1. **Emulator/simulator fast path** (`cordierite link --open android|ios-sim`, or the MCP
-   `cordierite_connect` tool's `target` argument): the daemon mints the link with the
+1. **Emulator/simulator fast path** (`appduct link --open android|ios-sim`, or the MCP
+   `appduct_connect` tool's `target` argument): the daemon mints the link with the
    advertised address forced to `127.0.0.1`, `adb reverse`/`simctl openurl` delivers it —
    no human, fully scriptable.
-2. **Physical device on LAN**: printed deep link + QR (`cordierite link --qr`).
+2. **Physical device on LAN**: printed deep link + QR (`appduct link --qr`).
 3. **Physical iOS device, experimental** (`--open ios-device` / `target: "ios-device"`,
    issue #31): `xcrun devicectl device process launch --device <udid> --payload-url <link>
    <bundle-id>` hands the link to an installed, dev-signed app on a connected iOS 17+ device
@@ -235,7 +235,7 @@ message existed.
 ```
 
 Guard: `isEventMessage`. Emitted by `postEvent(name, payload?)` on the React Native
-client; surfaced daemon-side as an `app_event` (`events.subscribe`, `cordierite events`) and
+client; surfaced daemon-side as an `app_event` (`events.subscribe`, `appduct events`) and
 retained per-session (`events.since`, §8) so a request/response caller (an MCP client, a script)
 can ask "what happened?" after the fact instead of only listening live.
 
@@ -300,7 +300,7 @@ is a daemon-side scheduling hint and is never emitted on the MCP `Tool` JSON.
   `crypto.timingSafeEqual` and is single-use — consumed on a successful claim, and
   invalidated outright after 5 failed claim attempts against that `sessionId`.
 - `PENDING → DISCARDED`: the link's TTL elapsed before a claim; cheap, re-issue with
-  `cordierite link` (or `cordierite_connect`) again.
+  `appduct link` (or `appduct_connect`) again.
 - `PENDING → ACTIVE`: a successful `session_claim`. The daemon issues a `resume_token` in
   the `session_ack`.
 - `ACTIVE → SUSPENDED`: socket close, socket error, or two missed keepalive pongs. Tool
@@ -312,7 +312,7 @@ is a daemon-side scheduling hint and is never emitted on the MCP `Tool` JSON.
   app is expected to re-send a full `tool_registry_snapshot` right after (§4) — the
   daemon treats it as authoritative and discards whatever it retained across the gap.
 - `SUSPENDED → EXPIRED`: `graceSeconds` elapsed with no successful resume.
-- Any state → `REVOKED`: `sessions.revoke` (CLI `cordierite revoke`, or the equivalent
+- Any state → `REVOKED`: `sessions.revoke` (CLI `appduct revoke`, or the equivalent
   RPC call). Terminal states (`DISCARDED`, `EXPIRED`, `REVOKED`) free the session's alias
   for reuse by a future session.
 - There is no cap on concurrent sessions; every session shares the one `wss://` listener.

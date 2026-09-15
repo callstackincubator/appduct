@@ -1,8 +1,8 @@
-import { encodeBootstrap, type BootstrapPayload } from "@cordierite/shared";
+import { encodeBootstrap, type BootstrapPayload } from "@appduct/shared";
 import { describe, expect, test } from "vitest";
 import { randomBytes } from "node:crypto";
 
-import { CordieriteBootstrapParseError } from "../Cordierite.types";
+import { AppductBootstrapParseError } from "../Appduct.types";
 import {
   extractLinkPin,
   parseBootstrapPayload,
@@ -65,7 +65,7 @@ describe("bootstrap helpers", () => {
       parseBootstrapPayload(JSON.stringify(payload()), {
         now: FIXED_NOW,
       })
-    ).toThrow(CordieriteBootstrapParseError);
+    ).toThrow(AppductBootstrapParseError);
   });
 
   test("parseBootstrapPayload rejects a v1-shaped base64url-encoded JSON payload", () => {
@@ -79,7 +79,7 @@ describe("bootstrap helpers", () => {
       parseBootstrapPayload(rawPayload, {
         now: FIXED_NOW,
       })
-    ).toThrow(CordieriteBootstrapParseError);
+    ).toThrow(AppductBootstrapParseError);
   });
 
   test("parseBootstrapPayload rejects expired payloads", () => {
@@ -89,7 +89,7 @@ describe("bootstrap helpers", () => {
       parseBootstrapPayload(binaryPayloadB64(expired), {
         now: FIXED_NOW,
       })
-    ).toThrow(CordieriteBootstrapParseError);
+    ).toThrow(AppductBootstrapParseError);
   });
 
   test("parseBootstrapUrl accepts a compact v2 bootstrap payload", () => {
@@ -97,7 +97,7 @@ describe("bootstrap helpers", () => {
     const rawPayload = binaryPayloadB64(p);
 
     expect(
-      parseBootstrapUrl(`playground:///?cordierite=${rawPayload}`, {
+      parseBootstrapUrl(`playground:///?appduct=${rawPayload}`, {
         now: FIXED_NOW,
       })
     ).toEqual(p);
@@ -109,7 +109,7 @@ describe("bootstrap helpers", () => {
     const pin = `sha256/${"A".repeat(43)}=`;
 
     const result = parseBootstrapUrl(
-      `playground:///?cordierite=${rawPayload}&pin=${encodeURIComponent(pin)}`,
+      `playground:///?appduct=${rawPayload}&pin=${encodeURIComponent(pin)}`,
       { now: FIXED_NOW }
     );
 
@@ -119,7 +119,7 @@ describe("bootstrap helpers", () => {
   test("parseBootstrapUrl omits linkPin when there is no pin param (old-style links)", () => {
     const p = payload();
     const result = parseBootstrapUrl(
-      `playground:///?cordierite=${binaryPayloadB64(p)}`,
+      `playground:///?appduct=${binaryPayloadB64(p)}`,
       { now: FIXED_NOW }
     );
 
@@ -130,7 +130,7 @@ describe("bootstrap helpers", () => {
   test("parseBootstrapUrl ignores a malformed pin param instead of throwing", () => {
     const p = payload();
     const result = parseBootstrapUrl(
-      `playground:///?cordierite=${binaryPayloadB64(p)}&pin=not-a-real-pin`,
+      `playground:///?appduct=${binaryPayloadB64(p)}&pin=not-a-real-pin`,
       { now: FIXED_NOW }
     );
 
@@ -146,7 +146,7 @@ describe("bootstrap helpers", () => {
     });
 
     test("returns undefined when the pin param is absent", () => {
-      const url = new URL("playground:///?cordierite=abc");
+      const url = new URL("playground:///?appduct=abc");
       expect(extractLinkPin(url)).toBeUndefined();
     });
 
@@ -173,7 +173,7 @@ describe("bootstrap helpers", () => {
 
     try {
       expect(
-        parseBootstrapUrl(`playground:///?cordierite=${rawPayload}`, {
+        parseBootstrapUrl(`playground:///?appduct=${rawPayload}`, {
           now: FIXED_NOW,
         })
       ).toEqual(p);

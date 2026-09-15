@@ -1,0 +1,736 @@
+import XCTest
+@testable import AppductCore
+
+final class AppductConnectionManagerTests: XCTestCase {
+  override func setUp() {
+    super.setUp()
+    AppductProcessResumeLeaseStore.shared.resetForTests()
+  }
+
+  // MARK: - formatAppductWebSocketUrl (IPv6 bracketing, matches transport.ts's formatAgentWebSocketUrl)
+
+  func testFormatWebSocketUrlLeavesIpv4Unbracketed() {
+    XCTAssertEqual(formatAppductWebSocketUrl(ip: "192.168.1.10", port: 8443), "wss://192.168.1.10:8443")
+  }
+
+  func testFormatWebSocketUrlBracketsIpv6() {
+    XCTAssertEqual(formatAppductWebSocketUrl(ip: "fd00::1", port: 8443), "wss://[fd00::1]:8443")
+  }
+
+  func testFormatWebSocketUrlBracketsLoopbackIpv6() {
+    XCTAssertEqual(formatAppductWebSocketUrl(ip: "::1", port: 8443), "wss://[::1]:8443")
+  }
+
+  // MARK: - Process resume lease
+
+  func testValidClaimAckStoresExactSchemaRecordBeforeRawCallback() throws {
+    let options = try connectOptions(token: "claim-token")
+    let rawAck = """
+    {"type":"session_ack","session_id":"session-1","status":"ok","alias":"iphone-1","resume_token":"resume-token-1","keepalive_interval_s":15,"grace_s":600}
+    """
+    let message = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(rawAck.utf8)) as? [String: Any]
+    )
+    let ownerGeneration = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    var recordObservedByRawCallback: [String: Any]?
+    var transitioned = false
+
+    let result = commitSessionAck(
+      message: message,
+      rawText: rawAck,
+      options: options,
+      ownerGeneration: ownerGeneration,
+      onAccepted: { _ in transitioned = true },
+      emitMessageRaw: { _ in
+        XCTAssertTrue(transitioned)
+        recordObservedByRawCallback = AppductProcessResumeLeaseStore.shared.getRecord()
+      }
+    )
+
+    XCTAssertEqual(result, .accepted)
+    let record = try XCTUnwrap(recordObservedByRawCallback)
+    XCTAssertEqual(record["schemaVersion"] as? Int, 1)
+    XCTAssertEqual(record["sessionId"] as? String, "session-1")
+    XCTAssertEqual(record["resumeToken"] as? String, "resume-token-1")
+    XCTAssertEqual(record["alias"] as? String, "iphone-1")
+    let endpoint = try XCTUnwrap(record["endpoint"] as? [String: Any])
+    XCTAssertEqual(endpoint["ip"] as? String, "127.0.0.1")
+    XCTAssertEqual(endpoint["port"] as? Int, 8443)
+    XCTAssertEqual(record["keepaliveIntervalS"] as? Double, 15)
+    XCTAssertEqual(record["graceS"] as? Double, 600)
+    XCTAssertTrue(record.keys.contains("disconnectedAtMs"))
+    XCTAssertTrue(record["disconnectedAtMs"] is NSNull)
+  }
+
+  func testResumeAckRotatesTokenAndResetsDisconnectTimestamp() throws {
+    let ownerGeneration = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    let options = try connectOptions(resumeToken: "resume-token-1")
+    let firstAck = validAck(resumeToken: "resume-token-1")
+
+    XCTAssertEqual(
+      commitSessionAck(
+        message: firstAck,
+        rawText: "first",
+        options: options,
+        ownerGeneration: ownerGeneration,
+        onAccepted: { _ in },
+        emitMessageRaw: { _ in }
+      ),
+      .accepted
+    )
+    XCTAssertTrue(
+      AppductProcessResumeLeaseStore.shared.markDisconnected(
+        ownerGeneration: ownerGeneration,
+        sessionId: "session-1",
+        disconnectedAtMs: 1_234
+      )
+    )
+
+    var rotatedAck = firstAck
+    rotatedAck["resume_token"] = "resume-token-2"
+    var callbackToken: String?
+    XCTAssertEqual(
+      commitSessionAck(
+        message: rotatedAck,
+        rawText: "rotated",
+        options: options,
+        ownerGeneration: ownerGeneration,
+        onAccepted: { _ in },
+        emitMessageRaw: { _ in
+          callbackToken = AppductProcessResumeLeaseStore.shared.get()?.resumeToken
+        }
+      ),
+      .accepted
+    )
+
+    XCTAssertEqual(callbackToken, "resume-token-2")
+    XCTAssertNil(AppductProcessResumeLeaseStore.shared.get()?.disconnectedAtMs)
+  }
+
+  func testMalformedAckMatrixNeverStoresTransitionsOrEmits() throws {
+    let validOptions = try connectOptions(resumeToken: "resume-token-old")
+    let valid = validAck(resumeToken: "resume-token-old")
+    var malformedCases: [(String, [String: Any], AppductConnectOptions)] = []
+
+    func replacing(_ key: String, with value: Any) -> [String: Any] {
+      var result = valid
+      result[key] = value
+      return result
+    }
+
+    func removing(_ key: String) -> [String: Any] {
+      var result = valid
+      result.removeValue(forKey: key)
+      return result
+    }
+
+    malformedCases.append(contentsOf: [
+      ("missing type", removing("type"), validOptions),
+      ("wrong type", replacing("type", with: "tool_call"), validOptions),
+      ("non-string type", replacing("type", with: 1), validOptions),
+      ("missing status", removing("status"), validOptions),
+      ("rejected status", replacing("status", with: "rejected"), validOptions),
+      ("wrong session", replacing("session_id", with: "session-2"), validOptions),
+      ("empty session", replacing("session_id", with: ""), validOptions),
+      ("long session", replacing("session_id", with: String(repeating: "s", count: 129)), validOptions),
+      ("missing token", removing("resume_token"), validOptions),
+      ("empty token", replacing("resume_token", with: ""), validOptions),
+      ("long token", replacing("resume_token", with: String(repeating: "t", count: 129)), validOptions),
+      ("missing alias", removing("alias"), validOptions),
+      ("empty alias", replacing("alias", with: ""), validOptions),
+      ("long alias", replacing("alias", with: String(repeating: "a", count: 129)), validOptions),
+      ("string keepalive", replacing("keepalive_interval_s", with: "15"), validOptions),
+      ("boolean keepalive", replacing("keepalive_interval_s", with: true), validOptions),
+      ("zero keepalive", replacing("keepalive_interval_s", with: 0), validOptions),
+      ("infinite keepalive", replacing("keepalive_interval_s", with: Double.infinity), validOptions),
+      ("negative grace", replacing("grace_s", with: -1), validOptions),
+      ("nan grace", replacing("grace_s", with: Double.nan), validOptions),
+      ("empty endpoint", valid, try connectOptions(ip: "", resumeToken: "resume-token-old")),
+      ("long endpoint", valid, try connectOptions(ip: String(repeating: "i", count: 4_097), resumeToken: "resume-token-old")),
+      ("zero port", valid, try connectOptions(port: 0, resumeToken: "resume-token-old")),
+      ("large port", valid, try connectOptions(port: 65_536, resumeToken: "resume-token-old")),
+    ])
+
+    for (name, malformedAck, malformedOptions) in malformedCases {
+      AppductProcessResumeLeaseStore.shared.resetForTests()
+      let ownerGeneration = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+      XCTAssertEqual(
+        commitSessionAck(
+          message: valid,
+          rawText: "valid",
+          options: validOptions,
+          ownerGeneration: ownerGeneration,
+          onAccepted: { _ in },
+          emitMessageRaw: { _ in }
+        ),
+        .accepted,
+        name
+      )
+      var transitioned = false
+      var emitted = false
+
+      XCTAssertEqual(
+        commitSessionAck(
+          message: malformedAck,
+          rawText: name,
+          options: malformedOptions,
+          ownerGeneration: ownerGeneration,
+          onAccepted: { _ in transitioned = true },
+          emitMessageRaw: { _ in emitted = true }
+        ),
+        .invalid,
+        name
+      )
+      XCTAssertFalse(transitioned, name)
+      XCTAssertFalse(emitted, name)
+      XCTAssertEqual(AppductProcessResumeLeaseStore.shared.get()?.resumeToken, "resume-token-old", name)
+    }
+  }
+
+  func testStaleGenerationCannotReplaceTimestampOrClearNewerLease() {
+    let olderOwner = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    let newerOwner = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+
+    XCTAssertTrue(
+      AppductProcessResumeLeaseStore.shared.replace(
+        ownerGeneration: olderOwner,
+        lease: lease(resumeToken: "resume-token-old")
+      )
+    )
+    XCTAssertTrue(
+      AppductProcessResumeLeaseStore.shared.replace(
+        ownerGeneration: newerOwner,
+        lease: lease(resumeToken: "resume-token-new")
+      )
+    )
+    XCTAssertFalse(
+      AppductProcessResumeLeaseStore.shared.replace(
+        ownerGeneration: olderOwner,
+        lease: lease(resumeToken: "resume-token-stale")
+      )
+    )
+    XCTAssertFalse(
+      AppductProcessResumeLeaseStore.shared.markDisconnected(
+        ownerGeneration: olderOwner,
+        sessionId: "session-1",
+        disconnectedAtMs: 1_000
+      )
+    )
+    XCTAssertFalse(AppductProcessResumeLeaseStore.shared.clear(ownerGeneration: olderOwner))
+    XCTAssertEqual(AppductProcessResumeLeaseStore.shared.get()?.resumeToken, "resume-token-new")
+    XCTAssertNil(AppductProcessResumeLeaseStore.shared.get()?.disconnectedAtMs)
+  }
+
+  func testManagerResumeLeaseGetterReturnsNilThenExactSchemaRecord() throws {
+    let ownerGeneration = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    let manager = AppductConnectionManager(ownerGeneration: ownerGeneration)
+
+    XCTAssertNil(manager.currentResumeLeaseRecord())
+    XCTAssertTrue(
+      AppductProcessResumeLeaseStore.shared.replace(
+        ownerGeneration: ownerGeneration,
+        lease: AppductResumeLeaseV1(
+          sessionId: "session-1",
+          resumeToken: "resume-token-1",
+          alias: "iphone-1",
+          endpoint: AppductResumeEndpoint(ip: "127.0.0.1", port: 8443),
+          keepaliveIntervalS: 15,
+          graceS: 600,
+          disconnectedAtMs: 1_234
+        )
+      )
+    )
+
+    let record = try XCTUnwrap(manager.currentResumeLeaseRecord())
+    XCTAssertEqual(record["schemaVersion"] as? Int, 1)
+    XCTAssertEqual(record["sessionId"] as? String, "session-1")
+    XCTAssertEqual(record["resumeToken"] as? String, "resume-token-1")
+    XCTAssertEqual(record["alias"] as? String, "iphone-1")
+    let endpoint = try XCTUnwrap(record["endpoint"] as? [String: Any])
+    XCTAssertEqual(endpoint["ip"] as? String, "127.0.0.1")
+    XCTAssertEqual(endpoint["port"] as? Int, 8443)
+    XCTAssertEqual(record["keepaliveIntervalS"] as? Double, 15)
+    XCTAssertEqual(record["graceS"] as? Double, 600)
+    XCTAssertEqual(record["disconnectedAtMs"] as? Int64, 1_234)
+  }
+
+  func testManagerResumeLeaseClearIsGuardedByItsOwnerGeneration() {
+    let olderOwner = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    let newerOwner = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    let oldManager = AppductConnectionManager(ownerGeneration: olderOwner)
+    let newManager = AppductConnectionManager(ownerGeneration: newerOwner)
+    XCTAssertTrue(
+      AppductProcessResumeLeaseStore.shared.replace(
+        ownerGeneration: newerOwner,
+        lease: lease(resumeToken: "resume-token-new")
+      )
+    )
+
+    XCTAssertFalse(oldManager.clearResumeLease())
+    XCTAssertEqual(AppductProcessResumeLeaseStore.shared.get()?.resumeToken, "resume-token-new")
+    XCTAssertTrue(newManager.clearResumeLease())
+    XCTAssertNil(AppductProcessResumeLeaseStore.shared.get())
+  }
+
+  func testTransportLossTimestampsLeaseWhileNormalTerminalCloseClearsIt() {
+    let ownerGeneration = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    AppductProcessResumeLeaseStore.shared.replace(
+      ownerGeneration: ownerGeneration,
+      lease: lease(resumeToken: "resume-token-1")
+    )
+
+    updateResumeLeaseForTransportTeardown(
+      ownerGeneration: ownerGeneration,
+      sessionId: "session-1",
+      closeCode: nil,
+      disconnectedAtMs: 1_234
+    )
+    XCTAssertEqual(AppductProcessResumeLeaseStore.shared.get()?.disconnectedAtMs, 1_234)
+    XCTAssertEqual(AppductProcessResumeLeaseStore.shared.getRecord()?["disconnectedAtMs"] as? Int64, 1_234)
+
+    updateResumeLeaseForTransportTeardown(
+      ownerGeneration: ownerGeneration,
+      sessionId: "session-1",
+      closeCode: 1_000,
+      disconnectedAtMs: 2_345
+    )
+    XCTAssertNil(AppductProcessResumeLeaseStore.shared.get())
+  }
+
+  func testConcurrentGenerationAssignmentIsUniqueAndMonotonic() {
+    let generations = ThreadSafeInt64Array()
+
+    DispatchQueue.concurrentPerform(iterations: 200) { _ in
+      generations.append(AppductProcessResumeLeaseStore.shared.newOwnerGeneration())
+    }
+
+    XCTAssertEqual(generations.values.sorted(), Array(1...200).map(Int64.init))
+  }
+
+  func testInvalidationPreservesAndTimestampsLeaseIdempotentlyWithoutEmitting() async throws {
+    let ownerGeneration = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    XCTAssertTrue(
+      AppductProcessResumeLeaseStore.shared.replace(
+        ownerGeneration: ownerGeneration,
+        lease: lease(resumeToken: "resume-token-1")
+      )
+    )
+    let manager = AppductConnectionManager(ownerGeneration: ownerGeneration, activeSessionId: "session-1")
+    let events = ThreadSafeStringArray()
+    manager.emitStateChange = { events.append($0) }
+
+    await manager.invalidate()
+
+    XCTAssertEqual(AppductProcessResumeLeaseStore.shared.get()?.resumeToken, "resume-token-1")
+    let disconnectedAtMs = try XCTUnwrap(AppductProcessResumeLeaseStore.shared.get()?.disconnectedAtMs)
+    XCTAssertGreaterThan(disconnectedAtMs, 0)
+    XCTAssertEqual(events.values, [])
+
+    await manager.invalidate()
+    XCTAssertEqual(AppductProcessResumeLeaseStore.shared.get()?.disconnectedAtMs, disconnectedAtMs)
+    XCTAssertEqual(events.values, [])
+  }
+
+  func testExplicitCloseClearsOwnedLeaseButOldManagerCannotClearNewerLease() async {
+    let olderOwner = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    let newerOwner = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    let oldManager = AppductConnectionManager(ownerGeneration: olderOwner, activeSessionId: "session-1")
+    let newManager = AppductConnectionManager(ownerGeneration: newerOwner)
+
+    AppductProcessResumeLeaseStore.shared.replace(
+      ownerGeneration: newerOwner,
+      lease: lease(resumeToken: "resume-token-new")
+    )
+    await oldManager.close()
+    XCTAssertEqual(AppductProcessResumeLeaseStore.shared.get()?.resumeToken, "resume-token-new")
+
+    await newManager.close()
+    XCTAssertNil(AppductProcessResumeLeaseStore.shared.get())
+  }
+
+  func testOldManagerInvalidationCannotTimestampNewerLease() async {
+    let olderOwner = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    let newerOwner = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    let oldManager = AppductConnectionManager(ownerGeneration: olderOwner, activeSessionId: "session-1")
+
+    AppductProcessResumeLeaseStore.shared.replace(
+      ownerGeneration: newerOwner,
+      lease: lease(resumeToken: "resume-token-new")
+    )
+    await oldManager.invalidate()
+
+    XCTAssertEqual(AppductProcessResumeLeaseStore.shared.get()?.resumeToken, "resume-token-new")
+    XCTAssertNil(AppductProcessResumeLeaseStore.shared.get()?.disconnectedAtMs)
+  }
+
+  func testStaleDelegateCloseCallbackCannotClearNewerLease() async throws {
+    let olderOwner = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    let newerOwner = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    let oldManager = AppductConnectionManager(ownerGeneration: olderOwner)
+    AppductProcessResumeLeaseStore.shared.replace(
+      ownerGeneration: newerOwner,
+      lease: lease(resumeToken: "resume-token-new")
+    )
+    let task = URLSession.shared.webSocketTask(with: try XCTUnwrap(URL(string: "wss://127.0.0.1:8443")))
+
+    oldManager.urlSession(
+      URLSession.shared,
+      webSocketTask: task,
+      didCloseWith: .normalClosure,
+      reason: nil
+    )
+    try? await Task.sleep(nanoseconds: 10_000_000)
+
+    XCTAssertEqual(AppductProcessResumeLeaseStore.shared.get()?.resumeToken, "resume-token-new")
+    XCTAssertNil(AppductProcessResumeLeaseStore.shared.get()?.disconnectedAtMs)
+  }
+
+  private func connectOptions(
+    ip: String = "127.0.0.1",
+    port: Int = 8443,
+    token: String? = nil,
+    resumeToken: String? = nil
+  ) throws -> AppductConnectOptions {
+    var value: [String: Any] = [
+      "ip": ip,
+      "port": port,
+      "sessionId": "session-1",
+      "expiresAt": Int.max,
+    ]
+    value["token"] = token
+    value["resumeToken"] = resumeToken
+    return try AppductConnectOptions(value)
+  }
+
+  private func validAck(resumeToken: String) -> [String: Any] {
+    [
+      "type": "session_ack",
+      "session_id": "session-1",
+      "status": "ok",
+      "alias": "iphone-1",
+      "resume_token": resumeToken,
+      "keepalive_interval_s": 15,
+      "grace_s": 600,
+    ]
+  }
+
+  private func lease(resumeToken: String) -> AppductResumeLeaseV1 {
+    AppductResumeLeaseV1(
+      sessionId: "session-1",
+      resumeToken: resumeToken,
+      alias: "iphone-1",
+      endpoint: AppductResumeEndpoint(ip: "127.0.0.1", port: 8443),
+      keepaliveIntervalS: 15,
+      graceS: 600,
+      disconnectedAtMs: nil
+    )
+  }
+
+  // MARK: - State transitions
+
+  func testInitialStateIsIdle() {
+    let manager = AppductConnectionManager()
+    XCTAssertEqual(manager.currentStateSnapshot(), "idle")
+  }
+
+  func testInvalidateFromIdleTransitionsToClosedAndIsIdempotent() async {
+    let manager = AppductConnectionManager()
+
+    await manager.invalidate()
+    XCTAssertEqual(manager.currentStateSnapshot(), "closed")
+
+    // Calling invalidate again (e.g. a second Metro reload racing a slow first one) must not
+    // crash or resurrect state; `getState()` must keep reporting "closed", never "active".
+    await manager.invalidate()
+    XCTAssertEqual(manager.currentStateSnapshot(), "closed")
+  }
+
+  func testCloseFromIdleEmitsExactlyOneCloseEventAndReportsClosed() async {
+    let manager = AppductConnectionManager()
+    let closeEvents = ClosedEventCounter()
+    manager.emitClose = { _ in
+      Task { await closeEvents.increment() }
+    }
+
+    await manager.close()
+
+    // Give the fire-and-forget increment a turn to run.
+    await Task.yield()
+    let count = await closeEvents.count
+    XCTAssertEqual(count, 1)
+    XCTAssertEqual(manager.currentStateSnapshot(), "closed")
+  }
+
+  func testConnectRejectsWhenNeitherTokenNorResumeTokenGiven() {
+    XCTAssertThrowsError(
+      try AppductConnectOptions([
+        "ip": "127.0.0.1",
+        "port": 8443,
+        "sessionId": "session-1",
+        "expiresAt": Int(Date().timeIntervalSince1970) + 60,
+      ])
+    )
+  }
+
+  func testConnectOptionsAcceptsResumeTokenWithoutClaimToken() throws {
+    let options = try AppductConnectOptions([
+      "ip": "127.0.0.1",
+      "port": 8443,
+      "sessionId": "session-1",
+      "resumeToken": "resume-token-value",
+      "expiresAt": Int(Date().timeIntervalSince1970) + 60,
+    ])
+
+    XCTAssertNil(options.token)
+    XCTAssertEqual(options.resumeToken, "resume-token-value")
+  }
+
+  // MARK: - Explicit trust mode (resolveTrustedPins) — docs/tasks/05-explicit-trust-mode.md
+
+  private let embeddedPins = ["sha256/embedded-pin"]
+  private let linkPinValue = "sha256/link-pin"
+
+  // Table row: trust="pin", non-empty embedded pins -> embedded pins only, linkPin ignored.
+  func testTrustPinWithEmbeddedPinsUsesEmbeddedPinsAndIgnoresLinkPin() {
+    for linkPin in [nil, "", linkPinValue] {
+      XCTAssertEqual(
+        resolveTrustedPins(trust: "pin", embeddedPins: embeddedPins, linkPin: linkPin),
+        .configured(Set(embeddedPins)),
+        "linkPin=\(linkPin ?? "nil")"
+      )
+    }
+  }
+
+  // Table row: trust="pin", empty embedded pins -> hard error.
+  func testTrustPinWithNoEmbeddedPinsHardErrorsRegardlessOfLinkPin() {
+    for linkPin in [nil, "", linkPinValue] {
+      XCTAssertEqual(
+        resolveTrustedPins(trust: "pin", embeddedPins: [], linkPin: linkPin),
+        .pinTrustRequiresEmbeddedPins,
+        "linkPin=\(linkPin ?? "nil")"
+      )
+    }
+  }
+
+  // Table row: trust="link", empty embedded pins -> trust linkPin.
+  func testTrustLinkWithNoEmbeddedPinsTrustsTheLinkPin() {
+    XCTAssertEqual(
+      resolveTrustedPins(trust: "link", embeddedPins: [], linkPin: linkPinValue),
+      .linkPin(linkPinValue)
+    )
+  }
+
+  // Table row: trust="link", empty embedded pins, no usable linkPin -> error.
+  func testTrustLinkWithNoEmbeddedPinsAndNoUsableLinkPinErrors() {
+    for linkPin in [nil, ""] {
+      XCTAssertEqual(
+        resolveTrustedPins(trust: "link", embeddedPins: [], linkPin: linkPin),
+        .linkTrustRequiresLinkPin,
+        "linkPin=\(linkPin ?? "nil")"
+      )
+    }
+  }
+
+  // Table row: trust="link", non-empty embedded pins -> embedded pins win, linkPin ignored.
+  func testTrustLinkWithEmbeddedPinsUsesEmbeddedPinsAndIgnoresLinkPin() {
+    for linkPin in [nil, "", linkPinValue] {
+      XCTAssertEqual(
+        resolveTrustedPins(trust: "link", embeddedPins: embeddedPins, linkPin: linkPin),
+        .configured(Set(embeddedPins)),
+        "linkPin=\(linkPin ?? "nil")"
+      )
+    }
+  }
+
+  // Missing-key default: no trust value, embedded pins present -> behaves like trust="pin".
+  func testMissingTrustWithEmbeddedPinsDefaultsToPinBehavior() {
+    XCTAssertEqual(
+      resolveTrustedPins(trust: nil, embeddedPins: embeddedPins, linkPin: linkPinValue),
+      .configured(Set(embeddedPins))
+    )
+  }
+
+  // Missing-key default: no trust value, no embedded pins -> behaves like trust="link".
+  func testMissingTrustWithNoEmbeddedPinsDefaultsToLinkBehavior() {
+    XCTAssertEqual(
+      resolveTrustedPins(trust: nil, embeddedPins: [], linkPin: linkPinValue),
+      .linkPin(linkPinValue)
+    )
+    XCTAssertEqual(
+      resolveTrustedPins(trust: nil, embeddedPins: [], linkPin: nil),
+      .linkTrustRequiresLinkPin
+    )
+  }
+
+  // Empty-string trust must behave exactly like a missing key, not like an invalid value: an
+  // empty plist value should read as "absent" on iOS the same way Android's
+  // `parseTrustMetadataValue` normalizes it before `loadConfiguration` ever calls in.
+  func testEmptyStringTrustBehavesLikeAMissingKey() {
+    XCTAssertEqual(
+      resolveTrustedPins(trust: "", embeddedPins: embeddedPins, linkPin: nil),
+      .configured(Set(embeddedPins))
+    )
+    XCTAssertEqual(
+      resolveTrustedPins(trust: "", embeddedPins: [], linkPin: linkPinValue),
+      .linkPin(linkPinValue)
+    )
+    XCTAssertEqual(
+      resolveTrustedPins(trust: "", embeddedPins: [], linkPin: nil),
+      .linkTrustRequiresLinkPin
+    )
+  }
+
+  // An unrecognized (but non-empty) trust string must hard-error, never silently fail *open* into
+  // the missing-key default's link-TOFU behavior — a typo like "pinn" or "Pin" must not be
+  // treated as weaker than what the author actually wrote.
+  func testUnrecognizedNonEmptyTrustValueIsAHardErrorEvenWhenEmbeddedPinsAreAbsent() {
+    for badTrust in ["PIN", "Link", "pinn", "none", "disabled"] {
+      XCTAssertEqual(
+        resolveTrustedPins(trust: badTrust, embeddedPins: [], linkPin: linkPinValue),
+        .invalidTrustValue(badTrust),
+        "trust=\(badTrust)"
+      )
+    }
+  }
+
+  // Table rows collapse once embedded pins are present: they win regardless of what `trust` says,
+  // even a garbage value — `trust` is simply irrelevant when pins are already embedded.
+  func testUnrecognizedTrustValueIsIrrelevantOnceEmbeddedPinsArePresent() {
+    XCTAssertEqual(
+      resolveTrustedPins(trust: "everything", embeddedPins: embeddedPins, linkPin: nil),
+      .configured(Set(embeddedPins))
+    )
+  }
+
+  func testConfigureFromBundleThrowsWhenNoPinsAndNoLinkPin() async {
+    // The test host's Info.plist never sets AppductCliPins, so this exercises the real
+    // Bundle.main-reading path (not just the pure resolveTrustedPins matrix above) for the
+    // pre-existing "nothing configured" case, which must still hard-fail.
+    let manager = AppductConnectionManager()
+    do {
+      try await manager.configureFromBundle(linkPin: nil)
+      XCTFail("expected configureFromBundle to throw")
+    } catch {
+      // expected
+    }
+  }
+
+  // MARK: - getConstants()'s build config (docs/tasks/07-native-module-constants.md)
+
+  // Every table row from the resolveTrustedPins matrix above must map to a build config that
+  // agrees on `hasEmbeddedPins` with whether a real connect() would have used embedded pins, and
+  // on `trust` with the effective bucket a real connect() would have resolved to.
+  func testBuildConfigReportsPinAndHasEmbeddedPinsWhenEmbeddedPinsWin() {
+    for resolution: AppductTrustedPinsResolution in [
+      .configured(Set(embeddedPins)),
+    ] {
+      XCTAssertEqual(
+        appductBuildConfig(resolution: resolution, allowPrivateLanOnly: true),
+        AppductBuildConfig(trust: "pin", hasEmbeddedPins: true, allowPrivateLanOnly: true)
+      )
+    }
+  }
+
+  func testBuildConfigReportsLinkAndNoEmbeddedPinsWhenTrustingTheLinkPin() {
+    XCTAssertEqual(
+      appductBuildConfig(resolution: .linkPin(linkPinValue), allowPrivateLanOnly: false),
+      AppductBuildConfig(trust: "link", hasEmbeddedPins: false, allowPrivateLanOnly: false)
+    )
+  }
+
+  func testBuildConfigReportsPinAndNoEmbeddedPinsForTheConfigTimeErrorCase() {
+    // trust="pin" with no embedded pins: a real connect() would hard-error, but getConstants()
+    // must not throw — it still reports the config's effective intent (trust="pin") plus the
+    // honest hasEmbeddedPins:false that explains *why* a connect() would fail.
+    XCTAssertEqual(
+      appductBuildConfig(resolution: .pinTrustRequiresEmbeddedPins, allowPrivateLanOnly: true),
+      AppductBuildConfig(trust: "pin", hasEmbeddedPins: false, allowPrivateLanOnly: true)
+    )
+  }
+
+  func testBuildConfigReportsLinkAndNoEmbeddedPinsWhenNoLinkPinIsAvailable() {
+    // No connect attempt is in flight when JS asks for the build config, so there is never a real
+    // linkPin to pass resolveTrustedPins — trust="link" with no embedded pins always resolves to
+    // this case here, never `.linkPin`, but the reported `trust` bucket is unaffected.
+    XCTAssertEqual(
+      appductBuildConfig(resolution: .linkTrustRequiresLinkPin, allowPrivateLanOnly: true),
+      AppductBuildConfig(trust: "link", hasEmbeddedPins: false, allowPrivateLanOnly: true)
+    )
+  }
+
+  func testBuildConfigSurfacesTheRawInvalidTrustValueInsteadOfCoercingIt() {
+    XCTAssertEqual(
+      appductBuildConfig(resolution: .invalidTrustValue("pinn"), allowPrivateLanOnly: true),
+      AppductBuildConfig(trust: "pinn", hasEmbeddedPins: false, allowPrivateLanOnly: true)
+    )
+  }
+
+  func testCurrentBuildConfigReadsTheSameBundleAsConfigureFromBundle() async {
+    // The test host's Info.plist never sets AppductCliPins/AppductTrust (same fixture used
+    // by testConfigureFromBundleThrowsWhenNoPinsAndNoLinkPin above): missing trust + no embedded
+    // pins defaults to "link", and with no linkPin available that's linkTrustRequiresLinkPin —
+    // exactly the config a real connect() attempt would need a linkPin to succeed with.
+    let config = currentAppductBuildConfig()
+    XCTAssertEqual(config, AppductBuildConfig(trust: "link", hasEmbeddedPins: false, allowPrivateLanOnly: true))
+
+    // Cross-check against the real connect() path: it must fail for exactly the reason the build
+    // config predicts (no embedded pins, no usable linkPin).
+    let manager = AppductConnectionManager()
+    do {
+      try await manager.configureFromBundle(linkPin: nil)
+      XCTFail("expected configureFromBundle to throw")
+    } catch {
+      // expected — matches config.hasEmbeddedPins == false
+    }
+  }
+
+  // MARK: - SPKI pin parity with packages/appduct/src/spki-pin.ts
+  //
+  // The fixture certificate + expected pin this test used to duplicate as a local string literal
+  // now lives once, shared with the Kotlin and TypeScript suites, in
+  // packages/native/fixtures/spki-pin.json — see FixturesConformanceTests.swift's
+  // `testSpkiPinFixtureMatchesTheSharedFixtureCertificate`.
+}
+
+/// Plain actor used only to serialize the close-event counter from a fire-and-forget `Task`.
+private actor ClosedEventCounter {
+  private(set) var count = 0
+
+  func increment() {
+    count += 1
+  }
+}
+
+private final class ThreadSafeStringArray: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storage: [String] = []
+
+  var values: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return storage
+  }
+
+  func append(_ value: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    storage.append(value)
+  }
+}
+
+private final class ThreadSafeInt64Array: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storage: [Int64] = []
+
+  var values: [Int64] {
+    lock.lock()
+    defer { lock.unlock() }
+    return storage
+  }
+
+  func append(_ value: Int64) {
+    lock.lock()
+    defer { lock.unlock() }
+    storage.append(value)
+  }
+}

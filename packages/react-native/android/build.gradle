@@ -33,42 +33,42 @@ if (isNewArchitectureEnabled()) {
 apply plugin: "com.android.library"
 apply plugin: "kotlin-android"
 
-group = "com.callstackincubator.cordierite"
+group = "com.callstackincubator.appduct"
 // Single source of truth: package.json (docs/tasks/14-native-core-extraction.md -- this used to be
 // a hard-coded literal here that drifted from package.json's own version).
-def cordieriteVersion = new JsonSlurper().parse(file("$projectDir/../package.json")).version
-version = cordieriteVersion
+def appductVersion = new JsonSlurper().parse(file("$projectDir/../package.json")).version
+version = appductVersion
 
-// Only configured when autolinking has already decided to link Cordierite, so the line appearing
-// at all is the proof. Ungated: a release build carrying Cordierite by mistake is the failure
+// Only configured when autolinking has already decided to link Appduct, so the line appearing
+// at all is the proof. Ungated: a release build carrying Appduct by mistake is the failure
 // worth catching, and this is grep-able in CI output. iOS prints the same line from the podspec.
-logger.lifecycle("[cordierite] native module INCLUDED in this build (v${version})")
+logger.lifecycle("[appduct] native module INCLUDED in this build (v${version})")
 
 /**
  * `PackageList.java` is generated once by RNGP and shared by every build variant (it is not
  * variant-aware -- see `docs/tasks/00-overview.md`'s "Revisited post-implementation" note), so it
- * always references `CordieritePackage` by name regardless of variant. Restricting *linking* of
+ * always references `AppductPackage` by name regardless of variant. Restricting *linking* of
  * this whole Gradle project per build type (`buildTypes` in `react-native.config.js`) would leave
  * that reference unresolved for a variant this project isn't linked into -- a compile error, not
  * an inert build. So this project is linked into every variant unconditionally (`buildTypes` is
  * empty in `react-native.config.js`).
  *
- * `CordieritePackage`/`NativeCordieriteModule` (src/main -- docs/tasks/14-native-core-extraction.md)
- * now always compile, for every variant: they reference `CordieriteConnectionManager` and friends by
+ * `AppductPackage`/`NativeAppductModule` (src/main -- docs/tasks/14-native-core-extraction.md)
+ * now always compile, for every variant: they reference `AppductConnectionManager` and friends by
  * simple (unqualified) name only, never a build-type check. Which implementation that name resolves
  * to is decided below by which vendored source directory is on each variant's compile classpath --
  * `android/core` (real, vendored from packages/native/android/core) or `android/core-noop` (no-op,
  * vendored from packages/native/android/core-noop) -- both scripts/sync-native-core.mjs targets,
  * both declaring the exact same package/class names so only one may ever be on a given variant's
  * classpath at once. `debug` always gets the real implementation; `release` gets the real
- * implementation only when `CORDIERITE_ENABLED` is truthy, and the no-op otherwise -- the same
+ * implementation only when `APPDUCT_ENABLED` is truthy, and the no-op otherwise -- the same
  * default this project has always had, just implemented as a vendored-directory swap instead of a
  * `src/debug`/`src/release-stub` one.
  */
-def cordieriteEnabledForRelease = System.getenv("CORDIERITE_ENABLED")?.trim()?.toLowerCase() in ["1", "true"]
+def appductEnabledForRelease = System.getenv("APPDUCT_ENABLED")?.trim()?.toLowerCase() in ["1", "true"]
 
 android {
-  namespace "com.callstackincubator.cordierite"
+  namespace "com.callstackincubator.appduct"
   compileSdk safeExtGet("compileSdkVersion", 35)
 
   sourceSets {
@@ -76,7 +76,7 @@ android {
       java.srcDirs += ["core"]
     }
     release {
-      java.srcDirs += [cordieriteEnabledForRelease ? "core" : "core-noop"]
+      java.srcDirs += [appductEnabledForRelease ? "core" : "core-noop"]
     }
   }
 
@@ -84,13 +84,13 @@ android {
     minSdkVersion safeExtGet("minSdkVersion", 24)
     targetSdkVersion safeExtGet("targetSdkVersion", 35)
     versionCode 1
-    versionName cordieriteVersion
+    versionName appductVersion
     buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
-    // Ships a keep rule for CordieriteNativeMarker (see android/core/consumer-rules.pro, vendored
+    // Ships a keep rule for AppductNativeMarker (see android/core/consumer-rules.pro, vendored
     // from packages/native/android/core) to every consuming app's R8/ProGuard pass, so
-    // `cordierite doctor` (docs/tasks/10-android-detection-keep-rule.md) has a detection anchor
+    // `appduct doctor` (docs/tasks/10-android-detection-keep-rule.md) has a detection anchor
     // that survives minification even with no config plugin and no app-authored keep rules for
-    // this package. Only ever meaningful for the `debug`/`CORDIERITE_ENABLED=1` variants that
+    // this package. Only ever meaningful for the `debug`/`APPDUCT_ENABLED=1` variants that
     // actually vendor `core` rather than `core-noop` -- consumerProguardFiles is declared once,
     // unconditionally, but the file it names only exists (post-sync) in the shape appropriate to
     // whichever `core`/`core-noop` directory this variant's sourceSet points at above; R8 simply
@@ -126,36 +126,36 @@ repositories {
 
 dependencies {
   implementation "com.facebook.react:react-android"
-  // Needed by the vendored android/core (debug, and release when CORDIERITE_ENABLED=1) but not by
+  // Needed by the vendored android/core (debug, and release when APPDUCT_ENABLED=1) but not by
   // android/core-noop. Declared unconditionally rather than per-variant, matching this project's
   // pre-extraction behavior (it shipped okhttp on every variant, including the release-stub
   // default, before this refactor too) -- narrowing it to only the variants that need it is a
   // follow-up, not something this mechanical extraction changes.
   implementation "com.squareup.okhttp3:okhttp:4.12.0"
-  // CordieriteClient (vendored android/core, docs/tasks/16-android-session-logic.md): suspend
+  // AppductClient (vendored android/core, docs/tasks/16-android-session-logic.md): suspend
   // connect/restoreSession/disconnect/postEvent, per-call timeout/cancel via coroutine
   // cancellation. Same "declared unconditionally" reasoning as okhttp above -- android/core-noop
   // does not need it, but this project does not vary its dependency set by variant.
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
-  // ProcessLifecycleOwner: foreground/background observation backing CordieriteClient's
+  // ProcessLifecycleOwner: foreground/background observation backing AppductClient's
   // reconnect-pause-while-backgrounded rule.
   implementation "androidx.lifecycle:lifecycle-process:2.8.7"
 
   // No test dependencies here: the Kotlin unit tests that used to live in this module's own
-  // src/test (CordieriteConnectionManagerTest, CordieriteSpkiPinTest) moved with the sources they
+  // src/test (AppductConnectionManagerTest, AppductSpkiPinTest) moved with the sources they
   // cover to packages/native/android/core/src/test (docs/tasks/14-native-core-extraction.md) and
-  // run via `./gradlew :core:testDebugUnitTest` there. `:cordierite_react-native:testDebugUnitTest`
+  // run via `./gradlew :core:testDebugUnitTest` there. `:appduct_react-native:testDebugUnitTest`
   // still runs in CI (no test classes -> a trivial pass) so the task name stays stable; the vendored
-  // `core`/`core-noop` compiling cleanly for every CORDIERITE_ENABLED state is what
-  // `assembleDebug`/`assembleRelease` plus the `cordierite doctor` gates below actually prove.
+  // `core`/`core-noop` compiling cleanly for every APPDUCT_ENABLED state is what
+  // `assembleDebug`/`assembleRelease` plus the `appduct doctor` gates below actually prove.
 }
 
 tasks.register("assertNewArchitectureEnabled") {
   onlyIf { !isNewArchitectureEnabled() }
   doFirst {
     throw new GradleException(
-      "@cordierite/react-native requires New Architecture. Set newArchEnabled=true in gradle.properties.",
+      "@appduct/react-native requires New Architecture. Set newArchEnabled=true in gradle.properties.",
     )
   }
 }

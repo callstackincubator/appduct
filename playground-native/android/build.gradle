@@ -1,4 +1,4 @@
-// Root build script for the native (non-React-Native) Cordierite playground
+// Root build script for the native (non-React-Native) Appduct playground
 // (docs/tasks/19-android-entry-points.md, issue #48 phase 3). AGP/Kotlin versions match
 // packages/native/android's own root build.gradle -- this app consumes that project's `core`/
 // `core-noop` modules directly (see settings.gradle's `includeBuild`), so the two builds must

@@ -3,16 +3,16 @@ import { Linking } from "react-native";
 import { logger } from "./logger";
 
 /**
- * Structural seam the auto-bootstrap flow needs from a Cordierite client: startup recovery and
+ * Structural seam the auto-bootstrap flow needs from a Appduct client: startup recovery and
  * `handleUrl`. Issue #48 phase 2 moved the entire "parse this deep link, decide whether it
- * outranks the held session, connect" decision into the native core (`CordieriteClient.handleUrl`
+ * outranks the held session, connect" decision into the native core (`AppductClient.handleUrl`
  * in Swift, the analogous entry point in Kotlin) -- this file's only remaining job is wiring
  * `Linking` events into it.
  */
-export type CordieriteAutoBootstrapClient = {
+export type AppductAutoBootstrapClient = {
   /** Starts recovery from the native process-memory lease, if one is available. */
   restoreSession(): Promise<boolean>;
-  /** Feeds a URL to the native core. Returns `true` iff it carried a `cordierite` query param
+  /** Feeds a URL to the native core. Returns `true` iff it carried a `appduct` query param
    * (whatever the parse outcome -- a bad payload surfaces on the unified `error` channel with
    * phase `"bootstrap"`), `false` for any other URL so the app can route it itself. */
   handleUrl(url: string): boolean;
@@ -25,8 +25,8 @@ export type CordieriteAutoBootstrapClient = {
  *
  * @internal Reached by app code only through the `./auto` entry, which passes the default client.
  */
-export function installCordieriteDeepLinkBootstrap(
-  client: CordieriteAutoBootstrapClient,
+export function installAppductDeepLinkBootstrap(
+  client: AppductAutoBootstrapClient,
 ): void {
   if (installed) {
     return;
@@ -38,7 +38,7 @@ export function installCordieriteDeepLinkBootstrap(
       client.handleUrl(url);
     });
   } catch (error) {
-    logger.warn("Cordierite: Linking.addEventListener(url) failed", error);
+    logger.warn("Appduct: Linking.addEventListener(url) failed", error);
   }
 
   const warnRecoveryFailure = () => {
@@ -46,7 +46,7 @@ export function installCordieriteDeepLinkBootstrap(
     // This is only the orchestration safety net; do not include the error because a third-party
     // client implementation could put lease credentials in its rejection message.
     logger.warn(
-      "Cordierite: startup session recovery failed; falling back to the initial URL",
+      "Appduct: startup session recovery failed; falling back to the initial URL",
     );
   };
 
@@ -61,11 +61,11 @@ export function installCordieriteDeepLinkBootstrap(
   let initialUrlPromise: Promise<string | null>;
   try {
     initialUrlPromise = Linking.getInitialURL().catch((error: unknown) => {
-      logger.warn("Cordierite: Linking.getInitialURL failed", error);
+      logger.warn("Appduct: Linking.getInitialURL failed", error);
       return null;
     });
   } catch (error) {
-    logger.warn("Cordierite: Linking.getInitialURL failed", error);
+    logger.warn("Appduct: Linking.getInitialURL failed", error);
     initialUrlPromise = Promise.resolve(null);
   }
 
@@ -89,13 +89,13 @@ export function installCordieriteDeepLinkBootstrap(
       client.handleUrl(initialUrl);
     }
   })().catch(() => {
-    logger.warn("Cordierite: startup bootstrap orchestration failed");
+    logger.warn("Appduct: startup bootstrap orchestration failed");
   });
 }
 
 let installed = false;
 
 /** @internal */
-export function __cordieriteResetInstallGuardForTests(): void {
+export function __appductResetInstallGuardForTests(): void {
   installed = false;
 }

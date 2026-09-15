@@ -2,17 +2,17 @@
 
 [![MIT license][license-badge]][license] [![npm downloads][npm-downloads-badge]][npm-downloads] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-Cordierite lets a terminal, a test runner, or an AI agent call functions inside your app while it's running — React Native, plain iOS, or plain Android. You pick what's callable — a few functions you write yourself — and nothing else is reachable.
+Appduct lets a terminal, a test runner, or an AI agent call functions inside your app while it's running — React Native, plain iOS, or plain Android. You pick what's callable — a few functions you write yourself — and nothing else is reachable.
 
 ## Why you'd want this
 
-**Your E2E tests stop tapping through setup.** Most of an end-to-end test isn't the thing you're testing. It's logging in, dismissing onboarding, seeding a cart, waiting for a spinner. With Cordierite, the test calls `login(userId)` or `seedCart(items)` directly and jumps straight to the part that matters. Faster runs, far less flakiness, and a lot fewer screenshots for an agent to burn tokens on.
+**Your E2E tests stop tapping through setup.** Most of an end-to-end test isn't the thing you're testing. It's logging in, dismissing onboarding, seeding a cart, waiting for a spinner. With Appduct, the test calls `login(userId)` or `seedCart(items)` directly and jumps straight to the part that matters. Faster runs, far less flakiness, and a lot fewer screenshots for an agent to burn tokens on.
 
 **Agents can actually drive your app.** Add one line to Claude Code's or Cursor's config and your app's functions show up as tools the agent can call. It can flip a feature flag, jump to a screen, or check some state without you wiring up a single prompt.
 
 **No hidden debug UI.** No secret gestures, no long-press-the-logo admin panel, nothing extra in the app for someone to go find. The only things reachable are functions you deliberately registered.
 
-**Nothing ships in your release build by default.** Cordierite is included in debug builds only — a release build compiles it out entirely, not just switches it off. Want it in a TestFlight or other internal build too? You can opt in per build — see [Build variants](docs/BUILD-VARIANTS.md).
+**Nothing ships in your release build by default.** Appduct is included in debug builds only — a release build compiles it out entirely, not just switches it off. Want it in a TestFlight or other internal build too? You can opt in per build — see [Build variants](docs/BUILD-VARIANTS.md).
 
 **Your dev loop doesn't fight you.** Metro reloads, backgrounding the app, flaky Wi-Fi — the session survives all of it and picks back up on its own. One background service handles as many devices as you've got plugged in.
 
@@ -21,10 +21,10 @@ Cordierite lets a terminal, a test runner, or an AI agent call functions inside 
 Register something you want reachable:
 
 ```ts
-import { useCordieriteTool } from "@cordierite/react-native";
+import { useAppductTool } from "@appduct/react-native";
 import { z } from "zod";
 
-useCordieriteTool({
+useAppductTool({
   name: "seed_cart",
   description: "Fill the cart with test items.",
   inputSchema: z.object({ items: z.number() }),
@@ -38,7 +38,7 @@ latest state it closes over.
 Call it from your terminal:
 
 ```bash
-cordierite invoke seed_cart --input '{"items":3}'
+appduct invoke seed_cart --input '{"items":3}'
 ```
 
 Or hand it to an agent:
@@ -46,7 +46,7 @@ Or hand it to an agent:
 ```json
 {
   "mcpServers": {
-    "cordierite": { "command": "cordierite", "args": ["mcp"] }
+    "appduct": { "command": "appduct", "args": ["mcp"] }
   }
 }
 ```
@@ -57,7 +57,7 @@ That's the whole idea. Everything else is about which builds include it and what
 
 ## Is this safe to ship?
 
-By default, yes — nothing here ships in a release build, so there's no code on the device to attack in the first place. If you opt into carrying Cordierite in a build that reaches people outside your team (see [Build variants](docs/BUILD-VARIANTS.md)), the connection is still encrypted, your app checks the identity of the machine on the other end rather than trusting whoever's on the network, and a link someone intercepts isn't a way in.
+By default, yes — nothing here ships in a release build, so there's no code on the device to attack in the first place. If you opt into carrying Appduct in a build that reaches people outside your team (see [Build variants](docs/BUILD-VARIANTS.md)), the connection is still encrypted, your app checks the identity of the machine on the other end rather than trusting whoever's on the network, and a link someone intercepts isn't a way in.
 
 [`docs/SECURITY.md`](docs/SECURITY.md) walks through what it protects against, what it doesn't, and how to configure and rotate keys for that case.
 
@@ -68,21 +68,21 @@ This walks through the React Native setup. Building a plain iOS or Android app w
 Install the CLI where you'll run it, and the package in your app:
 
 ```bash
-npm install -g cordierite
-npm install @cordierite/react-native zod
+npm install -g appduct
+npm install @appduct/react-native zod
 ```
 
 From there:
 
 - **[Set up your app](packages/react-native/README.md)** — registering tools, deep-link setup, and the API reference.
-- **[Use the CLI and MCP server](packages/cordierite/README.md)** — connecting to a device, listing and calling tools, and checking a built artifact.
+- **[Use the CLI and MCP server](packages/appduct/README.md)** — connecting to a device, listing and calling tools, and checking a built artifact.
 - **[Try the playground](playground/README.md)** — a working app you can run end to end in a few minutes. Fastest way to see whether this fits your project.
 
 You'll need a development build or a bare React Native app — Expo Go can't do it.
 
 ### Native apps
 
-No React Native in your app at all? Cordierite has a native SDK you call directly from Swift or Kotlin — same tool registration, deep-link handling, and session lifecycle:
+No React Native in your app at all? Appduct has a native SDK you call directly from Swift or Kotlin — same tool registration, deep-link handling, and session lifecycle:
 
 - **[Get started on iOS](packages/native/ios/README.md)**
 - **[Get started on Android](packages/native/android/README.md)**
@@ -91,10 +91,10 @@ No React Native in your app at all? Cordierite has a native SDK you call directl
 
 | Package | What it is |
 | --- | --- |
-| [`cordierite`](packages/cordierite/README.md) | The CLI, the background service, and the MCP server |
-| [`@cordierite/react-native`](packages/react-native/README.md) | The app-side library and Expo config plugin |
-| [`@cordierite/shared`](packages/shared/README.md) | Types shared by both |
-| [`packages/native`](packages/native/README.md) | The framework-free Swift/Kotlin core — vendored into `@cordierite/react-native`, and directly consumable by plain iOS ([`ios/README.md`](packages/native/ios/README.md)) and Android ([`android/README.md`](packages/native/android/README.md)) apps |
+| [`appduct`](packages/appduct/README.md) | The CLI, the background service, and the MCP server |
+| [`@appduct/react-native`](packages/react-native/README.md) | The app-side library and Expo config plugin |
+| [`@appduct/shared`](packages/shared/README.md) | Types shared by both |
+| [`packages/native`](packages/native/README.md) | The framework-free Swift/Kotlin core — vendored into `@appduct/react-native`, and directly consumable by plain iOS ([`ios/README.md`](packages/native/ios/README.md)) and Android ([`android/README.md`](packages/native/android/README.md)) apps |
 | [`playground-native`](playground-native/ios/README.md) | Native SwiftUI ([`ios`](playground-native/ios/README.md)) and Jetpack Compose ([`android`](playground-native/android/README.md)) example apps built on `packages/native` directly, no React Native |
 
 ## Support
@@ -104,24 +104,24 @@ iOS 15.1+ and Android, both on the New Architecture. Web gets a no-op stub so sh
 ## Docs
 
 - [`docs/SECURITY.md`](docs/SECURITY.md) — what it protects against, configuring trust, and key rotation
-- [`docs/BUILD-VARIANTS.md`](docs/BUILD-VARIANTS.md) — which builds carry Cordierite, and how to compile it out
+- [`docs/BUILD-VARIANTS.md`](docs/BUILD-VARIANTS.md) — which builds carry Appduct, and how to compile it out
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the pieces fit together
 - [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the wire protocol, if you're implementing a client
-- [`docs/CI.md`](docs/CI.md) — running it in CI, and the `cordierite doctor` release gate
+- [`docs/CI.md`](docs/CI.md) — running it in CI, and the `appduct doctor` release gate
 
 ## Made with ❤️ at Callstack
 
-`cordierite` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
+`appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
 
 Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
 
-[repo]: https://github.com/callstackincubator/cordierite
-[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=cordierite&utm_term=readme-with-love
-[license-badge]: https://img.shields.io/npm/l/cordierite?style=for-the-badge
-[license]: https://github.com/callstackincubator/cordierite/blob/main/LICENSE
-[npm-downloads-badge]: https://img.shields.io/npm/dm/cordierite?style=for-the-badge
-[npm-downloads]: https://www.npmjs.com/package/cordierite
+[repo]: https://github.com/callstackincubator/appduct
+[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love
+[license-badge]: https://img.shields.io/npm/l/appduct?style=for-the-badge
+[license]: https://github.com/callstackincubator/appduct/blob/main/LICENSE
+[npm-downloads-badge]: https://img.shields.io/npm/dm/appduct?style=for-the-badge
+[npm-downloads]: https://www.npmjs.com/package/appduct
 [prs-welcome-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge
-[prs-welcome]: https://github.com/callstackincubator/cordierite/pulls
+[prs-welcome]: https://github.com/callstackincubator/appduct/pulls
 [chat-badge]: https://img.shields.io/discord/426714625279524876.svg?style=for-the-badge
 [chat]: https://discord.gg/xgGt7KAjxv

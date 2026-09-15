@@ -8,7 +8,7 @@ import { isToolDescriptor } from "../domains/tool-descriptor.js";
 
 /**
  * Cross-language conformance fixtures (issue #48, "Parity is the risk"): every vector here also
- * loads and asserts in Swift (`packages/native/ios/Tests/CordieriteCoreTests/FixturesConformanceTests.swift`)
+ * loads and asserts in Swift (`packages/native/ios/Tests/AppductCoreTests/FixturesConformanceTests.swift`)
  * and Kotlin (`packages/native/android/core/src/test/.../FixturesConformanceTest.kt`) against
  * their own implementations of the same rules. See `packages/native/fixtures/README.md` for the
  * rule that a divergence found this way is fixed in the implementation, never in the fixture.
@@ -64,7 +64,7 @@ type BootstrapLinkVector = {
 /** Same shape `packages/react-native/src/bootstrap.ts`'s `extractLinkPin` validates against. */
 const LINK_PIN_PATTERN = /^sha256\/[A-Za-z0-9+/]{43}=$/u;
 
-describe("fixtures-conformance: bootstrap-links.json (deep link cordierite+pin extraction)", () => {
+describe("fixtures-conformance: bootstrap-links.json (deep link appduct+pin extraction)", () => {
   const payloadVectors = loadFixture<BootstrapPayloadVector[]>("bootstrap-payloads.json");
   const linkVectors = loadFixture<BootstrapLinkVector[]>("bootstrap-links.json");
 
@@ -74,10 +74,10 @@ describe("fixtures-conformance: bootstrap-links.json (deep link cordierite+pin e
 
   test.each(linkVectors.map((vector) => [vector.name, vector] as const))("%s", (_name, vector) => {
     const url = new URL(vector.url);
-    const cordieriteParam = url.searchParams.get("cordierite");
+    const appductParam = url.searchParams.get("appduct");
 
-    expect(cordieriteParam).not.toBeNull();
-    expect(cordieriteParam).toBe(payloadVectors[vector.expected.payloadIndex]?.base64url);
+    expect(appductParam).not.toBeNull();
+    expect(appductParam).toBe(payloadVectors[vector.expected.payloadIndex]?.base64url);
 
     const rawPin = url.searchParams.get("pin");
     const pin = rawPin !== null && LINK_PIN_PATTERN.test(rawPin) ? rawPin : null;
@@ -111,13 +111,13 @@ type CloseCodeVector = {
 };
 
 /**
- * `@cordierite/shared`/`@cordierite/react-native` no longer implement terminal-close
+ * `@appduct/shared`/`@appduct/react-native` no longer implement terminal-close
  * classification themselves (it moved to native in issue #48 phase 2 — see
  * `docs/tasks/15-native-session-logic.md`'s "Deleted" section for `client/terminal-close.ts`).
  * This suite still loads and asserts the fixture, both to keep it self-consistent with
  * `docs/PROTOCOL.md` §7 and so a future JS-side consumer of this rule has a passing reference
  * implementation to copy. The Swift and Kotlin suites assert the same fixture against their own
- * production `isTerminalCloseEvent`/`isCordieriteTerminalCloseCode` functions.
+ * production `isTerminalCloseEvent`/`isAppductTerminalCloseCode` functions.
  */
 const POLICY_VIOLATION_CLOSE_CODE = 1008;
 const isTerminalCloseCode = (code: number | null): boolean => code === POLICY_VIOLATION_CLOSE_CODE;

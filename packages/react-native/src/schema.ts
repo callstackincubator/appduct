@@ -7,14 +7,14 @@ import {
   type StandardSchemaV1JsonSchema,
   type ToolDescriptor,
   type ToolSchemaDescriptor,
-} from "@cordierite/shared";
+} from "@appduct/shared";
 
 import type {
-  CordieriteJsonSchemaConverter,
-  CordieriteNormalizedToolSchema,
-  CordieriteRuntimeSchema,
-  CordieriteToolDefinition,
-} from "./Cordierite.types";
+  AppductJsonSchemaConverter,
+  AppductNormalizedToolSchema,
+  AppductRuntimeSchema,
+  AppductToolDefinition,
+} from "./Appduct.types";
 import { isDev, logger } from "./logger";
 
 const JSON_SCHEMA_TARGET = "draft-2020-12";
@@ -151,7 +151,7 @@ const asStandardSchema = (value: unknown): StandardSchemaV1 | undefined => {
 
 const isJsonSchemaConverter = (
   value: unknown,
-): value is CordieriteJsonSchemaConverter =>
+): value is AppductJsonSchemaConverter =>
   isRecord(value) &&
   typeof value.input === "function" &&
   typeof value.output === "function";
@@ -224,7 +224,7 @@ const NOT_JSON_SCHEMA_ADVICE =
 export const normalizeToolSchema = (
   value: unknown,
   label: string,
-): CordieriteNormalizedToolSchema => {
+): AppductNormalizedToolSchema => {
   if (hasStandardProperty(value)) {
     const schema = asStandardSchema(value);
     if (!schema) {
@@ -282,7 +282,7 @@ export const normalizeToolSchema = (
 export const normalizeOptionalToolSchema = (
   value: unknown,
   label: string,
-): CordieriteNormalizedToolSchema | undefined =>
+): AppductNormalizedToolSchema | undefined =>
   value === undefined ? undefined : normalizeToolSchema(value, label);
 
 const hasJsonSchemaExporter = (
@@ -318,7 +318,7 @@ const describe = (value: unknown): string => {
  * to the same standard as a hand-written raw schema, so the two forms cannot diverge.
  */
 const exportFromConverter = (
-  converter: CordieriteJsonSchemaConverter,
+  converter: AppductJsonSchemaConverter,
   mode: "input" | "output",
   source: string,
 ): ConverterOutcome => {
@@ -342,7 +342,7 @@ const exportFromConverter = (
 
 /** Export outcome for one normalized slot, with the reason when no JSON Schema can be produced. */
 const exportNormalizedSchema = (
-  schema: CordieriteNormalizedToolSchema,
+  schema: AppductNormalizedToolSchema,
   mode: "input" | "output",
 ): ConverterOutcome => {
   if (schema.kind === "raw") {
@@ -366,7 +366,7 @@ const exportNormalizedSchema = (
   }
 
   return exportFromConverter(
-    schema.schema["~standard"].jsonSchema as CordieriteJsonSchemaConverter,
+    schema.schema["~standard"].jsonSchema as AppductJsonSchemaConverter,
     mode,
     `"~standard.jsonSchema.${mode}" exporter`,
   );
@@ -381,7 +381,7 @@ const exportNormalizedSchema = (
  * in `__DEV__` and warns once per tool name otherwise.
  */
 export const exportToolSchema = (
-  schema: CordieriteNormalizedToolSchema | undefined,
+  schema: AppductNormalizedToolSchema | undefined,
   mode: "input" | "output",
   toolName?: string,
 ): ToolSchemaDescriptor | undefined => {
@@ -396,17 +396,17 @@ export const exportToolSchema = (
 };
 
 /**
- * Render-time exporter for `useCordieriteTool`'s derived registration key. Takes the raw
+ * Render-time exporter for `useAppductTool`'s derived registration key. Takes the raw
  * `inputSchema`/`outputSchema` value as the caller passed it, and never throws or warns: an
  * invalid value or a shapeless schema yields `undefined` here, and the registration path
  * (`toToolDescriptor` via `registerTool`) is where it is reported. Keying is not the place to
  * fail a render or to log.
  */
 export const exportToolSchemaForKey = (
-  schema: CordieriteRuntimeSchema,
+  schema: AppductRuntimeSchema,
   mode: "input" | "output",
 ): ToolSchemaDescriptor | undefined => {
-  let normalized: CordieriteNormalizedToolSchema;
+  let normalized: AppductNormalizedToolSchema;
   try {
     normalized = normalizeToolSchema(schema, "schema");
   } catch {
@@ -438,7 +438,7 @@ export const normalizeStandardSchemaIssues = (
   }));
 };
 
-export type CordieriteToolSchemaValidationResult =
+export type AppductToolSchemaValidationResult =
   | {
       ok: true;
       value: unknown;
@@ -455,9 +455,9 @@ export type CordieriteToolSchemaValidationResult =
  * zero-runtime-dependency guarantee (ARCHITECTURE.md §13).
  */
 export const validateToolSchema = async (
-  schema: CordieriteNormalizedToolSchema,
+  schema: AppductNormalizedToolSchema,
   value: unknown,
-): Promise<CordieriteToolSchemaValidationResult> => {
+): Promise<AppductToolSchemaValidationResult> => {
   if (schema.kind === "raw") {
     return { ok: true, value };
   }
@@ -478,12 +478,12 @@ export const validateToolSchema = async (
 };
 
 /** A tool definition whose schemas have already been through `normalizeToolSchema`. */
-export type CordieriteNormalizedToolDefinition = Pick<
-  CordieriteToolDefinition,
+export type AppductNormalizedToolDefinition = Pick<
+  AppductToolDefinition,
   "name" | "description" | "annotations" | "timeoutMs"
 > & {
-  inputSchema?: CordieriteNormalizedToolSchema;
-  outputSchema?: CordieriteNormalizedToolSchema;
+  inputSchema?: AppductNormalizedToolSchema;
+  outputSchema?: AppductNormalizedToolSchema;
 };
 
 /** Dedupes the timeout warnings below per tool name, matching `warnMissingSchemaExporter`. */
@@ -546,7 +546,7 @@ export const normalizeToolTimeoutMs = (
 };
 
 export const toToolDescriptor = (
-  definition: CordieriteNormalizedToolDefinition,
+  definition: AppductNormalizedToolDefinition,
 ): ToolDescriptor => {
   const inputSchema = exportToolSchema(
     definition.inputSchema,

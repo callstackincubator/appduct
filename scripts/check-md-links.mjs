@@ -58,7 +58,7 @@ const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
  * link; nothing is fetched.
  */
 const SELF_BLOB =
-  /^https:\/\/(?:www\.)?github\.com\/callstackincubator\/cordierite\/(?:blob|tree)\/main(?:\/(.*)|(#.*))?$/i;
+  /^https:\/\/(?:www\.)?github\.com\/callstackincubator\/appduct\/(?:blob|tree)\/main(?:\/(.*)|(#.*))?$/i;
 
 /**
  * Repo-relative form of a self-referencing URL, or null if it is a genuinely external one.
@@ -89,7 +89,7 @@ function collectMarkdown(dir, out = []) {
 /**
  * Blank out fenced code blocks and, unless `inline` is false, inline code spans — preserving
  * line/column offsets so reported line numbers stay accurate. Heading extraction keeps inline
- * spans, since `## \`CORDIERITE_ENABLED\`` is a real heading whose text is entirely code.
+ * spans, since `## \`APPDUCT_ENABLED\`` is a real heading whose text is entirely code.
  */
 function maskCode(source, { inline = true } = {}) {
   const lines = source.split("\n");
@@ -134,7 +134,7 @@ function stripTags(text) {
  */
 function slugify(headingText) {
   // Code spans render literally, so their contents must survive emphasis stripping:
-  // `## \`CORDIERITE_ENABLED\`` slugs to `cordierite_enabled`, underscore intact.
+  // `## \`APPDUCT_ENABLED\`` slugs to `appduct_enabled`, underscore intact.
   const codeSpans = [];
   let plain = headingText.replace(/`([^`]*)`/g, (_match, inner) => {
     codeSpans.push(inner);

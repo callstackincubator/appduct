@@ -1,5 +1,5 @@
 {
-  "name": "cordierite-workspace",
+  "name": "appduct-workspace",
   "private": true,
   "scripts": {
     "build": "turbo run build",
@@ -8,8 +8,8 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "showcase": "./showcase-cordierite.sh",
-    "playground:cordierite": "./playground/scripts/cordierite.sh"
+    "showcase": "./showcase-appduct.sh",
+    "playground:appduct": "./playground/scripts/appduct.sh"
   },
   "workspaces": [
     "packages/*",

@@ -2,12 +2,12 @@ import {
   MAX_TOOL_TIMEOUT_MS,
   MIN_TOOL_TIMEOUT_MS,
   type StandardSchemaV1,
-} from "@cordierite/shared";
+} from "@appduct/shared";
 import { describe, expect, test } from "vitest";
 import { z as z3 } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
-import { jsonSchema } from "../Cordierite.types";
+import { jsonSchema } from "../Appduct.types";
 import {
   exportToolSchema,
   normalizeOptionalToolSchema,

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `cordierite`, `@cordierite/shared`, and `@cordierite/react-native` are
+All notable changes to `appduct`, `@appduct/shared`, and `@appduct/react-native` are
 documented here. The three packages are versioned in lockstep (identical version numbers), so one
 changelog covers all of them.
 
@@ -10,20 +10,20 @@ package versions for a release.
 
 ## 0.8.0 (2026-09-08)
 
-- **New:** `cordierite init` scaffolds config from an existing `app.json`/`app.config.js`, discovering the scheme automatically.
-- **New:** `mcp` accepts `--scheme`/`CORDIERITE_SCHEME` to target a specific app scheme.
+- **New:** `appduct init` scaffolds config from an existing `app.json`/`app.config.js`, discovering the scheme automatically.
+- **New:** `mcp` accepts `--scheme`/`APPDUCT_SCHEME` to target a specific app scheme.
 - **New (experimental):** `--open ios-device` delivers links to a physical iOS device via `xcrun devicectl`.
 - **New:** elicitation consent channel for policy `"prompt"`.
 - **New:** daemon audit log retention and `daemon.log` rotation.
 - **New:** per-tool `timeoutMs` is carried through to the daemon and sizes MCP/CLI transport timeouts.
-- **New:** the CLI and MCP server detect a daemon running an older version and restart it when no session/link state would be lost (`--daemon-restart`, `CORDIERITE_DAEMON_RESTART`, `config.json`'s `restartDaemonOnVersionMismatch`). See `docs/ARCHITECTURE.md` §4.
+- **New:** the CLI and MCP server detect a daemon running an older version and restart it when no session/link state would be lost (`--daemon-restart`, `APPDUCT_DAEMON_RESTART`, `config.json`'s `restartDaemonOnVersionMismatch`). See `docs/ARCHITECTURE.md` §4.
 - **New:** `inputSchema`/`outputSchema` accept a `{ schema, jsonSchema }` pair or a raw JSON Schema object, so zod 3 and plain valibot schemas publish a real shape.
 - **Breaking (dev only):** a Standard Schema with no JSON Schema exporter now throws in `__DEV__` instead of registering a shapeless tool silently. Release builds still register with a warning.
-- **Type change:** `CordieriteRuntimeSchema` is a union of the three accepted schema forms; internal `requireStandardSchema`/`validateStandardSchema` helpers are replaced by `normalizeToolSchema`/`validateToolSchema`.
+- **Type change:** `AppductRuntimeSchema` is a union of the three accepted schema forms; internal `requireStandardSchema`/`validateStandardSchema` helpers are replaced by `normalizeToolSchema`/`validateToolSchema`.
 - **Fix:** MCP server never emits a non-object `outputSchema` and guards `structuredContent`.
-- **Fix:** `useCordieriteTool` registers once per mount and routes calls through a ref.
-- **Fix:** `cordierite_connect` and delivered deep links no longer silently strand a session.
-- **Fix:** `ios/CordieriteTests` excluded from the npm package.
+- **Fix:** `useAppductTool` registers once per mount and routes calls through a ref.
+- **Fix:** `appduct_connect` and delivered deep links no longer silently strand a session.
+- **Fix:** `ios/AppductTests` excluded from the npm package.
 - Docs: five-minute READMEs, hardening guidance moved to `docs/`, new markdown link checker.
 
 ## 0.7.0 (2026-08-19)
@@ -36,21 +36,21 @@ package versions for a release.
   daemon-side rejection of this kind closes with 1008, so 1008 is now terminal wholesale rather
   than matched by reason string; transport-level closes (1011, 1001, 1006) stay retryable. A
   failed resume's close code now travels with the rejection via
-  `CordieriteHandshakeClosedError` so it isn't thrown away before reaching `onSocketLost`.
+  `AppductHandshakeClosedError` so it isn't thrown away before reaching `onSocketLost`.
 - **Fix: `restoreSession()` is now a first-class export**, reachable without going through
-  `installCordieriteDeepLinkBootstrap` or the `cordieriteClient` proxy. An app that drives
+  `installAppductDeepLinkBootstrap` or the `appductClient` proxy. An app that drives
   bootstrap itself (custom deep-link routing, QR scanning, a manual `connect()`) had nothing
   reading the native lease, so every Metro reload dropped a session native could still have
   resumed. Exported from the root and `./noop` entries and `CordierePublicApi`.
 - **Breaking: `requirePrivateIp` is removed; `/auto` is now the only install path.**
   `allowPrivateLanOnly` was already native build config
-  (`CordieriteAllowPrivateLanOnly` in Info.plist / the Android manifest) enforced by native
+  (`AppductAllowPrivateLanOnly` in Info.plist / the Android manifest) enforced by native
   `connect()` on both platforms — the JS `requirePrivateIp` option could only narrow what
   native already allowed, so setting it to `false` without also setting the native key did
   nothing. The deep-link handler now reads `allowPrivateLanOnly` from the same
   `getConstants()` path native enforces from, failing closed when it can't be read.
-  `installCordieriteDeepLinkBootstrap` and `InstallCordieriteDeepLinkBootstrapOptions` are gone;
-  `require("@cordierite/react-native/auto")` is the only way to install the bootstrap listener
+  `installAppductDeepLinkBootstrap` and `InstallAppductDeepLinkBootstrapOptions` are gone;
+  `require("@appduct/react-native/auto")` is the only way to install the bootstrap listener
   now. See `packages/react-native/README.md` for the current surface.
 
 ## 0.6.0 (2026-08-18)
@@ -60,14 +60,14 @@ package versions for a release.
   `tool.handler(args, context)` now receives an `AbortSignal` on `context.signal`, aborted on a
   `tool_cancel` frame or when the session's transport is lost; a handler that ignores it keeps
   running as before, one that observes it and throws gets `tool_cancelled` reported (distinct from
-  `tool_timeout`). `cordierite invoke` cancels the in-flight call on SIGINT rather than leaving the
+  `tool_timeout`). `appduct invoke` cancels the in-flight call on SIGINT rather than leaving the
   app-side handler running for a caller that already exited. An MCP client's
   `notifications/cancelled` maps to `tools.cancel` automatically.
 - **New: daemon-side event retention and a pull surface (`events.since`).** The daemon now keeps a
   per-session ring buffer (`eventBufferSize`, default 256) of recent events, including
   `app_event`s posted from the app. `events.since` drains it by sequence cursor, so a caller that
   wasn't subscribed at the moment an event fired can still retrieve it. Two new MCP tools expose
-  this to agents: `cordierite_events` (pull) and `cordierite_wait_for_event` (block for a matching
+  this to agents: `appduct_events` (pull) and `appduct_wait_for_event` (block for a matching
   event, checking the retained buffer before falling back to a live wait).
 - **New: minimal `"prompt"` policy value.** `policy.default`/`policy.destructive`/per-tool
   overrides now accept `"prompt"` in addition to `"allow"`/`"deny"`. The only implemented gate
@@ -76,34 +76,34 @@ package versions for a release.
   consent back on `tools/call`; every other caller (CLI, an older/non-compliant MCP client, CI) is
   denied with `policy_denied` — `"prompt"` fails closed rather than behaving like `allow`. See
   `docs/SECURITY.md` for what this does and doesn't guarantee.
-- **New: `cordierite/client` programmatic API for test runners.** A typed wrapper over the same
+- **New: `appduct/client` programmatic API for test runners.** A typed wrapper over the same
   daemon RPC the CLI and MCP server use, for a Jest/Vitest/Detox spec that wants to drive a
-  running app without shelling out to `cordierite invoke --json`: `connect()`, `link()` +
+  running app without shelling out to `appduct invoke --json`: `connect()`, `link()` +
   `waitForSession()`, `app.call()`, `app.tools()`, `app.events()`/`app.waitForEvent()`. Errors
-  surface as a `CordieriteError` whose `type` preserves the daemon's wire error type, so tests can
-  assert on it directly. See `packages/cordierite/README.md`'s "Programmatic use" section.
+  surface as a `AppductError` whose `type` preserves the daemon's wire error type, so tests can
+  assert on it directly. See `packages/appduct/README.md`'s "Programmatic use" section.
 
 ## 0.5.1 (2026-08-17)
 
-- **Fix: release builds no longer carry Cordierite's native module by default.** Previously,
-  leaving `CORDIERITE_ENABLED` unset shipped Cordierite in every build variant, including
+- **Fix: release builds no longer carry Appduct's native module by default.** Previously,
+  leaving `APPDUCT_ENABLED` unset shipped Appduct in every build variant, including
   release — the opposite of the intended dev-only default. Unset now links only `Debug`/`debug`,
   `1`/`true` links every variant (for a release-signed internal/QA build that still needs
-  Cordierite), and `0`/`false` excludes it everywhere, unchanged. iOS: `react-native.config.js`
+  Appduct), and `0`/`false` excludes it everywhere, unchanged. iOS: `react-native.config.js`
   sets CocoaPods' `:configurations`, a real per-variant linking decision. Android: RNGP's
   generated `PackageList.java` is shared, unfiltered, across every variant, so the equivalent
   `buildTypes` restriction breaks compilation for a package with static Java registration
   instead — `android/build.gradle` instead swaps which Kotlin source set compiles for `release`
-  (the real implementation, or a no-op `CordieritePackage` at the same fully-qualified name),
-  keyed on the same `CORDIERITE_ENABLED`. Neither mechanism is a runtime check.
-- **Fix: `cordierite doctor`'s Android detection now requires the `CordieriteNativeMarker`
+  (the real implementation, or a no-op `AppductPackage` at the same fully-qualified name),
+  keyed on the same `APPDUCT_ENABLED`. Neither mechanism is a runtime check.
+- **Fix: `appduct doctor`'s Android detection now requires the `AppductNativeMarker`
   keep-rule signal to report `present`.** The no-op stub introduced by the fix above compiles at
   the real implementation's exact package name, and the config plugin writes the same
   `AndroidManifest.xml` meta-data regardless of build variant — so the two other Android
   signals (dex package-string, manifest meta-data keys) could otherwise report a harmless
   default-release stub as "present." They're still reported for corroboration but no longer
   independently decide the verdict.
-  See `packages/react-native/README.md`'s "Compiling Cordierite out of production builds" for the
+  See `packages/react-native/README.md`'s "Compiling Appduct out of production builds" for the
   updated matrix.
 
 ## 0.5.0 (2026-08-17)
@@ -118,35 +118,35 @@ since 0.3.1:
 - **Breaking: `enableInReleaseBuilds` removed from the React Native config plugin, with no
   deprecation shim.** Passing it at all (`true` or `false`) now throws at prebuild, naming the
   replacement. Whether native code ships is decided by autolinking alone, driven by the
-  `CORDIERITE_ENABLED` environment variable: unset or empty means included (so a build that never
-  mentions Cordierite still gets it), `0`/`false` opts the package out of autolinking on both
+  `APPDUCT_ENABLED` environment variable: unset or empty means included (so a build that never
+  mentions Appduct still gets it), `0`/`false` opts the package out of autolinking on both
   platforms, and any other value is a config error. The package ships its own
-  `react-native.config.js` that reads it, and `@cordierite/react-native/metro` reads the same
+  `react-native.config.js` that reads it, and `@appduct/react-native/metro` reads the same
   variable to strip the JS, so one pipeline variable removes both surfaces with no app-side config.
   It must be set when autolinking resolves (`pod install` / gradle configure), not merely when the
   app compiles. What a build trusts is decided by `trust` — `"pin"` when `cliPins` is configured,
   `"link"` otherwise (trust the SPKI pin carried by the bootstrap link, per session) — and is no
   longer tied to whether the build is debuggable. A 0.3.x config that set `enableInReleaseBuilds`
   (either value) must simply delete that option; see `packages/react-native/README.md`'s
-  "Hardening for production / internal builds" and "Compiling Cordierite out of production builds"
+  "Hardening for production / internal builds" and "Compiling Appduct out of production builds"
   sections for the full migration.
-- **When Cordierite is linked, its podspec and `build.gradle` print `[cordierite] native module
+- **When Appduct is linked, its podspec and `build.gradle` print `[appduct] native module
   INCLUDED in this build`** during pod install / gradle configure. Nothing prints when it is
   excluded, because nothing runs — the line exists to catch a release build that carries
-  Cordierite by mistake. `cordierite doctor` remains the authority, since it inspects the built
+  Appduct by mistake. `appduct doctor` remains the authority, since it inspects the built
   artifact rather than the build log.
-- **New:** `cordierite doctor <artifact>` — inspects a built `.app`/`.ipa`/`.apk`/`.aab` directly
-  to assert whether Cordierite is present or absent, replacing the old runtime `debuggable`/`#if
+- **New:** `appduct doctor <artifact>` — inspects a built `.app`/`.ipa`/`.apk`/`.aab` directly
+  to assert whether Appduct is present or absent, replacing the old runtime `debuggable`/`#if
   DEBUG` check as the release-gate mechanism.
-- **New:** `cordierite mcp` — an MCP server exposing Cordierite sessions to MCP-compatible tools.
-- **New:** emulator/simulator fast path (`cordierite link --open`).
+- **New:** `appduct mcp` — an MCP server exposing Appduct sessions to MCP-compatible tools.
+- **New:** emulator/simulator fast path (`appduct link --open`).
 - **New:** session recovery on iOS and Android — the native clients can resume a session across an
   app process restart (resume lease) instead of requiring a fresh bootstrap link.
 - **New:** daemon-side policy engine and audit log.
 - **Hardened:** iOS and Android native connection layers no longer contain any build-type
-  (`debuggable`/`#if DEBUG`) check at all; whether Cordierite's native code is present in a build
+  (`debuggable`/`#if DEBUG`) check at all; whether Appduct's native code is present in a build
   is decided solely by autolinking, independent of debuggability, and is verifiable directly
-  against a built artifact with `cordierite doctor`.
+  against a built artifact with `appduct doctor`.
 - **Tooling:** migrated the workspace from bun to pnpm + vitest; CI now pins all GitHub Actions to
   full commit SHAs and publishes via npm trusted publishing (OIDC + provenance).
 

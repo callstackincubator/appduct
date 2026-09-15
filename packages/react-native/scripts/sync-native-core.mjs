@@ -2,13 +2,13 @@
 /**
  * Vendors the framework-free native core (`packages/native`,
  * docs/tasks/14-native-core-extraction.md) into this package at build/publish time, so
- * `@cordierite/react-native` never depends on `packages/native` being separately published to
+ * `@appduct/react-native` never depends on `packages/native` being separately published to
  * CocoaPods trunk or Maven Central -- that is deferred to Phase 3, and this package's own releases
  * should not be blocked on it.
  *
  * Copies:
- *   - packages/native/ios/Sources/CordieriteCore/Real/*.swift -> ios/Core/
- *     Only the `Real/` branch: `Cordierite.podspec` always compiles with `-DCORDIERITE_ENABLED` set
+ *   - packages/native/ios/Sources/AppductCore/Real/*.swift -> ios/Core/
+ *     Only the `Real/` branch: `Appduct.podspec` always compiles with `-DAPPDUCT_ENABLED` set
  *     (autolinking, not this file's contents, decides whether the pod links at all -- see
  *     `react-native.config.js`), so the RN pod never needs the `Stub/` branch.
  *   - packages/native/android/core/src/main/java/** (+ consumer-rules.pro) -> android/core/
@@ -53,16 +53,16 @@ function syncFile(srcFile, destFile) {
 }
 
 // The app-facing entry points of the native core (issue #48 phase 3) are deliberately NOT vendored
-// into the React Native package: the RN bridge owns its own `CordieriteClient`, and a second client
-// behind `Cordierite.shared` / the `Cordierite` object would compete with it for the one
+// into the React Native package: the RN bridge owns its own `AppductClient`, and a second client
+// behind `Appduct.shared` / the `Appduct` object would compete with it for the one
 // process-memory resume lease. Android's init `ContentProvider` and deep-link trampoline `Activity`
 // exist only for plain apps too (RN routes links through `Linking`) and are never declared in the
 // RN module's manifest. Everything else -- the client, transport, codecs, marker -- is shared.
-const IOS_FACADE_FILES = new Set(["CordieriteAPI.swift"]);
+const IOS_FACADE_FILES = new Set(["AppductAPI.swift"]);
 const ANDROID_FACADE_FILES = new Set([
-  "Cordierite.kt",
-  "CordieriteInitProvider.kt",
-  "CordieriteLinkActivity.kt",
+  "Appduct.kt",
+  "AppductInitProvider.kt",
+  "AppductLinkActivity.kt",
 ]);
 
 const excludeFacade = (facadeFiles) => (src) => !facadeFiles.has(src.split("/").pop());
@@ -70,7 +70,7 @@ const excludeFacade = (facadeFiles) => (src) => !facadeFiles.has(src.split("/").
 function main() {
   // --- iOS: Real/ only, minus the plain-app facade ---
   syncDir(
-    join(nativeRoot, "ios", "Sources", "CordieriteCore", "Real"),
+    join(nativeRoot, "ios", "Sources", "AppductCore", "Real"),
     join(rnRoot, "ios", "Core"),
     { filter: excludeFacade(IOS_FACADE_FILES) },
   );

@@ -6,62 +6,62 @@ import { afterEach, describe, expect, test } from "vitest";
 const require = createRequire(import.meta.url);
 
 const autolinkEnv = require("../../autolink-env.js") as {
-  isCordieriteAutolinkEnabled: (env?: NodeJS.ProcessEnv) => boolean;
-  parseCordieriteEnabled: (env?: NodeJS.ProcessEnv) => "unset" | boolean;
+  isAppductAutolinkEnabled: (env?: NodeJS.ProcessEnv) => boolean;
+  parseAppductEnabled: (env?: NodeJS.ProcessEnv) => "unset" | boolean;
   ENV_VAR: string;
 };
 
-const { isCordieriteAutolinkEnabled, parseCordieriteEnabled, ENV_VAR } =
+const { isAppductAutolinkEnabled, parseAppductEnabled, ENV_VAR } =
   autolinkEnv;
 
-describe("parseCordieriteEnabled", () => {
+describe("parseAppductEnabled", () => {
   afterEach(() => {
     delete process.env[ENV_VAR];
   });
 
   test('unset -> "unset"', () => {
     delete process.env[ENV_VAR];
-    expect(parseCordieriteEnabled()).toBe("unset");
+    expect(parseAppductEnabled()).toBe("unset");
   });
 
   test('empty string -> "unset"', () => {
     process.env[ENV_VAR] = "  ";
-    expect(parseCordieriteEnabled()).toBe("unset");
+    expect(parseAppductEnabled()).toBe("unset");
   });
 
   test.each(["1", "true", "True"])("%s -> true", (value) => {
     process.env[ENV_VAR] = value;
-    expect(parseCordieriteEnabled()).toBe(true);
+    expect(parseAppductEnabled()).toBe(true);
   });
 
   test.each(["0", "false", "False"])("%s -> false", (value) => {
     process.env[ENV_VAR] = value;
-    expect(parseCordieriteEnabled()).toBe(false);
+    expect(parseAppductEnabled()).toBe(false);
   });
 
   test("unrecognized value throws, naming the offending value", () => {
     process.env[ENV_VAR] = "nope";
-    expect(() => parseCordieriteEnabled()).toThrow(/"nope"/);
+    expect(() => parseAppductEnabled()).toThrow(/"nope"/);
   });
 });
 
-describe("isCordieriteAutolinkEnabled", () => {
+describe("isAppductAutolinkEnabled", () => {
   afterEach(() => {
     delete process.env[ENV_VAR];
   });
 
   test("unset -> true (present in at least the dev build)", () => {
     delete process.env[ENV_VAR];
-    expect(isCordieriteAutolinkEnabled()).toBe(true);
+    expect(isAppductAutolinkEnabled()).toBe(true);
   });
 
   test("truthy -> true", () => {
     process.env[ENV_VAR] = "1";
-    expect(isCordieriteAutolinkEnabled()).toBe(true);
+    expect(isAppductAutolinkEnabled()).toBe(true);
   });
 
   test("falsy -> false", () => {
     process.env[ENV_VAR] = "0";
-    expect(isCordieriteAutolinkEnabled()).toBe(false);
+    expect(isAppductAutolinkEnabled()).toBe(false);
   });
 });

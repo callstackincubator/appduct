@@ -5,7 +5,7 @@ can ship before the rest of this series.**
 
 ## Goal
 
-The documented way to exclude Cordierite from a build actually excludes it, and the
+The documented way to exclude Appduct from a build actually excludes it, and the
 playground demonstrates it working.
 
 ## Why — verified bug
@@ -20,7 +20,7 @@ The playground puts `autolinking.ios.exclude` in `app.json`, so it is a silent n
 ```
 $ cd playground && node --no-warnings --eval "require('expo/bin/autolinking')" \
     expo-modules-autolinking react-native-config --json --platform ios
-deps: ['expo', '@cordierite/react-native', 'react-native-gesture-handler', ...]
+deps: ['expo', '@appduct/react-native', 'react-native-gesture-handler', ...]
 ```
 
 Passing the same name via `--exclude` drops it, so the mechanism works — it just never
@@ -30,7 +30,7 @@ Consequences today:
 
 - `packages/react-native/README.md`'s Expo recipe and `docs/SECURITY.md`'s "Expo-managed
   equivalent" are both wrong, and they are the recipe this whole design now rests on.
-- The playground links the Cordierite pod twice — once via autolinking, once via
+- The playground links the Appduct pod twice — once via autolinking, once via
   `playground/plugins/with-native-tests.js`' explicit `pod` line — and that plugin's comment
   ("Expo Autolinking … intentionally links just the production pod") describes an exclusion
   that never happened.
@@ -40,7 +40,7 @@ Consequences today:
 - `packages/react-native/README.md`: move the Expo exclude snippet to `package.json`, keep
   the bare-RN `react-native.config.js` snippet as-is (that one is correct).
 - `docs/SECURITY.md`: same fix in "Compile out of release builds you don't want carrying
-  Cordierite at all".
+  Appduct at all".
 - `playground/app.json`: remove the ineffective `expo.autolinking` block.
 - `playground/package.json`: add the real one. Decide and document what the playground
   should demonstrate — it needs the pod present for the XCTest target, so the honest
@@ -51,9 +51,9 @@ Consequences today:
 
 ## Acceptance
 
-- With the exclude in place, the resolver command above omits `@cordierite/react-native` for
+- With the exclude in place, the resolver command above omits `@appduct/react-native` for
   the excluded platform(s).
-- `playground/ios/Podfile.lock` contains exactly one `Cordierite` entry after a clean
+- `playground/ios/Podfile.lock` contains exactly one `Appduct` entry after a clean
   `expo prebuild --clean` + `pod install`.
 - A note in the README states plainly that this is read from `package.json`, because the
   wrong location fails silently and this bug has already shipped once.

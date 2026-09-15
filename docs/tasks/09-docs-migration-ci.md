@@ -32,7 +32,7 @@ on documentation than the old one did — the inclusion switch now lives in the 
 **`docs/ARCHITECTURE.md` §11**
 
 - Replace the default-inert/dev-trust paragraph. Note that it currently contradicts itself
-  ("app-target settings … added to the Cordierite pod's Release configuration") and is wrong
+  ("app-target settings … added to the Appduct pod's Release configuration") and is wrong
   about `Release` specifically — good evidence for keeping the replacement short.
 - Document the JS half (`noopIfNativeUnavailable`, `/noop`, Metro swap) as the JS-layer
   strip, distinct from the native-layer strip.
@@ -44,20 +44,20 @@ on documentation than the old one did — the inclusion switch now lives in the 
   applies).
 - Delete "Three release-build locks" — all three are gone. Replace with what actually
   contains link trust now: it is opt-in configuration, inclusion is a separate explicit
-  choice, and `cordierite doctor` verifies the result.
+  choice, and `appduct doctor` verifies the result.
 - Reclassify policy/audit honestly: **operator ergonomics, not a production control**, since
   they run on the machine this document already names as the trust boundary. Point at
   conditional registration (task 03) as the app-side control that sits inside the boundary.
 - Fix the exclusion recipe if task 02 did not already.
 
 **`packages/react-native/README.md`** — options table, the `enabled` recipe, the
-`package.json` exclusion recipe, and `getCordieriteBuildConfig`.
+`package.json` exclusion recipe, and `getAppductBuildConfig`.
 
 **`docs/REQUIREMENTS.md`** — "Current product shape" and the production-capable goal.
 
 ## CI scope (`docs/CI.md` + workflows)
 
-- Run `cordierite doctor --assert-present` against the playground's Release build, and
+- Run `appduct doctor --assert-present` against the playground's Release build, and
   `--assert-absent` against a build with the exclude applied. This is the regression test
   for the entire design; without it, task 02's failure mode returns silently.
 - Keep native unit tests for both platforms running (task 04 deletes some, task 05 adds
@@ -66,7 +66,7 @@ on documentation than the old one did — the inclusion switch now lives in the 
 ## Acceptance
 
 - No document references `enableInReleaseBuilds`, `ENABLE_IN_RELEASE`,
-  `CORDIERITE_ENABLE_RELEASE`, or describes trust as derived from the build type.
+  `APPDUCT_ENABLE_RELEASE`, or describes trust as derived from the build type.
 - Both exclusion recipes are correct and verified by CI, not by inspection.
-- A reader can answer, from the README alone: will Cordierite be in my production build, and
+- A reader can answer, from the README alone: will Appduct be in my production build, and
   if it is, what does it trust?

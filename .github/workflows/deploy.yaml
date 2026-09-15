@@ -45,7 +45,7 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           version=$(node -e '
-            const packages = ["shared", "cordierite", "react-native"].map(
+            const packages = ["shared", "appduct", "react-native"].map(
               (name) => require(`./packages/${name}/package.json`).version,
             );
             if (new Set(packages).size !== 1) throw new Error(`Package versions differ: ${packages.join(", ")}`);
@@ -60,9 +60,9 @@ jobs:
       - name: Pack release tarballs
         run: |
           mkdir release
-          pnpm --filter @cordierite/shared pack --pack-destination release
-          pnpm --filter cordierite pack --pack-destination release
-          pnpm --filter @cordierite/react-native pack --pack-destination release
+          pnpm --filter @appduct/shared pack --pack-destination release
+          pnpm --filter appduct pack --pack-destination release
+          pnpm --filter @appduct/react-native pack --pack-destination release
       - name: Upload release tarballs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -94,7 +94,7 @@ jobs:
           name: npm-packages
           path: release
       - name: Publish shared package
-        run: npm publish ./release/cordierite-shared-*.tgz --access public --provenance --tag latest
+        run: npm publish ./release/appduct-shared-*.tgz --access public --provenance --tag latest
 
   publish-cli:
     needs: publish-shared
@@ -119,7 +119,7 @@ jobs:
           name: npm-packages
           path: release
       - name: Publish CLI package
-        run: npm publish ./release/cordierite-[0-9]*.tgz --access public --provenance --tag latest
+        run: npm publish ./release/appduct-[0-9]*.tgz --access public --provenance --tag latest
 
   publish-react-native:
     needs: publish-shared
@@ -144,4 +144,4 @@ jobs:
           name: npm-packages
           path: release
       - name: Publish React Native package
-        run: npm publish ./release/cordierite-react-native-*.tgz --access public --provenance --tag latest
+        run: npm publish ./release/appduct-react-native-*.tgz --access public --provenance --tag latest

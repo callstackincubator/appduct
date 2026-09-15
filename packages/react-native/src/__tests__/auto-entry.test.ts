@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 
-import type { Spec } from "../NativeCordierite";
+import type { Spec } from "../NativeAppduct";
 
 /**
  * Issue #48 phase 2: native owns lease recovery entirely now (there is no more JS-visible
@@ -54,10 +54,10 @@ describe("./auto entry in a fresh runtime", () => {
       },
     }));
 
-    const { __cordieriteSetNativeModuleLoaderForTests } =
-      await import("../CordieriteModule");
-    __cordieriteSetNativeModuleLoaderForTests(() => ({
-      NativeCordierite: nativeModule,
+    const { __appductSetNativeModuleLoaderForTests } =
+      await import("../AppductModule");
+    __appductSetNativeModuleLoaderForTests(() => ({
+      NativeAppduct: nativeModule,
     }));
     const rootModule = await import("../index");
     expect(restoreSessionCalls).toBe(0);

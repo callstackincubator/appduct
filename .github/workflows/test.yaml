@@ -107,7 +107,7 @@ jobs:
         # packages/native/android (docs/tasks/14-native-core-extraction.md) is not part of the
         # pnpm/Turbo workspace and is never autolinked into the playground -- it builds and tests
         # on its own, independent of the playground prebuild below, since this is what
-        # @cordierite/react-native's android/build.gradle vendors from (scripts/sync-native-core.mjs).
+        # @appduct/react-native's android/build.gradle vendors from (scripts/sync-native-core.mjs).
         # publishToMavenLocal for both artifacts also runs here so the maven-publish config
         # (docs/tasks/19-android-entry-points.md §6) can't silently rot between the real publish
         # this repeats and the ops-only step of pushing it to Maven Central.
@@ -125,69 +125,69 @@ jobs:
       - name: Test and assemble Android
         working-directory: playground/android
         # `-PreactNativeArchitectures=arm64-v8a` builds one ABI instead of the four in
-        # gradle.properties. Nothing downstream reads native code: `cordierite doctor`'s Android
+        # gradle.properties. Nothing downstream reads native code: `appduct doctor`'s Android
         # signals are all dex entries and AndroidManifest strings (see
-        # packages/cordierite/src/artifact-inspect.ts), so a single-ABI APK proves exactly as much
+        # packages/appduct/src/artifact-inspect.ts), so a single-ABI APK proves exactly as much
         # about inclusion as a four-ABI one. The configuration cache stays off deliberately —
-        # inclusion is driven by CORDIERITE_ENABLED at prebuild time, and this job is the thing
+        # inclusion is driven by APPDUCT_ENABLED at prebuild time, and this job is the thing
         # that proves that gate works, so it does not get to trust a cached configuration phase.
         run: >-
-          ./gradlew :cordierite_react-native:testDebugUnitTest assembleDebug
+          ./gradlew :appduct_react-native:testDebugUnitTest assembleDebug
           --build-cache --no-configuration-cache -PreactNativeArchitectures=arm64-v8a
-      - name: cordierite doctor — assert present (debug, the default)
+      - name: appduct doctor — assert present (debug, the default)
         run: >-
-          node packages/cordierite/bin.js doctor
+          node packages/appduct/bin.js doctor
           playground/android/app/build/outputs/apk/debug/app-debug.apk
           --assert-present
       - name: Assemble Android release (default autolinking config)
         working-directory: playground/android
         # Same android/ directory as the debug build above, still generated from the unset
-        # CORDIERITE_ENABLED prebuild — android/build.gradle's release source-set swap compiles
-        # the no-op CordieritePackage stub for this variant by default.
+        # APPDUCT_ENABLED prebuild — android/build.gradle's release source-set swap compiles
+        # the no-op AppductPackage stub for this variant by default.
         run: >-
           ./gradlew assembleRelease
           --build-cache --no-configuration-cache -PreactNativeArchitectures=arm64-v8a
-      - name: cordierite doctor — assert absent (release, the default)
+      - name: appduct doctor — assert absent (release, the default)
         run: >-
-          node packages/cordierite/bin.js doctor
+          node packages/appduct/bin.js doctor
           playground/android/app/build/outputs/apk/release/app-release.apk
           --assert-absent
-      - name: Re-prebuild Android with Cordierite enabled for release
+      - name: Re-prebuild Android with Appduct enabled for release
         working-directory: playground
         env:
-          CORDIERITE_ENABLED: "1"
+          APPDUCT_ENABLED: "1"
           CI: "true"
           EXPO_NO_TELEMETRY: "1"
         run: pnpm exec expo prebuild --platform android --no-install --clean
-      - name: Assemble Android release (Cordierite explicitly enabled)
+      - name: Assemble Android release (Appduct explicitly enabled)
         env:
-          CORDIERITE_ENABLED: "1"
+          APPDUCT_ENABLED: "1"
         working-directory: playground/android
         run: >-
           ./gradlew assembleRelease
           --build-cache --no-configuration-cache -PreactNativeArchitectures=arm64-v8a
-      - name: cordierite doctor — assert present (release, CORDIERITE_ENABLED=1)
+      - name: appduct doctor — assert present (release, APPDUCT_ENABLED=1)
         run: >-
-          node packages/cordierite/bin.js doctor
+          node packages/appduct/bin.js doctor
           playground/android/app/build/outputs/apk/release/app-release.apk
           --assert-present
-      - name: Re-prebuild Android with Cordierite excluded
+      - name: Re-prebuild Android with Appduct excluded
         working-directory: playground
         env:
-          CORDIERITE_ENABLED: "0"
+          APPDUCT_ENABLED: "0"
           CI: "true"
           EXPO_NO_TELEMETRY: "1"
         run: pnpm exec expo prebuild --platform android --no-install --clean
-      - name: Assemble Android release (Cordierite excluded)
+      - name: Assemble Android release (Appduct excluded)
         env:
-          CORDIERITE_ENABLED: "0"
+          APPDUCT_ENABLED: "0"
         working-directory: playground/android
         run: >-
           ./gradlew assembleRelease
           --build-cache --no-configuration-cache -PreactNativeArchitectures=arm64-v8a
-      - name: cordierite doctor — assert absent (excluded via CORDIERITE_ENABLED)
+      - name: appduct doctor — assert absent (excluded via APPDUCT_ENABLED)
         run: >-
-          node packages/cordierite/bin.js doctor
+          node packages/appduct/bin.js doctor
           playground/android/app/build/outputs/apk/release/app-release.apk
           --assert-absent
       - name: Assemble the native Android playground (Debug and Release)
@@ -199,14 +199,14 @@ jobs:
         # the same pairing issue #48 phase 3 asks a real consumer app to declare.
         working-directory: playground-native/android
         run: ./gradlew :app:assembleDebug :app:assembleRelease --no-configuration-cache
-      - name: cordierite doctor — assert present (native Android playground, Debug)
+      - name: appduct doctor — assert present (native Android playground, Debug)
         run: >-
-          node packages/cordierite/bin.js doctor
+          node packages/appduct/bin.js doctor
           playground-native/android/app/build/outputs/apk/debug/app-debug.apk
           --assert-present
-      - name: cordierite doctor — assert absent (native Android playground, Release)
+      - name: appduct doctor — assert absent (native Android playground, Release)
         run: >-
-          node packages/cordierite/bin.js doctor
+          node packages/appduct/bin.js doctor
           playground-native/android/app/build/outputs/apk/release/app-release-unsigned.apk
           --assert-absent
 
@@ -296,14 +296,14 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build packages
         run: pnpm build
-      - name: Build and test CordieriteCore (packages/native/ios)
+      - name: Build and test AppductCore (packages/native/ios)
         # Repo-root Package.swift (docs/tasks/14-native-core-extraction.md; SwiftPM manifests must
         # live at the repository root for URL dependencies). Runs before the CocoaPods-based
         # playground build below since it needs neither Expo prebuild nor `pod install`, so a stub
         # compile failure or a test regression fails fast. `-c debug` (the implicit default for
         # `swift test`, and where `swift test` itself always runs) compiles the Real/ branch and
-        # exercises the moved XCTest suite (formerly ios/CordieriteTests, now
-        # Tests/CordieriteCoreTests); `-c release` compiles the Stub/ branch, which is the check
+        # exercises the moved XCTest suite (formerly ios/AppductTests, now
+        # Tests/AppductCoreTests); `-c release` compiles the Stub/ branch, which is the check
         # that the stub's declarations actually match what the real implementation (and thus any
         # code written against it) expects.
         run: |
@@ -327,24 +327,24 @@ jobs:
           -derivedDataPath build-included ARCHS=arm64 ONLY_ACTIVE_ARCH=NO
           C_COMPILER_LAUNCHER="$CCACHE_BIN" CLANG_ENABLE_EXPLICIT_MODULES_WITH_COMPILER_LAUNCHER=YES
           CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
-      - name: cordierite doctor — assert present (debug, the default)
+      - name: appduct doctor — assert present (debug, the default)
         # Debug only -- iOS Release-configuration coverage for the new dev-only default is not
-        # wired here yet (matching Debug is `Debug`; Release links only when CORDIERITE_ENABLED=1).
+        # wired here yet (matching Debug is `Debug`; Release links only when APPDUCT_ENABLED=1).
         run: >-
-          node packages/cordierite/bin.js doctor
+          node packages/appduct/bin.js doctor
           playground/ios/build-included/Build/Products/Debug-iphonesimulator/playground.app
           --assert-present
-      - name: Re-prebuild iOS with Cordierite excluded
+      - name: Re-prebuild iOS with Appduct excluded
         working-directory: playground
         env:
-          CORDIERITE_ENABLED: "0"
+          APPDUCT_ENABLED: "0"
           CI: "true"
           EXPO_NO_TELEMETRY: "1"
           LANG: en_US.UTF-8
         run: pnpm exec expo prebuild --platform ios --clean
-      - name: Build playground for iOS Simulator (Cordierite excluded)
+      - name: Build playground for iOS Simulator (Appduct excluded)
         env:
-          CORDIERITE_ENABLED: "0"
+          APPDUCT_ENABLED: "0"
         working-directory: playground/ios
         run: >-
           xcodebuild build -workspace playground.xcworkspace -scheme playground -configuration Debug
@@ -352,48 +352,48 @@ jobs:
           -derivedDataPath build-excluded ARCHS=arm64 ONLY_ACTIVE_ARCH=NO
           C_COMPILER_LAUNCHER="$CCACHE_BIN" CLANG_ENABLE_EXPLICIT_MODULES_WITH_COMPILER_LAUNCHER=YES
           CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
-      - name: cordierite doctor — assert absent (excluded via CORDIERITE_ENABLED)
+      - name: appduct doctor — assert absent (excluded via APPDUCT_ENABLED)
         run: >-
-          node packages/cordierite/bin.js doctor
+          node packages/appduct/bin.js doctor
           playground/ios/build-excluded/Build/Products/Debug-iphonesimulator/playground.app
           --assert-absent
       - name: Install xcodegen
         # playground-native/ios's Xcode project is generated from project.yml, not committed
         # (docs/tasks/18-ios-entry-points.md Decision 6) -- one source of truth, no .pbxproj merge
-        # conflicts, mirroring Package.swift being the one source of truth for CordieriteCore itself.
+        # conflicts, mirroring Package.swift being the one source of truth for AppductCore itself.
         run: brew list xcodegen > /dev/null 2>&1 || brew install xcodegen
       - name: Generate the native iOS playground's Xcode project
         working-directory: playground-native/ios
         run: xcodegen generate
       - name: Build the native iOS playground for the Simulator (Debug — links the real core)
-        # No CORDIERITE_ENABLED / expo prebuild involved here: this app has no React Native and no
+        # No APPDUCT_ENABLED / expo prebuild involved here: this app has no React Native and no
         # autolinking at all, so the SwiftPM `Package.swift` config alone (`.when(configuration:
-        # .debug)`) decides that Debug gets Sources/CordieriteCore/Real and Release gets Stub/ --
+        # .debug)`) decides that Debug gets Sources/AppductCore/Real and Release gets Stub/ --
         # the CI proof that the plain-app consumer path (not just the RN one, above) is wired up.
         working-directory: playground-native/ios
         run: >-
-          xcodebuild build -project CordieritePlayground.xcodeproj -scheme CordieritePlayground
+          xcodebuild build -project AppductPlayground.xcodeproj -scheme AppductPlayground
           -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'
           -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=NO
           C_COMPILER_LAUNCHER="$CCACHE_BIN" CLANG_ENABLE_EXPLICIT_MODULES_WITH_COMPILER_LAUNCHER=YES
           CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
-      - name: cordierite doctor — assert present (native iOS playground, Debug)
+      - name: appduct doctor — assert present (native iOS playground, Debug)
         run: >-
-          node packages/cordierite/bin.js doctor
-          playground-native/ios/build/Build/Products/Debug-iphonesimulator/CordieritePlayground.app
+          node packages/appduct/bin.js doctor
+          playground-native/ios/build/Build/Products/Debug-iphonesimulator/AppductPlayground.app
           --assert-present
       - name: Build the native iOS playground for the Simulator (Release — links the Stub/ no-op)
         working-directory: playground-native/ios
         run: >-
-          xcodebuild build -project CordieritePlayground.xcodeproj -scheme CordieritePlayground
+          xcodebuild build -project AppductPlayground.xcodeproj -scheme AppductPlayground
           -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'
           -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=NO
           C_COMPILER_LAUNCHER="$CCACHE_BIN" CLANG_ENABLE_EXPLICIT_MODULES_WITH_COMPILER_LAUNCHER=YES
           CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
-      - name: cordierite doctor — assert absent (native iOS playground, Release)
+      - name: appduct doctor — assert absent (native iOS playground, Release)
         run: >-
-          node packages/cordierite/bin.js doctor
-          playground-native/ios/build/Build/Products/Release-iphonesimulator/CordieritePlayground.app
+          node packages/appduct/bin.js doctor
+          playground-native/ios/build/Build/Products/Release-iphonesimulator/AppductPlayground.app
           --assert-absent
       - name: Report ccache statistics
         if: always()

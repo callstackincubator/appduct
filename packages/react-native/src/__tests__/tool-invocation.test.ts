@@ -1,7 +1,7 @@
 import { describe, expect, vi, test } from "vitest";
 import { z } from "zod";
 
-import type { CordieriteRegisteredTool } from "../Cordierite.types";
+import type { AppductRegisteredTool } from "../Appduct.types";
 import { createToolMessageHandler } from "../client/tool-invocation";
 import { normalizeToolSchema } from "../schema";
 
@@ -11,7 +11,7 @@ import { normalizeToolSchema } from "../schema";
  * Ports the still-JS-owned half of the old `tool-invocation.test.ts` (issue #48 phase 2): schema
  * validation, running the handler, and answering through `respondToToolCall`/`reportToolProgress`.
  * Timeout, unknown-tool `tool_not_found`, and the `tool_cancel` wire frame itself are now the
- * native core's job (see `CordieriteCoreTests/CordieriteClientTests.swift`) -- this file only
+ * native core's job (see `AppductCoreTests/AppductClientTests.swift`) -- this file only
  * covers what still runs in JS, driven directly by the native → JS events this bridge answers.
  */
 
@@ -22,7 +22,7 @@ type RespondCall = {
 };
 
 const makeHandler = (
-  tools: Map<string, CordieriteRegisteredTool>,
+  tools: Map<string, AppductRegisteredTool>,
   sessionId = "session-1",
 ) => {
   const responds: RespondCall[] = [];
@@ -43,9 +43,9 @@ const makeHandler = (
 };
 
 const registeredTool = (
-  overrides: Partial<CordieriteRegisteredTool> &
-    Pick<CordieriteRegisteredTool, "name" | "handler">,
-): CordieriteRegisteredTool => ({
+  overrides: Partial<AppductRegisteredTool> &
+    Pick<AppductRegisteredTool, "name" | "handler">,
+): AppductRegisteredTool => ({
   id: Symbol(overrides.name),
   inputSchema: undefined,
   outputSchema: undefined,
@@ -54,7 +54,7 @@ const registeredTool = (
 
 describe("createToolMessageHandler", () => {
   test("unregistered tool responds tool_not_found (defensive -- native normally filters this)", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     const { handleToolCall, responds } = makeHandler(tools);
 
     await handleToolCall({ id: "call-1", name: "missing", argsJson: "{}" });
@@ -65,7 +65,7 @@ describe("createToolMessageHandler", () => {
   });
 
   test("no inputSchema + empty args calls the handler with undefined", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     const handlerFn = vi.fn().mockResolvedValue(undefined);
     tools.set("noop", registeredTool({ name: "noop", handler: handlerFn }));
     const { handleToolCall, responds } = makeHandler(tools);
@@ -81,7 +81,7 @@ describe("createToolMessageHandler", () => {
   });
 
   test("no inputSchema + non-empty args responds tool_input_validation_error", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     const handlerFn = vi.fn();
     tools.set("noop", registeredTool({ name: "noop", handler: handlerFn }));
     const { handleToolCall, responds } = makeHandler(tools);
@@ -99,7 +99,7 @@ describe("createToolMessageHandler", () => {
   });
 
   test("inputSchema validates args and passes the parsed value to the handler", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     const handlerFn = vi.fn().mockResolvedValue({ ok: true });
     const schema = normalizeToolSchema(
       z.object({ city: z.string() }),
@@ -127,7 +127,7 @@ describe("createToolMessageHandler", () => {
   });
 
   test("invalid args against inputSchema respond tool_input_validation_error without calling the handler", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     const handlerFn = vi.fn();
     const schema = normalizeToolSchema(
       z.object({ city: z.string() }),
@@ -156,7 +156,7 @@ describe("createToolMessageHandler", () => {
   });
 
   test("a handler that throws responds tool_execution_error with the error's message", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     tools.set(
       "boom",
       registeredTool({
@@ -176,7 +176,7 @@ describe("createToolMessageHandler", () => {
   });
 
   test("outputSchema omitted + handler returns a value responds tool_output_validation_error", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     tools.set(
       "noop",
       registeredTool({ name: "noop", handler: () => "unexpected" }),
@@ -191,7 +191,7 @@ describe("createToolMessageHandler", () => {
   });
 
   test("a result failing outputSchema responds tool_output_validation_error", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     const schema = normalizeToolSchema(
       z.object({ ok: z.boolean() }),
       "test outputSchema",
@@ -214,7 +214,7 @@ describe("createToolMessageHandler", () => {
   });
 
   test("reportProgress calls reportToolProgress with the call id", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     tools.set(
       "progressive",
       registeredTool({
@@ -235,7 +235,7 @@ describe("createToolMessageHandler", () => {
   });
 
   test("handleToolCancel aborts the matching in-flight signal", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     let observedAborted = false;
     let handlerStarted!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -272,7 +272,7 @@ describe("createToolMessageHandler", () => {
   });
 
   test("malformed argsJson falls back to an empty object instead of throwing", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     const handlerFn = vi.fn().mockResolvedValue(undefined);
     tools.set("noop", registeredTool({ name: "noop", handler: handlerFn }));
     const { handleToolCall, responds } = makeHandler(tools);
@@ -284,7 +284,7 @@ describe("createToolMessageHandler", () => {
   });
 
   test("abortAllInFlight aborts every pending signal", async () => {
-    const tools = new Map<string, CordieriteRegisteredTool>();
+    const tools = new Map<string, AppductRegisteredTool>();
     const abortedIds: string[] = [];
     let started = 0;
     const bothStarted = () => started === 2;

@@ -1,49 +1,49 @@
-import type { ToolDescriptor } from "@cordierite/shared";
+import type { ToolDescriptor } from "@appduct/shared";
 
 import type {
-  CordieriteBuildConfig,
-  CordieriteClientState,
-  CordieriteConnectInput,
-  CordieriteListenerKind,
-  CordieriteRuntimeSchema,
-  CordieriteToolRegistration,
-  CordieriteUnifiedListenerMap,
-} from "./Cordierite.types";
+  AppductBuildConfig,
+  AppductClientState,
+  AppductConnectInput,
+  AppductListenerKind,
+  AppductRuntimeSchema,
+  AppductToolRegistration,
+  AppductUnifiedListenerMap,
+} from "./Appduct.types";
 import {
-  cordieriteNativeModule,
-  getCordieriteNativeBuildConfig,
-} from "./CordieriteModule";
+  appductNativeModule,
+  getAppductNativeBuildConfig,
+} from "./AppductModule";
 import { parseBootstrapPayload, parseBootstrapUrl } from "./bootstrap";
-import { cordieriteClient, noopIfNativeUnavailable } from "./default-client";
+import { appductClient, noopIfNativeUnavailable } from "./default-client";
 import * as noop from "./noop";
 import { exportToolSchemaForKey } from "./schema";
-import { createUseCordieriteTool } from "./useCordieriteTool";
+import { createUseAppductTool } from "./useAppductTool";
 
-export * from "./Cordierite.types";
+export * from "./Appduct.types";
 export { parseBootstrapPayload, parseBootstrapUrl };
 export {
-  createCordieriteClient,
-  type CordieriteClient,
-  type CordieriteNativeModuleLike,
-  type CreateCordieriteClientOptions,
+  createAppductClient,
+  type AppductClient,
+  type AppductNativeModuleLike,
+  type CreateAppductClientOptions,
 } from "./client";
-export { cordieriteNativeModule };
-export { cordieriteClient };
-export type { CordierePublicApi, CordieriteSubscription } from "./public-api";
-export type { UseCordieriteToolOptions } from "./useCordieriteTool";
+export { appductNativeModule };
+export { appductClient };
+export type { CordierePublicApi, AppductSubscription } from "./public-api";
+export type { UseAppductToolOptions } from "./useAppductTool";
 
 /**
- * Register a Cordierite tool on the default client. Same as `cordieriteClient.registerTool` —
+ * Register a Appduct tool on the default client. Same as `appductClient.registerTool` —
  * prefer this for typical app code so you do not need to touch the singleton. The returned
  * disposer removes only this registration (identity-based), even if a later call re-registers the
  * same tool name.
  */
 export function registerTool<
-  TInputSchema extends CordieriteRuntimeSchema | undefined,
-  TOutputSchema extends CordieriteRuntimeSchema | undefined,
->(registration: CordieriteToolRegistration<TInputSchema, TOutputSchema>) {
+  TInputSchema extends AppductRuntimeSchema | undefined,
+  TOutputSchema extends AppductRuntimeSchema | undefined,
+>(registration: AppductToolRegistration<TInputSchema, TOutputSchema>) {
   return noopIfNativeUnavailable(
-    () => cordieriteClient.registerTool(registration),
+    () => appductClient.registerTool(registration),
     () => noop.registerTool(registration),
   );
 }
@@ -51,7 +51,7 @@ export function registerTool<
 /** Emits an `event` frame on the default client while active; drops (dev warning) otherwise. */
 export function postEvent(name: string, payload?: unknown): Promise<void> {
   return noopIfNativeUnavailable(
-    () => cordieriteClient.postEvent(name, payload),
+    () => appductClient.postEvent(name, payload),
     () => noop.postEvent(name, payload),
   );
 }
@@ -63,7 +63,7 @@ export function postEvent(name: string, payload?: unknown): Promise<void> {
  */
 export function getRegisteredTools(): ToolDescriptor[] {
   return noopIfNativeUnavailable(
-    () => cordieriteClient.getRegisteredTools(),
+    () => appductClient.getRegisteredTools(),
     () => noop.getRegisteredTools(),
   );
 }
@@ -73,13 +73,13 @@ export function getRegisteredTools(): ToolDescriptor[] {
  * `sessionChange`, `error` (bootstrap parse/connect, socket, and tool-handler failures — one
  * channel). Every registration returns `{ remove() }`.
  */
-export function addCordieriteListener<Kind extends CordieriteListenerKind>(
+export function addAppductListener<Kind extends AppductListenerKind>(
   kind: Kind,
-  callback: CordieriteUnifiedListenerMap[Kind],
+  callback: AppductUnifiedListenerMap[Kind],
 ) {
   return noopIfNativeUnavailable(
-    () => cordieriteClient.addCordieriteListener(kind, callback),
-    () => noop.addCordieriteListener(kind, callback),
+    () => appductClient.addAppductListener(kind, callback),
+    () => noop.addAppductListener(kind, callback),
   );
 }
 
@@ -100,16 +100,16 @@ export function addCordieriteListener<Kind extends CordieriteListenerKind>(
  */
 export function restoreSession(): Promise<boolean> {
   return noopIfNativeUnavailable(
-    () => cordieriteClient.restoreSession(),
+    () => appductClient.restoreSession(),
     () => noop.restoreSession(),
   );
 }
 
 /** Unified client state on the default client: `idle | connecting | active | reconnecting | closed`. */
-export function getCordieriteState(): CordieriteClientState {
+export function getAppductState(): AppductClientState {
   return noopIfNativeUnavailable(
-    () => cordieriteClient.getClientState(),
-    () => noop.getCordieriteState(),
+    () => appductClient.getClientState(),
+    () => noop.getAppductState(),
   );
 }
 
@@ -119,9 +119,9 @@ export function getCordieriteState(): CordieriteClientState {
  * from incoming deep links — but it is exposed for manual bootstrap flows (custom deep-link
  * handling, QR scanning, tests).
  */
-export function connect(input: CordieriteConnectInput): Promise<void> {
+export function connect(input: AppductConnectInput): Promise<void> {
   return noopIfNativeUnavailable(
-    () => cordieriteClient.connect(input),
+    () => appductClient.connect(input),
     () => noop.connect(input),
   );
 }
@@ -133,10 +133,10 @@ export function connect(input: CordieriteConnectInput): Promise<void> {
  * (bundling runs before native config is known) — see `docs/tasks/07-native-module-constants.md`.
  * On the `./noop` entry this reports the documented "absent" shape instead of a real trust mode.
  */
-export function getCordieriteBuildConfig(): CordieriteBuildConfig {
+export function getAppductBuildConfig(): AppductBuildConfig {
   return noopIfNativeUnavailable(
-    () => getCordieriteNativeBuildConfig(),
-    () => noop.getCordieriteBuildConfig(),
+    () => getAppductNativeBuildConfig(),
+    () => noop.getAppductBuildConfig(),
   );
 }
 
@@ -152,6 +152,6 @@ export function getCordieriteBuildConfig(): CordieriteBuildConfig {
  * `exportToolSchemaForKey` is injected (rather than imported by the hook) so the inert `./noop` entry
  * below does not pull JSON Schema export into a bundle that registers nothing.
  */
-export const useCordieriteTool = createUseCordieriteTool(registerTool, {
+export const useAppductTool = createUseAppductTool(registerTool, {
   exportSchema: exportToolSchemaForKey,
 });

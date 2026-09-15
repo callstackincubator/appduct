@@ -5,23 +5,23 @@
  * `Record<string, unknown>` here rather than adding that dependency just for a type.
  */
 
-export interface WithCordieriteOptions {
+export interface WithAppductOptions {
   /**
-   * Mirrors the `@cordierite/react-native` config plugin's `include` option. `true` (default)
+   * Mirrors the `@appduct/react-native` config plugin's `include` option. `true` (default)
    * leaves Metro's module resolution untouched. `false` redirects every specifier this package
-   * exposes as a real JS entry point to `@cordierite/react-native/noop`.
+   * exposes as a real JS entry point to `@appduct/react-native/noop`.
    */
   include?: boolean;
 }
 
 /**
  * Wraps a Metro config so that, when `options.include` is `false`, imports of
- * `@cordierite/react-native` (and any other entry point this package exports) resolve to the
+ * `@appduct/react-native` (and any other entry point this package exports) resolve to the
  * inert `/noop` entry instead. Chains to `config.resolver.resolveRequest` if already set, rather
  * than replacing it -- call this last, after anything else that sets `resolveRequest`. See
- * `docs/BUILD-VARIANTS.md`'s "Compiling Cordierite out of production builds" section.
+ * `docs/BUILD-VARIANTS.md`'s "Compiling Appduct out of production builds" section.
  */
-export function withCordierite<TConfig extends Record<string, unknown>>(
+export function withAppduct<TConfig extends Record<string, unknown>>(
   config: TConfig,
-  options?: WithCordieriteOptions,
+  options?: WithAppductOptions,
 ): TConfig;

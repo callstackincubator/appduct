@@ -1,0 +1,62 @@
+{
+  "name": "appduct",
+  "version": "0.8.0",
+  "description": "Driving React Native tools without in-app debug UI.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js",
+      "default": "./dist/client/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "appduct": "./bin.js"
+  },
+  "keywords": [
+    "appduct",
+    "react-native",
+    "agent"
+  ],
+  "repository": "https://github.com/callstackincubator/appduct",
+  "bugs": {
+    "url": "https://github.com/callstackincubator/appduct/issues"
+  },
+  "author": "Szymon Chmal <szymon@chmal.it> (V3RON)",
+  "license": "MIT",
+  "homepage": "https://github.com/callstackincubator/appduct/tree/main/packages/appduct#readme",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "test": "vitest run --config ../../vitest.config.ts src/__tests__",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@appduct/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@peculiar/x509": "^2.0.0",
+    "cac": "^6.7.14",
+    "picocolors": "^1.1.1",
+    "reflect-metadata": "^0.2.2",
+    "toqr": "^0.1.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "~5.9.2"
+  },
+  "files": [
+    "bin.js",
+    "dist"
+  ]
+}

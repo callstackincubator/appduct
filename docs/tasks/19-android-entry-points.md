@@ -1,33 +1,33 @@
 # 19 — Android app-facing entry points, deep-link trampoline, and native playground (Phase 3 of issue #48, Android half)
 
 **Depends on:** `docs/tasks/14-native-core-extraction.md` (phase 1: `packages/native/android`'s
-`core`/`core-noop` split) and `docs/tasks/16-android-session-logic.md` (phase 2: `CordieriteClient`,
+`core`/`core-noop` split) and `docs/tasks/16-android-session-logic.md` (phase 2: `AppductClient`,
 the internal client the facade below wraps). Ran in parallel with the iOS/Swift phase-3 half and
 the RN/JS phase-3 half; this task covers only `packages/native/android`, `playground-native/android`,
 `packages/native/android/README.md`, and this file.
 
 ## Goal
 
-Finish issue #48's phase 3 for Android: a public `Cordierite` facade a plain Android app calls
+Finish issue #48's phase 3 for Android: a public `Appduct` facade a plain Android app calls
 directly (no React Native), a no-UI deep-link trampoline, publishing config so `core`/`core-noop`
 produce real Maven artifacts, and a native Jetpack Compose playground app exercising all of it.
 
-## 1. The `Cordierite` facade
+## 1. The `Appduct` facade
 
-`core/src/main/java/.../Cordierite.kt` (mirrored inert in `core-noop`). An `object`, not a class --
-one client per process, matching how the issue's own Android sketch calls it (`Cordierite.register(...)`
-directly, no instance to hold onto). Thin: every method converts to/from `CordieriteClient`'s
+`core/src/main/java/.../Appduct.kt` (mirrored inert in `core-noop`). An `object`, not a class --
+one client per process, matching how the issue's own Android sketch calls it (`Appduct.register(...)`
+directly, no instance to hold onto). Thin: every method converts to/from `AppductClient`'s
 existing types and delegates immediately; no session logic is duplicated here.
 
-**Public types are new, not the internal ones re-exported.** `CordieriteClient`,
-`CordieriteClientState`, `CordieriteToolDescriptor`, `CordieriteToolCallContext`, etc. are all
-`internal` (phase 2's own design, since `@cordierite/react-native`'s bridge is the only other
+**Public types are new, not the internal ones re-exported.** `AppductClient`,
+`AppductClientState`, `AppductToolDescriptor`, `AppductToolCallContext`, etc. are all
+`internal` (phase 2's own design, since `@appduct/react-native`'s bridge is the only other
 consumer and lives in the same Gradle module once vendored). The facade defines its own public
 mirrors -- `ClientState`, `ToolAnnotations`, `ToolCallContext`, `BuildConfig`, `ToolRegistration`,
-`Subscription`, `CordieriteEvent` -- and converts between them at the boundary
-(`CordieriteClientState.toPublic()`, etc.). This keeps the internal types free to change shape for
+`Subscription`, `AppductEvent` -- and converts between them at the boundary
+(`AppductClientState.toPublic()`, etc.). This keeps the internal types free to change shape for
 phase-2-style reasons without that being a public API break, and matches the issue's own sketch
-literally (unqualified `ClientState`/`BuildConfig` names, not `Cordierite.ClientState`).
+literally (unqualified `ClientState`/`BuildConfig` names, not `Appduct.ClientState`).
 
 **Two `register` overloads**, differing only in whether the handler takes a `ToolCallContext`:
 ```kotlin
@@ -36,105 +36,105 @@ fun register(..., handler: suspend (args: JSONObject) -> Any?): ToolRegistration
 ```
 Kotlin resolves the trailing-lambda call correctly by parameter arity in both directions (a
 one-param lambda picks the second overload, a two-param lambda the first) -- verified by
-`CordieriteTest`'s calls using both shapes side by side with no explicit type annotations needed.
+`AppductTest`'s calls using both shapes side by side with no explicit type annotations needed.
 
-**`addListener` merges three internal listener channels into one `CordieriteEvent` sealed type**
+**`addListener` merges three internal listener channels into one `AppductEvent` sealed type**
 (`StateChange`/`SessionChange`/`Error`), matching the issue's sketch
-(`fun addListener(listener: (CordieriteEvent) -> Unit): Subscription`) rather than the internal
+(`fun addListener(listener: (AppductEvent) -> Unit): Subscription`) rather than the internal
 client's three separate `addXListener` methods. `Subscription.remove()` unsubscribes all three
 underlying listeners together.
 
-**Handler results and cancellation are unchanged from `CordieriteClient`** -- the facade adds no
+**Handler results and cancellation are unchanged from `AppductClient`** -- the facade adds no
 new JSON-conversion or cancellation logic, just documents what already exists (`org.json`
 values plus plain Kotlin/Java collections/primitives convert automatically;
 `tool_serialization_error` for anything else; cancellation is coroutine-native, no separate
 token). See `packages/native/android/README.md` for the consumer-facing version of this.
 
-## 2. `CordieriteInitProvider`: initialization with no explicit `init()` call
+## 2. `AppductInitProvider`: initialization with no explicit `init()` call
 
-The issue's Android sketch calls `Cordierite.register(...)` straight from `Application.onCreate()`
+The issue's Android sketch calls `Appduct.register(...)` straight from `Application.onCreate()`
 with no prior setup step -- so something has to have a `Context` and a constructed
-`CordieriteClient` ready *before* that. A dependency-free `ContentProvider`
-(`android:authorities="${applicationId}.cordierite-init"`, `android:exported="false"`) is the
+`AppductClient` ready *before* that. A dependency-free `ContentProvider`
+(`android:authorities="${applicationId}.appduct-init"`, `android:exported="false"`) is the
 standard Android idiom for exactly this: the platform constructs every manifest-declared
 `ContentProvider` and calls `onCreate()` strictly before `Application.onCreate()`, during process
-startup, with no ordering control needed from app code. `CordieriteInitProvider.onCreate()`
-captures `context.applicationContext`, constructs the real `CordieriteClient`, and kicks off
+startup, with no ordering control needed from app code. `AppductInitProvider.onCreate()`
+captures `context.applicationContext`, constructs the real `AppductClient`, and kicks off
 `restoreSession()` in the background (fire-and-forget, `runCatching`-wrapped so a failed lease
 restore never crashes provider init).
 
-`Cordierite`'s backing client is `@Volatile var backingClient: CordieriteClient?`, set once by
+`Appduct`'s backing client is `@Volatile var backingClient: AppductClient?`, set once by
 `attach(context)` (internal, called only by the provider) and read through a `client()` accessor
 that throws a specific `IllegalStateException` naming the likely cause (the provider was removed
 without a replacement) if it's still `null` -- fails loud rather than silently no-op'ing, matching
 this repo's general "fail closed and say why" style (`docs/SECURITY.md`'s trust-mode error
-messages, `cordierite doctor`'s never-guess policy).
+messages, `appduct doctor`'s never-guess policy).
 
-`core-noop` has **no `CordieriteInitProvider` at all** -- nothing to capture a `Context` for, and
-its `Cordierite.register` et al. are all synchronous no-ops needing no client. This is also why
+`core-noop` has **no `AppductInitProvider` at all** -- nothing to capture a `Context` for, and
+its `Appduct.register` et al. are all synchronous no-ops needing no client. This is also why
 `core-noop`'s `AndroidManifest.xml` stays the empty file it already was (phase 1): no provider, no
 trampoline, no entries of any kind.
 
 ### Test-only substitution
 
-`Cordierite.attachForTest(client: CordieriteClient)` / `detachForTest()` are `internal`, letting
-`core/src/test`'s `CordieriteTest` substitute a client built over `FakeCordieriteTransport` instead
-of the real `CordieriteInitProvider` path -- the same "test-only internal constructor" pattern
-`CordieriteClientTest` already uses for the transport layer one level down. Kotlin's Gradle plugin
+`Appduct.attachForTest(client: AppductClient)` / `detachForTest()` are `internal`, letting
+`core/src/test`'s `AppductTest` substitute a client built over `FakeAppductTransport` instead
+of the real `AppductInitProvider` path -- the same "test-only internal constructor" pattern
+`AppductClientTest` already uses for the transport layer one level down. Kotlin's Gradle plugin
 grants a module's `test` source set friend access to that module's own `internal` declarations
-(already relied on by the pre-existing `CordieriteClientTest`), so this needed no visibility
+(already relied on by the pre-existing `AppductClientTest`), so this needed no visibility
 changes beyond what phase 2 already had.
 
-## 3. `CordieriteLinkActivity`: the trampoline
+## 3. `AppductLinkActivity`: the trampoline
 
 `android:theme="@android:style/Theme.NoDisplay"`, `exported="true"`, `excludeFromRecents="true"`,
 `noHistory="true"`, an intent filter on `VIEW`/`DEFAULT`/`BROWSABLE` with
-`<data android:scheme="${cordieriteScheme}"/>`. `onCreate` calls `Cordierite.handle(intent)` and
+`<data android:scheme="${appductScheme}"/>`. `onCreate` calls `Appduct.handle(intent)` and
 `finish()`es unconditionally, whatever `handle` returned.
 
-**Declared only in `core`'s own `AndroidManifest.xml`.** `@cordierite/react-native`'s
+**Declared only in `core`'s own `AndroidManifest.xml`.** `@appduct/react-native`'s
 `scripts/sync-native-core.mjs` vendors only the `src/main/java` tree, never `AndroidManifest.xml`
 (confirmed by reading the script before adding anything, per this task's brief) -- so although
-`CordieriteInitProvider`/`CordieriteLinkActivity`'s *source files* do get copied into the RN
+`AppductInitProvider`/`AppductLinkActivity`'s *source files* do get copied into the RN
 bridge's compiled sources (nothing excludes them from that directory-wide copy), neither component
 is ever actually registered there, and the RN bridge needs no dependency or manifest entry it
 doesn't already have to keep compiling. Verified directly: `node scripts/sync-native-core.mjs`
 copies both new files alongside the rest of `core`'s sources, and
 `packages/react-native/android`'s own manifest is untouched and still has no such entries.
 
-**"A link with no Cordierite payload is not swallowed" is a documented limitation, not a feature
-this activity implements.** Once `CordieriteLinkActivity` is the exported entry point for a given
+**"A link with no Appduct payload is not swallowed" is a documented limitation, not a feature
+this activity implements.** Once `AppductLinkActivity` is the exported entry point for a given
 scheme, *any* link on that scheme lands here first -- there is no way for a no-UI trampoline with
-no knowledge of the app's own navigation graph to "forward" a non-Cordierite link anywhere
+no knowledge of the app's own navigation graph to "forward" a non-Appduct link anywhere
 meaningful; the only two real choices for an app that also wants to handle links on the same
-scheme are (a) give Cordierite a dedicated scheme, or (b) remove this activity
-(`tools:node="remove"`) and call `Cordierite.handle(intent)` from the app's own activity instead.
+scheme are (a) give Appduct a dedicated scheme, or (b) remove this activity
+(`tools:node="remove"`) and call `Appduct.handle(intent)` from the app's own activity instead.
 Both are documented in `packages/native/android/README.md`'s "Deep links" section, and the
 manifest's own doc comment points there.
 
-**Robolectric test** (`CordieriteLinkActivityTest`) launches the activity directly via
-`Robolectric.buildActivity(CordieriteLinkActivity::class.java, intent).create()` with a bootstrap
-intent, and asserts the URL reached `Cordierite`/the underlying client (surfaced as a `"bootstrap"`
+**Robolectric test** (`AppductLinkActivityTest`) launches the activity directly via
+`Robolectric.buildActivity(AppductLinkActivity::class.java, intent).create()` with a bootstrap
+intent, and asserts the URL reached `Appduct`/the underlying client (surfaced as a `"bootstrap"`
 phase error on `addListener`, since the test payload isn't a real encoded v2 blob -- reaching
 `handleUrl` at all is what the test is for, matching the task brief's "an intent with a bootstrap
 URL reaches the client").
 
 ## 4. A bug this task's own build config almost shipped: manifest placeholders leak downstream
 
-`core`'s own unit tests need `${cordieriteScheme}` resolved to *something* for Robolectric's test
+`core`'s own unit tests need `${appductScheme}` resolved to *something* for Robolectric's test
 manifest merge to succeed at all. The first fix tried was `defaultConfig.manifestPlaceholders =
-[cordieriteScheme: "cordierite-core-test"]` -- which compiles and makes `:core:testDebugUnitTest`
+[appductScheme: "appduct-core-test"]` -- which compiles and makes `:core:testDebugUnitTest`
 pass, but is wrong: AGP resolves a *library's own* manifest placeholders once, at that library's
 own manifest-merge step (`processDebugManifest`), baking a literal value into the AAR's merged
 manifest. A downstream consumer -- whether via a real Maven dependency or, as in this task's own
 `playground-native`, a `includeBuild` project substitution -- inherits that already-resolved
 literal verbatim and never gets a chance to apply its own placeholder value for the same key,
-since by the time the consumer's own manifest merge runs, there is no more `${cordieriteScheme}`
+since by the time the consumer's own manifest merge runs, there is no more `${appductScheme}`
 token left to substitute.
 
 This was caught, not theorized: `playground-native`'s installed debug APK's merged manifest showed
-`android:scheme="cordierite-core-test"` (the test default) instead of `"cordierite-native"` (what
-`app/build.gradle` actually set), and `cordierite link --open android --scheme cordierite-native`
+`android:scheme="appduct-core-test"` (the test default) instead of `"appduct-native"` (what
+`app/build.gradle` actually set), and `appduct link --open android --scheme appduct-native`
 failed with `unable to resolve Intent` as a direct, reproducible consequence.
 
 **Fix:** scope the test-only default to the `unitTest` *component* via the Variant API instead of
@@ -142,17 +142,17 @@ failed with `unable to resolve Intent` as a direct, reproducible consequence.
 ```groovy
 androidComponents {
   onVariants(selector().withBuildType("debug")) { variant ->
-    variant.unitTest?.manifestPlaceholders?.put("cordieriteScheme", "cordierite-core-test")
+    variant.unitTest?.manifestPlaceholders?.put("appductScheme", "appduct-core-test")
   }
 }
 ```
 `variant.unitTest` is a distinct `Component` with its own `manifestPlaceholders` property, entirely
 separate from the main `debug` variant's -- setting it here has no effect on `processDebugManifest`
 (confirmed: its merged-manifest intermediate still shows the literal, unresolved
-`${cordieriteScheme}` token afterward) and therefore no effect on anything that depends on `core`
+`${appductScheme}` token afterward) and therefore no effect on anything that depends on `core`
 as a real library, only on `core`'s own Robolectric run. Re-verified end-to-end after the fix:
 `:core:testDebugUnitTest` still green, and `playground-native`'s rebuilt debug APK's manifest
-correctly shows `"cordierite-native"`.
+correctly shows `"appduct-native"`.
 
 ## 5. `android.permission.INTERNET`
 
@@ -176,43 +176,43 @@ Kotlin/Java sources, no hand-wired `Jar` task needed):
 ./gradlew :core:publishToMavenLocal :core-noop:publishToMavenLocal
 ```
 
-Verified against `~/.m2/repository/com/callstackincubator/cordierite/`: both `core/0.8.0/` and
+Verified against `~/.m2/repository/com/callstackincubator/appduct/`: both `core/0.8.0/` and
 `core-noop/0.8.0/` contain `.aar`, `-sources.jar`, `.module`, and `.pom`. No signing, no Central
 upload -- deferred as an ops task per the brief.
 
 ## 7. Native playground (`playground-native/android`)
 
-A single-module Compose app, `com.callstackincubator.cordierite.playground`. `settings.gradle`
+A single-module Compose app, `com.callstackincubator.appduct.playground`. `settings.gradle`
 uses `includeBuild("../../packages/native/android")` with dependency substitution for
-`com.callstackincubator.cordierite:core`/`:core-noop`, so the playground always builds against
+`com.callstackincubator.appduct:core`/`:core-noop`, so the playground always builds against
 this worktree's `packages/native/android`, never a published artifact, with no publish-then-consume
 round trip during development. `app/build.gradle` pairs `debugImplementation(core)` /
 `releaseImplementation(core-noop)`, matching the issue's sketch exactly, and sets
-`manifestPlaceholders["cordieriteScheme"] = "cordierite-native"`.
+`manifestPlaceholders["appductScheme"] = "appduct-native"`.
 
 **Tools mirror the Expo playground's** (`playground/app/(tabs)/index.tsx`) one-for-one: `sum`,
 `call_count`, `reset_counter` (destructive), `slow_task` (progress + `timeoutMs`), `throwing_tool`.
 Registered in `PlaygroundApplication.onCreate()`. `PlaygroundState` (a plain Kotlin `object` using
 Compose's `mutableStateOf`/`mutableStateListOf` directly, no `ViewModel`) mirrors connection
 state/session id/call count and a capped recent-events log, updated by one
-`Cordierite.addListener` subscription registered once for the whole process; `MainActivity`'s one
-Compose screen just reads it. A "Post event" button calls `Cordierite.postEvent`.
+`Appduct.addListener` subscription registered once for the whole process; `MainActivity`'s one
+Compose screen just reads it. A "Post event" button calls `Appduct.postEvent`.
 
 Verified:
 ```bash
 ./gradlew :app:assembleDebug :app:assembleRelease   # both succeed
-node packages/cordierite/dist/bin.js doctor app/build/outputs/apk/debug/app-debug.apk --assert-present   # holds
-node packages/cordierite/dist/bin.js doctor app/build/outputs/apk/release/app-release-unsigned.apk --assert-absent  # holds
+node packages/appduct/dist/bin.js doctor app/build/outputs/apk/debug/app-debug.apk --assert-present   # holds
+node packages/appduct/dist/bin.js doctor app/build/outputs/apk/release/app-release-unsigned.apk --assert-absent  # holds
 ```
 
 **A `pnpm exec` gotcha found during this verification, not a bug in this task's own code:**
-`pnpm exec cordierite doctor ...` initially reported the release APK as `present: true` with no
+`pnpm exec appduct doctor ...` initially reported the release APK as `present: true` with no
 `android-keep-rule-marker` signal -- self-contradictory given `artifact-inspect.ts`'s own `present`
 formula (`android` case: `signals.includes("android-keep-rule-marker")`, nothing else can flip it).
-Root cause: this machine has `cordierite` installed globally (via an `fnm` shim), and `pnpm exec`
+Root cause: this machine has `appduct` installed globally (via an `fnm` shim), and `pnpm exec`
 fell back to that stale global `PATH` binary instead of resolving the workspace's own build, since
-no local bin symlink exists for `cordierite` at the workspace root. `node
-packages/cordierite/dist/bin.js doctor ...` (bypassing `pnpm exec`'s resolution entirely) gave the
+no local bin symlink exists for `appduct` at the workspace root. `node
+packages/appduct/dist/bin.js doctor ...` (bypassing `pnpm exec`'s resolution entirely) gave the
 correct, expected result both directions. Documented in
 `playground-native/android/README.md`; not a code change anywhere in this repo.
 
@@ -223,11 +223,11 @@ restarted, per this task's "never kill a process you didn't start" constraint). 
 key output, run from the repo root unless noted:
 
 ```bash
-export CORDIERITE_STATE_DIR=/tmp/cordierite-3b-state   # config.json: {"wssPort": 8456}
+export APPDUCT_STATE_DIR=/tmp/appduct-3b-state   # config.json: {"wssPort": 8456}
 adb -s emulator-5554 install -r playground-native/android/app/build/outputs/apk/debug/app-debug.apk
-adb -s emulator-5554 shell am start -n com.callstackincubator.cordierite.playground/.MainActivity
+adb -s emulator-5554 shell am start -n com.callstackincubator.appduct.playground/.MainActivity
 
-node packages/cordierite/dist/bin.js link --open android --scheme cordierite-native --device emulator-5554
+node packages/appduct/dist/bin.js link --open android --scheme appduct-native --device emulator-5554
 # -> Link Created, Delivered yes (android)
 ```
 
@@ -244,34 +244,34 @@ On-device: `State: active`, `Session: f7Z6w6yPAmKxV5UI` (screenshot captured via
 `adb shell screencap`).
 
 ```bash
-node packages/cordierite/dist/bin.js tools
+node packages/appduct/dist/bin.js tools
 ```
 Lists all five registered tools with their descriptions.
 
 ```bash
-node packages/cordierite/dist/bin.js invoke sum --input '{"a":2,"b":3}'          # {"total":5}
-node packages/cordierite/dist/bin.js invoke call_count --input '{}'              # {"count":1}
-node packages/cordierite/dist/bin.js invoke throwing_tool --input '{}'           # tool_execution_error: "throwing_tool always fails on purpose."
-node packages/cordierite/dist/bin.js invoke slow_task --input '{}'               # {"done":true}, ~1.5s
-node packages/cordierite/dist/bin.js invoke reset_counter --input '{}'           # {"count":0}
+node packages/appduct/dist/bin.js invoke sum --input '{"a":2,"b":3}'          # {"total":5}
+node packages/appduct/dist/bin.js invoke call_count --input '{}'              # {"count":1}
+node packages/appduct/dist/bin.js invoke throwing_tool --input '{}'           # tool_execution_error: "throwing_tool always fails on purpose."
+node packages/appduct/dist/bin.js invoke slow_task --input '{}'               # {"done":true}, ~1.5s
+node packages/appduct/dist/bin.js invoke reset_counter --input '{}'           # {"count":0}
 ```
 
-Tapped "Post event" via `adb shell input tap`; `node packages/cordierite/dist/bin.js events`
+Tapped "Post event" via `adb shell input tap`; `node packages/appduct/dist/bin.js events`
 (streaming) showed:
 ```
 app_event  android-sdk-built-for-arm64  { "name": "button_tapped", "payload": { "at": 1789399486681 }, ... }
 ```
 
-Backgrounded (`adb shell input keyevent HOME`) and re-checked immediately: `cordierite ls` still
+Backgrounded (`adb shell input keyevent HOME`) and re-checked immediately: `appduct ls` still
 showed the session `active` (within the grace window). Relaunched
 (`adb shell am start -n .../.MainActivity`, which Android reported as "brought to the front" since
 the task was still alive) and invoked once more:
 ```bash
-node packages/cordierite/dist/bin.js invoke sum --input '{"a":10,"b":15}'   # {"total":25}
+node packages/appduct/dist/bin.js invoke sum --input '{"a":10,"b":15}'   # {"total":25}
 ```
 Same session id throughout (`f7Z6w6yPAmKxV5UI`); on-device event log accumulated every call in
 order, oldest-message-first display (newest at top), matching `PlaygroundState.logEvent`'s
-prepend behavior. `node packages/cordierite/dist/bin.js daemon stop` at the end to clean up the
+prepend behavior. `node packages/appduct/dist/bin.js daemon stop` at the end to clean up the
 private daemon this check spawned.
 
 Everything in the task brief's live-check script completed successfully; nothing was skipped.
@@ -280,7 +280,7 @@ Everything in the task brief's live-check script completed successfully; nothing
 
 - **Public type names are new, not re-exports of the internal ones** (section 1) -- the issue's
   own sketch already implies this (`ClientState`/`BuildConfig` unqualified, distinct from
-  `CordieriteClientState`/`CordieriteBuildConfig`), but it's worth stating explicitly: nothing
+  `AppductClientState`/`AppductBuildConfig`), but it's worth stating explicitly: nothing
   internal was made public to satisfy the facade.
 - **`android.permission.INTERNET` is not declared anywhere in `packages/native/android`** -- an
   app-level concern by design (see section 5); this is a deviation from "just make it work
@@ -295,7 +295,7 @@ Everything in the task brief's live-check script completed successfully; nothing
 - Publishing `core`/`core-noop` to Maven Central itself (signing, credentials, CI wiring) -- an
   ops task per the brief; `publishToMavenLocal` is what's verified here.
 - Any change to `packages/react-native/**`, `packages/native/ios/**`, `Package.swift`,
-  `packages/cordierite/**`, `docs/*.md` other than this file, or the root README -- explicitly out
+  `packages/appduct/**`, `docs/*.md` other than this file, or the root README -- explicitly out
   of this task's owned surface; the RN vendoring *behavior* was read and relied on (section 3) but
   no RN file was modified.
 - Schema derivation from `kotlinx.serialization`/`Codable` -- out of scope for issue #48 entirely

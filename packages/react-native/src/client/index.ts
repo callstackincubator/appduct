@@ -1,19 +1,19 @@
-import type { ToolDescriptor } from "@cordierite/shared";
+import type { ToolDescriptor } from "@appduct/shared";
 
 import type {
-  CordieriteClientState,
-  CordieriteConnectCallOptions,
-  CordieriteConnectInput,
-  CordieriteListenerKind,
-  CordieriteRegisteredTool,
-  CordieriteRuntimeSchema,
-  CordieriteToolHandler,
-  CordieriteToolRegistration,
-  CordieriteUnifiedListenerMap,
-} from "../Cordierite.types";
+  AppductClientState,
+  AppductConnectCallOptions,
+  AppductConnectInput,
+  AppductListenerKind,
+  AppductRegisteredTool,
+  AppductRuntimeSchema,
+  AppductToolHandler,
+  AppductToolRegistration,
+  AppductUnifiedListenerMap,
+} from "../Appduct.types";
 import type {
-  CordieriteNativeModuleLike,
-  CreateCordieriteClientOptions,
+  AppductNativeModuleLike,
+  CreateAppductClientOptions,
 } from "../client-types";
 import { logger } from "../logger";
 import { normalizeOptionalToolSchema, toToolDescriptor } from "../schema";
@@ -21,27 +21,27 @@ import { createUnifiedListenerBus } from "./listeners";
 import { createToolMessageHandler } from "./tool-invocation";
 
 export type {
-  CordieriteNativeModuleLike,
-  CreateCordieriteClientOptions,
+  AppductNativeModuleLike,
+  CreateAppductClientOptions,
 } from "../client-types";
 
 /**
  * Both native bridges reject `postEvent` with this code when no session is active (iOS:
- * `CordieriteClient.CordieriteNotActiveError` via `CordieriteTurboBridge.swift`; Android: the
- * `NativeCordieriteModule.postEvent` state guard, since the Kotlin core's own `postEvent` is
+ * `AppductClient.AppductNotActiveError` via `AppductTurboBridge.swift`; Android: the
+ * `NativeAppductModule.postEvent` state guard, since the Kotlin core's own `postEvent` is
  * itself a best-effort no-op for a plain-app caller) -- see `postEvent` below, which downgrades
  * exactly this rejection to a dev-only warning instead of the generic `error` listener event every
  * other `postEvent` failure gets.
  */
-export const CORDIERITE_NOT_ACTIVE_ERROR_CODE = "E_CORDIERITE_NOT_ACTIVE";
+export const APPDUCT_NOT_ACTIVE_ERROR_CODE = "E_APPDUCT_NOT_ACTIVE";
 
 /** Whether `error` is a native `postEvent` rejection specifically for "no session is active",
  * identified by `code` the way a rejected TurboModule/bridge promise surfaces it to JS. */
-export const isCordieriteNotActiveError = (error: unknown): boolean =>
+export const isAppductNotActiveError = (error: unknown): boolean =>
   typeof error === "object" &&
   error !== null &&
   "code" in error &&
-  (error as { code?: unknown }).code === CORDIERITE_NOT_ACTIVE_ERROR_CODE;
+  (error as { code?: unknown }).code === APPDUCT_NOT_ACTIVE_ERROR_CODE;
 
 /**
  * The thin client left after issue #48 phase 2 (`docs/tasks/15-native-session-logic.md`): the
@@ -50,13 +50,13 @@ export const isCordieriteNotActiveError = (error: unknown): boolean =>
  * a handler map, Standard Schema → JSON Schema conversion, input/output validation, and mapping
  * native's JSON-string events onto the public listener/handler surface.
  */
-export const createCordieriteClient = (
-  module: CordieriteNativeModuleLike,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for call-site compatibility; see CreateCordieriteClientOptions's doc comment.
-  clientOptions: CreateCordieriteClientOptions = {},
+export const createAppductClient = (
+  module: AppductNativeModuleLike,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for call-site compatibility; see CreateAppductClientOptions's doc comment.
+  clientOptions: CreateAppductClientOptions = {},
 ) => {
   const listenerBus = createUnifiedListenerBus();
-  const tools = new Map<string, CordieriteRegisteredTool>();
+  const tools = new Map<string, AppductRegisteredTool>();
   let destroyed = false;
 
   const { handleToolCall, handleToolCancel, abortAllInFlight } =
@@ -82,7 +82,7 @@ export const createCordieriteClient = (
   });
   const stateChangeSubscription = module.addListener("stateChange", (event) => {
     listenerBus.emit("stateChange", {
-      state: event.state as CordieriteClientState,
+      state: event.state as AppductClientState,
       reason: event.reason,
     });
   });
@@ -119,9 +119,9 @@ export const createCordieriteClient = (
      * while a session is active).
      */
     registerTool<
-      TInputSchema extends CordieriteRuntimeSchema | undefined,
-      TOutputSchema extends CordieriteRuntimeSchema | undefined,
-    >(registration: CordieriteToolRegistration<TInputSchema, TOutputSchema>) {
+      TInputSchema extends AppductRuntimeSchema | undefined,
+      TOutputSchema extends AppductRuntimeSchema | undefined,
+    >(registration: AppductToolRegistration<TInputSchema, TOutputSchema>) {
       const inputSchema = normalizeOptionalToolSchema(
         registration.inputSchema,
         `Tool "${registration.name}" inputSchema`,
@@ -146,7 +146,7 @@ export const createCordieriteClient = (
         );
       }
 
-      const id = Symbol(`cordierite-tool:${registration.name}`);
+      const id = Symbol(`appduct-tool:${registration.name}`);
 
       logger.debug("registerTool", registration.name);
       // Native validates and throws synchronously on an invalid descriptor -- surfaced to the
@@ -159,7 +159,7 @@ export const createCordieriteClient = (
         name: registration.name,
         inputSchema,
         outputSchema,
-        handler: registration.handler as CordieriteToolHandler,
+        handler: registration.handler as AppductToolHandler,
       });
 
       return {
@@ -215,8 +215,8 @@ export const createCordieriteClient = (
      * `session_ack` is received (not merely once native has accepted the socket).
      */
     async connect(
-      input: CordieriteConnectInput,
-      connectOptions?: CordieriteConnectCallOptions,
+      input: AppductConnectInput,
+      connectOptions?: AppductConnectCallOptions,
     ): Promise<void> {
       logger.debug("connect", {
         session: (input as { sessionId?: string }).sessionId,
@@ -236,9 +236,9 @@ export const createCordieriteClient = (
           payload === undefined ? null : JSON.stringify(payload),
         );
       } catch (error) {
-        if (isCordieriteNotActiveError(error)) {
+        if (isAppductNotActiveError(error)) {
           logger.devWarn(
-            `postEvent("${name}") dropped: no active Cordierite session.`,
+            `postEvent("${name}") dropped: no active Appduct session.`,
           );
           return;
         }
@@ -264,29 +264,29 @@ export const createCordieriteClient = (
 
     /** Raw native connection state -- now identical to `getClientState()`; both are native's own
      * unified state (issue #48 phase 2 removed the separate "raw" tier). */
-    getState(): CordieriteClientState {
-      return module.getState() as CordieriteClientState;
+    getState(): AppductClientState {
+      return module.getState() as AppductClientState;
     },
 
     /** Unified client state: `idle | connecting | active | reconnecting | closed`. */
-    getClientState(): CordieriteClientState {
-      return module.getState() as CordieriteClientState;
+    getClientState(): AppductClientState {
+      return module.getState() as AppductClientState;
     },
 
     getSessionId(): string | null {
       return module.getSessionId();
     },
 
-    /** Feeds a deep link to native. Returns `true` iff the URL carried a `cordierite` query param;
+    /** Feeds a deep link to native. Returns `true` iff the URL carried a `appduct` query param;
      * the actual parse/connect/supersede decision happens natively and asynchronously. */
     handleUrl(url: string): boolean {
       return module.handleUrl(url);
     },
 
     /** Unified listener API (ARCHITECTURE.md §11): `stateChange`, `sessionChange`, `error`. */
-    addCordieriteListener<Kind extends CordieriteListenerKind>(
+    addAppductListener<Kind extends AppductListenerKind>(
       kind: Kind,
-      callback: CordieriteUnifiedListenerMap[Kind],
+      callback: AppductUnifiedListenerMap[Kind],
     ) {
       return listenerBus.addListener(kind, callback);
     },
@@ -308,4 +308,4 @@ export const createCordieriteClient = (
   };
 };
 
-export type CordieriteClient = ReturnType<typeof createCordieriteClient>;
+export type AppductClient = ReturnType<typeof createAppductClient>;

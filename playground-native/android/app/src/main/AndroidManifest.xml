@@ -9,13 +9,13 @@
     <application
         android:name=".PlaygroundApplication"
         android:allowBackup="true"
-        android:label="Cordierite Playground"
+        android:label="Appduct Playground"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="Cordierite Playground">
+            android:label="Appduct Playground">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -23,7 +23,7 @@
         </activity>
 
         <!--
-          CordieriteInitProvider and CordieriteLinkActivity are declared in `core`'s own
+          AppductInitProvider and AppductLinkActivity are declared in `core`'s own
           AndroidManifest.xml (debugImplementation, see app/build.gradle) and merged in
           automatically: nothing to declare here. A release build resolves `core-noop` instead,
           which has no manifest entries at all, so neither exists in that variant's merged

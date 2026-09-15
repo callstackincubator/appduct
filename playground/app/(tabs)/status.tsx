@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  getCordieriteState,
-  getCordieriteBuildConfig,
+  getAppductState,
+  getAppductBuildConfig,
   postEvent,
-  addCordieriteListener,
-  type CordieriteClientState,
-  type CordieriteSessionChangeEvent,
-  type CordieriteUnifiedErrorEvent,
-} from "@cordierite/react-native";
+  addAppductListener,
+  type AppductClientState,
+  type AppductSessionChangeEvent,
+  type AppductUnifiedErrorEvent,
+} from "@appduct/react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Layout, Radius } from "@/constants/theme";
@@ -18,7 +18,7 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 const MAX_ERRORS = 5;
 
 function connectionBadgeColor(
-  state: CordieriteClientState,
+  state: AppductClientState,
   colors: { success: string; warning: string; danger: string; muted: string }
 ): string {
   switch (state) {
@@ -46,17 +46,17 @@ export default function StatusScreen() {
   const tint = useThemeColor({}, "tint");
   const tintForeground = useThemeColor({}, "tintForeground");
 
-  const [connectionState, setConnectionState] = useState<CordieriteClientState>(
-    getCordieriteState()
+  const [connectionState, setConnectionState] = useState<AppductClientState>(
+    getAppductState()
   );
   // Native build config never changes within a process's lifetime (task 07), so a plain `useState`
   // initializer -- read once, no listener needed -- is enough to show which trust mode this
   // artifact was actually built with.
-  const [buildConfig] = useState(() => getCordieriteBuildConfig());
+  const [buildConfig] = useState(() => getAppductBuildConfig());
   const [alias, setAlias] = useState<string | null>(null);
   const [lastSessionEvent, setLastSessionEvent] =
-    useState<CordieriteSessionChangeEvent | null>(null);
-  const [errors, setErrors] = useState<CordieriteUnifiedErrorEvent[]>([]);
+    useState<AppductSessionChangeEvent | null>(null);
+  const [errors, setErrors] = useState<AppductUnifiedErrorEvent[]>([]);
   const [lastPingAt, setLastPingAt] = useState<number | null>(null);
 
   const dotColor = useMemo(
@@ -71,10 +71,10 @@ export default function StatusScreen() {
   );
 
   useEffect(() => {
-    const stateSubscription = addCordieriteListener("stateChange", (event) => {
+    const stateSubscription = addAppductListener("stateChange", (event) => {
       setConnectionState(event.state);
     });
-    const sessionSubscription = addCordieriteListener("sessionChange", (event) => {
+    const sessionSubscription = addAppductListener("sessionChange", (event) => {
       setLastSessionEvent(event);
       if (event.type === "lost") {
         setAlias(null);
@@ -82,7 +82,7 @@ export default function StatusScreen() {
         setAlias(event.alias);
       }
     });
-    const errorSubscription = addCordieriteListener("error", (event) => {
+    const errorSubscription = addAppductListener("error", (event) => {
       setErrors((previous) => [event, ...previous].slice(0, MAX_ERRORS));
     });
 
@@ -171,8 +171,8 @@ export default function StatusScreen() {
           </Pressable>
           <ThemedText type="caption" style={styles.cardHint}>
             {lastPingAt !== null
-              ? `Last sent at ${new Date(lastPingAt).toLocaleTimeString()}. Watch it with: cordierite events --follow`
-              : "Watch it arrive with: cordierite events --follow"}
+              ? `Last sent at ${new Date(lastPingAt).toLocaleTimeString()}. Watch it with: appduct events --follow`
+              : "Watch it arrive with: appduct events --follow"}
           </ThemedText>
         </View>
 

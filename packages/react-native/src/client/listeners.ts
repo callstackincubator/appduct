@@ -1,27 +1,27 @@
 import type {
-  CordieriteListenerKind,
-  CordieriteUnifiedListenerMap,
-} from "../Cordierite.types";
+  AppductListenerKind,
+  AppductUnifiedListenerMap,
+} from "../Appduct.types";
 import { logger } from "../logger";
 
 export type UnifiedListenerBus = {
-  addListener<Kind extends CordieriteListenerKind>(
+  addListener<Kind extends AppductListenerKind>(
     kind: Kind,
-    callback: CordieriteUnifiedListenerMap[Kind]
+    callback: AppductUnifiedListenerMap[Kind]
   ): { remove(): void };
-  emit<Kind extends CordieriteListenerKind>(
+  emit<Kind extends AppductListenerKind>(
     kind: Kind,
-    event: Parameters<CordieriteUnifiedListenerMap[Kind]>[0]
+    event: Parameters<AppductUnifiedListenerMap[Kind]>[0]
   ): void;
 };
 
 /**
- * The single event bus behind `addCordieriteListener` (ARCHITECTURE.md §11): `stateChange`,
+ * The single event bus behind `addAppductListener` (ARCHITECTURE.md §11): `stateChange`,
  * `sessionChange`, and `error` (bootstrap/connect/socket/tool-handler failures, one channel).
  */
 export const createUnifiedListenerBus = (): UnifiedListenerBus => {
   const listeners: {
-    [K in CordieriteListenerKind]: Set<CordieriteUnifiedListenerMap[K]>;
+    [K in AppductListenerKind]: Set<AppductUnifiedListenerMap[K]>;
   } = {
     stateChange: new Set(),
     sessionChange: new Set(),
@@ -45,7 +45,7 @@ export const createUnifiedListenerBus = (): UnifiedListenerBus => {
         try {
           callback(event);
         } catch (error) {
-          logger.warn(`Cordierite "${kind}" listener threw`, error);
+          logger.warn(`Appduct "${kind}" listener threw`, error);
         }
       }
     },

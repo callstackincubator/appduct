@@ -16,7 +16,7 @@ type NormalizedOptions = {
   deepLinkScheme: string | undefined;
 };
 
-const cordieritePlugin = require("../../app.plugin.js") as ((
+const appductPlugin = require("../../app.plugin.js") as ((
   config: Record<string, unknown>,
   options?: Record<string, unknown>,
 ) => { mods?: Record<string, unknown> }) & {
@@ -48,9 +48,9 @@ const {
   normalizeOptions,
   applyInfoPlistChanges,
   applyAndroidManifestChanges,
-} = cordieritePlugin.__internal;
+} = appductPlugin.__internal;
 
-const PACKAGE_NAME = "@cordierite/react-native";
+const PACKAGE_NAME = "@appduct/react-native";
 
 // A real SHA-256 digest, base64-encoded: 32 bytes -> 44 base64 characters (one `=` pad).
 const VALID_PIN = "sha256/Jd5ES7Yt70PB1fYYVg5K3sLCpzPE1eEWxvrJ+i/H5rY=";
@@ -92,12 +92,12 @@ describe("app.plugin.js: validatePins", () => {
 });
 
 describe("app.plugin.js: normalizeOptions", () => {
-  test("enableInReleaseBuilds throws, naming CORDIERITE_ENABLED/trust", () => {
+  test("enableInReleaseBuilds throws, naming APPDUCT_ENABLED/trust", () => {
     expect(() => normalizeOptions({ enableInReleaseBuilds: true }, {})).toThrow(
       /"enableInReleaseBuilds" has been removed/,
     );
     expect(() => normalizeOptions({ enableInReleaseBuilds: true }, {})).toThrow(
-      /CORDIERITE_ENABLED/,
+      /APPDUCT_ENABLED/,
     );
     expect(() => normalizeOptions({ enableInReleaseBuilds: true }, {})).toThrow(
       /"trust"/,
@@ -110,27 +110,27 @@ describe("app.plugin.js: normalizeOptions", () => {
     ).toThrow(/"enableInReleaseBuilds" has been removed/);
   });
 
-  test("include throws, naming CORDIERITE_ENABLED (both values -- the option is gone)", () => {
+  test("include throws, naming APPDUCT_ENABLED (both values -- the option is gone)", () => {
     for (const value of [true, false]) {
       expect(() => normalizeOptions({ include: value }, {})).toThrow(
         /"include" has been removed/,
       );
       expect(() => normalizeOptions({ include: value }, {})).toThrow(
-        /CORDIERITE_ENABLED/,
+        /APPDUCT_ENABLED/,
       );
     }
   });
 
-  test("an unparseable CORDIERITE_ENABLED fails at prebuild, where a throw actually stops the build", () => {
-    const previous = process.env.CORDIERITE_ENABLED;
-    process.env.CORDIERITE_ENABLED = "flase";
+  test("an unparseable APPDUCT_ENABLED fails at prebuild, where a throw actually stops the build", () => {
+    const previous = process.env.APPDUCT_ENABLED;
+    process.env.APPDUCT_ENABLED = "flase";
     try {
-      expect(() => normalizeOptions({}, {})).toThrow(/CORDIERITE_ENABLED/);
+      expect(() => normalizeOptions({}, {})).toThrow(/APPDUCT_ENABLED/);
     } finally {
       if (previous === undefined) {
-        delete process.env.CORDIERITE_ENABLED;
+        delete process.env.APPDUCT_ENABLED;
       } else {
-        process.env.CORDIERITE_ENABLED = previous;
+        process.env.APPDUCT_ENABLED = previous;
       }
     }
   });
@@ -275,21 +275,21 @@ describe("app.plugin.js: configuredSchemes", () => {
   });
 });
 
-describe("app.plugin.js: CORDIERITE_ENABLED=0 leaves no footprint", () => {
+describe("app.plugin.js: APPDUCT_ENABLED=0 leaves no footprint", () => {
   const withEnv = (value: string | undefined, run: () => void) => {
-    const previous = process.env.CORDIERITE_ENABLED;
+    const previous = process.env.APPDUCT_ENABLED;
     if (value === undefined) {
-      delete process.env.CORDIERITE_ENABLED;
+      delete process.env.APPDUCT_ENABLED;
     } else {
-      process.env.CORDIERITE_ENABLED = value;
+      process.env.APPDUCT_ENABLED = value;
     }
     try {
       run();
     } finally {
       if (previous === undefined) {
-        delete process.env.CORDIERITE_ENABLED;
+        delete process.env.APPDUCT_ENABLED;
       } else {
-        process.env.CORDIERITE_ENABLED = previous;
+        process.env.APPDUCT_ENABLED = previous;
       }
     }
   };
@@ -298,7 +298,7 @@ describe("app.plugin.js: CORDIERITE_ENABLED=0 leaves no footprint", () => {
   // wrote them into an excluded build would fail `doctor --assert-absent` on a genuinely clean
   // artifact -- the regression this guards.
   const runPlugin = () =>
-    cordieritePlugin(
+    appductPlugin(
       { name: "app", _internal: { projectRoot: "/tmp/app" } },
       { cliPins: [VALID_PIN] },
     ) as { mods?: Record<string, unknown> };
@@ -329,10 +329,10 @@ describe("app.plugin.js: applyInfoPlistChanges", () => {
         deepLinkScheme: undefined,
       },
     );
-    expect(infoPlist["CordieriteCliPins"]).toEqual([VALID_PIN]);
-    expect(infoPlist["CordieriteAllowPrivateLanOnly"]).toBe(true);
-    expect(typeof infoPlist["CordieriteAllowPrivateLanOnly"]).toBe("boolean");
-    expect(infoPlist["CordieriteTrust"]).toBe("pin");
+    expect(infoPlist["AppductCliPins"]).toEqual([VALID_PIN]);
+    expect(infoPlist["AppductAllowPrivateLanOnly"]).toBe(true);
+    expect(typeof infoPlist["AppductAllowPrivateLanOnly"]).toBe("boolean");
+    expect(infoPlist["AppductTrust"]).toBe("pin");
   });
 
   test("writes trust: link and an empty pins array when cliPins is omitted", () => {
@@ -345,8 +345,8 @@ describe("app.plugin.js: applyInfoPlistChanges", () => {
         deepLinkScheme: undefined,
       },
     );
-    expect(infoPlist["CordieriteCliPins"]).toEqual([]);
-    expect(infoPlist["CordieriteTrust"]).toBe("link");
+    expect(infoPlist["AppductCliPins"]).toEqual([]);
+    expect(infoPlist["AppductTrust"]).toBe("link");
   });
 });
 
@@ -371,16 +371,16 @@ describe("app.plugin.js: applyAndroidManifestChanges", () => {
     const metaData = metaDataOf(manifest);
     const pins = metaData.find(
       (item) =>
-        item.$["android:name"] === "com.callstackincubator.cordierite.CLI_PINS",
+        item.$["android:name"] === "com.callstackincubator.appduct.CLI_PINS",
     );
     const privateLan = metaData.find(
       (item) =>
         item.$["android:name"] ===
-        "com.callstackincubator.cordierite.ALLOW_PRIVATE_LAN_ONLY",
+        "com.callstackincubator.appduct.ALLOW_PRIVATE_LAN_ONLY",
     );
     const trust = metaData.find(
       (item) =>
-        item.$["android:name"] === "com.callstackincubator.cordierite.TRUST",
+        item.$["android:name"] === "com.callstackincubator.appduct.TRUST",
     );
 
     expect(pins?.$["android:value"]).toBe(JSON.stringify([VALID_PIN]));
@@ -401,7 +401,7 @@ describe("app.plugin.js: applyAndroidManifestChanges", () => {
 
     const pins = metaDataOf(manifest).find(
       (item) =>
-        item.$["android:name"] === "com.callstackincubator.cordierite.CLI_PINS",
+        item.$["android:name"] === "com.callstackincubator.appduct.CLI_PINS",
     );
     expect(pins?.$["android:value"]).toBe(JSON.stringify([]));
   });

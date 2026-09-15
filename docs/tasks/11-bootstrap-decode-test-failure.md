@@ -4,7 +4,7 @@
 
 ## Goal
 
-`packages/cordierite/src/__tests__/exit-codes.integration.test.ts` passes, or the test is
+`packages/appduct/src/__tests__/exit-codes.integration.test.ts` passes, or the test is
 knowingly changed for a documented reason.
 
 ## Why
@@ -47,7 +47,7 @@ this series were each told to ignore it.
 
 - Root-cause it. Start by determining whether the payload is malformed at mint time or
   mis-parsed at decode time — `packages/shared/src/domains/bootstrap.ts` and the fixtures in
-  `packages/cordierite/src/__tests__/fixtures.ts` are the two ends.
+  `packages/appduct/src/__tests__/fixtures.ts` are the two ends.
 - Check whether it is timing/TTL-dependent: the payload carries `expiresAt` in unix
   **seconds**, and a fixture minted with a short or already-elapsed TTL would decode to
   `null` in exactly this way.
@@ -56,6 +56,6 @@ this series were each told to ignore it.
 
 ## Acceptance
 
-- `pnpm test` in `packages/cordierite` is fully green.
+- `pnpm test` in `packages/appduct` is fully green.
 - The commit message states what the cause was, so the next person who sees a `decodeBootstrap`
   null does not re-derive it.

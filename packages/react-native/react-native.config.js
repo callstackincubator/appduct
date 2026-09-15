@@ -2,12 +2,12 @@
 // (`expo-modules-autolinking react-native-config --json`). Never `console.log` here -- it corrupts
 // that payload and fails the build with an opaque JSON parse error.
 
-const { parseCordieriteEnabled } = require("./autolink-env");
+const { parseAppductEnabled } = require("./autolink-env");
 
 const ANDROID_BASE = {
   packageImportPath:
-    "import com.callstackincubator.cordierite.CordieritePackage;",
-  packageInstance: "new CordieritePackage()",
+    "import com.callstackincubator.appduct.AppductPackage;",
+  packageInstance: "new AppductPackage()",
 };
 
 /**
@@ -18,8 +18,8 @@ const ANDROID_BASE = {
  * unfiltered, by every variant -- restricting linking by variant would leave that shared file
  * referencing a class absent from the unlisted variant's classpath, a compile error. So Android
  * always links this project (`buildTypes` omitted below) and the dev/release split happens inside
- * `android/build.gradle` instead, via a `CORDIERITE_ENABLED`-gated source set swap -- see that
- * file's own comment. Zero-config default is dev-only; release needs `CORDIERITE_ENABLED=1` to
+ * `android/build.gradle` instead, via a `APPDUCT_ENABLED`-gated source set swap -- see that
+ * file's own comment. Zero-config default is dev-only; release needs `APPDUCT_ENABLED=1` to
  * opt in, on both platforms, just through different mechanisms.
  */
 const devOnly = {
@@ -39,14 +39,14 @@ const excluded = { android: null, ios: null };
  * Parse errors fall back to dev-only rather than propagating: the resolver swallows whatever this
  * file throws (exits 0 and autodetects the package anyway), so raising here would read as a gate
  * that does not exist. An unrecognized value must behave exactly like an unset one -- fail open
- * into "every build" would ship Cordierite into a release build over a typo. `app.plugin.js`
- * validates the value where a throw does fail the build, and `cordierite doctor` is what
- * establishes whether a built artifact actually carries Cordierite.
+ * into "every build" would ship Appduct into a release build over a typo. `app.plugin.js`
+ * validates the value where a throw does fail the build, and `appduct doctor` is what
+ * establishes whether a built artifact actually carries Appduct.
  */
 function resolvePlatforms() {
   let enabled;
   try {
-    enabled = parseCordieriteEnabled();
+    enabled = parseAppductEnabled();
   } catch {
     return devOnly;
   }

@@ -3,42 +3,42 @@
 
     <application>
         <!--
-          Captures the application Context before any app code runs, so `Cordierite.register(...)`
+          Captures the application Context before any app code runs, so `Appduct.register(...)`
           works from `Application.onCreate()` with no manual init call
           (docs/tasks/19-android-entry-points.md). `${applicationId}` is filled in automatically by
           AGP: every consumer app gets a uniquely named authority, as the platform requires for a
-          ContentProvider. The name below is fully qualified, not the relative `.CordieriteInitProvider`
-          shorthand, because this module's Kotlin package (`com.callstackincubator.cordierite`)
-          differs from its AGP `namespace` (`com.callstackincubator.cordierite.core`, see
+          ContentProvider. The name below is fully qualified, not the relative `.AppductInitProvider`
+          shorthand, because this module's Kotlin package (`com.callstackincubator.appduct`)
+          differs from its AGP `namespace` (`com.callstackincubator.appduct.core`, see
           build.gradle) that relative names resolve against; a relative name here would resolve to
           a class that doesn't exist and crash at provider-install time.
 
           Opt out (an app that wants to drive initialization itself instead) with, in the app's own
           manifest:
-            <provider android:name="com.callstackincubator.cordierite.CordieriteInitProvider"
+            <provider android:name="com.callstackincubator.appduct.AppductInitProvider"
                        tools:node="remove" />
           See packages/native/android/README.md, "Opting out of the init provider and trampoline".
         -->
         <provider
-            android:name="com.callstackincubator.cordierite.CordieriteInitProvider"
-            android:authorities="${applicationId}.cordierite-init"
+            android:name="com.callstackincubator.appduct.AppductInitProvider"
+            android:authorities="${applicationId}.appduct-init"
             android:exported="false" />
 
         <!--
-          No-UI trampoline for `${cordieriteScheme}://` deep links. The consumer app sets
-          `manifestPlaceholders["cordieriteScheme"] = "myapp"` in its own build.gradle; forgetting
+          No-UI trampoline for `${appductScheme}://` deep links. The consumer app sets
+          `manifestPlaceholders["appductScheme"] = "myapp"` in its own build.gradle; forgetting
           it is a manifest-merger error at build time (see packages/native/android/README.md's
-          troubleshooting section for the exact message). Calls `Cordierite.handle(intent)` and
-          finishes immediately; a link with no Cordierite payload is not forwarded anywhere else
-          (see CordieriteLinkActivity's own doc comment and the README for what to do if you need
+          troubleshooting section for the exact message). Calls `Appduct.handle(intent)` and
+          finishes immediately; a link with no Appduct payload is not forwarded anywhere else
+          (see AppductLinkActivity's own doc comment and the README for what to do if you need
           the same scheme for your own deep links too).
 
           Opt out the same way:
-            <activity android:name="com.callstackincubator.cordierite.CordieriteLinkActivity"
+            <activity android:name="com.callstackincubator.appduct.AppductLinkActivity"
                       tools:node="remove" />
         -->
         <activity
-            android:name="com.callstackincubator.cordierite.CordieriteLinkActivity"
+            android:name="com.callstackincubator.appduct.AppductLinkActivity"
             android:theme="@android:style/Theme.NoDisplay"
             android:exported="true"
             android:excludeFromRecents="true"
@@ -47,7 +47,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="${cordieriteScheme}" />
+                <data android:scheme="${appductScheme}" />
             </intent-filter>
         </activity>
     </application>

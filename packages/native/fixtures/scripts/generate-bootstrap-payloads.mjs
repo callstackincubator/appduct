@@ -2,11 +2,11 @@
 // Regenerates packages/native/fixtures/bootstrap-payloads.json.
 //
 // Run from the repository root, after `pnpm build` (this script imports the *built*
-// @cordierite/shared output, not its TypeScript source):
+// @appduct/shared output, not its TypeScript source):
 //
 //   node packages/native/fixtures/scripts/generate-bootstrap-payloads.mjs
 //
-// Positive vectors are produced with @cordierite/shared's own `encodeBootstrap`, so they are
+// Positive vectors are produced with @appduct/shared's own `encodeBootstrap`, so they are
 // guaranteed to be well-formed per docs/PROTOCOL.md §2. Negative vectors are built by hand from
 // raw bytes (this script's own `encodeRawBootstrap` helper below, deliberately independent of
 // `encodeBootstrap`) so that each one is corrupted in exactly one documented way, then base64url

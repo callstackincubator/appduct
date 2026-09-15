@@ -1,0 +1,1267 @@
+// Vendored into @appduct/react-native at build time by scripts/sync-native-core.mjs -- see
+// packages/native/README.md. Compiled unconditionally by the RN pod (Appduct.podspec always
+// sets -DAPPDUCT_ENABLED); the #if guard below only matters when this file is built directly
+// as part of the AppductCore SwiftPM package (see repo-root Package.swift and Decision 2 in
+// docs/tasks/14-native-core-extraction.md).
+#if APPDUCT_ENABLED
+
+import CryptoKit
+import Foundation
+import Security
+#if canImport(UIKit)
+  import UIKit
+#endif
+
+private let cliPinsPlistKey = "AppductCliPins"
+private let allowPrivateLanOnlyPlistKey = "AppductAllowPrivateLanOnly"
+private let trustPlistKey = "AppductTrust"
+private let protocolVersion = 2
+
+enum AppductConnectionState: String {
+  case idle
+  case connecting
+  case active
+  case closed
+  case error
+}
+
+private struct AppductModuleError: Error {
+  let message: String
+}
+
+/// Composes the daemon connect URL, bracketing an IPv6 literal (`wss://[fd00::1]:8443`) and
+/// leaving an IPv4 literal unbracketed (`wss://192.168.1.10:8443`) — matching
+/// `formatAgentWebSocketUrl` in `packages/shared/src/domains/transport.ts`. A pure, free function
+/// so it is directly unit-testable without a real socket.
+func formatAppductWebSocketUrl(ip: String, port: Int) -> String {
+  let host = ip.contains(":") ? "[\(ip)]" : ip
+  return "wss://\(host):\(port)"
+}
+
+public struct AppductErrorDetails: Sendable {
+  public let code: String
+  public let message: String
+  public let phase: String
+  public let nativeCode: String?
+  public let closeReason: String?
+  public let isRetryable: Bool?
+  public let hint: String?
+}
+
+/// RCT/JSI often passes numeric fields as `NSNumber`; accept both `Int` and `NSNumber`.
+private func appductIntFromBridge(_ value: Any?) -> Int? {
+  switch value {
+  case let int as Int:
+    return int
+  case let number as NSNumber:
+    return number.intValue
+  default:
+    return nil
+  }
+}
+
+/// Sendable by construction (every field is a value type): parsed synchronously in
+/// `AppductTurboBridge` from the loosely-typed JS options bag before it ever crosses onto the
+/// actor, so `connect(options:)` never has to send a non-`Sendable` `[String: Any]`/`NSDictionary`
+/// across an isolation boundary.
+public struct AppductConnectOptions: Sendable {
+  public let ip: String
+  public let port: Int
+  public let sessionId: String
+  /// Claim token. Required unless `resumeToken` is present (protocol v2 `session_resume`).
+  public let token: String?
+  /// When present, `connect` sends `session_resume` as the first frame instead of `session_claim`.
+  public let resumeToken: String?
+  public let expiresAt: Int
+  public let deviceManufacturer: String?
+  public let deviceModel: String?
+  public let deviceOs: String?
+  /// The bootstrap deep link's separate `pin` query param, forwarded unchanged from JS
+  /// (`AppductConnectOptions.linkPin` in `Appduct.types.ts`). Only ever consulted by
+  /// `resolveTrustedPins` when no build-time `cliPins` are configured and the explicit
+  /// `AppductTrust` plist value (or its missing-key default) resolves to `"link"` — see
+  /// `configureFromBundle`.
+  public let linkPin: String?
+
+  public init(_ value: [String: Any]) throws {
+    // NOTE: intentionally not actor-isolated — called synchronously from the TurboModule bridge
+    // before any actor hop, so parsing failures reject the JS promise immediately.
+    guard
+      let ip = value["ip"] as? String,
+      let port = appductIntFromBridge(value["port"]),
+      let sessionId = value["sessionId"] as? String,
+      let expiresAt = appductIntFromBridge(value["expiresAt"])
+    else {
+      throw AppductModuleError(message: "Invalid Appduct connect options.")
+    }
+
+    self.ip = ip
+    self.port = port
+    self.sessionId = sessionId
+    self.expiresAt = expiresAt
+
+    func optionalString(_ key: String) -> String? {
+      guard let s = value[key] as? String else {
+        return nil
+      }
+      let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? nil : trimmed
+    }
+
+    self.token = optionalString("token")
+    self.resumeToken = optionalString("resumeToken")
+
+    guard self.token != nil || self.resumeToken != nil else {
+      throw AppductModuleError(message: "Appduct connect requires either token or resumeToken.")
+    }
+
+    self.deviceManufacturer = optionalString("deviceManufacturer")
+    self.deviceModel = optionalString("deviceModel")
+    self.deviceOs = optionalString("deviceOs")
+    self.linkPin = optionalString("linkPin")
+  }
+}
+
+/// Outcome of `resolveTrustedPins` (explicit trust mode). Mirrors Android's
+/// `TrustedPinsResolution` one-to-one.
+enum AppductTrustedPinsResolution: Equatable {
+  /// Embedded pins (build-time `cliPins`) are configured; `linkPin` is irrelevant and never even
+  /// inspected once this case applies — embedded pins always win regardless of `trust`, so config
+  /// can never *widen* trust by switching to `"link"`.
+  case configured(Set<String>)
+  /// `trust` (explicit or via the missing-key default) resolved to `"link"`, no embedded pins are
+  /// configured, and `linkPin` is usable: trust that single pin for this connection only. Callers
+  /// must log the unconditional trust=link notice when they see this case.
+  case linkPin(String)
+  /// `trust` resolved to `"pin"` (explicit or via the missing-key default) but no embedded pins
+  /// are configured. This is a config-time error the plugin refuses to produce, so it only
+  /// happens via hand-edited native config.
+  case pinTrustRequiresEmbeddedPins
+  /// `trust` resolved to `"link"`, no embedded pins are configured, and the connect options
+  /// carried no usable `linkPin` to trust.
+  case linkTrustRequiresLinkPin
+  /// `trust` is present but is neither `"link"` nor `"pin"` (a typo/hand-edit), and no embedded
+  /// pins are configured to fall back on regardless of `trust`'s text. This must never be treated
+  /// as the missing-key default — that would let a mistyped `trust` value silently fail *open*
+  /// into unpinned link TOFU instead of erroring.
+  case invalidTrustValue(String)
+}
+
+/// Pure decision logic for explicit trust mode (`docs/tasks/05-explicit-trust-mode.md`): given
+/// the `AppductTrust` plist value, the build-time `cliPins` read from Info.plist, and the
+/// connect options' `linkPin` (from the bootstrap deep link's separate `pin` query param, if
+/// any), decides which SPKI pin(s) this connection trusts. Factored out of `configureFromBundle`
+/// (which reads `Bundle.main`) so the decision matrix is unit-testable without an Info.plist
+/// fixture — mirrors Android's `resolveTrustedPins` one-to-one.
+///
+/// | `trust` | embedded pins | behavior |
+/// | --- | --- | --- |
+/// | `"pin"` | non-empty | embedded pins only; `linkPin` ignored |
+/// | `"pin"` | empty | `.pinTrustRequiresEmbeddedPins` — hard error |
+/// | `"link"` | empty | trust `linkPin`, or `.linkTrustRequiresLinkPin` if none is usable |
+/// | `"link"` | non-empty | embedded pins win, `linkPin` ignored (config can never *widen* trust) |
+///
+/// A missing (`nil`/empty-string) `trust` value defaults to `"pin"` if `embeddedPins` is
+/// non-empty, else `"link"` — matching the config plugin's own default so bare-RN and Expo apps
+/// behave identically. Embedded pins are checked first, so by the time a `nil`/empty `trust` is
+/// actually consulted below, `embeddedPins` is already known empty and the default always
+/// resolves to `"link"`. A *present but unrecognized* `trust` string (anything other than
+/// `"link"`/`"pin"`) is `.invalidTrustValue` — it is never coerced into the missing-key default,
+/// which would let a typo silently widen trust into unpinned link TOFU. No build-time
+/// debuggability signal is ever consulted here.
+func resolveTrustedPins(
+  trust: String?,
+  embeddedPins: [String],
+  linkPin: String?
+) -> AppductTrustedPinsResolution {
+  // Embedded pins always win once present, regardless of `trust`: config can never *widen* trust
+  // by declaring `trust: "link"` (or anything else) alongside real `cliPins`.
+  if !embeddedPins.isEmpty {
+    return .configured(Set(embeddedPins))
+  }
+
+  let normalizedTrust = (trust?.isEmpty == false) ? trust : nil
+
+  switch normalizedTrust {
+  case "pin":
+    return .pinTrustRequiresEmbeddedPins
+  case "link", nil:
+    if let linkPin, !linkPin.isEmpty {
+      return .linkPin(linkPin)
+    }
+    return .linkTrustRequiresLinkPin
+  case .some(let unrecognized):
+    return .invalidTrustValue(unrecognized)
+  }
+}
+
+/**
+ * The raw `AppductTrust`/`AppductCliPins`/`AppductAllowPrivateLanOnly` Info.plist values,
+ * parsed but not yet run through `resolveTrustedPins`. The single Bundle-reading path shared by
+ * `configureFromBundle` (real connect attempts) and `currentAppductBuildConfig()` (JS diagnostics via
+ * `getConstants()`), so the two can never read different data out of the bundle.
+ */
+struct AppductManifestConfig {
+  let trust: String?
+  let embeddedPins: [String]
+  let allowPrivateLanOnly: Bool
+}
+
+/// See `AppductManifestConfig`.
+func readAppductManifestConfig() -> AppductManifestConfig {
+  let info = Bundle.main.infoDictionary ?? [:]
+  return AppductManifestConfig(
+    trust: info[trustPlistKey] as? String,
+    embeddedPins: info[cliPinsPlistKey] as? [String] ?? [],
+    // Fail closed: absent the plist key, only local/LAN addresses are allowed.
+    allowPrivateLanOnly: info[allowPrivateLanOnlyPlistKey] as? Bool ?? true
+  )
+}
+
+/// The small diagnostic surface exposed to JS via `getConstants()` (`docs/tasks/07-native-module-constants.md`).
+struct AppductBuildConfig: Equatable {
+  let trust: String
+  let hasEmbeddedPins: Bool
+  let allowPrivateLanOnly: Bool
+}
+
+/**
+ * Maps a `resolveTrustedPins` outcome to `AppductBuildConfig`. Reusing that function's own
+ * outcome — rather than re-deriving "trust"/"hasEmbeddedPins" from the raw plist values with
+ * separate logic — guarantees this can never disagree with what a real `connect()` attempt would
+ * use for the same plist state. `trust` reports the *effective* bucket ("pin" whenever embedded
+ * pins win, "link" otherwise) rather than echoing the raw config string, except
+ * `.invalidTrustValue`, whose raw text is surfaced as-is so a hand-edited typo is visible instead
+ * of silently coerced.
+ */
+func appductBuildConfig(
+  resolution: AppductTrustedPinsResolution,
+  allowPrivateLanOnly: Bool
+) -> AppductBuildConfig {
+  switch resolution {
+  case .configured:
+    return AppductBuildConfig(trust: "pin", hasEmbeddedPins: true, allowPrivateLanOnly: allowPrivateLanOnly)
+  case .linkPin:
+    return AppductBuildConfig(trust: "link", hasEmbeddedPins: false, allowPrivateLanOnly: allowPrivateLanOnly)
+  case .pinTrustRequiresEmbeddedPins:
+    return AppductBuildConfig(trust: "pin", hasEmbeddedPins: false, allowPrivateLanOnly: allowPrivateLanOnly)
+  case .linkTrustRequiresLinkPin:
+    return AppductBuildConfig(trust: "link", hasEmbeddedPins: false, allowPrivateLanOnly: allowPrivateLanOnly)
+  case .invalidTrustValue(let value):
+    return AppductBuildConfig(trust: value, hasEmbeddedPins: false, allowPrivateLanOnly: allowPrivateLanOnly)
+  }
+}
+
+/**
+ * Backs the TurboModule's `getConstants()`. Reads the bundle through the exact same
+ * `readAppductManifestConfig()`/`resolveTrustedPins` path `configureFromBundle` uses for a real
+ * `connect()` — `linkPin` is `nil` here since no connect attempt (and therefore no bootstrap link)
+ * is in flight when JS asks for the build config; see `appductBuildConfig`'s doc comment for
+ * what that means for the reported `trust` value. A free function (not an actor method): purely a
+ * `Bundle.main` read, so it needs no actor hop and can be called synchronously from the TurboModule
+ * bridge.
+ */
+func currentAppductBuildConfig() -> AppductBuildConfig {
+  let manifestConfig = readAppductManifestConfig()
+  let resolution = resolveTrustedPins(
+    trust: manifestConfig.trust,
+    embeddedPins: manifestConfig.embeddedPins,
+    linkPin: nil
+  )
+  return appductBuildConfig(resolution: resolution, allowPrivateLanOnly: manifestConfig.allowPrivateLanOnly)
+}
+
+private struct DefaultSessionClaimDeviceFields {
+  let manufacturer: String
+  let model: String
+  let os: String
+}
+
+/// `UIDevice` properties are `@MainActor`-isolated; this is only ever called from `connect()`,
+/// which can freely `await` onto the main actor for this one-shot, non-blocking read.
+@MainActor
+private func defaultAppleSessionClaimDeviceFields() -> DefaultSessionClaimDeviceFields {
+  #if canImport(UIKit)
+  let device = UIDevice.current
+  let os = "\(device.systemName) \(device.systemVersion)"
+  return DefaultSessionClaimDeviceFields(
+    manufacturer: "Apple",
+    model: defaultAppleDeviceModelLabel(device: device),
+    os: os,
+  )
+  #else
+  return DefaultSessionClaimDeviceFields(
+    manufacturer: "Apple",
+    model: "Unknown Apple device",
+    os: ProcessInfo.processInfo.operatingSystemVersionString,
+  )
+  #endif
+}
+
+#if canImport(UIKit)
+@MainActor
+private func defaultAppleDeviceModelLabel(device: UIDevice) -> String {
+  #if os(visionOS)
+    return "Apple Vision"
+  #else
+    switch device.userInterfaceIdiom {
+    case .phone:
+      return "iPhone"
+    case .pad:
+      return "iPad"
+    case .tv:
+      return "Apple TV"
+    case .mac:
+      return "Mac"
+    case .carPlay, .vision, .unspecified:
+      return device.model
+    @unknown default:
+      return device.model
+    }
+  #endif
+}
+#endif
+
+private func mergeSessionClaimDeviceFields(
+  options: AppductConnectOptions,
+  defaults: DefaultSessionClaimDeviceFields,
+) -> DefaultSessionClaimDeviceFields {
+  DefaultSessionClaimDeviceFields(
+    manufacturer: options.deviceManufacturer ?? defaults.manufacturer,
+    model: options.deviceModel ?? defaults.model,
+    os: options.deviceOs ?? defaults.os,
+  )
+}
+
+/// All connection state is actor-isolated: every mutation and read goes through this actor's
+/// serial executor, so two rapid `connect()` calls, delegate callbacks arriving on URLSession's
+/// delegate queue, and JS-thread calls can never race. Actors may inherit from `NSObject`
+/// (and only from `NSObject`) specifically so they can satisfy `@objc` delegate protocols like
+/// `URLSessionWebSocketDelegate`; the delegate methods below are `nonisolated` (URLSession calls
+/// them synchronously from its own queue) and hop back onto the actor via `Task` before touching
+/// any state.
+public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionWebSocketDelegate {
+  /// Event callbacks are wired once, synchronously, immediately after construction (see
+  /// `AppductTurboBridge.wireEventHandlers`) and before any JS call can reach `connect`.
+  /// `nonisolated(unsafe)` lets the bridge assign them from outside the actor without an `await`,
+  /// matching the existing synchronous wiring contract; `invalidate()` clears them so a
+  /// straggling delegate callback can never call back into a torn-down bridge.
+  public nonisolated(unsafe) var emitStateChange: (@Sendable (String) -> Void)?
+  /// Turbo path: only the raw JSON string; JS parses `message`.
+  public nonisolated(unsafe) var emitMessageRaw: (@Sendable (String) -> Void)?
+  public nonisolated(unsafe) var emitError: (@Sendable (AppductErrorDetails) -> Void)?
+  public nonisolated(unsafe) var emitClose: (@Sendable (NSDictionary) -> Void)?
+
+  private(set) var state: AppductConnectionState = .idle {
+    didSet {
+      stateSnapshot = state.rawValue
+      if !isInvalidated {
+        emitStateChange?(state.rawValue)
+      }
+    }
+  }
+
+  /// Mirrors `state.rawValue` so `getState()` (a synchronous TurboModule method) can be answered
+  /// without hopping onto the actor. Written only from within actor-isolated code, immediately
+  /// after `state` changes, so it is never stale by more than the time it takes to observe it —
+  /// in particular it is never `"active"` once a teardown path has run.
+  nonisolated(unsafe) private(set) var stateSnapshot = AppductConnectionState.idle.rawValue
+
+  private var session: URLSession?
+  private var socketTask: URLSessionWebSocketTask?
+  private var activeSessionId: String?
+  private var pendingOptions: AppductConnectOptions?
+  nonisolated private let ownerGeneration: Int64
+  private var isInvalidated = false
+  /// Written once per `connect()` (inside `configureFromBundle`, before the socket exists) and
+  /// read from the `nonisolated` TLS challenge delegate callback, which must respond
+  /// synchronously and therefore cannot hop onto the actor. Never mutated concurrently with a
+  /// read: no challenge can arrive before `configureFromBundle` has run.
+  nonisolated(unsafe) private var configuredPins: Set<String> = []
+  private var allowPrivateLanOnly = true
+  private var closeEventPending = false
+  private var lastErrorDetails: AppductErrorDetails?
+  private var keepaliveTask: Task<Void, Never>?
+  private var pingFailureCount = 0
+
+  public override init() {
+    ownerGeneration = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    super.init()
+  }
+
+  init(ownerGeneration: Int64, activeSessionId: String? = nil) {
+    self.ownerGeneration = ownerGeneration
+    self.activeSessionId = activeSessionId
+    super.init()
+  }
+
+  /// `linkPin` comes from the connect options (the bootstrap deep link's `pin` param, if any) —
+  /// see `resolveTrustedPins` for the trust decision itself.
+  func configureFromBundle(linkPin: String?) throws {
+    let manifestConfig = readAppductManifestConfig()
+
+    switch resolveTrustedPins(trust: manifestConfig.trust, embeddedPins: manifestConfig.embeddedPins, linkPin: linkPin) {
+    case .configured(let trustedPins):
+      configuredPins = trustedPins
+    case .linkPin(let pin):
+      // Loud and unconditional (not gated behind any log level): this is now a deliberate
+      // configuration choice, not a dev-mode fallback, but the developer relying on it must still
+      // not be able to miss it.
+      NSLog("Appduct: trust=link — trusting the SPKI pin carried by the bootstrap link for this session.")
+      configuredPins = [pin]
+    case .pinTrustRequiresEmbeddedPins:
+      throw AppductModuleError(message: "Appduct trust=\"pin\" requires AppductCliPins to be configured in Info.plist.")
+    case .linkTrustRequiresLinkPin:
+      throw AppductModuleError(message: "Appduct trust=\"link\" but the bootstrap link carried no pin to trust.")
+    case .invalidTrustValue(let value):
+      throw AppductModuleError(message: "Appduct AppductTrust must be \"link\" or \"pin\", got \"\(value)\".")
+    }
+
+    allowPrivateLanOnly = manifestConfig.allowPrivateLanOnly
+  }
+
+  public func connect(options: AppductConnectOptions) async throws {
+    guard !isInvalidated else {
+      throw AppductModuleError(message: "Appduct native module has been invalidated.")
+    }
+
+    if state == .connecting || state == .active {
+      throw AppductModuleError(message: "A Appduct session is already connecting or active.")
+    }
+
+    try configureFromBundle(linkPin: options.linkPin)
+
+    let now = Int(Date().timeIntervalSince1970)
+
+    if options.expiresAt <= now {
+      throw AppductModuleError(message: "Appduct bootstrap payload has expired.")
+    }
+
+    if allowPrivateLanOnly && !isLocalIpv4Address(options.ip) {
+      throw AppductModuleError(message: "Appduct only allows local IPv4 addresses.")
+    }
+
+    guard let url = URL(string: formatAppductWebSocketUrl(ip: options.ip, port: options.port)) else {
+      throw AppductModuleError(message: "Failed to create a Appduct WebSocket URL.")
+    }
+
+    // Resume needs no claim token, so validate up front (still before any `await`) rather than
+    // discovering a missing token only after the socket already exists.
+    if options.resumeToken == nil && options.token == nil {
+      throw AppductModuleError(message: "Appduct connect requires a claim token.")
+    }
+
+    // Everything above this point, and everything through `state = .connecting` below, is
+    // synchronous: two rapid `connect()` calls can only interleave at an `await`, and the first
+    // `await` is `sendRawObject` at the very end — by which point `state` is already
+    // `.connecting`, so a second call's guard at the top of this function deterministically
+    // throws `already_connecting` instead of racing to create a second socket.
+    cleanup()
+
+    pendingOptions = options
+    closeEventPending = true
+    state = .connecting
+
+    let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+    let task = session.webSocketTask(with: url)
+
+    self.session = session
+    socketTask = task
+
+    task.resume()
+    receiveNextMessage()
+
+    let firstFrame: [String: Any]
+
+    if let resumeToken = options.resumeToken {
+      firstFrame = [
+        "type": "session_resume",
+        "protocol_version": protocolVersion,
+        "session_id": options.sessionId,
+        "resume_token": resumeToken,
+      ]
+    } else {
+      guard let token = options.token else {
+        // Unreachable: validated above, before any `await`.
+        throw AppductModuleError(message: "Appduct connect requires a claim token.")
+      }
+
+      let device = mergeSessionClaimDeviceFields(options: options, defaults: await defaultAppleSessionClaimDeviceFields())
+      firstFrame = [
+        "type": "session_claim",
+        "protocol_version": protocolVersion,
+        "session_id": options.sessionId,
+        "token": token,
+        "device_manufacturer": device.manufacturer,
+        "device_model": device.model,
+        "device_os": device.os,
+      ]
+    }
+
+    try await sendRawObject(firstFrame, requireActiveSession: false)
+  }
+
+  public func send(message: String) async throws {
+    guard state == .active, let activeSessionId else {
+      throw AppductModuleError(message: "Appduct session is not active.")
+    }
+
+    guard
+      let data = message.data(using: .utf8),
+      let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+      throw AppductModuleError(message: "Outgoing Appduct messages must be JSON objects.")
+    }
+
+    guard let sessionId = parsed["session_id"] as? String, sessionId == activeSessionId else {
+      throw AppductModuleError(message: "Outgoing Appduct message session_id does not match the active session.")
+    }
+
+    try await sendText(message)
+  }
+
+  public func close() async {
+    AppductProcessResumeLeaseStore.shared.clear(ownerGeneration: ownerGeneration)
+
+    guard let socketTask else {
+      cleanup()
+      state = .closed
+      emitClose?(NSDictionary())
+      return
+    }
+
+    closeEventPending = true
+    socketTask.cancel(with: .normalClosure, reason: nil)
+  }
+
+  /// TurboModule invalidation: called by React Native when the bridge is torn down (e.g. a Metro
+  /// reload). Cancels the socket with close code 1001, invalidates the URLSession, clears all
+  /// state, and drops the event callbacks so no straggling delegate callback can reach into a
+  /// dead bridge. Deliberately synchronous within the actor turn (no awaited network round trip)
+  /// so the socket is released promptly and the daemon observes the disconnect and suspends the
+  /// session.
+  public func invalidate() {
+    guard !isInvalidated else {
+      return
+    }
+
+    isInvalidated = true
+    markCurrentLeaseDisconnected(at: epochMilliseconds())
+    closeEventPending = false
+    socketTask?.cancel(with: .goingAway, reason: nil)
+    cleanup()
+    emitStateChange = nil
+    emitMessageRaw = nil
+    emitError = nil
+    emitClose = nil
+    state = .closed
+  }
+
+  /// Synchronous, non-isolated read of the current state for the TurboModule's `getState()`,
+  /// which is a synchronous ObjC method and cannot `await` onto the actor.
+  public nonisolated func currentStateSnapshot() -> String {
+    stateSnapshot
+  }
+
+  /// Synchronous TurboModule bridge wrappers; clear retains this manager's generation guard.
+  public nonisolated func currentResumeLeaseRecord() -> NSDictionary? {
+    AppductProcessResumeLeaseStore.shared.getRecord().map { $0 as NSDictionary }
+  }
+
+  @discardableResult
+  public nonisolated func clearResumeLease() -> Bool {
+    AppductProcessResumeLeaseStore.shared.clear(ownerGeneration: ownerGeneration)
+  }
+
+  private func cleanup() {
+    keepaliveTask?.cancel()
+    keepaliveTask = nil
+    pingFailureCount = 0
+    socketTask = nil
+    session?.invalidateAndCancel()
+    session = nil
+    activeSessionId = nil
+    pendingOptions = nil
+    lastErrorDetails = nil
+  }
+
+  private func markCurrentLeaseDisconnected(at disconnectedAtMs: Int64) {
+    let sessionId = activeSessionId ?? pendingOptions?.sessionId
+    guard let sessionId else {
+      return
+    }
+    AppductProcessResumeLeaseStore.shared.markDisconnected(
+      ownerGeneration: ownerGeneration,
+      sessionId: sessionId,
+      disconnectedAtMs: disconnectedAtMs
+    )
+  }
+
+  private func epochMilliseconds() -> Int64 {
+    Int64(Date().timeIntervalSince1970 * 1_000)
+  }
+
+  private func cancelTransport(
+    with closeCode: URLSessionWebSocketTask.CloseCode,
+    reason: Data?
+  ) {
+    updateResumeLeaseForTransportTeardown(
+      ownerGeneration: ownerGeneration,
+      sessionId: activeSessionId ?? pendingOptions?.sessionId,
+      closeCode: Int(closeCode.rawValue),
+      disconnectedAtMs: epochMilliseconds()
+    )
+    socketTask?.cancel(with: closeCode, reason: reason)
+  }
+
+  private func publishError(_ details: AppductErrorDetails) {
+    guard !isInvalidated else {
+      return
+    }
+    lastErrorDetails = details
+    emitError?(details)
+  }
+
+  private func sendRawObject(_ value: [String: Any], requireActiveSession: Bool) async throws {
+    if requireActiveSession {
+      guard state == .active else {
+        throw AppductModuleError(message: "Appduct session is not active.")
+      }
+    }
+
+    let data = try JSONSerialization.data(withJSONObject: value)
+    guard let text = String(data: data, encoding: .utf8) else {
+      throw AppductModuleError(message: "Failed to serialize a Appduct message.")
+    }
+
+    try await sendText(text)
+  }
+
+  private func sendText(_ text: String) async throws {
+    guard let socketTask else {
+      throw AppductModuleError(message: "Appduct socket is not connected.")
+    }
+
+    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+      socketTask.send(.string(text)) { error in
+        if let error {
+          continuation.resume(throwing: error)
+          return
+        }
+
+        continuation.resume()
+      }
+    }
+  }
+
+  private func receiveNextMessage() {
+    guard let socketTask else {
+      return
+    }
+
+    let expectedTask = socketTask
+
+    Task { [weak self] in
+      guard let self else {
+        return
+      }
+
+      do {
+        let message = try await expectedTask.receive()
+        await self.handleReceivedMessage(message, from: expectedTask)
+      } catch {
+        await self.handleReceiveFailure(error, from: expectedTask)
+      }
+    }
+  }
+
+  private func handleReceivedMessage(_ message: URLSessionWebSocketTask.Message, from task: URLSessionWebSocketTask) async {
+    guard !isInvalidated, task === socketTask else {
+      // Stale read loop from a socket that has since been replaced or torn down.
+      return
+    }
+
+    switch message {
+    case .string(let text):
+      await handleIncomingText(text)
+      receiveNextMessage()
+    case .data:
+      state = .error
+      publishError(
+        AppductErrorDetails(
+          code: "invalid_message",
+          message: "Binary Appduct messages are not supported.",
+          phase: "transport",
+          nativeCode: "binary_not_supported",
+          closeReason: nil,
+          isRetryable: false,
+          hint: nil
+        )
+      )
+      cancelTransport(with: .unsupportedData, reason: Data("binary_not_supported".utf8))
+    @unknown default:
+      state = .error
+      publishError(
+        AppductErrorDetails(
+          code: "invalid_message",
+          message: "Unsupported Appduct WebSocket message received.",
+          phase: "transport",
+          nativeCode: "invalid_message",
+          closeReason: nil,
+          isRetryable: false,
+          hint: nil
+        )
+      )
+      cancelTransport(with: .policyViolation, reason: Data("invalid_message".utf8))
+    }
+  }
+
+  private func handleReceiveFailure(_ error: Error, from task: URLSessionWebSocketTask) async {
+    guard !isInvalidated, task === socketTask else {
+      return
+    }
+
+    state = .error
+    if lastErrorDetails == nil {
+      publishError(
+        classifyTransportFailure(
+          code: "receive_failed",
+          message: error.localizedDescription,
+          closeReason: nil
+        )
+      )
+    }
+    cancelTransport(with: .abnormalClosure, reason: nil)
+  }
+
+  private func handleIncomingText(_ text: String) async {
+    guard !isInvalidated else {
+      return
+    }
+
+    guard
+      let data = text.data(using: .utf8),
+      let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+      state = .error
+      publishError(
+        AppductErrorDetails(
+          code: "invalid_message",
+          message: "Incoming Appduct message must be a JSON object.",
+          phase: "transport",
+          nativeCode: "invalid_message",
+          closeReason: nil,
+          isRetryable: false,
+          hint: nil
+        )
+      )
+      cancelTransport(with: .policyViolation, reason: Data("invalid_message".utf8))
+      return
+    }
+
+    if state == .connecting {
+      await handleSessionAck(parsed, rawText: text)
+      return
+    }
+
+    guard
+      let activeSessionId,
+      let sessionId = parsed["session_id"] as? String,
+      sessionId == activeSessionId
+    else {
+      state = .error
+      publishError(
+        AppductErrorDetails(
+          code: "session_mismatch",
+          message: "Incoming Appduct message does not match the active session.",
+          phase: "session",
+          nativeCode: "session_mismatch",
+          closeReason: nil,
+          isRetryable: false,
+          hint: nil
+        )
+      )
+      cancelTransport(with: .policyViolation, reason: Data("session_mismatch".utf8))
+      return
+    }
+
+    emitMessageRaw?(text)
+  }
+
+  private func handleSessionAck(_ message: [String: Any], rawText: String) async {
+    guard let pendingOptions else {
+      state = .error
+      publishError(classifyHandshakeCloseReason(nil))
+      cancelTransport(with: .policyViolation, reason: Data("invalid_ack".utf8))
+      return
+    }
+
+    let result = commitSessionAck(
+      message: message,
+      rawText: rawText,
+      options: pendingOptions,
+      ownerGeneration: ownerGeneration,
+      onAccepted: { lease in
+        activeSessionId = lease.sessionId
+        self.pendingOptions = nil
+        state = .active
+        scheduleKeepalive(intervalSeconds: lease.keepaliveIntervalS)
+      },
+      emitMessageRaw: { text in
+        emitMessageRaw?(text)
+      }
+    )
+
+    switch result {
+    case .accepted:
+      return
+    case .stale:
+      cancelTransport(with: .normalClosure, reason: Data("module_replaced".utf8))
+    case .invalid:
+      state = .error
+      let closeReason = (message["reason"] as? String)?.isEmpty == false ? message["reason"] as? String : nil
+      publishError(classifyHandshakeCloseReason(closeReason))
+      cancelTransport(with: .policyViolation, reason: Data((closeReason ?? "invalid_ack").utf8))
+    }
+  }
+
+  private func scheduleKeepalive(intervalSeconds: Double) {
+    keepaliveTask?.cancel()
+    pingFailureCount = 0
+
+    let requestedNanoseconds = intervalSeconds * 1_000_000_000
+    let nanoseconds = requestedNanoseconds >= Double(UInt64.max)
+      ? UInt64.max
+      : UInt64(max(1, requestedNanoseconds))
+
+    keepaliveTask = Task { [weak self] in
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: nanoseconds)
+        if Task.isCancelled {
+          return
+        }
+        await self?.sendPing()
+      }
+    }
+  }
+
+  /// Sends a protocol-level WebSocket ping. Two consecutive failures are treated as transport
+  /// death: the socket is cancelled, which drives the same `didCompleteWithError`/`didCloseWith`
+  /// teardown path (and its single-close-event dedupe) as any other abrupt disconnect.
+  private func sendPing() async {
+    guard let socketTask, state == .active else {
+      return
+    }
+
+    do {
+      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        socketTask.sendPing { error in
+          if let error {
+            continuation.resume(throwing: error)
+            return
+          }
+
+          continuation.resume()
+        }
+      }
+      pingFailureCount = 0
+    } catch {
+      pingFailureCount += 1
+
+      if pingFailureCount >= 2 {
+        publishError(
+          classifyTransportFailure(
+            code: "keepalive_ping_failed",
+            message: error.localizedDescription,
+            closeReason: nil
+          )
+        )
+        cancelTransport(with: .abnormalClosure, reason: nil)
+      }
+    }
+  }
+
+  private func isLocalIpv4Address(_ value: String) -> Bool {
+    let parts = value.split(separator: ".")
+
+    guard parts.count == 4 else {
+      return false
+    }
+
+    let octets = parts.compactMap { Int($0) }
+
+    guard octets.count == 4 else {
+      return false
+    }
+
+    guard octets.allSatisfy({ (0...255).contains($0) }) else {
+      return false
+    }
+
+    let first = octets[0]
+    let second = octets[1]
+
+    return first == 127 ||
+      first == 10 ||
+      (first == 172 && (16...31).contains(second)) ||
+      (first == 192 && second == 168)
+  }
+
+  /// Deliberately `nonisolated` and fully synchronous (no `Task`/actor hop): `completionHandler`
+  /// is not `@Sendable`-typed by the SDK, so it cannot cross into the actor, and the TLS
+  /// handshake should not wait on an extra hop anyway. All the state this needs
+  /// (`configuredPins`) is a `nonisolated(unsafe)` snapshot written before any socket exists;
+  /// error reporting is dispatched separately via a fire-and-forget `Task` that only carries the
+  /// `Sendable` `AppductErrorDetails`.
+  public nonisolated func urlSession(
+    _ session: URLSession,
+    didReceive challenge: URLAuthenticationChallenge,
+    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+  ) {
+    guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust else {
+      // Non-TLS-server-trust challenges (e.g. client certificate, HTTP auth) are not something
+      // Appduct pins against; defer to the platform's normal handling instead of failing the
+      // connection with a bogus TLS error.
+      completionHandler(.performDefaultHandling, nil)
+      return
+    }
+
+    guard
+      let trust = challenge.protectionSpace.serverTrust,
+      let certificate = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
+      let leaf = certificate.first
+    else {
+      reportError(
+        AppductErrorDetails(
+          code: "tls_handshake_failed",
+          message: "Appduct could not evaluate the host TLS certificate.",
+          phase: "tls",
+          nativeCode: "server_trust_unavailable",
+          closeReason: nil,
+          isRetryable: false,
+          hint: "Check the host certificate and trusted pins."
+        )
+      )
+      completionHandler(.cancelAuthenticationChallenge, nil)
+      return
+    }
+
+    do {
+      let pin = try spkiPin(for: leaf)
+
+      guard configuredPins.contains(pin) else {
+        reportError(
+          AppductErrorDetails(
+            code: "pin_mismatch",
+            message: "Appduct host certificate pin mismatch.",
+            phase: "tls",
+            nativeCode: "pin_mismatch",
+            closeReason: nil,
+            isRetryable: false,
+            hint: "Verify cliPins matches the fingerprint from appduct keygen and rebuild the native app."
+          )
+        )
+        completionHandler(.cancelAuthenticationChallenge, nil)
+        return
+      }
+
+      completionHandler(.useCredential, URLCredential(trust: trust))
+    } catch {
+      reportError(
+        AppductErrorDetails(
+          code: "tls_handshake_failed",
+          message: error.localizedDescription,
+          phase: "tls",
+          nativeCode: "spki_pin_failed",
+          closeReason: nil,
+          isRetryable: false,
+          hint: "Check the host certificate and trusted pins."
+        )
+      )
+      completionHandler(.cancelAuthenticationChallenge, nil)
+    }
+  }
+
+  /// Fire-and-forget error report from a `nonisolated` context: hops onto the actor to update
+  /// `lastErrorDetails` and invoke `emitError`, without making the (synchronous) caller wait.
+  nonisolated private func reportError(_ details: AppductErrorDetails) {
+    Task {
+      await self.publishError(details)
+    }
+  }
+
+  public nonisolated func urlSession(
+    _ session: URLSession,
+    webSocketTask: URLSessionWebSocketTask,
+    didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
+    reason: Data?
+  ) {
+    Task {
+      await self.handleSocketClosed(task: webSocketTask, closeCode: closeCode, reason: reason)
+    }
+  }
+
+  /// `didCompleteWithError` fires for every task completion, including a normal close (with
+  /// `error == nil`, shortly after `didCloseWith`) and abrupt transport death (network drop,
+  /// process kill on the other end) where `didCloseWith` never fires at all. Both paths funnel
+  /// into `finishTransportTeardown`, which is guarded by `closeEventPending` so exactly one
+  /// `close` event is ever emitted no matter which delegate callback (or both) fire.
+  public nonisolated func urlSession(
+    _ session: URLSession,
+    task: URLSessionTask,
+    didCompleteWithError error: Error?
+  ) {
+    Task {
+      await self.handleTaskCompleted(task: task, error: error)
+    }
+  }
+
+  private func handleSocketClosed(
+    task: URLSessionWebSocketTask,
+    closeCode: URLSessionWebSocketTask.CloseCode,
+    reason: Data?
+  ) async {
+    guard !isInvalidated, task === socketTask else {
+      return
+    }
+
+    let decodedReason = reason.flatMap { String(data: $0, encoding: .utf8) }
+
+    if state == .connecting, let decodedReason {
+      state = .error
+      publishError(classifyHandshakeCloseReason(decodedReason))
+    }
+
+    finishTransportTeardown(emitCode: Int(closeCode.rawValue), emitReason: decodedReason)
+  }
+
+  private func handleTaskCompleted(task: URLSessionTask, error: Error?) async {
+    guard !isInvalidated, task === socketTask else {
+      return
+    }
+
+    if let error, lastErrorDetails == nil, state != .error {
+      publishError(
+        classifyTransportFailure(
+          code: "transport_task_completed",
+          message: error.localizedDescription,
+          closeReason: nil
+        )
+      )
+    }
+
+    finishTransportTeardown(emitCode: nil, emitReason: nil)
+  }
+
+  private func finishTransportTeardown(emitCode: Int?, emitReason: String?) {
+    guard closeEventPending else {
+      // Already handled by the other delegate path (or by an explicit close()/invalidate()).
+      return
+    }
+
+    let leaseSessionId = activeSessionId ?? pendingOptions?.sessionId
+    updateResumeLeaseForTransportTeardown(
+      ownerGeneration: ownerGeneration,
+      sessionId: leaseSessionId,
+      closeCode: emitCode,
+      disconnectedAtMs: epochMilliseconds()
+    )
+
+    cleanup()
+
+    if state != .error {
+      state = .closed
+    }
+
+    let payload = NSMutableDictionary()
+    if let emitCode {
+      payload["code"] = emitCode
+    }
+    if let emitReason {
+      payload["reason"] = emitReason
+    }
+    emitClose?(payload)
+    closeEventPending = false
+  }
+
+  /// SPKI DER hash; pin strings must match Android `PinningTrustManager` for the same leaf certificate.
+  nonisolated func spkiPin(for certificate: SecCertificate) throws -> String {
+    guard let publicKey = SecCertificateCopyKey(certificate),
+          let rawPublicKey = SecKeyCopyExternalRepresentation(publicKey, nil) as Data?
+    else {
+      throw AppductModuleError(message: "Unable to read the Appduct server public key.")
+    }
+
+    guard let attributes = SecKeyCopyAttributes(publicKey) as NSDictionary? else {
+      throw AppductModuleError(message: "Unable to read Appduct server public key attributes.")
+    }
+    guard let keyType = attributes[kSecAttrKeyType] as? String else {
+      throw AppductModuleError(message: "Unsupported Appduct server public key type.")
+    }
+
+    let keySizeBits = attributes[kSecAttrKeySizeInBits] as? Int ?? 0
+    let algorithmIdentifier: Data
+
+    if keyType == (kSecAttrKeyTypeRSA as String) {
+      algorithmIdentifier = Data([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00])
+    } else if keyType == (kSecAttrKeyTypeECSECPrimeRandom as String) {
+      switch keySizeBits {
+      case 256:
+        algorithmIdentifier = Data([0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07])
+      case 384:
+        algorithmIdentifier = Data([0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22])
+      case 521:
+        algorithmIdentifier = Data([0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x23])
+      default:
+        throw AppductModuleError(message: "Unsupported Appduct EC key size.")
+      }
+    } else {
+      throw AppductModuleError(message: "Unsupported Appduct server public key algorithm.")
+    }
+
+    let bitString = asn1(tag: 0x03, value: Data([0x00]) + rawPublicKey)
+    let spki = asn1(tag: 0x30, value: algorithmIdentifier + bitString)
+    let digest = SHA256.hash(data: spki)
+
+    return "sha256/\(Data(digest).base64EncodedString())"
+  }
+
+  nonisolated private func asn1(tag: UInt8, value: Data) -> Data {
+    Data([tag]) + derLength(value.count) + value
+  }
+
+  nonisolated private func derLength(_ length: Int) -> Data {
+    if length < 128 {
+      return Data([UInt8(length)])
+    }
+
+    var remaining = length
+    var octets: [UInt8] = []
+
+    while remaining > 0 {
+      octets.insert(UInt8(remaining & 0xff), at: 0)
+      remaining >>= 8
+    }
+
+    return Data([0x80 | UInt8(octets.count)] + octets)
+  }
+
+  private func classifyTransportFailure(
+    code: String,
+    message: String,
+    closeReason: String?
+  ) -> AppductErrorDetails {
+    let normalized = message.lowercased()
+
+    if normalized.contains("timed out") || normalized.contains("network connection was lost") {
+      return AppductErrorDetails(
+        code: "host_unreachable",
+        message: message,
+        phase: "connect",
+        nativeCode: code,
+        closeReason: closeReason,
+        isRetryable: true,
+        hint: "Check that the host is running and reachable from the app."
+      )
+    }
+
+    if normalized.contains("ssl") || normalized.contains("certificate") || normalized.contains("tls") {
+      return AppductErrorDetails(
+        code: "tls_handshake_failed",
+        message: message,
+        phase: "tls",
+        nativeCode: code,
+        closeReason: closeReason,
+        isRetryable: false,
+        hint: "Check the host certificate, trusted pins, and device clock."
+      )
+    }
+
+    return AppductErrorDetails(
+      code: code,
+      message: message,
+      phase: "transport",
+      nativeCode: code,
+      closeReason: closeReason,
+      isRetryable: true,
+      hint: nil
+    )
+  }
+
+  private func classifyHandshakeCloseReason(_ closeReason: String?) -> AppductErrorDetails {
+    switch closeReason {
+    case "expired_session_claim":
+      return AppductErrorDetails(
+        code: "session_claim_expired",
+        message: "Appduct session claim expired before the app connected.",
+        phase: "handshake",
+        nativeCode: nil,
+        closeReason: closeReason,
+        isRetryable: true,
+        hint: "Restart the host and open the deep link again. Larger apps may need the longer default 60s TTL."
+      )
+    case "wrong_session_id":
+      return AppductErrorDetails(
+        code: "session_claim_rejected",
+        message: "Appduct app claimed a different session id than the host expected.",
+        phase: "handshake",
+        nativeCode: nil,
+        closeReason: closeReason,
+        isRetryable: false,
+        hint: nil
+      )
+    case "wrong_token":
+      return AppductErrorDetails(
+        code: "session_claim_rejected",
+        message: "Appduct app used the wrong session token for this host.",
+        phase: "handshake",
+        nativeCode: nil,
+        closeReason: closeReason,
+        isRetryable: false,
+        hint: nil
+      )
+    case "already_claimed", "single_session_only":
+      return AppductErrorDetails(
+        code: "session_claim_rejected",
+        message: "Appduct host already has an active device connection for this session.",
+        phase: "handshake",
+        nativeCode: nil,
+        closeReason: closeReason,
+        isRetryable: true,
+        hint: nil
+      )
+    case "session_not_claimable":
+      return AppductErrorDetails(
+        code: "session_claim_rejected",
+        message: "Appduct session is no longer claimable.",
+        phase: "handshake",
+        nativeCode: nil,
+        closeReason: closeReason,
+        isRetryable: true,
+        hint: nil
+      )
+    case "expected_session_claim":
+      return AppductErrorDetails(
+        code: "invalid_ack",
+        message: "Appduct host expected a session claim before any other message.",
+        phase: "handshake",
+        nativeCode: nil,
+        closeReason: closeReason,
+        isRetryable: false,
+        hint: nil
+      )
+    default:
+      return AppductErrorDetails(
+        code: "invalid_ack",
+        message: "Appduct session acknowledgement was invalid.",
+        phase: "handshake",
+        nativeCode: nil,
+        closeReason: closeReason,
+        isRetryable: false,
+        hint: nil
+      )
+    }
+  }
+}
+
+#endif

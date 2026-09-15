@@ -1,10 +1,10 @@
 import type {
-  CordieriteRegisteredTool,
-  CordieriteToolExecutionContext,
-} from "../Cordierite.types";
+  AppductRegisteredTool,
+  AppductToolExecutionContext,
+} from "../Appduct.types";
 import type {
-  CordieriteNativeToolCallEvent,
-  CordieriteNativeToolCancelEvent,
+  AppductNativeToolCallEvent,
+  AppductNativeToolCancelEvent,
 } from "../client-types";
 import { logger } from "../logger";
 import { validateToolSchema } from "../schema";
@@ -32,13 +32,13 @@ export const normalizeThrownError = (error: unknown) => {
 
   return {
     type: "tool_execution_error" as const,
-    message: "Cordierite tool execution failed.",
+    message: "Appduct tool execution failed.",
     details: error,
   };
 };
 
 export type ToolInvocationDeps = {
-  getRegistry: () => Map<string, CordieriteRegisteredTool>;
+  getRegistry: () => Map<string, AppductRegisteredTool>;
   /** Native's own `getSessionId()` snapshot -- the wire `tool_call` frame's `session_id` is not
    * itself forwarded on the native → JS event, since it is always the currently active session. */
   getSessionId: () => string | null;
@@ -55,8 +55,8 @@ export type ToolInvocationDeps = {
 };
 
 export type ToolMessageHandler = {
-  handleToolCall: (event: CordieriteNativeToolCallEvent) => Promise<void>;
-  handleToolCancel: (event: CordieriteNativeToolCancelEvent) => void;
+  handleToolCall: (event: AppductNativeToolCallEvent) => Promise<void>;
+  handleToolCancel: (event: AppductNativeToolCancelEvent) => void;
   /** Aborts every in-flight handler's signal -- used when the client is destroyed, so a handler
    * whose native call has vanished does not keep running against a dead client forever. */
   abortAllInFlight: () => void;
@@ -88,7 +88,7 @@ export const createToolMessageHandler = (
   const inFlight = new Map<string, AbortController>();
 
   const handleToolCall = async (
-    event: CordieriteNativeToolCallEvent,
+    event: AppductNativeToolCallEvent,
   ): Promise<void> => {
     const { id, name } = event;
 
@@ -119,7 +119,7 @@ export const createToolMessageHandler = (
     const controller = new AbortController();
     inFlight.set(id, controller);
 
-    const context: CordieriteToolExecutionContext = {
+    const context: AppductToolExecutionContext = {
       sessionId: getSessionId() ?? "",
       invocationId: id,
       receivedAt: new Date().toISOString(),
@@ -213,7 +213,7 @@ export const createToolMessageHandler = (
           respondToToolCall,
           id,
           "tool_serialization_error",
-          "Cordierite tool result is not JSON-serializable.",
+          "Appduct tool result is not JSON-serializable.",
           normalized,
         );
         return;
@@ -225,7 +225,7 @@ export const createToolMessageHandler = (
     }
   };
 
-  const handleToolCancel = (event: CordieriteNativeToolCancelEvent): void => {
+  const handleToolCancel = (event: AppductNativeToolCancelEvent): void => {
     inFlight.get(event.id)?.abort();
   };
 

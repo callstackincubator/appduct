@@ -1,10 +1,10 @@
-[![Cordierite][cordierite-banner]][repo]
+[![Appduct][appduct-banner]][repo]
 
 ### Reference app: tools from the CLI—no debug UI
 
 [![MIT license][license-badge]][license] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-The playground is an Expo **development build** that demonstrates Cordierite's v2 model: an
+The playground is an Expo **development build** that demonstrates Appduct's v2 model: an
 always-on **daemon** on your machine, an app that claims a **pinned `wss://`** session from a
 bootstrap deep link, and a thin **CLI/MCP** surface driving tools registered in JS—no extra debug
 screens in the app, same ideas as in **production** builds.
@@ -14,8 +14,8 @@ screens in the app, same ideas as in **production** builds.
 - **End-to-end check** that SPKI pins in `app.json` match the daemon's key material while tools
   run from the **CLI** (or an MCP client), not in-app menus.
 - **Safe local defaults**: `allowPrivateLanOnly` stays enabled while iterating—same knob as
-  production, not a statement that Cordierite only works offline or on one subnet.
-- **Resume smoke test**: the app uses `@cordierite/react-native/auto`, so a Metro reload suspends
+  production, not a statement that Appduct only works offline or on one subnet.
+- **Resume smoke test**: the app uses `@appduct/react-native/auto`, so a Metro reload suspends
   and resumes the session automatically with the same alias—no new deep link needed while the
   native app process stays alive.
 - **UI sandbox** (Expo Router) with two tabs: **Tools** (registers demo tools, renders the live
@@ -29,7 +29,7 @@ Go—this app ships native pinning code.
 ### 1. Use the committed playground host identity
 
 The playground ships an intentionally non-secret TLS host-key fixture at
-`.cordierite/key.pem`; its matching SPKI pin is already in `app.json`. The launcher below selects
+`.appduct/key.pem`; its matching SPKI pin is already in `app.json`. The launcher below selects
 that isolated state directory and corrects the key mode after checkout, so no key generation or
 configuration changes are needed. Do not use this identity for another app or any production
 environment.
@@ -47,9 +47,9 @@ step required for the smoke test below.
 
 ### 3. Bootstrap a session
 
-- **iOS Simulator**: `pnpm run playground:cordierite -- link --open ios-sim`
-- **Android emulator**: `pnpm run playground:cordierite -- link --open android`
-- **Physical device**: `pnpm run playground:cordierite -- link --qr`, then scan the QR code with the device's camera (it
+- **iOS Simulator**: `pnpm run playground:appduct -- link --open ios-sim`
+- **Android emulator**: `pnpm run playground:appduct -- link --open android`
+- **Physical device**: `pnpm run playground:appduct -- link --qr`, then scan the QR code with the device's camera (it
   must be on the same LAN as the daemon, or `allowPrivateLanOnly` will reject it)
 
 The **Status** tab should flip to `active` with an alias once the app claims the session.
@@ -57,14 +57,14 @@ The **Status** tab should flip to `active` with an alias once the app claims the
 ### 4. Drive it from the CLI
 
 ```sh
-pnpm run playground:cordierite -- ls
-pnpm run playground:cordierite -- tools
-pnpm run playground:cordierite -- invoke sum --input '{"a":1,"b":2}'
-pnpm run playground:cordierite -- invoke call_count --input '{}'      # reads state a handler closes over
-pnpm run playground:cordierite -- invoke reset_counter --input '{}'   # destructive; denied if policy.destructive=deny
-pnpm run playground:cordierite -- invoke slow_task --input '{}'       # watch progress with events --follow
-pnpm run playground:cordierite -- invoke throwing_tool --input '{}'   # exercises tool_execution_error
-pnpm run playground:cordierite -- events --follow
+pnpm run playground:appduct -- ls
+pnpm run playground:appduct -- tools
+pnpm run playground:appduct -- invoke sum --input '{"a":1,"b":2}'
+pnpm run playground:appduct -- invoke call_count --input '{}'      # reads state a handler closes over
+pnpm run playground:appduct -- invoke reset_counter --input '{}'   # destructive; denied if policy.destructive=deny
+pnpm run playground:appduct -- invoke slow_task --input '{}'       # watch progress with events --follow
+pnpm run playground:appduct -- invoke throwing_tool --input '{}'   # exercises tool_execution_error
+pnpm run playground:appduct -- events --follow
 ```
 
 Tap **Send playground_ping** on the Status tab while `events --follow` is running to see the
@@ -74,7 +74,7 @@ Tap **Send playground_ping** on the Status tab while `events --follow` is runnin
 
 With a session active, trigger a Metro reload (press `r` in the Metro terminal, or shake the
 device and choose Reload). The Status tab should show `reconnecting` then `active` again with the
-**same alias**—no new `cordierite link` needed. Keep the native app process alive: the resume
+**same alias**—no new `appduct link` needed. Keep the native app process alive: the resume
 lease exists only in native process memory, so killing/relaunching the app requires a new link.
 The daemon-side session grace window (`graceSeconds` in `config.json`) starts when the transport
 suspends/disconnects.
@@ -82,23 +82,23 @@ suspends/disconnects.
 ## Platform compatibility
 
 - **iOS** and **Android** development builds, New Architecture.
-- **Web**: Cordierite client is a stub; this app is not targeting web sessions.
+- **Web**: Appduct client is a stub; this app is not targeting web sessions.
 
 ## Documentation
 
 - [Monorepo README](../README.md)
 - [Architecture](../docs/ARCHITECTURE.md)
-- [@cordierite/react-native](../packages/react-native/README.md)
-- [cordierite (CLI/daemon/MCP)](../packages/cordierite/README.md)
+- [@appduct/react-native](../packages/react-native/README.md)
+- [appduct (CLI/daemon/MCP)](../packages/appduct/README.md)
 
 ## Authors
 
-Ships with [Cordierite][repo] · [Callstack][callstack-readme-with-love].
+Ships with [Appduct][repo] · [Callstack][callstack-readme-with-love].
 
-[cordierite-banner]: https://img.shields.io/badge/Cordierite-callstack%2Fincubator-111827?style=for-the-badge&logo=github&logoColor=white
-[repo]: https://github.com/callstackincubator/cordierite
-[license-badge]: https://img.shields.io/npm/l/%40cordierite%2Freact-native?style=for-the-badge
-[license]: https://github.com/callstackincubator/cordierite/blob/main/LICENSE
+[appduct-banner]: https://img.shields.io/badge/Appduct-callstack%2Fincubator-111827?style=for-the-badge&logo=github&logoColor=white
+[repo]: https://github.com/callstackincubator/appduct
+[license-badge]: https://img.shields.io/npm/l/%40appduct%2Freact-native?style=for-the-badge
+[license]: https://github.com/callstackincubator/appduct/blob/main/LICENSE
 [prs-welcome-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge
-[prs-welcome]: https://github.com/callstackincubator/cordierite/pulls
-[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=cordierite&utm_term=readme-with-love
+[prs-welcome]: https://github.com/callstackincubator/appduct/pulls
+[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love

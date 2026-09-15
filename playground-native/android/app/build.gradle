@@ -9,23 +9,23 @@ apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 // informational here, since settings.gradle's `includeBuild` dependency substitution resolves
 // `core`/`core-noop` to the local project regardless of the version string below, but keeping it
 // in lockstep avoids a stale, misleading number in this file.
-def cordieriteVersion = new JsonSlurper().parse(file("$rootDir/../../packages/react-native/package.json")).version
+def appductVersion = new JsonSlurper().parse(file("$rootDir/../../packages/react-native/package.json")).version
 
 android {
-  namespace 'com.callstackincubator.cordierite.playground'
+  namespace 'com.callstackincubator.appduct.playground'
   compileSdk rootProject.ext.compileSdkVersion
 
   defaultConfig {
-    applicationId 'com.callstackincubator.cordierite.playground'
+    applicationId 'com.callstackincubator.appduct.playground'
     minSdkVersion rootProject.ext.minSdkVersion
     targetSdkVersion rootProject.ext.targetSdkVersion
     versionCode 1
     versionName '1.0'
-    // The deep-link scheme CordieriteLinkActivity's intent filter (core's own AndroidManifest.xml)
-    // resolves ${cordieriteScheme} against -- forgetting this on a real consumer app is a
+    // The deep-link scheme AppductLinkActivity's intent filter (core's own AndroidManifest.xml)
+    // resolves ${appductScheme} against -- forgetting this on a real consumer app is a
     // manifest-merger error at build time (packages/native/android/README.md's troubleshooting
     // section has the exact message this playground deliberately reproduces and documents).
-    manifestPlaceholders = [cordieriteScheme: "cordierite-native"]
+    manifestPlaceholders = [appductScheme: "appduct-native"]
   }
 
   buildFeatures {
@@ -53,12 +53,12 @@ android {
 }
 
 dependencies {
-  // The whole point of this playground: a debug build gets the real Cordierite core, a release
+  // The whole point of this playground: a debug build gets the real Appduct core, a release
   // build gets the inert no-op -- exactly the pairing issue #48 phase 3 asks a plain Android app
   // to declare, resolved here to the local project via settings.gradle's `includeBuild` instead of
   // a published Maven artifact.
-  debugImplementation "com.callstackincubator.cordierite:core:${cordieriteVersion}"
-  releaseImplementation "com.callstackincubator.cordierite:core-noop:${cordieriteVersion}"
+  debugImplementation "com.callstackincubator.appduct:core:${appductVersion}"
+  releaseImplementation "com.callstackincubator.appduct:core-noop:${appductVersion}"
 
   implementation platform('androidx.compose:compose-bom:2024.09.00')
   implementation 'androidx.compose.ui:ui'

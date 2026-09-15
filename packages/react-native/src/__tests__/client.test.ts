@@ -1,9 +1,9 @@
 import { describe, expect, vi, test } from "vitest";
 
-import { createCordieriteClient } from "../client";
+import { createAppductClient } from "../client";
 import type {
-  CordieriteNativeEvents,
-  CordieriteNativeModuleLike,
+  AppductNativeEvents,
+  AppductNativeModuleLike,
 } from "../client-types";
 import { logger } from "../logger";
 
@@ -12,18 +12,18 @@ import { logger } from "../logger";
 /**
  * Issue #48 phase 2 moved reconnect/backoff, the tool registry's wire deltas, claim/resume, and
  * per-call timeout entirely into the native core (see
- * `packages/native/ios/Tests/CordieriteCoreTests/CordieriteClientTests.swift` for that behavioral
- * spec). This file covers the bridge contract instead: `createCordieriteClient` against a mocked
- * `CordieriteNativeModuleLike` that emits `onToolCall`/`onToolCancel`/`onStateChange`/
+ * `packages/native/ios/Tests/AppductCoreTests/AppductClientTests.swift` for that behavioral
+ * spec). This file covers the bridge contract instead: `createAppductClient` against a mocked
+ * `AppductNativeModuleLike` that emits `onToolCall`/`onToolCancel`/`onStateChange`/
  * `onSessionChange`/`onError` the way the real TurboModule does, asserting the thin JS layer wires
  * them onto the public surface correctly.
  */
 
-type Listener<K extends keyof CordieriteNativeEvents> =
-  CordieriteNativeEvents[K];
+type Listener<K extends keyof AppductNativeEvents> =
+  AppductNativeEvents[K];
 
 const createFakeNativeModule = () => {
-  const listeners: { [K in keyof CordieriteNativeEvents]: Set<Listener<K>> } = {
+  const listeners: { [K in keyof AppductNativeEvents]: Set<Listener<K>> } = {
     toolCall: new Set(),
     toolCancel: new Set(),
     stateChange: new Set(),
@@ -48,7 +48,7 @@ const createFakeNativeModule = () => {
   let state = "idle";
   let registeredToolsJson = "[]";
 
-  const emit = <K extends keyof CordieriteNativeEvents>(
+  const emit = <K extends keyof AppductNativeEvents>(
     kind: K,
     event: Parameters<Listener<K>>[0],
   ) => {
@@ -57,10 +57,10 @@ const createFakeNativeModule = () => {
     }
   };
 
-  const module: CordieriteNativeModuleLike = {
+  const module: AppductNativeModuleLike = {
     registerTool: (descriptorJson) => registerToolCalls.push(descriptorJson),
     unregisterTool: (name) => unregisterToolCalls.push(name),
-    handleUrl: (url) => url.includes("cordierite="),
+    handleUrl: (url) => url.includes("appduct="),
     connect: async (inputJson, supersede) => {
       connectCalls.push({ inputJson, supersede });
     },
@@ -100,10 +100,10 @@ const createFakeNativeModule = () => {
   };
 };
 
-describe("createCordieriteClient (bridge contract)", () => {
+describe("createAppductClient (bridge contract)", () => {
   test("registerTool sends the descriptor to native and returns an identity-safe disposer", () => {
     const fake = createFakeNativeModule();
-    const client = createCordieriteClient(fake.module);
+    const client = createAppductClient(fake.module);
 
     const registration = client.registerTool({
       name: "seed_cart",
@@ -131,7 +131,7 @@ describe("createCordieriteClient (bridge contract)", () => {
   test("onToolCall dispatches to the registered handler and answers via respondToToolCall", async () => {
     const fake = createFakeNativeModule();
     fake.setSessionId("session-1");
-    const client = createCordieriteClient(fake.module);
+    const client = createAppductClient(fake.module);
 
     client.registerTool({
       name: "echo",
@@ -159,7 +159,7 @@ describe("createCordieriteClient (bridge contract)", () => {
 
   test("onToolCancel aborts the matching handler's signal", async () => {
     const fake = createFakeNativeModule();
-    const client = createCordieriteClient(fake.module);
+    const client = createAppductClient(fake.module);
     let sawAbort = false;
     let started!: () => void;
     const startedPromise = new Promise<void>((resolve) => {
@@ -186,16 +186,16 @@ describe("createCordieriteClient (bridge contract)", () => {
     await vi.waitFor(() => expect(sawAbort).toBe(true));
   });
 
-  test("onStateChange/onSessionChange/onError forward onto addCordieriteListener", () => {
+  test("onStateChange/onSessionChange/onError forward onto addAppductListener", () => {
     const fake = createFakeNativeModule();
-    const client = createCordieriteClient(fake.module);
+    const client = createAppductClient(fake.module);
 
     const states: unknown[] = [];
     const sessions: unknown[] = [];
     const errors: unknown[] = [];
-    client.addCordieriteListener("stateChange", (e) => states.push(e));
-    client.addCordieriteListener("sessionChange", (e) => sessions.push(e));
-    client.addCordieriteListener("error", (e) => errors.push(e));
+    client.addAppductListener("stateChange", (e) => states.push(e));
+    client.addAppductListener("sessionChange", (e) => sessions.push(e));
+    client.addAppductListener("error", (e) => errors.push(e));
 
     fake.emit("stateChange", { state: "active", reason: undefined });
     fake.emit("sessionChange", {
@@ -221,9 +221,9 @@ describe("createCordieriteClient (bridge contract)", () => {
 
   test("sessionChange carries type/reason for claim, resume, and every lost cause", () => {
     const fake = createFakeNativeModule();
-    const client = createCordieriteClient(fake.module);
+    const client = createAppductClient(fake.module);
     const sessions: unknown[] = [];
-    client.addCordieriteListener("sessionChange", (e) => sessions.push(e));
+    client.addAppductListener("sessionChange", (e) => sessions.push(e));
 
     fake.emit("sessionChange", {
       type: "claimed",
@@ -275,7 +275,7 @@ describe("createCordieriteClient (bridge contract)", () => {
 
   test("connect() serializes the input to JSON and forwards supersede", async () => {
     const fake = createFakeNativeModule();
-    const client = createCordieriteClient(fake.module);
+    const client = createAppductClient(fake.module);
 
     await client.connect(
       {
@@ -298,7 +298,7 @@ describe("createCordieriteClient (bridge contract)", () => {
   test("getClientState()/getState() both read native's unified state", () => {
     const fake = createFakeNativeModule();
     fake.setState("reconnecting");
-    const client = createCordieriteClient(fake.module);
+    const client = createAppductClient(fake.module);
 
     expect(client.getClientState()).toBe("reconnecting");
     expect(client.getState()).toBe("reconnecting");
@@ -309,7 +309,7 @@ describe("createCordieriteClient (bridge contract)", () => {
     fake.setRegisteredToolsJson(
       JSON.stringify([{ name: "a", description: "x" }]),
     );
-    const client = createCordieriteClient(fake.module);
+    const client = createAppductClient(fake.module);
 
     expect(client.getRegisteredTools()).toEqual([
       { name: "a", description: "x" },
@@ -318,17 +318,17 @@ describe("createCordieriteClient (bridge contract)", () => {
 
   test("handleUrl() forwards to native", () => {
     const fake = createFakeNativeModule();
-    const client = createCordieriteClient(fake.module);
+    const client = createAppductClient(fake.module);
 
-    expect(client.handleUrl("myapp://open?cordierite=abc")).toBe(true);
+    expect(client.handleUrl("myapp://open?appduct=abc")).toBe(true);
     expect(client.handleUrl("myapp://open")).toBe(false);
   });
 
   test("destroy() removes every native subscription", () => {
     const fake = createFakeNativeModule();
-    const client = createCordieriteClient(fake.module);
+    const client = createAppductClient(fake.module);
 
-    client.addCordieriteListener("error", () => {});
+    client.addAppductListener("error", () => {});
     client.destroy();
 
     fake.emit("toolCall", { id: "call-1", name: "anything", argsJson: "{}" });
@@ -342,25 +342,25 @@ describe("createCordieriteClient (bridge contract)", () => {
       fake.module.postEvent = async () => {
         throw new Error("boom");
       };
-      const client = createCordieriteClient(fake.module);
+      const client = createAppductClient(fake.module);
 
       await expect(client.postEvent("screen_changed")).resolves.toBeUndefined();
     });
 
-    test('a rejection carrying code "E_CORDIERITE_NOT_ACTIVE" is a dev-only drop, not an `error` event', async () => {
+    test('a rejection carrying code "E_APPDUCT_NOT_ACTIVE" is a dev-only drop, not an `error` event', async () => {
       const fake = createFakeNativeModule();
       fake.module.postEvent = async () => {
         const error = new Error("no active session") as Error & {
           code?: string;
         };
-        error.code = "E_CORDIERITE_NOT_ACTIVE";
+        error.code = "E_APPDUCT_NOT_ACTIVE";
         throw error;
       };
-      const client = createCordieriteClient(fake.module);
+      const client = createAppductClient(fake.module);
       const devWarnSpy = vi.spyOn(logger, "devWarn");
       const warnSpy = vi.spyOn(logger, "warn");
       const errorEvents: unknown[] = [];
-      client.addCordieriteListener("error", (event) => {
+      client.addAppductListener("error", (event) => {
         errorEvents.push(event);
       });
 
@@ -378,10 +378,10 @@ describe("createCordieriteClient (bridge contract)", () => {
       fake.module.postEvent = async () => {
         throw new Error("socket write failed");
       };
-      const client = createCordieriteClient(fake.module);
+      const client = createAppductClient(fake.module);
       const warnSpy = vi.spyOn(logger, "warn");
       const errorEvents: { phase: string; message: string }[] = [];
-      client.addCordieriteListener("error", (event) => {
+      client.addAppductListener("error", (event) => {
         errorEvents.push(event);
       });
 

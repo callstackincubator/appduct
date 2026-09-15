@@ -4,16 +4,16 @@
 
 ## Goal
 
-CI proves, on iOS as it already does on Android, that a build with Cordierite excluded from
-autolinking really ships without it — `cordierite doctor --assert-absent` against a real
+CI proves, on iOS as it already does on Android, that a build with Appduct excluded from
+autolinking really ships without it — `appduct doctor --assert-absent` against a real
 `.app`.
 
 ## Why it was left open
 
 Task 09 wired `doctor` into the Android CI job only. The iOS side was blocked by a coupling
 task 02 discovered: excluding the package from autolinking on iOS also stops its **codegen**,
-and `playground/plugins/with-native-tests.js` hand-adds the Cordierite pod for the XCTest
-target. That pod's `RCTNativeCordierite.mm` imports the generated `CordieriteSpec.h`, so an
+and `playground/plugins/with-native-tests.js` hand-adds the Appduct pod for the XCTest
+target. That pod's `RCTNativeAppduct.mm` imports the generated `AppductSpec.h`, so an
 excluded iOS build fails to compile rather than producing an artifact to inspect.
 
 So the gate is missing on exactly the platform where the strip is hardest to reason about,
@@ -33,7 +33,7 @@ and the asymmetry is currently invisible in CI — it just looks like Android is
 ## Watch for
 
 - The exclude must live in `package.json`'s `expo.autolinking`, never `app.json` — see
-  task 02. If CI mutates config to produce the excluded build, drop the Cordierite config
+  task 02. If CI mutates config to produce the excluded build, drop the Appduct config
   plugin entry too: it unconditionally writes `Info.plist` keys that `artifact-inspect.ts`
   reads as a presence signal, which would make `--assert-absent` fail for the wrong reason.
   Task 09 hit exactly this on Android.
