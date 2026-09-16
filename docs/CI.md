@@ -289,6 +289,23 @@ version can never be replaced or deleted, so the last irreversible step stays de
 path has proven itself; switching to `AUTOMATIC` later is a one-word change. The job polls the
 status endpoint and fails on `FAILED`, so a rejected bundle still breaks the release loudly.
 
+**Re-run safe, in two layers.** Before staging anything, `publish-maven` checks whether the
+version is already on Central (repo1.maven.org, OR the Portal's `published` endpoint on an explicit
+`"published": true`) and skips if so. That alone does not cover the likeliest re-run, though: an
+upload that succeeded, followed by the status poll timing out. That deployment is validated but
+*unpublished*, so every "is it published?" check says no — and the Portal API has no endpoint to
+list deployments, so its id is the only handle on it. The job therefore saves the id as a workflow
+artifact **immediately after uploading, before polling**, and a re-run attempt restores it and
+resumes watching that deployment instead of uploading a duplicate. Only live states (`PENDING`,
+`VALIDATING`, `VALIDATED`, `PUBLISHING`, `PUBLISHED`) are resumed; a `FAILED` or dropped deployment,
+or any unparseable answer, falls through to a fresh upload. Both guards lean the same way: a wrong
+"skip" would end a release green with nothing on Central, while a wrong "upload" at worst leaves a
+duplicate for a human to drop.
+
+The artifact is scoped to one workflow run, so this covers **Re-run failed jobs**, not a brand-new
+run for the same version; that case still hits the published check, or at worst a duplicate
+deployment Central refuses to publish.
+
 Secrets, in a `maven-central` environment: `CENTRAL_TOKEN_USERNAME` / `CENTRAL_TOKEN_PASSWORD`
 (a Portal user token) and `APPDUCT_SIGNING_KEY` / `APPDUCT_SIGNING_PASSWORD` (an armored private
 key, used in memory — never written to the runner's disk).

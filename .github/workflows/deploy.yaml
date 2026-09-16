@@ -229,6 +229,9 @@ jobs:
     # the same reason publish-cocoapods does -- Maven Central is immutable, a version can never be
     # replaced or deleted, so the irreversible half of a release only runs once npm (which allows
     # `npm unpublish` for 72 hours) is known good.
+    #
+    # Re-run safe, like publish-cocoapods: an already-published version is skipped, and a deployment
+    # uploaded by an earlier attempt of this run is picked back up instead of being uploaded twice.
     needs: [publish-cli, publish-react-native]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -254,7 +257,87 @@ jobs:
         with:
           # See test.yaml: the legacy standalone "tools" package no longer exists upstream.
           packages: platform-tools
+      - name: Check whether this version is already on Maven Central
+        # Two independent sources, OR-ed. Each can only say "published" when that is genuinely true,
+        # so neither can cause a false skip -- the dangerous direction, since it would end a release
+        # green without anything ever reaching Central.
+        #
+        # repo1.maven.org is public and unambiguous, but trails a real publish by up to ~30 minutes.
+        # The Portal's `published` endpoint has no such lag, but its response body is not in
+        # Sonatype's published docs, so it only counts on an explicit `"published": true` and any
+        # other answer falls through. Checking `core` alone is enough: both artifacts go up in one
+        # bundle, so they are published together or not at all.
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+        run: |
+          version=$(node -p "require('./packages/react-native/package.json').version")
+          echo "APPDUCT_VERSION=$version" >> "$GITHUB_ENV"
+          published=false
+          repo1=$(curl -s -o /dev/null -I -w '%{http_code}' \
+            "https://repo1.maven.org/maven2/com/callstack/appduct/core/$version/core-$version.pom") || repo1=000
+          if [ "$repo1" = "200" ]; then
+            published=true
+          else
+            auth=$(printf '%s:%s' "$CENTRAL_TOKEN_USERNAME" "$CENTRAL_TOKEN_PASSWORD" | base64 | tr -d '\n')
+            if curl -sS -H "Authorization: Bearer $auth" \
+                "https://central.sonatype.com/api/v1/publisher/published?namespace=com.callstack.appduct&name=core&version=$version" \
+                | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{
+                    try { process.exit(JSON.parse(s).published === true ? 0 : 1); } catch { process.exit(1); }
+                  })'; then
+              published=true
+            fi
+          fi
+          echo "ALREADY_PUBLISHED=$published" >> "$GITHUB_ENV"
+          if [ "$published" = true ]; then
+            echo "::notice::com.callstack.appduct $version is already on Maven Central; skipping the upload."
+          fi
+      - name: Restore the deployment id from an earlier attempt
+        if: env.ALREADY_PUBLISHED == 'false'
+        # Covers what the check above cannot: an upload that succeeded, followed by a failure later
+        # in this job (most likely the status poll timing out), followed by "Re-run failed jobs".
+        # That deployment is VALIDATED but unpublished, so it is invisible to both published checks,
+        # and the Portal API has no endpoint to list deployments -- its id is the only handle on it.
+        # The upload step saves the id as an artifact of this run, which a re-run attempt can read.
+        # Absent on a first attempt, hence continue-on-error.
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: central-deployment-id
+          path: ${{ runner.temp }}/central-deployment
+      - name: Reuse the earlier deployment if it is still live
+        if: env.ALREADY_PUBLISHED == 'false'
+        # Only states that mean "this deployment will, or already did, carry the release" are reused.
+        # FAILED, a deployment dropped in the Portal UI, or any answer that cannot be parsed all
+        # fall through to a fresh upload -- reusing wrongly would leave the release with nothing to
+        # publish, while uploading again at worst leaves a duplicate for a human to drop.
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+        run: |
+          reuse=false
+          id_file="$RUNNER_TEMP/central-deployment/deployment-id"
+          if [ -f "$id_file" ]; then
+            id=$(tr -d '[:space:]' < "$id_file")
+            auth=$(printf '%s:%s' "$CENTRAL_TOKEN_USERNAME" "$CENTRAL_TOKEN_PASSWORD" | base64 | tr -d '\n')
+            state=$(curl -sS -X POST -H "Authorization: Bearer $auth" \
+              "https://central.sonatype.com/api/v1/publisher/status?id=$id" \
+              | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{
+                  try { process.stdout.write(JSON.parse(s).deploymentState || "UNKNOWN"); }
+                  catch { process.stdout.write("UNKNOWN"); }
+                })') || state=UNKNOWN
+            echo "Deployment $id from an earlier attempt is $state."
+            case "$state" in
+              PENDING|VALIDATING|VALIDATED|PUBLISHING|PUBLISHED)
+                reuse=true
+                echo "DEPLOYMENT_ID=$id" >> "$GITHUB_ENV"
+                echo "::notice::Reusing deployment $id ($state) instead of uploading $APPDUCT_VERSION again."
+                ;;
+            esac
+          fi
+          echo "REUSE_DEPLOYMENT=$reuse" >> "$GITHUB_ENV"
       - name: Stage the signed bundle
+        if: env.ALREADY_PUBLISHED == 'false' && env.REUSE_DEPLOYMENT != 'true'
         # Publishes both modules into one on-disk Maven repository layout, which is exactly the
         # shape the Portal's bundle zip must have. Gradle writes the .md5/.sha1 checksums Central
         # requires for every file, and the `signing` plugin writes a .asc beside each one -- the
@@ -268,6 +351,7 @@ jobs:
             :core:publishAllPublicationsToCentralBundleRepository \
             :core-noop:publishAllPublicationsToCentralBundleRepository
       - name: Verify every artifact is signed
+        if: env.ALREADY_PUBLISHED == 'false' && env.REUSE_DEPLOYMENT != 'true'
         # A missing APPDUCT_SIGNING_KEY makes `signing` a silent no-op by design, so that
         # `publishToMavenLocal` keeps working on an unkeyed machine (see publishing.gradle). That
         # same leniency would otherwise let this job upload an unsigned bundle and fail deep inside
@@ -286,16 +370,17 @@ jobs:
           fi
           echo "All staged artifacts carry a .asc signature."
       - name: Build the deployment bundle
+        if: env.ALREADY_PUBLISHED == 'false' && env.REUSE_DEPLOYMENT != 'true'
         # maven-metadata.xml is excluded deliberately: Central generates its own repository
         # metadata, and Gradle's copy describes only this one deployment, so shipping it is at best
         # redundant and at worst a validation failure.
         working-directory: packages/native/android/build/central-bundle
         run: zip -r "$RUNNER_TEMP/central-bundle.zip" . -x '*maven-metadata.xml*'
       - name: Upload to the Central Portal
+        if: env.ALREADY_PUBLISHED == 'false' && env.REUSE_DEPLOYMENT != 'true'
         env:
           CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
           CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
         # publishingType=USER_MANAGED, not AUTOMATIC. Central validates the bundle and then waits
         # for a human to press Publish in the Portal UI. Given the deployment can never be undone
         # once it goes out, the last step stays manual until this path has proven itself over a few
@@ -305,10 +390,32 @@ jobs:
           response=$(curl --fail-with-body -sS -X POST \
             -H "Authorization: Bearer $auth" \
             -F "bundle=@$RUNNER_TEMP/central-bundle.zip" \
-            "https://central.sonatype.com/api/v1/publisher/upload?name=appduct-$RELEASE_TAG&publishingType=USER_MANAGED")
-          echo "Deployment id: $response"
-          echo "DEPLOYMENT_ID=$response" >> "$GITHUB_ENV"
+            "https://central.sonatype.com/api/v1/publisher/upload?name=appduct-v$APPDUCT_VERSION&publishingType=USER_MANAGED")
+          id=$(printf '%s' "$response" | tr -d '[:space:]')
+          # The body is the bare deployment id. Refuse anything else rather than saving junk that a
+          # re-run would then try to resume.
+          if ! printf '%s' "$id" | grep -Eq '^[0-9a-fA-F-]{36}$'; then
+            echo "::error::Unexpected upload response (expected a deployment id): $response"
+            exit 1
+          fi
+          echo "Deployment id: $id"
+          echo "DEPLOYMENT_ID=$id" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/central-deployment"
+          printf '%s\n' "$id" > "$RUNNER_TEMP/central-deployment/deployment-id"
+      - name: Save the deployment id for a re-run
+        if: env.ALREADY_PUBLISHED == 'false' && env.REUSE_DEPLOYMENT != 'true'
+        # Deliberately before the status poll, so the id survives whatever fails after the upload.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: central-deployment-id
+          path: ${{ runner.temp }}/central-deployment/deployment-id
+          # A later attempt that finds the saved deployment FAILED or dropped uploads a fresh one,
+          # and must replace this id rather than collide with it.
+          overwrite: true
+          # GitHub allows re-running a workflow run for up to 30 days.
+          retention-days: 30
       - name: Report validation status
+        if: env.ALREADY_PUBLISHED == 'false'
         env:
           CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
           CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
@@ -337,5 +444,5 @@ jobs:
             esac
             sleep 15
           done
-          echo "::error::Timed out waiting for deployment $DEPLOYMENT_ID to validate."
+          echo "::error::Timed out waiting for deployment $DEPLOYMENT_ID to validate. Re-running this job resumes watching it rather than uploading again."
           exit 1
