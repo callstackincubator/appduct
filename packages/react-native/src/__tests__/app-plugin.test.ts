@@ -371,16 +371,16 @@ describe("app.plugin.js: applyAndroidManifestChanges", () => {
     const metaData = metaDataOf(manifest);
     const pins = metaData.find(
       (item) =>
-        item.$["android:name"] === "com.callstackincubator.appduct.CLI_PINS",
+        item.$["android:name"] === "com.callstack.appduct.CLI_PINS",
     );
     const privateLan = metaData.find(
       (item) =>
         item.$["android:name"] ===
-        "com.callstackincubator.appduct.ALLOW_PRIVATE_LAN_ONLY",
+        "com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY",
     );
     const trust = metaData.find(
       (item) =>
-        item.$["android:name"] === "com.callstackincubator.appduct.TRUST",
+        item.$["android:name"] === "com.callstack.appduct.TRUST",
     );
 
     expect(pins?.$["android:value"]).toBe(JSON.stringify([VALID_PIN]));
@@ -401,7 +401,7 @@ describe("app.plugin.js: applyAndroidManifestChanges", () => {
 
     const pins = metaDataOf(manifest).find(
       (item) =>
-        item.$["android:name"] === "com.callstackincubator.appduct.CLI_PINS",
+        item.$["android:name"] === "com.callstack.appduct.CLI_PINS",
     );
     expect(pins?.$["android:value"]).toBe(JSON.stringify([]));
   });

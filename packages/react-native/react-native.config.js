@@ -6,7 +6,7 @@ const { parseAppductEnabled } = require("./autolink-env");
 
 const ANDROID_BASE = {
   packageImportPath:
-    "import com.callstackincubator.appduct.AppductPackage;",
+    "import com.callstack.appduct.AppductPackage;",
   packageInstance: "new AppductPackage()",
 };
 

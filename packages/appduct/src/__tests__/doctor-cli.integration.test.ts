@@ -31,7 +31,7 @@ describe("appduct doctor: CLI wiring", () => {
     const root = await withFixtureRoot();
     const apkPath = path.join(root, "included.apk");
     await buildZipFixture(apkPath, {
-      "classes.dex": "Lcom/callstackincubator/appduct/X;Lcom/callstackincubator/appduct/AppductNativeMarker;",
+      "classes.dex": "Lcom/callstack/appduct/X;Lcom/callstack/appduct/AppductNativeMarker;",
       "AndroidManifest.xml": "placeholder manifest",
     });
 
@@ -46,7 +46,7 @@ describe("appduct doctor: CLI wiring", () => {
     const root = await withFixtureRoot();
     const apkPath = path.join(root, "included.apk");
     await buildZipFixture(apkPath, {
-      "classes.dex": "Lcom/callstackincubator/appduct/X;Lcom/callstackincubator/appduct/AppductNativeMarker;",
+      "classes.dex": "Lcom/callstack/appduct/X;Lcom/callstack/appduct/AppductNativeMarker;",
       "AndroidManifest.xml": "placeholder manifest",
     });
 
@@ -59,7 +59,7 @@ describe("appduct doctor: CLI wiring", () => {
     const root = await withFixtureRoot();
     const apkPath = path.join(root, "included.apk");
     await buildZipFixture(apkPath, {
-      "classes.dex": "Lcom/callstackincubator/appduct/X;Lcom/callstackincubator/appduct/AppductNativeMarker;",
+      "classes.dex": "Lcom/callstack/appduct/X;Lcom/callstack/appduct/AppductNativeMarker;",
       "AndroidManifest.xml": "placeholder manifest",
     });
 
@@ -125,7 +125,7 @@ describe("appduct doctor: CLI wiring", () => {
     const root = await withFixtureRoot();
     const apkPath = path.join(root, "included.apk");
     await buildZipFixture(apkPath, {
-      "classes.dex": "Lcom/callstackincubator/appduct/X;Lcom/callstackincubator/appduct/AppductNativeMarker;",
+      "classes.dex": "Lcom/callstack/appduct/X;Lcom/callstack/appduct/AppductNativeMarker;",
       "AndroidManifest.xml": "placeholder manifest",
     });
 

@@ -60,7 +60,7 @@ docs/tasks/14-native-core-extraction.md) or the `RCTNativeAppduct` Objective-C c
 OR'd together so a stripped binary that dropped one doesn't read as absent; the
 plugin-authored `Info.plist` keys are reported alongside them but cannot flip the verdict on
 their own. On Android the verdict is decided by the `AppductNativeMarker` keep-rule
-signal alone; the `com.callstackincubator.appduct` dex package and the
+signal alone; the `com.callstack.appduct` dex package and the
 `AndroidManifest.xml` meta-data keys are reported alongside it but cannot flip it — the two
 platforms now follow the same "real-code-only symbol, corroborating signals only" rule (see
 [Android detection](#android-detection)).
@@ -243,12 +243,26 @@ validates.
 
 ### Maven Central
 
-Coordinates are `com.callstack.appduct:core` and `:core-noop`. The namespace is the reversed
-`callstack.com` domain — note it does **not** match the Kotlin package or the AGP namespace, which
-both remain `com.callstackincubator.appduct*`. Those are three unrelated concepts, and the Kotlin
-package in particular is load-bearing: `appduct doctor`'s Android detection keys on the
-`com.callstackincubator.appduct` dex package, so renaming it would silently change what the release
-gate inspects.
+Coordinates are `com.callstack.appduct:core` and `:core-noop`, from the reversed `callstack.com`
+domain that Central verifies the namespace against.
+
+**One namespace, everywhere.** The Maven group, the Kotlin package, the AGP namespace, the
+`AndroidManifest.xml` meta-data keys, and the native playground's application id all read
+`com.callstack.appduct*`. They are technically independent knobs, and for a while the Maven group
+and the Kotlin package disagreed — that is precisely the state worth avoiding, because the one
+place they are coupled is invisible: `appduct doctor`'s Android detection keys on the **dex package
+name**, so a change to the Kotlin package silently changes what the release gate inspects.
+
+That coupling is why `artifact-inspect.ts` matches every Android marker against both
+`com.callstack.*` and the legacy `com.callstackincubator.*` spelling that shipped up to 0.9.0.
+`doctor` inspects artifacts it did not build, so an app compiled against an older Appduct must
+still be detected — reporting `absent` for an app that genuinely bundles Appduct would rubber-stamp
+shipping it to production, the one failure this tool must never have. The legacy entries are
+load-bearing for as long as any pre-rename artifact can still be inspected, and a regression test
+in `artifact-inspect.test.ts` fails if they are dropped.
+
+The GitHub organisation is still `callstackincubator`, so repository URLs are unchanged; only the
+namespace moved. Task documents under `docs/tasks/` keep the old spelling as dated records.
 
 **No third-party publishing plugin.** Sonatype ships no official Gradle plugin for the Central
 Portal, and the community alternatives mostly automate what `publishing.gradle` already does in

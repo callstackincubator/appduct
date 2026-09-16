@@ -17,7 +17,7 @@ playground-native/android/
     build.gradle     debugImplementation(core) / releaseImplementation(core-noop)
     src/main/
       AndroidManifest.xml
-      java/com/callstackincubator/appduct/playground/
+      java/com/callstack/appduct/playground/
         PlaygroundApplication.kt   registers tools in Application.onCreate()
         PlaygroundState.kt         Compose-observable connection state / event log
         MainActivity.kt            the one screen
@@ -60,7 +60,7 @@ Install and run on a booted emulator or device:
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.callstackincubator.appduct.playground/.MainActivity
+adb shell am start -n com.callstack.appduct.playground/.MainActivity
 ```
 
 Then drive it from the `appduct` CLI, pointed at a daemon whose state directory this build's

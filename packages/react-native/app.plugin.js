@@ -9,10 +9,10 @@ const {
 const { isAppductAutolinkEnabled, ENV_VAR } = require("./autolink-env");
 const PLUGIN_NAME = "@appduct/react-native";
 const PLUGIN_VERSION = require("./package.json").version;
-const ANDROID_PINS_KEY = "com.callstackincubator.appduct.CLI_PINS";
+const ANDROID_PINS_KEY = "com.callstack.appduct.CLI_PINS";
 const ANDROID_PRIVATE_LAN_KEY =
-  "com.callstackincubator.appduct.ALLOW_PRIVATE_LAN_ONLY";
-const ANDROID_TRUST_KEY = "com.callstackincubator.appduct.TRUST";
+  "com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY";
+const ANDROID_TRUST_KEY = "com.callstack.appduct.TRUST";
 const IOS_PINS_KEY = "AppductCliPins";
 const IOS_PRIVATE_LAN_KEY = "AppductAllowPrivateLanOnly";
 const IOS_TRUST_KEY = "AppductTrust";

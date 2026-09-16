@@ -27,7 +27,7 @@ xcodebuild build -project AppductPlayground.xcodeproj -scheme AppductPlayground 
   -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
 xcrun simctl install booted \
   ~/Library/Developer/Xcode/DerivedData/AppductPlayground-*/Build/Products/Debug-iphonesimulator/AppductPlayground.app
-xcrun simctl launch booted com.callstackincubator.appduct.playgroundnative
+xcrun simctl launch booted com.callstack.appduct.playgroundnative
 
 # 3. Point the CLI at it -- the app registers the `appduct-native` URL scheme.
 appduct link --scheme appduct-native --open ios-sim

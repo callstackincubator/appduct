@@ -176,15 +176,15 @@ Kotlin/Java sources, no hand-wired `Jar` task needed):
 ./gradlew :core:publishToMavenLocal :core-noop:publishToMavenLocal
 ```
 
-Verified against `~/.m2/repository/com/callstackincubator/appduct/`: both `core/0.8.0/` and
+Verified against `~/.m2/repository/com/callstack/appduct/`: both `core/0.8.0/` and
 `core-noop/0.8.0/` contain `.aar`, `-sources.jar`, `.module`, and `.pom`. No signing, no Central
 upload -- deferred as an ops task per the brief.
 
 ## 7. Native playground (`playground-native/android`)
 
-A single-module Compose app, `com.callstackincubator.appduct.playground`. `settings.gradle`
+A single-module Compose app, `com.callstack.appduct.playground`. `settings.gradle`
 uses `includeBuild("../../packages/native/android")` with dependency substitution for
-`com.callstackincubator.appduct:core`/`:core-noop`, so the playground always builds against
+`com.callstack.appduct:core`/`:core-noop`, so the playground always builds against
 this worktree's `packages/native/android`, never a published artifact, with no publish-then-consume
 round trip during development. `app/build.gradle` pairs `debugImplementation(core)` /
 `releaseImplementation(core-noop)`, matching the issue's sketch exactly, and sets
@@ -225,7 +225,7 @@ key output, run from the repo root unless noted:
 ```bash
 export APPDUCT_STATE_DIR=/tmp/appduct-3b-state   # config.json: {"wssPort": 8456}
 adb -s emulator-5554 install -r playground-native/android/app/build/outputs/apk/debug/app-debug.apk
-adb -s emulator-5554 shell am start -n com.callstackincubator.appduct.playground/.MainActivity
+adb -s emulator-5554 shell am start -n com.callstack.appduct.playground/.MainActivity
 
 node packages/appduct/dist/bin.js link --open android --scheme appduct-native --device emulator-5554
 # -> Link Created, Delivered yes (android)

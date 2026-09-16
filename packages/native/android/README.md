@@ -56,7 +56,7 @@ natural place, since [initialization](#4-initialization-the-init-provider) alrea
 the time it runs:
 
 ```kotlin
-import com.callstackincubator.appduct.Appduct
+import com.callstack.appduct.Appduct
 import org.json.JSONObject
 
 class MyApp : Application() {
@@ -158,10 +158,10 @@ app's own manifest, matching the component by its fully qualified name:
 <manifest xmlns:tools="http://schemas.android.com/tools">
   <application>
     <provider
-        android:name="com.callstackincubator.appduct.AppductInitProvider"
+        android:name="com.callstack.appduct.AppductInitProvider"
         tools:node="remove" />
     <activity
-        android:name="com.callstackincubator.appduct.AppductLinkActivity"
+        android:name="com.callstack.appduct.AppductLinkActivity"
         tools:node="remove" />
   </application>
 </manifest>
@@ -183,9 +183,9 @@ the keys themselves, set as `<meta-data>` on your app's `<application>` tag:
 
 | Name | Purpose |
 | --- | ------- |
-| `com.callstackincubator.appduct.CLI_PINS` | JSON array string of `sha256/...` SPKI pins |
-| `com.callstackincubator.appduct.TRUST` | `"link"` \| `"pin"` -- any other value is a hard error at connect time |
-| `com.callstackincubator.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean (a `"true"`/`"false"` string is also accepted); defaults to `true` (fail-closed) when absent |
+| `com.callstack.appduct.CLI_PINS` | JSON array string of `sha256/...` SPKI pins |
+| `com.callstack.appduct.TRUST` | `"link"` \| `"pin"` -- any other value is a hard error at connect time |
+| `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean (a `"true"`/`"false"` string is also accepted); defaults to `true` (fail-closed) when absent |
 
 With no keys set, `trust: "link"` is the default: the app trusts whichever SPKI pin a delivered
 bootstrap link carries, for that one session only -- zero setup, appropriate for local
@@ -212,7 +212,7 @@ appduct doctor path/to/app-debug.apk --assert-present
 
 `doctor`'s Android detection trusts only a keep-rule-protected marker class
 (`AppductNativeMarker`, compiled only into `core`, never `core-noop`) to decide presence --
-not just "is the `com.callstackincubator.appduct` package name anywhere in the dex", since
+not just "is the `com.callstack.appduct` package name anywhere in the dex", since
 `core-noop`'s classes share that same Kotlin package and would otherwise look present to a naive
 scan. See [`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) and
 [`docs/CI.md`](../../../docs/CI.md#release-gate-appduct-doctor) for the full mechanism.

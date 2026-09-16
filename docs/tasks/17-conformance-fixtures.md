@@ -52,7 +52,7 @@ Consumers, one per language:
 | vitest (`@appduct/shared`) | `packages/shared/src/__tests__/fixtures-conformance.test.ts` |
 | vitest (`@appduct/appduct` CLI, SPKI only) | `packages/appduct/src/__tests__/spki-pin.test.ts` (extended) |
 | XCTest (`AppductCore`) | `packages/native/ios/Tests/AppductCoreTests/FixturesConformanceTests.swift` |
-| JUnit (`packages/native/android/core`) | `packages/native/android/core/src/test/java/com/callstackincubator/appduct/FixturesConformanceTest.kt` |
+| JUnit (`packages/native/android/core`) | `packages/native/android/core/src/test/java/com/callstack/appduct/FixturesConformanceTest.kt` |
 
 Where a hand-written test already duplicated a vector now covered by a fixture (the SPKI
 certificate/pin pair in the Swift and Kotlin suites), the duplicate assertion was removed in favor

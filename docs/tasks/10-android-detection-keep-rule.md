@@ -9,7 +9,7 @@ the Android half of `packages/appduct/src/artifact-inspect.ts`.**
 
 ## Why
 
-Task 08 shipped two Android signals: the `com.callstackincubator.appduct` package string in
+Task 08 shipped two Android signals: the `com.callstack.appduct` package string in
 the dex, and the plugin-authored manifest meta-data. Its reviewer found a combination that
 evades both — **bare RN + R8 with no keep rule and no config plugin** — because R8 can rename
 the dex package and there are no plugin-written manifest keys to fall back on.

@@ -1,6 +1,6 @@
 name: AppductPlayground
 options:
-  bundleIdPrefix: com.callstackincubator.appduct
+  bundleIdPrefix: com.callstack.appduct
   deploymentTarget:
     iOS: "15.1"
   # xcodegen otherwise fabricates its own scheme with `buildTarget`-derived config choices; naming
@@ -33,7 +33,7 @@ targets:
         product: AppductCore
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.callstackincubator.appduct.playgroundnative
+        PRODUCT_BUNDLE_IDENTIFIER: com.callstack.appduct.playgroundnative
         PRODUCT_NAME: AppductPlayground
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"

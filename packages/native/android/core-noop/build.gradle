@@ -7,7 +7,7 @@ version = rootProject.ext.appductVersion
 android {
   // Same namespace as `core` -- see that module's build.gradle for why this is safe: the two are
   // never linked into the same build variant at once.
-  namespace 'com.callstackincubator.appduct.core'
+  namespace 'com.callstack.appduct.core'
   compileSdk rootProject.ext.compileSdkVersion
 
   defaultConfig {

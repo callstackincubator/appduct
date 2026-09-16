@@ -29,7 +29,7 @@ appduct doctor <path-to-artifact> [--assert-absent | --assert-present] [--json]
   present/absent, and — when present and cheaply readable — the configured trust mode from
   `Info.plist` / the manifest.
 - Detection: the Objective-C class name (`RCTNativeAppduct`) and the Swift/pod symbols on
-  iOS; the `com.callstackincubator.appduct` package/classes in the dex on Android. Prefer
+  iOS; the `com.callstack.appduct` package/classes in the dex on Android. Prefer
   tools already available where the artifact is built (`unzip`, `strings`, `nm`,
   `aapt2`/`dexdump`) and degrade with a clear message rather than a wrong answer when a tool
   is missing. **Never report "absent" because a tool was unavailable** — that failure mode

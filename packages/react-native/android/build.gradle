@@ -33,7 +33,7 @@ if (isNewArchitectureEnabled()) {
 apply plugin: "com.android.library"
 apply plugin: "kotlin-android"
 
-group = "com.callstackincubator.appduct"
+group = "com.callstack.appduct"
 // Single source of truth: package.json (docs/tasks/14-native-core-extraction.md -- this used to be
 // a hard-coded literal here that drifted from package.json's own version).
 def appductVersion = new JsonSlurper().parse(file("$projectDir/../package.json")).version
@@ -68,7 +68,7 @@ logger.lifecycle("[appduct] native module INCLUDED in this build (v${version})")
 def appductEnabledForRelease = System.getenv("APPDUCT_ENABLED")?.trim()?.toLowerCase() in ["1", "true"]
 
 android {
-  namespace "com.callstackincubator.appduct"
+  namespace "com.callstack.appduct"
   compileSdk safeExtGet("compileSdkVersion", 35)
 
   sourceSets {
