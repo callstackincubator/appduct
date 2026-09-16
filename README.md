@@ -2,7 +2,7 @@
 
 [![MIT license][license-badge]][license] [![npm downloads][npm-downloads-badge]][npm-downloads] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-Appduct lets a terminal, a test runner, or an AI agent call functions inside your React Native app while it's running. You pick what's callable — a few functions you write yourself — and nothing else is reachable.
+Appduct lets a terminal, a test runner, or an AI agent call functions inside your app while it's running — React Native, iOS, or Android. You pick what's callable — a few functions you write yourself — and nothing else is reachable.
 
 ## Why you'd want this
 
@@ -14,7 +14,7 @@ Appduct lets a terminal, a test runner, or an AI agent call functions inside you
 
 **Nothing ships in your release build by default.** Appduct is included in debug builds only — a release build compiles it out entirely, not just switches it off. Want it in a TestFlight or other internal build too? You can opt in per build — see [Build variants](docs/BUILD-VARIANTS.md).
 
-**Your dev loop doesn't fight you.** Metro reloads, backgrounding the app, flaky Wi-Fi — the session survives all of it and picks back up on its own. One background service handles as many devices as you've got plugged in.
+**Your dev loop doesn't fight you.** Reloads, backgrounding the app, flaky Wi-Fi — the session survives all of it and picks back up on its own. One background service handles as many devices as you've got plugged in.
 
 ## What it looks like
 
@@ -33,7 +33,7 @@ useAppductTool({
 ```
 
 The hook registers once per mount — re-rendering costs nothing, and the handler always sees the
-latest state it closes over.
+latest state it closes over. Apps without React Native register tools from Swift or Kotlin instead — see [Getting started](#getting-started).
 
 Call it from your terminal:
 
@@ -41,7 +41,7 @@ Call it from your terminal:
 appduct invoke seed_cart --input '{"items":3}'
 ```
 
-Or hand it to an agent — see [Use it with an agent](#use-it-with-an-agent). The CLI and the MCP server both read your app's deep-link scheme straight from `app.json`'s `expo.scheme`, so there's nothing to configure.
+Or hand it to an agent — see [Use it with an agent](#use-it-with-an-agent). The CLI and the MCP server both read your app's deep-link scheme from its project files — `app.json` in an Expo app, `Info.plist` on iOS, `build.gradle` on Android — so there's nothing to configure.
 
 That's the whole idea. Everything else is about which builds include it and what they trust.
 
@@ -53,20 +53,32 @@ By default, yes — nothing here ships in a release build, so there's no code on
 
 ## Getting started
 
-Install the CLI where you'll run it, and the package in your app:
+Install the CLI on the machine you'll run it from:
 
 ```bash
 npm install -g appduct
+```
+
+The [CLI guide](packages/appduct/README.md) covers connecting to a device, listing and calling tools, and checking a built artifact. Then add Appduct to your app.
+
+### React Native
+
+```bash
 npm install @appduct/react-native zod
 ```
 
-From there:
-
 - **[Set up your app](packages/react-native/README.md)** — registering tools, deep-link setup, and the API reference.
-- **[Use the CLI and MCP server](packages/appduct/README.md)** — connecting to a device, listing and calling tools, and checking a built artifact.
 - **[Try the playground](playground/README.md)** — a working app you can run end to end in a few minutes. Fastest way to see whether this fits your project.
 
 You'll need a development build or a bare React Native app — Expo Go can't do it.
+
+### iOS or Android, without React Native
+
+Call Appduct directly from Swift or Kotlin. You get the same tools, deep links, and reconnect behavior as the React Native package, with nothing from React Native in your app.
+
+- **[Set up an iOS app](packages/native/ios/README.md)** — install with Swift Package Manager or CocoaPods.
+- **[Set up an Android app](packages/native/android/README.md)** — install from Maven Central.
+- **Try the native playgrounds** — a [SwiftUI app](playground-native/ios/README.md) and a [Jetpack Compose app](playground-native/android/README.md) that register the same tools as the React Native playground.
 
 ## Use it with an agent
 
@@ -96,11 +108,16 @@ Asking an agent to add Appduct to your app or write its tools? Install the skill
 | --- | --- |
 | [`appduct`](packages/appduct/README.md) | The CLI, the background service, and the MCP server |
 | [`@appduct/react-native`](packages/react-native/README.md) | The app-side library and Expo config plugin |
-| [`@appduct/shared`](packages/shared/README.md) | Types shared by both |
+| [`@appduct/shared`](packages/shared/README.md) | Types shared by the CLI and the React Native library |
+| [`AppductCore`](packages/native/ios/README.md) | The iOS library, for apps without React Native (Swift Package Manager or CocoaPods) |
+| [`com.callstack.appduct:core`](packages/native/android/README.md) | The Android library, for apps without React Native, paired with `core-noop` for release builds (Maven Central) |
 
 ## Support
 
-React Native apps on iOS 15.1+ and Android, both on the New Architecture. Web gets a no-op stub so shared code doesn't break. The CLI needs Node 20 or newer. Windows should work but hasn't been verified yet.
+- **React Native:** iOS 15.1+ and Android, both on the New Architecture. Web gets a no-op stub so shared code doesn't break.
+- **iOS without React Native:** iOS 15.1+. Installing with Swift Package Manager needs Xcode 16.3 or newer.
+- **Android without React Native:** Android 7.0 (API 24) or newer.
+- **CLI:** Node 20 or newer. Windows should work but hasn't been verified yet.
 
 ## Docs
 
