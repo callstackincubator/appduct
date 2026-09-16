@@ -8,6 +8,33 @@ This file is maintained by hand. There is no automated changelog tooling (see
 `docs/CI.md#release-policy` for why) — update this file as part of the commit that bumps the
 package versions for a release.
 
+## 0.10.0 (2026-09-16)
+
+- **New: native SDKs for apps without React Native.** The same Appduct core the React Native
+  package uses is now published on its own:
+  - **iOS** — `AppductCore` via Swift Package Manager
+    (`.package(url: "https://github.com/callstackincubator/appduct", from: "0.10.0")`) or CocoaPods
+    (`pod 'AppductCore', :configurations => ['Debug']`). See `packages/native/ios/README.md`.
+  - **Android** — `com.callstack.appduct:core` for debug builds and `com.callstack.appduct:core-noop`
+    for release builds, on Maven Central. See `packages/native/android/README.md`.
+- **Breaking (Android): the namespace moved from `com.callstackincubator.appduct` to
+  `com.callstack.appduct`.** This covers the Kotlin package, the Android library namespace, and the
+  `AndroidManifest.xml` meta-data keys.
+  - **Expo and autolinked React Native apps:** nothing to do. The config plugin and autolinking pick
+    up the new names on your next prebuild/build.
+  - **If you set the meta-data keys by hand:** rename them. The old keys are no longer read, so an
+    app still using them loses its configuration and falls back to the fail-closed defaults.
+    - `com.callstackincubator.appduct.CLI_PINS` → `com.callstack.appduct.CLI_PINS`
+    - `com.callstackincubator.appduct.TRUST` → `com.callstack.appduct.TRUST`
+    - `com.callstackincubator.appduct.ALLOW_PRIVATE_LAN_ONLY` → `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY`
+  - **If you import Appduct's Kotlin classes directly:** update the imports to `com.callstack.appduct`.
+- `appduct doctor` recognises both the new and the pre-0.10.0 Android namespace, so a release gate
+  still detects Appduct in apps built against 0.9.0 or earlier.
+- **Fix:** resolved Swift strict-concurrency warnings in the iOS core.
+- **Fix:** CLI and MCP messages say "an Appduct" instead of "a Appduct".
+- Docs: the README is scoped to React Native, with new guidance on the MCP and CLI ways to use
+  Appduct with an agent.
+
 ## 0.8.0 (2026-09-08)
 
 - **New:** `appduct init` scaffolds config from an existing `app.json`/`app.config.js`, discovering the scheme automatically.
