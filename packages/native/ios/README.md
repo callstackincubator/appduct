@@ -18,8 +18,11 @@ this").
 ### Swift Package Manager
 
 ```swift
-.package(url: "https://github.com/callstackincubator/appduct", from: "0.8.0")
+.package(url: "https://github.com/callstackincubator/appduct", from: "0.9.0")
 ```
+
+`0.9.0` is a floor, not a pin — it is the first release carrying the Swift manifest, and `from:`
+resolves to the newest `0.x` tag, so this line stays current without edits.
 
 Add the `AppductCore` product to your app target. **No further configuration ships the real
 implementation only in `Debug`, matching the RN package's own default** (see
@@ -31,7 +34,7 @@ To carry the real implementation into a `Release` build too (an internal/QA buil
 the `AlwaysEnabled` package trait instead:
 
 ```swift
-.package(url: "https://github.com/callstackincubator/appduct", from: "0.8.0", traits: ["AlwaysEnabled"])
+.package(url: "https://github.com/callstackincubator/appduct", from: "0.9.0", traits: ["AlwaysEnabled"])
 ```
 
 There is no environment-variable equivalent on this path — see
