@@ -1,14 +1,13 @@
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
-apply plugin: 'maven-publish'
 
-group = 'com.callstackincubator.appduct'
+group = 'com.callstack.appduct'
 version = rootProject.ext.appductVersion
 
 android {
   // Same namespace as `core` -- see that module's build.gradle for why this is safe: the two are
   // never linked into the same build variant at once.
-  namespace 'com.callstackincubator.appduct.core'
+  namespace 'com.callstack.appduct.core'
   compileSdk rootProject.ext.compileSdkVersion
 
   defaultConfig {
@@ -36,6 +35,8 @@ android {
   publishing {
     singleVariant('release') {
       withSourcesJar()
+      // Required by Central, same as `core`.
+      withJavadocJar()
     }
   }
 }
@@ -45,15 +46,9 @@ android {
 // artifact must not pull in the real transport dependency graph.
 dependencies {}
 
-afterEvaluate {
-  publishing {
-    publications {
-      release(MavenPublication) {
-        from components.release
-        groupId = group
-        artifactId = 'core-noop'
-        version = version
-      }
-    }
-  }
-}
+// See core/build.gradle -- publishing.gradle holds the shared POM/signing/bundle wiring.
+ext.appductArtifactId = 'core-noop'
+ext.appductArtifactDescription = 'Inert build-variant counterpart to com.callstack.appduct:core: ' +
+  'the same public API with every method a no-op, so a release build carries no Appduct ' +
+  'implementation and none of its dependencies.'
+apply from: "$rootDir/publishing.gradle"

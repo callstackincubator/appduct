@@ -60,7 +60,7 @@ docs/tasks/14-native-core-extraction.md) or the `RCTNativeAppduct` Objective-C c
 OR'd together so a stripped binary that dropped one doesn't read as absent; the
 plugin-authored `Info.plist` keys are reported alongside them but cannot flip the verdict on
 their own. On Android the verdict is decided by the `AppductNativeMarker` keep-rule
-signal alone; the `com.callstackincubator.appduct` dex package and the
+signal alone; the `com.callstack.appduct` dex package and the
 `AndroidManifest.xml` meta-data keys are reported alongside it but cannot flip it — the two
 platforms now follow the same "real-code-only symbol, corroborating signals only" rule (see
 [Android detection](#android-detection)).
@@ -179,7 +179,7 @@ jobs each build the corresponding native playground (`playground-native/android`
 `playground-native/ios`) after their Expo-playground steps, for exactly this reason:
 
 - **Android**: `./gradlew :app:assembleDebug :app:assembleRelease` in `playground-native/android`
-  (which resolves `com.callstackincubator.appduct:core`/`:core-noop` to the local
+  (which resolves `com.callstack.appduct:core`/`:core-noop` to the local
   `packages/native/android` projects via `settings.gradle`'s `includeBuild` substitution, not a
   published artifact), then `appduct doctor --assert-present` on the debug APK and
   `--assert-absent` on the release APK — the same marker-only signal the Expo gate uses, proving
@@ -209,15 +209,14 @@ than through a published `appduct` binary, matching how the playground's own
 
 ## Native publishing
 
-`deploy.yaml` publishes three npm packages, and — since the CocoaPods wiring landed — the two iOS
-distribution channels as well. All of it hangs off one GitHub release.
+`deploy.yaml` publishes every channel Appduct ships on, all off one GitHub release.
 
 | Channel | Published by | Version comes from |
 | --- | --- | --- |
 | npm (`appduct`, `@appduct/shared`, `@appduct/react-native`) | `publish-*` jobs, OIDC trusted publishing | each `package.json` |
 | SwiftPM (`AppductCore`) | the release's **git tag** — nothing else to do | the tag; `Package.swift` has no version field |
 | CocoaPods trunk (`AppductCore`) | `publish-cocoapods` job | `packages/react-native/package.json`, read by the podspec |
-| Maven Central (`…appduct:core`, `:core-noop`) | **nobody yet — ops task** | `ext.appductVersion`, read from the same `package.json` |
+| Maven Central (`com.callstack.appduct:core`, `:core-noop`) | `publish-maven` job (staged; **the final Publish is manual**) | `ext.appductVersion`, read from the same `package.json` |
 
 The podspec lives at the **repo root**, next to `Package.swift`, for the same reason that manifest
 does: CocoaPods resolves a trunk pod's file patterns against the root of the cloned repository, not
@@ -241,6 +240,75 @@ the PR that introduces it rather than here. The plain `swift build`/`swift test`
 target macOS, where `#if canImport(UIKit)` is false and the UIKit-backed code is compiled out
 entirely. Note the iOS gate does not cover **tvOS**, which the podspec also declares and trunk also
 validates.
+
+### Maven Central
+
+Coordinates are `com.callstack.appduct:core` and `:core-noop`, from the reversed `callstack.com`
+domain that Central verifies the namespace against.
+
+**One namespace, everywhere.** The Maven group, the Kotlin package, the AGP namespace, the
+`AndroidManifest.xml` meta-data keys, and the native playground's application id all read
+`com.callstack.appduct*`. They are technically independent knobs, and for a while the Maven group
+and the Kotlin package disagreed — that is precisely the state worth avoiding, because the one
+place they are coupled is invisible: `appduct doctor`'s Android detection keys on the **dex package
+name**, so a change to the Kotlin package silently changes what the release gate inspects.
+
+That coupling is why `artifact-inspect.ts` matches every Android marker against both
+`com.callstack.*` and the legacy `com.callstackincubator.*` spelling that shipped up to 0.9.0.
+`doctor` inspects artifacts it did not build, so an app compiled against an older Appduct must
+still be detected — reporting `absent` for an app that genuinely bundles Appduct would rubber-stamp
+shipping it to production, the one failure this tool must never have. The legacy entries are
+load-bearing for as long as any pre-rename artifact can still be inspected, and a regression test
+in `artifact-inspect.test.ts` fails if they are dropped.
+
+The GitHub organisation is still `callstackincubator`, so repository URLs are unchanged; only the
+namespace moved. Task documents under `docs/tasks/` keep the old spelling as dated records.
+
+**No third-party publishing plugin.** Sonatype ships no official Gradle plugin for the Central
+Portal, and the community alternatives mostly automate what `publishing.gradle` already does in
+~40 lines: stage a signed, checksummed repository layout on disk. `publish-maven` zips that
+directory and POSTs it to the Portal API. Keeping it first-party keeps the Android build classpath
+to AGP and Kotlin.
+
+Publishing to a *file* repository rather than a remote one is the trick that makes this work: the
+Portal takes a single zipped bundle, not Maven-protocol uploads, and a file repository is what
+produces the exact layout that bundle needs — full group path, plus the `.md5`/`.sha1` checksums
+Central requires on every file, written by Gradle rather than by hand. Both modules stage into one
+`rootProject` directory so a single zip covers the release. `maven-metadata.xml` is excluded from
+the zip: Central generates its own.
+
+**Signing is conditional by design.** `publishing.gradle` wires the `signing` plugin only when
+`APPDUCT_SIGNING_KEY` is present, so `test.yaml`'s `publishToMavenLocal` keeps working on an
+unkeyed machine. Central rejects any unsigned file, so that same leniency could let the job upload
+an unsigned bundle and fail deep inside Central's validator — `publish-maven` therefore asserts
+every staged artifact has a `.asc` beside it before zipping.
+
+**The final Publish is manual.** The job uploads with `publishingType=USER_MANAGED`, so Central
+validates the bundle and then waits for a human to press Publish in the Portal UI. A Central
+version can never be replaced or deleted, so the last irreversible step stays deliberate until this
+path has proven itself; switching to `AUTOMATIC` later is a one-word change. The job polls the
+status endpoint and fails on `FAILED`, so a rejected bundle still breaks the release loudly.
+
+**Re-run safe, in two layers.** Before staging anything, `publish-maven` checks whether the
+version is already on Central (repo1.maven.org, OR the Portal's `published` endpoint on an explicit
+`"published": true`) and skips if so. That alone does not cover the likeliest re-run, though: an
+upload that succeeded, followed by the status poll timing out. That deployment is validated but
+*unpublished*, so every "is it published?" check says no — and the Portal API has no endpoint to
+list deployments, so its id is the only handle on it. The job therefore saves the id as a workflow
+artifact **immediately after uploading, before polling**, and a re-run attempt restores it and
+resumes watching that deployment instead of uploading a duplicate. Only live states (`PENDING`,
+`VALIDATING`, `VALIDATED`, `PUBLISHING`, `PUBLISHED`) are resumed; a `FAILED` or dropped deployment,
+or any unparseable answer, falls through to a fresh upload. Both guards lean the same way: a wrong
+"skip" would end a release green with nothing on Central, while a wrong "upload" at worst leaves a
+duplicate for a human to drop.
+
+The artifact is scoped to one workflow run, so this covers **Re-run failed jobs**, not a brand-new
+run for the same version; that case still hits the published check, or at worst a duplicate
+deployment Central refuses to publish.
+
+Secrets, in a `maven-central` environment: `CENTRAL_TOKEN_USERNAME` / `CENTRAL_TOKEN_PASSWORD`
+(a Portal user token) and `APPDUCT_SIGNING_KEY` / `APPDUCT_SIGNING_PASSWORD` (an armored private
+key, used in memory — never written to the runner's disk).
 
 ## Release policy
 

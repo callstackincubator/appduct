@@ -12,7 +12,7 @@ Consumers:
 - `packages/shared/src/__tests__/fixtures-conformance.test.ts` (vitest)
 - `packages/appduct/src/__tests__/spki-pin.test.ts` (vitest, `spki-pin.json` only)
 - `packages/native/ios/Tests/AppductCoreTests/FixturesConformanceTests.swift` (XCTest)
-- `packages/native/android/core/src/test/java/com/callstackincubator/appduct/FixturesConformanceTest.kt`
+- `packages/native/android/core/src/test/java/com/callstack/appduct/FixturesConformanceTest.kt`
   (JUnit)
 
 ## The rule

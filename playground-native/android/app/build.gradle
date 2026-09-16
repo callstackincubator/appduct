@@ -12,11 +12,11 @@ apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 def appductVersion = new JsonSlurper().parse(file("$rootDir/../../packages/react-native/package.json")).version
 
 android {
-  namespace 'com.callstackincubator.appduct.playground'
+  namespace 'com.callstack.appduct.playground'
   compileSdk rootProject.ext.compileSdkVersion
 
   defaultConfig {
-    applicationId 'com.callstackincubator.appduct.playground'
+    applicationId 'com.callstack.appduct.playground'
     minSdkVersion rootProject.ext.minSdkVersion
     targetSdkVersion rootProject.ext.targetSdkVersion
     versionCode 1
@@ -57,8 +57,8 @@ dependencies {
   // build gets the inert no-op -- exactly the pairing issue #48 phase 3 asks a plain Android app
   // to declare, resolved here to the local project via settings.gradle's `includeBuild` instead of
   // a published Maven artifact.
-  debugImplementation "com.callstackincubator.appduct:core:${appductVersion}"
-  releaseImplementation "com.callstackincubator.appduct:core-noop:${appductVersion}"
+  debugImplementation "com.callstack.appduct:core:${appductVersion}"
+  releaseImplementation "com.callstack.appduct:core-noop:${appductVersion}"
 
   implementation platform('androidx.compose:compose-bom:2024.09.00')
   implementation 'androidx.compose.ui:ui'

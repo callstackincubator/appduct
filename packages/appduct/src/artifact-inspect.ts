@@ -31,7 +31,7 @@
  *   future stub could ship them) without the real implementation being present, exactly the reason
  *   the Android signals below aren't all treated as equally authoritative either.
  * - Android: the primary signal is `AppductNativeMarker`
- *   (`packages/native/android/core/src/main/java/com/callstackincubator/appduct/AppductNativeMarker.kt`,
+ *   (`packages/native/android/core/src/main/java/com/callstack/appduct/AppductNativeMarker.kt`,
  *   vendored into `@appduct/react-native` at `android/core/src/main/java/...`), a marker class with no
  *   other purpose. Its fully-qualified name is kept unminified and unremoved by a `-keep` rule in
  *   `consumer-rules.pro` (same vendoring path), shipped to every consuming app via `consumerProguardFiles`
@@ -41,10 +41,12 @@
  *   minification in every supported consumer setup.
  *
  *   Two more signals are kept as fallbacks for artifacts built before this marker existed: the
- *   `com.callstackincubator.appduct` package string in the dex string pool (survives as long as
+ *   `com.callstack.appduct` package string in the dex string pool (and its pre-rename spelling,
+ *   `com.callstackincubator.appduct` — every Android marker below is matched against both, so an
+ *   app built against Appduct 0.9.0 or earlier is still detected) (survives as long as
  *   R8/ProGuard minification+obfuscation isn't applied to it — an aggressive release config with no keep
  *   rule for this package can rename it away) and the plugin-authored meta-data key names in
- *   `AndroidManifest.xml` (`com.callstackincubator.appduct.CLI_PINS`/`TRUST`/`ALLOW_PRIVATE_LAN_ONLY`):
+ *   `AndroidManifest.xml` (`com.callstack.appduct.CLI_PINS`/`TRUST`/`ALLOW_PRIVATE_LAN_ONLY`):
  *   those are XML attribute string values written by the config plugin at prebuild time, not compiled
  *   identifiers, so R8 never touches them, but they only exist at all if the config plugin ran. Both
  *   encodings AAPT2 can choose for the manifest string pool (UTF-8 or UTF-16LE) are checked.
@@ -113,16 +115,34 @@ const IOS_OBJC_CLASS_MARKER = "RCTNativeAppduct";
 const IOS_INFO_PLIST_KEY_MARKERS = ["AppductCliPins", "AppductTrust", "AppductAllowPrivateLanOnly"];
 
 // Fully-qualified name of `AppductNativeMarker`
-// (packages/native/android/core/src/main/java/com/callstackincubator/appduct/AppductNativeMarker.kt,
-// vendored into packages/react-native/android/core/src/main/java/com/callstackincubator/appduct/AppductNativeMarker.kt
+// (packages/native/android/core/src/main/java/com/callstack/appduct/AppductNativeMarker.kt,
+// vendored into packages/react-native/android/core/src/main/java/com/callstack/appduct/AppductNativeMarker.kt
 // by scripts/sync-native-core.mjs), kept unminified by packages/native/android/core/consumer-rules.pro
 // (vendored to packages/react-native/android/core/consumer-rules.pro the same way). Checked as a dex
 // type descriptor (`Lcom/.../AppductNativeMarker;`) — see detectAndroidSignals — which is how the
 // class's fully-qualified name is actually encoded in classes.dex.
-const ANDROID_KEEP_RULE_MARKER_CLASS = "com/callstackincubator/appduct/AppductNativeMarker";
+//
+// Each of the three Android markers is matched against BOTH the current `com.callstack.*` namespace
+// and the legacy `com.callstackincubator.*` one that every release up to and including 0.9.0
+// shipped. `doctor` inspects artifacts it did not build -- including an app built against an older
+// Appduct, which is exactly the case a release gate runs into -- and reporting `absent` for an app
+// that genuinely bundles Appduct is the one failure mode this tool must never have: it would
+// rubber-stamp shipping Appduct to production. docs/CI.md states the rule ("a broken check must
+// fail loudly, not rubber-stamp a release"); the cost of honouring it here is one extra buffer
+// scan per signal. The legacy entries are load-bearing and must not be dropped while any artifact
+// built before the rename can still be inspected.
+const ANDROID_KEEP_RULE_MARKER_CLASSES = [
+  "com/callstack/appduct/AppductNativeMarker",
+  "com/callstackincubator/appduct/AppductNativeMarker",
+];
 
-const ANDROID_DEX_PACKAGE_MARKERS = ["com/callstackincubator/appduct", "com.callstackincubator.appduct"];
-const ANDROID_MANIFEST_KEY_MARKER = "com.callstackincubator.appduct.";
+const ANDROID_DEX_PACKAGE_MARKERS = [
+  "com/callstack/appduct",
+  "com.callstack.appduct",
+  "com/callstackincubator/appduct",
+  "com.callstackincubator.appduct",
+];
+const ANDROID_MANIFEST_KEY_MARKERS = ["com.callstack.appduct.", "com.callstackincubator.appduct."];
 
 const bufferIncludesAscii = (haystack: Buffer, needle: string): boolean => {
   return haystack.includes(Buffer.from(needle, "utf8"));
@@ -366,7 +386,9 @@ const detectAndroidSignals = (bytes: Buffer): DetectionSignal[] => {
   // in every supported consumer setup (see the file-level doc comment). Matched as a dex type
   // descriptor (`L` + fully-qualified-name-with-slashes + `;`) since that's the actual encoding of
   // a class name inside classes.dex, not just a loose substring check.
-  if (bufferIncludesAscii(bytes, `L${ANDROID_KEEP_RULE_MARKER_CLASS};`)) {
+  if (
+    ANDROID_KEEP_RULE_MARKER_CLASSES.some((klass) => bufferIncludesAscii(bytes, `L${klass};`))
+  ) {
     signals.push("android-keep-rule-marker");
   }
 
@@ -375,8 +397,9 @@ const detectAndroidSignals = (bytes: Buffer): DetectionSignal[] => {
   }
 
   if (
-    bufferIncludesAscii(bytes, ANDROID_MANIFEST_KEY_MARKER) ||
-    bufferIncludesUtf16le(bytes, ANDROID_MANIFEST_KEY_MARKER)
+    ANDROID_MANIFEST_KEY_MARKERS.some(
+      (marker) => bufferIncludesAscii(bytes, marker) || bufferIncludesUtf16le(bytes, marker),
+    )
   ) {
     signals.push("android-manifest-meta-data-keys");
   }

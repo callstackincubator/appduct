@@ -100,9 +100,9 @@ hand-adding the pod is a combination only a maintainer would use. Task 09 should
 | iOS `Info.plist` | `AppductCliPins` | array of `sha256/...` |
 | iOS `Info.plist` | `AppductTrust` | `"link"` \| `"pin"` |
 | iOS `Info.plist` | `AppductAllowPrivateLanOnly` | Boolean |
-| Android meta-data | `com.callstackincubator.appduct.CLI_PINS` | JSON array string |
-| Android meta-data | `com.callstackincubator.appduct.TRUST` | `"link"` \| `"pin"` |
-| Android meta-data | `com.callstackincubator.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean |
+| Android meta-data | `com.callstack.appduct.CLI_PINS` | JSON array string |
+| Android meta-data | `com.callstack.appduct.TRUST` | `"link"` \| `"pin"` |
+| Android meta-data | `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean |
 
 ### Deleted outright
 

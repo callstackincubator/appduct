@@ -8,19 +8,19 @@
           (docs/tasks/19-android-entry-points.md). `${applicationId}` is filled in automatically by
           AGP: every consumer app gets a uniquely named authority, as the platform requires for a
           ContentProvider. The name below is fully qualified, not the relative `.AppductInitProvider`
-          shorthand, because this module's Kotlin package (`com.callstackincubator.appduct`)
-          differs from its AGP `namespace` (`com.callstackincubator.appduct.core`, see
+          shorthand, because this module's Kotlin package (`com.callstack.appduct`)
+          differs from its AGP `namespace` (`com.callstack.appduct.core`, see
           build.gradle) that relative names resolve against; a relative name here would resolve to
           a class that doesn't exist and crash at provider-install time.
 
           Opt out (an app that wants to drive initialization itself instead) with, in the app's own
           manifest:
-            <provider android:name="com.callstackincubator.appduct.AppductInitProvider"
+            <provider android:name="com.callstack.appduct.AppductInitProvider"
                        tools:node="remove" />
           See packages/native/android/README.md, "Opting out of the init provider and trampoline".
         -->
         <provider
-            android:name="com.callstackincubator.appduct.AppductInitProvider"
+            android:name="com.callstack.appduct.AppductInitProvider"
             android:authorities="${applicationId}.appduct-init"
             android:exported="false" />
 
@@ -34,11 +34,11 @@
           the same scheme for your own deep links too).
 
           Opt out the same way:
-            <activity android:name="com.callstackincubator.appduct.AppductLinkActivity"
+            <activity android:name="com.callstack.appduct.AppductLinkActivity"
                       tools:node="remove" />
         -->
         <activity
-            android:name="com.callstackincubator.appduct.AppductLinkActivity"
+            android:name="com.callstack.appduct.AppductLinkActivity"
             android:theme="@android:style/Theme.NoDisplay"
             android:exported="true"
             android:excludeFromRecents="true"

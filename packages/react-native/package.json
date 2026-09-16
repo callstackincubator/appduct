@@ -65,7 +65,7 @@
     "type": "modules",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.callstackincubator.appduct"
+      "javaPackageName": "com.callstack.appduct"
     }
   },
   "dependencies": {

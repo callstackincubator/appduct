@@ -7,6 +7,6 @@
 # `appduct doctor` (packages/appduct/src/artifact-inspect.ts, docs/tasks/10-android-detection-keep-rule.md)
 # has a detection anchor that survives aggressive release minification even in a bare-RN app with
 # no config plugin and no other Android keep rules. Deliberately scoped to this one marker class,
-# not the whole `com.callstackincubator.appduct` package: everything else in this library
+# not the whole `com.callstack.appduct` package: everything else in this library
 # remains free to be renamed and shrunk by R8 as normal.
--keep class com.callstackincubator.appduct.AppductNativeMarker { *; }
+-keep class com.callstack.appduct.AppductNativeMarker { *; }

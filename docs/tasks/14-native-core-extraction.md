@@ -54,7 +54,7 @@ Package.swift                          # repo root -- SwiftPM requires it there 
 ## Decisions and why
 
 **Vendoring, not a dependency.** `@appduct/react-native` does not depend on
-`AppductCore`/`com.callstackincubator.appduct:core` as a CocoaPods/Gradle dependency.
+`AppductCore`/`com.callstack.appduct:core` as a CocoaPods/Gradle dependency.
 `packages/react-native/scripts/sync-native-core.mjs`, wired into this package's `build` and
 `prepack` scripts, copies the sources in instead. Publishing `packages/native` independently
 to CocoaPods trunk and Maven Central is deferred to Phase 3 of issue #48 — until that exists,
@@ -100,13 +100,13 @@ the unchanged `AppductConnectionManagerTest.kt` test suite (which never called `
 directly, only the pure functions) continuing to pass unmodified.
 
 **Android package name unchanged; AAR namespace changed.** The issue allows either keeping the
-existing Kotlin package (`com.callstackincubator.appduct`) for the moved classes or moving
+existing Kotlin package (`com.callstack.appduct`) for the moved classes or moving
 them under a `.core` subpackage, calling the former "acceptable and lower-risk." Taken: touching
 every import across the moved files and the still-RN-package bridge that references them by
 simple name is unnecessary risk for a mechanical move. The AAR **namespace** (a separate AGP
 concept — where a module's own generated `R`/`BuildConfig` land, not the Kotlin package its
-classes declare) is `com.callstackincubator.appduct.core` for both `core` and `core-noop`,
-distinct from `@appduct/react-native`'s own `com.callstackincubator.appduct` namespace —
+classes declare) is `com.callstack.appduct.core` for both `core` and `core-noop`,
+distinct from `@appduct/react-native`'s own `com.callstack.appduct` namespace —
 required since a consumer app links the RN module and one of `core`/`core-noop` into the same
 build. `core` and `core-noop` share a namespace with each other safely, since exactly one is
 ever on a given variant's classpath (`debugImplementation`-equivalent vs.

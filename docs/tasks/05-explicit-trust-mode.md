@@ -23,7 +23,7 @@ moves from "we guessed from the build type" to "someone wrote it down".
 
 ## Scope
 
-Read `AppductTrust` (iOS `Info.plist`) / `com.callstackincubator.appduct.TRUST`
+Read `AppductTrust` (iOS `Info.plist`) / `com.callstack.appduct.TRUST`
 (Android meta-data) alongside the existing pins keys. Values: `"link"` | `"pin"`.
 
 Rewrite `resolveTrustedPins` on both platforms to take `(trust, embeddedPins, linkPin)`:

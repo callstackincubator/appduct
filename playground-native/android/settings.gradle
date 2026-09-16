@@ -8,7 +8,7 @@ pluginManagement {
 
 rootProject.name = 'appduct-playground-native'
 
-// Substitutes `com.callstackincubator.appduct:core`/`:core-noop` with the local Gradle
+// Substitutes `com.callstack.appduct:core`/`:core-noop` with the local Gradle
 // projects from packages/native/android instead of resolving a published Maven artifact --
 // exactly the composite-build wiring issue #48 phase 3 sketches, and how this playground stays
 // in lockstep with the native core as it's developed, with no publish-then-consume round trip.
@@ -17,8 +17,8 @@ rootProject.name = 'appduct-playground-native'
 // name above, so the two composite builds' project names never collide).
 includeBuild("../../packages/native/android") {
   dependencySubstitution {
-    substitute(module("com.callstackincubator.appduct:core")).using(project(":core"))
-    substitute(module("com.callstackincubator.appduct:core-noop")).using(project(":core-noop"))
+    substitute(module("com.callstack.appduct:core")).using(project(":core"))
+    substitute(module("com.callstack.appduct:core-noop")).using(project(":core-noop"))
   }
 }
 

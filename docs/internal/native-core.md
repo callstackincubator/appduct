@@ -18,13 +18,14 @@ over resolved pnpm workspace packages, never sees it either.
 | --- | --- | --- |
 | `@appduct/react-native` | **Vendored by copy**, not a dependency — `packages/react-native/scripts/sync-native-core.mjs` copies source files in at build/publish time (see below) | [`../../packages/react-native/README.md`](../../packages/react-native/README.md) |
 | A plain iOS app | SwiftPM (`.package(url:)` against the repo-root `Package.swift`) or CocoaPods (the repo-root `AppductCore.podspec`) | [`../../packages/native/ios/README.md`](../../packages/native/ios/README.md) |
-| A plain Android app | Maven (`com.callstackincubator.appduct:core`/`:core-noop`) | [`../../packages/native/android/README.md`](../../packages/native/android/README.md) |
+| A plain Android app | Maven (`com.callstack.appduct:core`/`:core-noop`) | [`../../packages/native/android/README.md`](../../packages/native/android/README.md) |
 
 CocoaPods trunk and the SwiftPM tag are published by `deploy.yaml`'s `publish-cocoapods` job,
 which runs after the npm publishes on every GitHub release (`docs/CI.md`); the SwiftPM "publish" is
 the release's git tag itself, since `Package.swift` carries no version of its own. **Maven Central
-is still an ops task** — `core`/`core-noop` have `maven-publish` wiring but no repository, signing,
-or credentials — see [`../tasks/21-native-core-integration.md`](../tasks/21-native-core-integration.md).
+is published by `deploy.yaml`'s `publish-maven` job**, which stages a signed bundle and uploads it
+to the Central Portal for validation; the final Publish is a deliberate manual step in the Portal
+UI. See [`../CI.md`](../CI.md#maven-central).
 `playground-native/android`'s `settings.gradle` and `playground-native/ios`'s `project.yml` both
 build against this worktree's own sources directly (Gradle `includeBuild` substitution, a local
 SwiftPM package path respectively) — no publish-then-consume round trip needed for local
@@ -59,7 +60,7 @@ decisions (why `Appduct.shared` starts `restoreSession()` on first access, the A
 `AppductClient` instance and the one process-memory resume lease that comes with it; the RN
 bridge (`AppductTurboBridge.swift`/`NativeAppductModule.kt`) owns a *separate*
 `AppductClient` of its own. A React Native app that imported `AppductCore`/
-`com.callstackincubator.appduct:core` directly and called the facade alongside the RN bridge
+`com.callstack.appduct:core` directly and called the facade alongside the RN bridge
 would end up with two independent clients racing for the same lease and the same deep link — which
 is also why the facade files (`AppductAPI.swift` on iOS; `Appduct.kt`,
 `AppductInitProvider.kt`, `AppductLinkActivity.kt` on Android) are excluded from vendoring
@@ -94,7 +95,7 @@ dependencies (and therefore only lets another project depend on this repo via
 
 ## How `@appduct/react-native` vendors this
 
-The RN package does **not** depend on `AppductCore`/`com.callstackincubator.appduct:core` as
+The RN package does **not** depend on `AppductCore`/`com.callstack.appduct:core` as
 a CocoaPods/Gradle dependency. Publishing this core independently to CocoaPods trunk and Maven
 Central is deferred (see the table above); until then the RN package's own releases would be
 blocked on unrelated native-core publishing infrastructure if it depended on published core

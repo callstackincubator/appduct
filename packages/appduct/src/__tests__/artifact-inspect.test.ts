@@ -142,7 +142,7 @@ describe("artifact-inspect: Android .apk (synthetic zip fixture)", () => {
     await buildZipFixture(apkPath, {
       "classes.dex": Buffer.concat([
         Buffer.from("dex\n035\0"),
-        Buffer.from("Lcom/callstackincubator/appduct/AppductPackage;"),
+        Buffer.from("Lcom/callstack/appduct/AppductPackage;"),
       ]),
       "AndroidManifest.xml": "binary-axml-placeholder-no-appduct-keys",
     });
@@ -162,8 +162,8 @@ describe("artifact-inspect: Android .apk (synthetic zip fixture)", () => {
     await buildZipFixture(apkPath, {
       "classes.dex": Buffer.concat([
         Buffer.from("dex\n035\0"),
-        Buffer.from("Lcom/callstackincubator/appduct/AppductPackage;"),
-        Buffer.from("Lcom/callstackincubator/appduct/AppductNativeMarker;"),
+        Buffer.from("Lcom/callstack/appduct/AppductPackage;"),
+        Buffer.from("Lcom/callstack/appduct/AppductNativeMarker;"),
       ]),
       "AndroidManifest.xml": "binary-axml-placeholder-no-appduct-keys",
     });
@@ -187,7 +187,7 @@ describe("artifact-inspect: Android .apk (synthetic zip fixture)", () => {
       // for AppductNativeMarker held: its fully-qualified dex type descriptor survives verbatim.
       "classes.dex": Buffer.concat([
         Buffer.from("dex\n035\0"),
-        Buffer.from("Lcom/callstackincubator/appduct/AppductNativeMarker;"),
+        Buffer.from("Lcom/callstack/appduct/AppductNativeMarker;"),
       ]),
       "AndroidManifest.xml": "no appduct keys in here (bare-RN app, no config plugin)",
     });
@@ -203,11 +203,11 @@ describe("artifact-inspect: Android .apk (synthetic zip fixture)", () => {
     const apkPath = path.join(root, "manifest-only.apk");
 
     await buildZipFixture(apkPath, {
-      // Simulates a release build where R8 renamed the dex package (no "callstackincubator" string
+      // Simulates a release build where R8 renamed the dex package (no "callstack" string
       // left in classes.dex) but the config-plugin-authored manifest meta-data keys survive, since
       // they're XML attribute string data, not a code symbol R8 can rename.
       "classes.dex": Buffer.from("dex\n035\0La/b/c;"),
-      "AndroidManifest.xml": Buffer.from("com.callstackincubator.appduct.CLI_PINS", "utf16le"),
+      "AndroidManifest.xml": Buffer.from("com.callstack.appduct.CLI_PINS", "utf16le"),
     });
 
     const result = await inspectArtifact(apkPath);
@@ -217,6 +217,26 @@ describe("artifact-inspect: Android .apk (synthetic zip fixture)", () => {
     expect(result.signals).not.toContain("android-dex-package-symbol");
   });
 
+  test("an artifact built before the com.callstackincubator -> com.callstack rename is still detected -- a release gate must never report a bundled Appduct as absent", async () => {
+    const root = await withFixtureRoot();
+    const apkPath = path.join(root, "legacy-namespace.apk");
+
+    await buildZipFixture(apkPath, {
+      // Exactly what Appduct <= 0.9.0 shipped: the marker class under the pre-rename package.
+      "classes.dex": Buffer.concat([
+        Buffer.from("dex\n035\0"),
+        Buffer.from("Lcom/callstackincubator/appduct/AppductNativeMarker;"),
+      ]),
+      "AndroidManifest.xml": Buffer.from("com.callstackincubator.appduct.CLI_PINS", "utf16le"),
+    });
+
+    const result = await inspectArtifact(apkPath);
+
+    expect(result.present).toBe(true);
+    expect(result.signals).toContain("android-keep-rule-marker");
+    expect(result.signals).toContain("android-dex-package-symbol");
+    expect(result.signals).toContain("android-manifest-meta-data-keys");
+  });
   test("excluded: reports absent with no signals", async () => {
     const root = await withFixtureRoot();
     const apkPath = path.join(root, "excluded.apk");
@@ -241,7 +261,7 @@ describe("artifact-inspect: Android .aab (bonus format coverage)", () => {
 
     await buildZipFixture(aabPath, {
       "base/dex/classes.dex": Buffer.from(
-        "Lcom/callstackincubator/appduct/AppductPackage;Lcom/callstackincubator/appduct/AppductNativeMarker;",
+        "Lcom/callstack/appduct/AppductPackage;Lcom/callstack/appduct/AppductNativeMarker;",
       ),
       "base/manifest/AndroidManifest.xml": "no keys here",
     });

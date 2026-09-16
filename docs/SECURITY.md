@@ -182,9 +182,9 @@ Android `<application>` meta-data:
 
 | Name | Purpose |
 | --- | ------- |
-| `com.callstackincubator.appduct.CLI_PINS` | JSON array string of pin values |
-| `com.callstackincubator.appduct.TRUST` | `"link"` \| `"pin"` — any other value is a hard error at connect time |
-| `com.callstackincubator.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean meta-data value (a `"true"`/`"false"` String is also accepted); defaults to `true` (fail-closed) when absent |
+| `com.callstack.appduct.CLI_PINS` | JSON array string of pin values |
+| `com.callstack.appduct.TRUST` | `"link"` \| `"pin"` — any other value is a hard error at connect time |
+| `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean meta-data value (a `"true"`/`"false"` String is also accepted); defaults to `true` (fail-closed) when absent |
 
 Wire **deep links** so the OS can open your app with the host's bootstrap URL, and make
 sure the app scheme matches the one `appduct link` (or the `deepLinkScheme` plugin
@@ -201,7 +201,7 @@ worked example and `Appduct.shared.buildConfig`, the plain-app equivalent of
 `getAppductBuildConfig()`.
 
 A plain Android app consuming `packages/native` directly (the `Appduct` object) sets the same
-`<application>` meta-data keys — `com.callstackincubator.appduct.CLI_PINS`, `.TRUST`,
+`<application>` meta-data keys — `com.callstack.appduct.CLI_PINS`, `.TRUST`,
 `.ALLOW_PRIVATE_LAN_ONLY` — from the table above, read by the same `resolveTrustedPins`-equivalent
 logic the RN bridge's `connect()` uses. See
 [`packages/native/android/README.md`](../packages/native/android/README.md#5-hardened-builds) for
