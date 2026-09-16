@@ -24,7 +24,7 @@ playground-native/android/
 ```
 
 This is **not** a published-artifact consumer: `settings.gradle`'s `includeBuild` substitutes
-`com.callstackincubator.appduct:core`/`:core-noop` with the local Gradle projects from
+`com.callstack.appduct:core`/`:core-noop` with the local Gradle projects from
 `packages/native/android`, so the playground always builds against whatever is in this worktree,
 with no publish-then-consume round trip. A real consumer app instead depends on the published
 Maven coordinates -- see `packages/native/android/README.md`.

@@ -222,3 +222,120 @@ jobs:
         # warning in these sources should block a release. test.yaml's iOS build catches it first,
         # on the PR that introduces it, so reaching this job with warnings should not happen.
         run: pod trunk push AppductCore.podspec
+
+  publish-maven:
+    # Alongside publish-cocoapods rather than after it: the two are independent registries, and
+    # neither can be rolled back, so ordering them buys nothing. Both wait on the npm publishes for
+    # the same reason publish-cocoapods does -- Maven Central is immutable, a version can never be
+    # replaced or deleted, so the irreversible half of a release only runs once npm (which allows
+    # `npm unpublish` for 72 hours) is known good.
+    needs: [publish-cli, publish-react-native]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Holds CENTRAL_TOKEN_USERNAME/PASSWORD (Central Portal user token) and the GPG key pair.
+    # Central has no OIDC trusted-publishing equivalent either, so these are long-lived secrets in
+    # a protected environment.
+    environment: maven-central
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The release's tag: the Gradle build reads its version from
+          # packages/react-native/package.json, so the checkout must be the commit the release names.
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+      - name: Set up Java 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          # See test.yaml: the legacy standalone "tools" package no longer exists upstream.
+          packages: platform-tools
+      - name: Stage the signed bundle
+        # Publishes both modules into one on-disk Maven repository layout, which is exactly the
+        # shape the Portal's bundle zip must have. Gradle writes the .md5/.sha1 checksums Central
+        # requires for every file, and the `signing` plugin writes a .asc beside each one -- the
+        # key is only ever in the environment, never on the runner's disk.
+        working-directory: packages/native/android
+        env:
+          APPDUCT_SIGNING_KEY: ${{ secrets.APPDUCT_SIGNING_KEY }}
+          APPDUCT_SIGNING_PASSWORD: ${{ secrets.APPDUCT_SIGNING_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon \
+            :core:publishAllPublicationsToCentralBundleRepository \
+            :core-noop:publishAllPublicationsToCentralBundleRepository
+      - name: Verify every artifact is signed
+        # A missing APPDUCT_SIGNING_KEY makes `signing` a silent no-op by design, so that
+        # `publishToMavenLocal` keeps working on an unkeyed machine (see publishing.gradle). That
+        # same leniency would otherwise let this job upload an unsigned bundle and fail deep inside
+        # Central's validator, so assert it here where the cause is obvious.
+        working-directory: packages/native/android
+        run: |
+          bundle=build/central-bundle
+          unsigned=$(find "$bundle" -type f \
+            ! -name '*.asc' ! -name '*.md5' ! -name '*.sha1' ! -name '*.sha256' ! -name '*.sha512' \
+            ! -name 'maven-metadata.xml' \
+            -exec sh -c '[ -f "$1.asc" ] || echo "$1"' _ {} \;)
+          if [ -n "$unsigned" ]; then
+            echo "::error::Unsigned artifacts staged -- is APPDUCT_SIGNING_KEY set?"
+            echo "$unsigned"
+            exit 1
+          fi
+          echo "All staged artifacts carry a .asc signature."
+      - name: Build the deployment bundle
+        # maven-metadata.xml is excluded deliberately: Central generates its own repository
+        # metadata, and Gradle's copy describes only this one deployment, so shipping it is at best
+        # redundant and at worst a validation failure.
+        working-directory: packages/native/android/build/central-bundle
+        run: zip -r "$RUNNER_TEMP/central-bundle.zip" . -x '*maven-metadata.xml*'
+      - name: Upload to the Central Portal
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        # publishingType=USER_MANAGED, not AUTOMATIC. Central validates the bundle and then waits
+        # for a human to press Publish in the Portal UI. Given the deployment can never be undone
+        # once it goes out, the last step stays manual until this path has proven itself over a few
+        # releases; switching to AUTOMATIC later is a one-word change.
+        run: |
+          auth=$(printf '%s:%s' "$CENTRAL_TOKEN_USERNAME" "$CENTRAL_TOKEN_PASSWORD" | base64 | tr -d '\n')
+          response=$(curl --fail-with-body -sS -X POST \
+            -H "Authorization: Bearer $auth" \
+            -F "bundle=@$RUNNER_TEMP/central-bundle.zip" \
+            "https://central.sonatype.com/api/v1/publisher/upload?name=appduct-$RELEASE_TAG&publishingType=USER_MANAGED")
+          echo "Deployment id: $response"
+          echo "DEPLOYMENT_ID=$response" >> "$GITHUB_ENV"
+      - name: Report validation status
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+        # Validation is asynchronous, so poll until it leaves the pending states. FAILED fails the
+        # job; VALIDATED is the success case and means the release is staged and waiting for the
+        # manual Publish. Never publishes anything itself.
+        run: |
+          auth=$(printf '%s:%s' "$CENTRAL_TOKEN_USERNAME" "$CENTRAL_TOKEN_PASSWORD" | base64 | tr -d '\n')
+          for _ in $(seq 1 40); do
+            state=$(curl --fail-with-body -sS -X POST \
+              -H "Authorization: Bearer $auth" \
+              "https://central.sonatype.com/api/v1/publisher/status?id=$DEPLOYMENT_ID" \
+              | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{
+                  process.stdout.write(JSON.parse(s).deploymentState || "UNKNOWN");
+                })')
+            echo "deploymentState=$state"
+            case "$state" in
+              VALIDATED|PUBLISHING|PUBLISHED)
+                echo "::notice::Deployment $DEPLOYMENT_ID is $state. Press Publish at https://central.sonatype.com/publishing/deployments to release it."
+                exit 0
+                ;;
+              FAILED)
+                echo "::error::Central rejected deployment $DEPLOYMENT_ID. See https://central.sonatype.com/publishing/deployments"
+                exit 1
+                ;;
+            esac
+            sleep 15
+          done
+          echo "::error::Timed out waiting for deployment $DEPLOYMENT_ID to validate."
+          exit 1

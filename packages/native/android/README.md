@@ -13,8 +13,8 @@ Two artifacts, same public API, one real, one inert:
 
 ```kotlin
 dependencies {
-  debugImplementation("com.callstackincubator.appduct:core:<version>")
-  releaseImplementation("com.callstackincubator.appduct:core-noop:<version>")
+  debugImplementation("com.callstack.appduct:core:<version>")
+  releaseImplementation("com.callstack.appduct:core-noop:<version>")
 }
 ```
 

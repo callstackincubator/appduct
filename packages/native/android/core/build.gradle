@@ -1,8 +1,7 @@
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
-apply plugin: 'maven-publish'
 
-group = 'com.callstackincubator.appduct'
+group = 'com.callstack.appduct'
 version = rootProject.ext.appductVersion
 
 android {
@@ -55,6 +54,9 @@ android {
   publishing {
     singleVariant('release') {
       withSourcesJar()
+      // Central rejects a deployment with no javadoc jar. AGP generates one from the Kotlin/Java
+      // sources here; for a Kotlin module it is largely a stub, which Central explicitly permits.
+      withJavadocJar()
     }
   }
 }
@@ -99,21 +101,11 @@ androidComponents {
   }
 }
 
-// Minimal `maven-publish` wiring for Phase 3 (docs/tasks/14-native-core-extraction.md), when this
-// module is actually published to Maven Central rather than only vendored into
-// @appduct/react-native by scripts/sync-native-core.mjs. Not exercised by CI yet -- no
-// `publishing.repositories` target is configured -- but the coordinates are fixed now so a
-// consumer's `debugImplementation("com.callstackincubator.appduct:core:<version>")` (see the
-// issue's Phase 3 sketch) is stable ahead of the actual publish.
-afterEvaluate {
-  publishing {
-    publications {
-      release(MavenPublication) {
-        from components.release
-        groupId = group
-        artifactId = 'core'
-        version = version
-      }
-    }
-  }
-}
+// Maven Central publishing. The POM metadata, signing, and the staged bundle layout all live in
+// publishing.gradle, shared with core-noop; these two properties are the only per-module part.
+// A consumer declares `debugImplementation("com.callstack.appduct:core:<version>")` -- see
+// packages/native/android/README.md.
+ext.appductArtifactId = 'core'
+ext.appductArtifactDescription = 'Framework-free Android core for Appduct: TLS-pinned session ' +
+  'transport, session lifecycle, and tool registry for plain Android apps.'
+apply from: "$rootDir/publishing.gradle"

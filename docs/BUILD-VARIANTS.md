@@ -309,14 +309,14 @@ those sources compile, so the pod never needs `Stub/`.
 
 **Android** (`packages/native/android`): a standalone Gradle project (own `settings.gradle`,
 not a workspace member) publishing two modules with the same public API —
-`com.callstackincubator.appduct:core` (the real implementation) and `:core-noop` (every
+`com.callstack.appduct:core` (the real implementation) and `:core-noop` (every
 method a no-op, no `okhttp` dependency, no marker class). `@appduct/react-native` vendors
 `core`/`core-noop` into `android/core`/`android/core-noop` and picks between them the same way
 described above — `AppductPackage`/`NativeAppductModule` (`android/src/main/java`)
 always compile, and `debug`/`release` add whichever vendored directory to `java.srcDirs`.
 **A plain Android app instead depends on `core`/`core-noop` as ordinary Maven coordinates**
-(`debugImplementation("com.callstackincubator.appduct:core:<version>")` /
-`releaseImplementation("com.callstackincubator.appduct:core-noop:<version>")`,
+(`debugImplementation("com.callstack.appduct:core:<version>")` /
+`releaseImplementation("com.callstack.appduct:core-noop:<version>")`,
 `packages/native/android/README.md`) — a real per-variant *dependency* decision, distinct from
 (and simpler than) the vendored copy's source-directory swap, since a plain app has no
 `PackageList.java`-style shared registration file forcing every variant onto the same
