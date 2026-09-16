@@ -1,6 +1,6 @@
 require 'json'
 
-package = JSON.parse(File.read(File.join(__dir__, '..', '..', 'react-native', 'package.json')))
+package = JSON.parse(File.read(File.join(__dir__, 'packages', 'react-native', 'package.json')))
 
 Pod::Spec.new do |s|
   s.name           = 'AppductCore'
@@ -12,18 +12,23 @@ Pod::Spec.new do |s|
   s.summary        = 'Framework-free Swift core for Appduct: TLS-pinned session transport and resume leases.'
   s.description    = 'The native connection layer behind @appduct/react-native, usable directly ' \
                       'from plain iOS/tvOS/macOS apps. See packages/native/README.md.'
-  s.license        = package['license']
+  s.license        = { :type => package['license'], :file => 'LICENSE' }
   s.author         = package['author']
   s.homepage       = package['homepage']
   s.platforms      = {
     :ios => '15.1',
     :tvos => '15.1'
   }
-  s.swift_version  = '5.9'
-  s.source         = { git: 'https://github.com/callstackincubator/appduct' }
+  # Language mode, not a toolchain version: `-swift-version` accepts only 4, 4.2, 5, and 6, so
+  # '6.1' is not a legal value here despite Package.swift's `swift-tools-version: 6.1`. Set to 6 to
+  # match the mode SwiftPM actually compiles these same sources in (verified: an iOS build of the
+  # root Package.swift passes `-swift-version 6`); the previous '5.9' was normalised to mode 5 by
+  # Xcode, quietly building the pod under laxer rules than the SwiftPM package.
+  s.swift_version  = '6.0'
+  s.source         = { git: 'https://github.com/callstackincubator/appduct.git', tag: "v#{s.version}" }
   s.static_framework = true
 
-  s.source_files = 'ios/Sources/AppductCore/Real/**/*.swift'
+  s.source_files = 'packages/native/ios/Sources/AppductCore/Real/**/*.swift'
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
@@ -34,15 +39,16 @@ Pod::Spec.new do |s|
     # include them has already been made, so the code inside should always be the real
     # implementation, never the stub. All connection state lives behind a single actor (see
     # AppductConnectionManager); `-strict-concurrency=complete` keeps it that way by failing the
-    # build on any new concurrency violation -- kept here rather than relying on the SwiftPM
-    # target's Swift 6 language mode, since a CocoaPods consumer's `swift_version` does not imply it.
+    # build on any new concurrency violation. Redundant while `s.swift_version` is 6.0 -- language
+    # mode 6 implies complete checking -- but kept explicit so lowering that value back to 5 cannot
+    # silently drop the strictness along with it.
     'OTHER_SWIFT_FLAGS' => '-DAPPDUCT_ENABLED -strict-concurrency=complete',
   }
 
   s.test_spec 'Tests' do |test_spec|
     # Pure-logic tests (actor state transitions, SPKI pin parity with
     # packages/appduct/src/spki-pin.ts) that need only Foundation/Security.
-    test_spec.source_files = 'ios/Tests/AppductCoreTests/**/*.swift'
+    test_spec.source_files = 'packages/native/ios/Tests/AppductCoreTests/**/*.swift'
     test_spec.requires_app_host = true
   end
 end

@@ -145,3 +145,80 @@ jobs:
           path: release
       - name: Publish React Native package
         run: npm publish ./release/appduct-react-native-*.tgz --access public --provenance --tag latest
+
+  publish-cocoapods:
+    # Deliberately last, after every npm publish has succeeded. A CocoaPods trunk version is
+    # permanent -- `pod trunk` has no unpublish, and a version can never be replaced or reused --
+    # whereas npm allows `npm unpublish` within 72 hours. So the irreversible half of the release
+    # only runs once the reversible half is known good; a trunk push that lands next to a failed
+    # npm publish would pin the repo to a version number it can never ship again.
+    needs: [publish-cli, publish-react-native]
+    runs-on: macos-latest
+    timeout-minutes: 45
+    # Holds COCOAPODS_TRUNK_TOKEN (from `pod trunk register`). CocoaPods has no OIDC/trusted-
+    # publishing equivalent to npm's, so this is a long-lived secret rather than an id-token
+    # exchange -- hence its own protected environment, and no `id-token: write` here.
+    environment: cocoapods
+    env:
+      # CocoaPods drives Ruby's default_external encoding off the locale; on the runner's default
+      # POSIX locale a non-ASCII byte anywhere in a podspec or a cloned source path raises
+      # `Encoding::CompatibilityError`. Same workaround the iOS test job applies to `pod install`.
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The release's tag, not the default branch: AppductCore.podspec reads its version out
+          # of packages/react-native/package.json at push time, so the checkout has to be the
+          # commit that release actually names.
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+      - name: Verify the release tag is fetchable from GitHub
+        # `pod trunk push` does not upload the working tree -- it clones `s.source`'s git URL at
+        # `tag: v#{s.version}` and validates that. A tag that is missing from the remote (a local-
+        # only tag, or a release cut from a branch) fails deep inside CocoaPods' downloader with an
+        # opaque git error, so check the precondition here where the message can say what is wrong.
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          source_url=$(grep -o 'https://github.com/[^'"'"']*\.git' AppductCore.podspec)
+          if [ -z "$(git ls-remote --tags "$source_url" "refs/tags/$RELEASE_TAG")" ]; then
+            echo "::error::$RELEASE_TAG is not present at $source_url, which is what 'pod trunk push' clones."
+            exit 1
+          fi
+      - name: Resolve the podspec version
+        # Single-sourced from packages/react-native/package.json by the podspec itself; the
+        # `package` job has already asserted that this equals the release tag.
+        run: |
+          version=$(node -p "require('./packages/react-native/package.json').version")
+          echo "PODSPEC_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Check whether this version is already on trunk
+        # Makes a re-run of a partially-failed deploy safe. A duplicate `pod trunk push` is a hard
+        # error, so without this any re-run after a successful push fails the whole workflow and
+        # obscures whatever actually needed re-running.
+        run: |
+          # 404 is the expected answer until the very first release, and it returns an empty body --
+          # so branch on the status code rather than piping nothing into a JSON parser.
+          http=$(curl -sS -o trunk.json -w '%{http_code}' \
+            "https://trunk.cocoapods.org/api/v1/pods/AppductCore" || echo 000)
+          if [ "$http" = "200" ] && node -e '
+              const pod = JSON.parse(require("fs").readFileSync("trunk.json", "utf8"));
+              const published = (pod.versions || []).some((v) => v.name === process.argv[1]);
+              process.exit(published ? 0 : 1);
+            ' "$PODSPEC_VERSION"; then
+            echo "ALREADY_PUBLISHED=true" >> "$GITHUB_ENV"
+            echo "AppductCore $PODSPEC_VERSION is already on trunk; skipping the push."
+          else
+            echo "ALREADY_PUBLISHED=false" >> "$GITHUB_ENV"
+          fi
+      - name: Publish AppductCore to CocoaPods trunk
+        if: env.ALREADY_PUBLISHED == 'false'
+        env:
+          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+        # `pod trunk push` validates locally (clone, lint, build for every platform the podspec
+        # declares) and only uploads once that passes, so a validation failure publishes nothing.
+        # Deliberately no --allow-warnings (#57 cleared the warnings that used to need it): a new
+        # warning in these sources should block a release. test.yaml's iOS build catches it first,
+        # on the PR that introduces it, so reaching this job with warnings should not happen.
+        run: pod trunk push AppductCore.podspec
