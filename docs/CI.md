@@ -234,14 +234,13 @@ It needs a `COCOAPODS_TRUNK_TOKEN` secret in a `cocoapods` environment. CocoaPod
 equivalent to npm's trusted publishing, so this is a long-lived credential from `pod trunk
 register` rather than an id-token exchange.
 
-**`--allow-warnings` is currently required** — tracked in
-[issue #57](https://github.com/callstackincubator/appduct/issues/57). Two main-actor-isolation
-warnings in `packages/native/ios/Sources/AppductCore/Real/AppductClientTypes.swift` (around
-`UIApplication.shared.applicationState`) and one no-op `await` in `AppductClient+Session.swift`
-trip trunk's validation otherwise. Note the first two are invisible to `test.yaml`'s `swift build`,
-which targets macOS where `#if canImport(UIKit)` is false — only an iOS/tvOS compile surfaces them,
-so today the release job is the first thing that sees them. While the flag is on, trunk validation
-is not a real gate.
+**The push runs without `--allow-warnings`,** so any warning in these sources fails validation
+and blocks the release. That is only safe because `test.yaml` builds `AppductCore` for an iOS
+destination with `SWIFT_TREAT_WARNINGS_AS_ERRORS=YES` (added in #59), catching such a warning on
+the PR that introduces it rather than here. The plain `swift build`/`swift test` steps cannot: they
+target macOS, where `#if canImport(UIKit)` is false and the UIKit-backed code is compiled out
+entirely. Note the iOS gate does not cover **tvOS**, which the podspec also declares and trunk also
+validates.
 
 ## Release policy
 

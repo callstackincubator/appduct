@@ -218,7 +218,7 @@ jobs:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
         # `pod trunk push` validates locally (clone, lint, build for every platform the podspec
         # declares) and only uploads once that passes, so a validation failure publishes nothing.
-        # --allow-warnings is required while the warnings tracked in issue #57 stand. Drop the
-        # flag once they are fixed -- until then trunk validation is not a real gate, since a new
-        # warning introduced later would pass too.
-        run: pod trunk push AppductCore.podspec --allow-warnings
+        # Deliberately no --allow-warnings (#57 cleared the warnings that used to need it): a new
+        # warning in these sources should block a release. test.yaml's iOS build catches it first,
+        # on the PR that introduces it, so reaching this job with warnings should not happen.
+        run: pod trunk push AppductCore.podspec
