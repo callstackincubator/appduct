@@ -49,6 +49,13 @@ Pod::Spec.new do |s|
     # Pure-logic tests (actor state transitions, SPKI pin parity with
     # packages/appduct/src/spki-pin.ts) that need only Foundation/Security.
     test_spec.source_files = 'packages/native/ios/Tests/AppductCoreTests/**/*.swift'
+    # FixturesConformanceTests reads the cross-language vectors in packages/native/fixtures/ at a
+    # path relative to its own source file (`#filePath`), not from a bundle. CocoaPods deletes every
+    # file no pattern names when it downloads a pod, so without this the fixtures are gone and the
+    # suite fails -- but only for a *downloaded* pod: `pod spec lint` and `pod trunk push`, never
+    # `pod lib lint`, which uses the working tree in place. Kept in place, at the same relative path,
+    # rather than copied as resources, because the test resolves them by path.
+    test_spec.preserve_paths = 'packages/native/fixtures/*.json'
     test_spec.requires_app_host = true
   end
 end
