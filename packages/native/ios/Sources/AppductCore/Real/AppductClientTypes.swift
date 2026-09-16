@@ -264,16 +264,17 @@ public protocol AppductDisposable: Sendable {
     public init() {}
 
     public func isBackgrounded() -> Bool {
-      var result = true
-      let block = {
-        result = UIApplication.shared.applicationState != .active
-      }
-      if Thread.isMainThread {
-        block()
-      } else {
-        DispatchQueue.main.sync(execute: block)
-      }
-      return result
+      // `UIApplication.shared` and `applicationState` are both main-actor-isolated, and this
+      // method is nonisolated (the protocol is a plain `Sendable` seam, called from
+      // `AppductClient`'s actor init). The main-thread hop below is what makes the read safe;
+      // `MainActor.assumeIsolated` is how that guarantee gets stated to the compiler rather than
+      // merely asserted in a comment, which is what `-strict-concurrency=complete` flagged.
+      //
+      // The `Thread.isMainThread` branch is load-bearing, not an optimisation: `sync` onto the
+      // main queue from the main thread deadlocks. Keeping it also keeps `assumeIsolated`'s own
+      // precondition satisfied on both paths -- it traps if it is ever reached off the main actor.
+      let readState = { MainActor.assumeIsolated { UIApplication.shared.applicationState != .active } }
+      return Thread.isMainThread ? readState() : DispatchQueue.main.sync(execute: readState)
     }
 
     public func onChange(_ handler: @escaping @Sendable (Bool) -> Void) -> any AppductDisposable {
