@@ -309,6 +309,22 @@ jobs:
         run: |
           swift build -c release
           swift test
+      - name: Build AppductCore for iOS
+        # `swift build` above targets the *host* -- macOS -- where `#if canImport(UIKit)` is false
+        # and UIKitAppductForegroundObserver is compiled out entirely. Until this step existed, no
+        # CI job had ever compiled that code for iOS, so its strict-concurrency warnings were only
+        # ever seen by `pod trunk push`'s validation at release time (issue #57).
+        #
+        # `-destination 'generic/platform=iOS'` builds for the device SDK without needing a
+        # simulator to be booted. `SWIFT_TREAT_WARNINGS_AS_ERRORS` is the point of the step: the
+        # CocoaPods publish job aims to run without `--allow-warnings`, which means any new warning
+        # in these sources blocks a release -- so it has to fail here, on the PR that introduces it,
+        # rather than weeks later during a release.
+        run: |
+          xcodebuild -scheme AppductCore -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/appductcore-ios" \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            build
       - name: Prebuild iOS
         working-directory: playground
         env:

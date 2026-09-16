@@ -211,7 +211,7 @@ extension AppductClient {
         do {
           try await self.transport.connect(options: options)
         } catch {
-          await self.settlePendingAttempt(.failure(error))
+          self.settlePendingAttempt(.failure(error))
         }
       }
     }
