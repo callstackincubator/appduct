@@ -198,13 +198,50 @@ The standalone `packages/native/android` test step (above) also runs
 `testDebugUnitTest`/`assembleRelease` tasks, so the `maven-publish` configuration
 (`docs/tasks/19-android-entry-points.md` §6) that a real Maven Central publish will eventually use
 is exercised on every run rather than only when someone remembers to check it by hand. This is
-still `publishToMavenLocal`, not a real publish — CocoaPods trunk / Maven Central / a SwiftPM tag
-publish remains an ops task, not something CI does (see `docs/tasks/21-native-core-integration.md`).
+still `publishToMavenLocal`, not a real publish: **Maven Central remains an ops task**, not
+something CI does (see `docs/tasks/21-native-core-integration.md`). The two iOS channels are wired,
+though — see [Native publishing](#native-publishing) below.
 
 CI invokes the command directly against the built artifact — `node packages/appduct/bin.js
 doctor <path> --assert-present|--assert-absent` from the repo root, after `pnpm build` — rather
 than through a published `appduct` binary, matching how the playground's own
 `scripts/appduct.sh` launcher invokes the CLI from a workspace checkout.
+
+## Native publishing
+
+`deploy.yaml` publishes three npm packages, and — since the CocoaPods wiring landed — the two iOS
+distribution channels as well. All of it hangs off one GitHub release.
+
+| Channel | Published by | Version comes from |
+| --- | --- | --- |
+| npm (`appduct`, `@appduct/shared`, `@appduct/react-native`) | `publish-*` jobs, OIDC trusted publishing | each `package.json` |
+| SwiftPM (`AppductCore`) | the release's **git tag** — nothing else to do | the tag; `Package.swift` has no version field |
+| CocoaPods trunk (`AppductCore`) | `publish-cocoapods` job | `packages/react-native/package.json`, read by the podspec |
+| Maven Central (`…appduct:core`, `:core-noop`) | **nobody yet — ops task** | `ext.appductVersion`, read from the same `package.json` |
+
+The podspec lives at the **repo root**, next to `Package.swift`, for the same reason that manifest
+does: CocoaPods resolves a trunk pod's file patterns against the root of the cloned repository, not
+against the podspec's own directory, so a podspec under `packages/native/ios/` would have to spell
+every path as if it were at the root anyway — and would lint incorrectly in place.
+
+`publish-cocoapods` runs **after** every npm publish has succeeded. A trunk version is permanent
+(there is no `pod trunk` unpublish, and a version can never be reused), whereas `npm unpublish`
+works for 72 hours — so the irreversible half of a release only runs once the reversible half is
+known good. The job is also re-run safe: it queries the trunk API first and skips a version already
+published, so re-running a partially-failed deploy does not fail on a duplicate push.
+
+It needs a `COCOAPODS_TRUNK_TOKEN` secret in a `cocoapods` environment. CocoaPods has no OIDC
+equivalent to npm's trusted publishing, so this is a long-lived credential from `pod trunk
+register` rather than an id-token exchange.
+
+**`--allow-warnings` is currently required** — tracked in
+[issue #57](https://github.com/callstackincubator/appduct/issues/57). Two main-actor-isolation
+warnings in `packages/native/ios/Sources/AppductCore/Real/AppductClientTypes.swift` (around
+`UIApplication.shared.applicationState`) and one no-op `await` in `AppductClient+Session.swift`
+trip trunk's validation otherwise. Note the first two are invisible to `test.yaml`'s `swift build`,
+which targets macOS where `#if canImport(UIKit)` is false — only an iOS/tvOS compile surfaces them,
+so today the release job is the first thing that sees them. While the flag is on, trunk validation
+is not a real gate.
 
 ## Release policy
 

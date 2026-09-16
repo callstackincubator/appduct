@@ -17,12 +17,14 @@ over resolved pnpm workspace packages, never sees it either.
 | Consumer | How it gets the code | Where |
 | --- | --- | --- |
 | `@appduct/react-native` | **Vendored by copy**, not a dependency — `packages/react-native/scripts/sync-native-core.mjs` copies source files in at build/publish time (see below) | [`../../packages/react-native/README.md`](../../packages/react-native/README.md) |
-| A plain iOS app | SwiftPM (`.package(url:)` against the repo-root `Package.swift`) or CocoaPods (`AppductCore.podspec`) | [`../../packages/native/ios/README.md`](../../packages/native/ios/README.md) |
+| A plain iOS app | SwiftPM (`.package(url:)` against the repo-root `Package.swift`) or CocoaPods (the repo-root `AppductCore.podspec`) | [`../../packages/native/ios/README.md`](../../packages/native/ios/README.md) |
 | A plain Android app | Maven (`com.callstackincubator.appduct:core`/`:core-noop`) | [`../../packages/native/android/README.md`](../../packages/native/android/README.md) |
 
-Publishing the iOS/Android artifacts the last two rows depend on (CocoaPods trunk, Maven Central, a
-SwiftPM tag) is an ops task, not something any of this repo's automation does — see
-[`../tasks/21-native-core-integration.md`](../tasks/21-native-core-integration.md).
+CocoaPods trunk and the SwiftPM tag are published by `deploy.yaml`'s `publish-cocoapods` job,
+which runs after the npm publishes on every GitHub release (`docs/CI.md`); the SwiftPM "publish" is
+the release's git tag itself, since `Package.swift` carries no version of its own. **Maven Central
+is still an ops task** — `core`/`core-noop` have `maven-publish` wiring but no repository, signing,
+or credentials — see [`../tasks/21-native-core-integration.md`](../tasks/21-native-core-integration.md).
 `playground-native/android`'s `settings.gradle` and `playground-native/ios`'s `project.yml` both
 build against this worktree's own sources directly (Gradle `includeBuild` substitution, a local
 SwiftPM package path respectively) — no publish-then-consume round trip needed for local
@@ -75,7 +77,6 @@ ios/
                (includes AppductAPI.swift, the plain-app facade)
     Stub/      a same-API no-op mirror, every file wrapped in `#if !APPDUCT_ENABLED`
   Tests/AppductCoreTests/    XCTest suite (moved from packages/react-native/ios/AppductTests)
-  AppductCore.podspec        CocoaPods consumption
 android/
   core/        the real implementation as a standalone Gradle module
                (includes Appduct.kt, AppductInitProvider.kt, AppductLinkActivity.kt --
