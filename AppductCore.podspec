@@ -45,17 +45,11 @@ Pod::Spec.new do |s|
     'OTHER_SWIFT_FLAGS' => '-DAPPDUCT_ENABLED -strict-concurrency=complete',
   }
 
-  s.test_spec 'Tests' do |test_spec|
-    # Pure-logic tests (actor state transitions, SPKI pin parity with
-    # packages/appduct/src/spki-pin.ts) that need only Foundation/Security.
-    test_spec.source_files = 'packages/native/ios/Tests/AppductCoreTests/**/*.swift'
-    # FixturesConformanceTests reads the cross-language vectors in packages/native/fixtures/ at a
-    # path relative to its own source file (`#filePath`), not from a bundle. CocoaPods deletes every
-    # file no pattern names when it downloads a pod, so without this the fixtures are gone and the
-    # suite fails -- but only for a *downloaded* pod: `pod spec lint` and `pod trunk push`, never
-    # `pod lib lint`, which uses the working tree in place. Kept in place, at the same relative path,
-    # rather than copied as resources, because the test resolves them by path.
-    test_spec.preserve_paths = 'packages/native/fixtures/*.json'
-    test_spec.requires_app_host = true
-  end
+  # No test_spec. The unit tests in packages/native/ios/Tests/AppductCoreTests run in CI through
+  # `swift test` against the repo-root Package.swift, the same choice Appduct.podspec made. Here it
+  # is also load-bearing: `pod spec lint` and `pod trunk push` run a pod's test spec on an iOS *and*
+  # a tvOS simulator, and several of these tests wait for actor work with fixed `Task.yield()`
+  # loops that are racy in a simulator (they pass on macOS). Declaring them made every trunk push a
+  # coin toss while adding no coverage CI lacks. Trunk validation still builds the pod for both
+  # platforms, which is what publishing needs.
 end
