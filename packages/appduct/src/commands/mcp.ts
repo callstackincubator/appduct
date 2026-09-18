@@ -107,6 +107,7 @@ export const handleMcpCommand = async (context: McpCommandContext): Promise<McpH
     scheme,
     schemeTried: tried,
     cwd: context.cwd,
+    stateDirRoot: paths.root,
     exec: context.exec,
     env: context.env,
   });

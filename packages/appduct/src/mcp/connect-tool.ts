@@ -213,6 +213,11 @@ export type ConnectToolDeps = {
    * resolved fresh on every call rather than once at startup, since which platform's `appId.<key>`
    * is needed depends on the call's (or auto-detection's) target. Defaults to `process.cwd()`. */
   cwd?: string;
+  /** The state directory in use, so the `appId` walk-up can never mistake it for a project config
+   * — the same exclusion `resolveScheme` is given at server startup (`commands/mcp.ts`). Without
+   * it, an operator who points `--state-dir` at a directory on the walk-up path would have that
+   * *global* file read at the project tier, inverting the documented precedence. */
+  stateDirRoot?: string;
   exec?: ExecFn;
   env?: NodeJS.ProcessEnv;
 };
@@ -273,7 +278,12 @@ const withResolvedAppId = async (
     return { delivery: base };
   }
 
-  const resolved = await resolveAppId({ platform, flagAppId, cwd: deps.cwd });
+  const resolved = await resolveAppId({
+    platform,
+    flagAppId,
+    cwd: deps.cwd,
+    stateDirRoot: deps.stateDirRoot,
+  });
 
   return { delivery: { ...base, appId: resolved.appId }, appIdTried: resolved.tried };
 };
