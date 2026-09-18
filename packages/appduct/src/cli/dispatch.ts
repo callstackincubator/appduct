@@ -183,6 +183,21 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
             {
               scheme: typeof parsedOptions.scheme === "string" ? parsedOptions.scheme : undefined,
               force: Boolean(parsedOptions.force),
+              // cac camelCases `--ios-app-id`/`--android-app-id`; the dashed spellings are kept as
+              // a fallback so a parser change can't silently drop the flag (same pattern as the
+              // now-removed `--bundle-id`).
+              iosAppId:
+                typeof parsedOptions.iosAppId === "string"
+                  ? parsedOptions.iosAppId
+                  : typeof parsedOptions["ios-app-id"] === "string"
+                    ? parsedOptions["ios-app-id"]
+                    : undefined,
+              androidAppId:
+                typeof parsedOptions.androidAppId === "string"
+                  ? parsedOptions.androidAppId
+                  : typeof parsedOptions["android-app-id"] === "string"
+                    ? parsedOptions["android-app-id"]
+                    : undefined,
             },
             // `init` never reads the state dir, but it must know which directory it is so it can
             // refuse to write a "safe to commit" project config into the daemon's own state.
@@ -215,13 +230,13 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
               scheme: typeof parsedOptions.scheme === "string" ? parsedOptions.scheme : undefined,
               open: typeof parsedOptions.open === "string" ? parsedOptions.open : undefined,
               device: typeof parsedOptions.device === "string" ? parsedOptions.device : undefined,
-              // cac camelCases `--bundle-id`; the dashed spelling is kept as a fallback so a
+              // cac camelCases `--app-id`; the dashed spelling is kept as a fallback so a
               // parser change can't silently drop the flag.
-              bundleId:
-                typeof parsedOptions.bundleId === "string"
-                  ? parsedOptions.bundleId
-                  : typeof parsedOptions["bundle-id"] === "string"
-                    ? parsedOptions["bundle-id"]
+              appId:
+                typeof parsedOptions.appId === "string"
+                  ? parsedOptions.appId
+                  : typeof parsedOptions["app-id"] === "string"
+                    ? parsedOptions["app-id"]
                     : undefined,
               // Left `undefined` when absent rather than coerced to `false`, so that
               // "--relaunch only applies with --open ios-device" fires on the flag actually being

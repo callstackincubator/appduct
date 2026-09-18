@@ -22,7 +22,15 @@ export const createCli = () => {
         "APPDUCT_SCHEME, and no walk-up: init decides what to write here, so it never bakes " +
         "an ambient value into a committed file.",
     )
-    .option("--force", "Replace the scheme already recorded in the project config.");
+    .option("--force", "Replace the scheme already recorded in the project config.")
+    .option(
+      "--ios-app-id <id>",
+      "iOS bundle id to write as \"appId.ios\" (needed to deliver a link with --open ios-device).",
+    )
+    .option(
+      "--android-app-id <id>",
+      "Android package name to write as \"appId.android\" (needed to deliver a link with --open android).",
+    );
 
   cli
     .command("keygen", "Generate an Appduct host private key and print its app fingerprint.")
@@ -43,8 +51,8 @@ export const createCli = () => {
     )
     .option("--device <id>", "adb serial, simulator udid or paired-device udid to target when --open is ambiguous.")
     .option(
-      "--bundle-id <id>",
-      "App bundle id for --open ios-device (default: config.json's \"iosBundleId\").",
+      "--app-id <id>",
+      "Installed app id for --open android/ios-device (default: .appduct/config.json's \"appId.<platform>\").",
     )
     .option(
       "--relaunch",

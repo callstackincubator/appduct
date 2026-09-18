@@ -42,6 +42,24 @@ export const usesLoopbackAddress = (target: OpenTarget): boolean => {
 };
 
 /**
+ * The `appId.<platform>` config key a target's app id is read from — the single place that maps a
+ * delivery target to the platform whose app id it needs. `undefined` for `ios-sim`: `simctl
+ * openurl` has no equivalent of `-p`/a bundle-id argument, so it needs no app id and none should
+ * ever be required for it.
+ */
+export const platformOf = (target: OpenTarget): "ios" | "android" | undefined => {
+  if (target === "android") {
+    return "android";
+  }
+
+  if (target === "ios-device") {
+    return "ios";
+  }
+
+  return undefined;
+};
+
+/**
  * Whether an advertised address is one that only resolves back to the machine that minted the link.
  * `daemon/address.ts` falls back to `127.0.0.1` when it cannot find a routable interface, and such
  * a link handed to a physical phone points the phone at *itself*: the app connects to nothing, the
@@ -328,29 +346,50 @@ const listPairedIosDevices = async (exec: ExecFn): Promise<PairedIosDevice[]> =>
 
 const describeIosDevice = (device: PairedIosDevice): string => `${device.name} (${device.udid})`;
 
-/** The single wording naming both ways to supply a bundle id, so the CLI and MCP paths agree. */
-export const MISSING_BUNDLE_ID_MESSAGE =
-  "Delivering to a physical iPhone needs the app's bundle id: pass \"--bundle-id <id>\" (or " +
-  '"bundleId" over MCP), or set "iosBundleId" in config.json.';
+/**
+ * The single wording naming every way to supply an app id, shared by the `android` and
+ * `ios-device` paths (and by the CLI/MCP/programmatic callers that resolve one before minting a
+ * link) so the fix cannot drift between them. This is the *last-line-of-defence* message: the
+ * normal path is `scheme.ts`'s `resolveAppId`/`describeMissingAppId`, which names the exact
+ * project-config locations it looked in and fires before a link is even minted. This one covers a
+ * caller that reaches `deliverToOpenTarget` some other way (a test, or a future direct caller)
+ * with no app id at all.
+ */
+export const MISSING_APP_ID_MESSAGE =
+  "Delivering to a device needs the installed app's id (the Android package name, or the iOS " +
+  'bundle id): pass "--app-id <id>" (or "appId" over MCP), or record it as "appId.<platform>" in ' +
+  '.appduct/config.json — run `appduct init --android-app-id <id> --ios-app-id <id>` to write it.';
 
 /**
- * A bundle id is the **only trailing positional** in the `devicectl device process launch` argv, so
- * a value beginning with `-` would be read by `devicectl` as an option rather than as the app to
- * launch — `--console`, say, silently changing what the command does. Apple's own grammar for a
- * bundle identifier is alphanumerics, `.` and `-`, which never legitimately starts with `-`, so
- * enforcing exactly that shape closes the hole at every entry point.
+ * This pattern guards two unrelated hazards, one per platform, and is deliberately a superset of
+ * both platforms' own id grammars rather than a spelling check for either:
  *
- * A `--` terminator is deliberately *not* used instead: `devicectl` takes launch arguments after
- * the bundle id, its handling of `--` is undocumented, and none of it can be verified without
- * hardware — whereas this check is exact and fully testable.
+ * - `ios-device`: an app id is the **only trailing positional** in the `devicectl device process
+ *   launch` argv, so a value beginning with `-` would be read by `devicectl` as an option rather
+ *   than as the app to launch — `--console`, say, silently changing what the command does.
+ * - `android`: an app id ends up inside the single string `adb shell` reconstructs and re-parses
+ *   on the *device's own shell* (see the `-d` single-quoting a few lines below and
+ *   ARCHITECTURE.md §8) — a space or `;` there is command injection on the device, not a local
+ *   argv-splitting bug.
+ *
+ * Apple's bundle-id grammar and Android's `applicationId` grammar disagree with each other (Android
+ * forbids a leading/embedded `-`; iOS allows one), so this pattern accepts the union of both rather
+ * than picking one platform's spelling rules to enforce on the other. That makes it a safety check
+ * on the local argv and the remote shell, not a validity check on the id itself: a value that is
+ * syntactically safe but semantically wrong for its platform is not caught here — it fails loudly
+ * at `am start`/`devicectl` instead, which is an acceptable and much simpler place to find out.
+ *
+ * A `--` terminator is deliberately *not* used instead of this check on the `ios-device` side:
+ * `devicectl` takes launch arguments after the bundle id, its handling of `--` is undocumented, and
+ * none of it can be verified without hardware — whereas this check is exact and fully testable.
  */
-const BUNDLE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9.-]*$/u;
+const APP_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9.-]*$/u;
 
-export const isValidBundleId = (value: string): boolean => BUNDLE_ID_PATTERN.test(value);
+export const isValidAppId = (value: string): boolean => APP_ID_PATTERN.test(value);
 
-export const invalidBundleIdMessage = (value: string): string =>
-  `"${value}" is not a valid iOS bundle id (letters, digits, "." and "-", starting with a letter ` +
-  "or digit).";
+export const invalidAppIdMessage = (value: string): string =>
+  `"${value}" is not a valid app id (letters, digits, "." and "-", starting with a letter or ` +
+  "digit).";
 
 /** Same ambiguity rules as `deliverIosSim`: exactly one paired device, or the caller names one. */
 const resolveSingleIosDevice = async (exec: ExecFn): Promise<string> => {
@@ -388,19 +427,19 @@ const deliverIosDevice = async (
   exec: ExecFn,
   deepLink: string,
   device: string | undefined,
-  bundleId: string | undefined,
+  appId: string | undefined,
   relaunch: boolean,
 ): Promise<void> => {
-  // Checked before any enumeration: without a bundle id the launch cannot happen at all, so
+  // Checked before any enumeration: without an app id the launch cannot happen at all, so
   // spending a `devicectl list devices` timeout first would only delay the same error.
-  if (!bundleId) {
-    throw usageError(MISSING_BUNDLE_ID_MESSAGE);
+  if (!appId) {
+    throw usageError(MISSING_APP_ID_MESSAGE);
   }
 
   // Last line of defence: every caller validates too, but this is the one place the value reaches
   // an argv, so it is the one place that must not be bypassable.
-  if (!isValidBundleId(bundleId)) {
-    throw usageError(invalidBundleIdMessage(bundleId));
+  if (!isValidAppId(appId)) {
+    throw usageError(invalidAppIdMessage(appId));
   }
 
   // An explicit udid is honored without a preflight, mirroring the `ios-sim`/`android` passthrough.
@@ -422,7 +461,7 @@ const deliverIosDevice = async (
     ...(relaunch ? ["--terminate-existing"] : []),
     "--payload-url",
     deepLink,
-    bundleId,
+    appId,
   ]);
 };
 
@@ -491,20 +530,39 @@ const withSerial = (args: string[], serial: string | undefined): string[] => {
   return serial ? ["-s", serial, ...args] : args;
 };
 
+/**
+ * `am` does not reliably exit non-zero for an intent it could not resolve — the whole reason this
+ * change exists is that an implicit (schemeless-of-package) `am start` can pop an "Open with"
+ * chooser and still report success. Naming the package with `-p` turns that into a hard resolution
+ * failure instead of a chooser, but only if the *output* is checked too: an unresolvable `-p` still
+ * exits 0 and writes `Error: Activity not started, unable to resolve Intent { ... }` to stdout, and
+ * without this check that reproduces the exact silent hang (`appduct_wait_for_session` blocking its
+ * whole timeout with nothing explaining why) this change exists to fix.
+ */
+const AM_START_ERROR_PATTERN = /^Error:/mu;
+
 const deliverAndroid = async (
   exec: ExecFn,
   deepLink: string,
   wssPort: number,
   device: string | undefined,
   env: NodeJS.ProcessEnv,
+  appId: string,
 ): Promise<void> => {
+  // Checked before any adb call (mirroring the `ios-device` last-line-of-defence comment above):
+  // every caller validates too, but this is the one place the value reaches both a local argv and,
+  // via `adb shell`'s remote reparse, the device's own shell.
+  if (!isValidAppId(appId)) {
+    throw usageError(invalidAppIdMessage(appId));
+  }
+
   const serial = await resolveAndroidSerial(exec, device, env);
 
   // `adb reverse` before `am start`: the port forward must exist before the app tries to connect,
   // which can happen the instant the deep link is handled.
   await run(exec, "adb", withSerial(["reverse", `tcp:${wssPort}`, `tcp:${wssPort}`], serial));
 
-  await run(
+  const { stdout, stderr } = await run(
     exec,
     "adb",
     withSerial(
@@ -519,10 +577,23 @@ const deliverAndroid = async (
         // device's own shell; single-quoting the URL here (not just for local execFile, which never
         // re-tokenizes argv) protects against that second, remote parse (ARCHITECTURE.md §8).
         `'${deepLink}'`,
+        // Names the app explicitly: without this, more than one installed app declaring the same
+        // scheme makes Android show an "Open with" chooser, which `am start` still reports as a
+        // successful launch — see `AM_START_ERROR_PATTERN` below for the other half of the fix.
+        "-p",
+        appId,
       ],
       serial,
     ),
   );
+
+  if (AM_START_ERROR_PATTERN.test(stdout) || AM_START_ERROR_PATTERN.test(stderr)) {
+    throw usageError(
+      `"adb shell am start" could not launch "${appId}": ${(stdout + stderr).trim() || "(no output)"} ` +
+        `— the app is likely not installed on this device, or its installed build does not declare ` +
+        "a matching deep-link scheme.",
+    );
+  }
 };
 
 // --- detection ---
@@ -614,8 +685,11 @@ export type OpenTargetOptions = {
   /** An adb device serial (`target: "android"`), a simulator udid (`target: "ios-sim"`) or a
    * paired-device udid (`target: "ios-device"`). */
   device?: string;
-  /** The installed app's bundle id. Required by (and only used for) `target: "ios-device"`. */
-  bundleId?: string;
+  /** The installed app's id: the Android package name for `target: "android"`, the iOS bundle id
+   * for `target: "ios-device"`. Required by both; unused (and never required) for `target:
+   * "ios-sim"` — see {@link platformOf}. Resolution (flag, then project config) happens before
+   * this is called; see `scheme.ts`'s `resolveAppId`. */
+  appId?: string;
   /** `target: "ios-device"` only: terminate a running instance first (`--terminate-existing`)
    * instead of launching over it. Off by default; see {@link deliverToOpenTarget}. */
   relaunch?: boolean;
@@ -626,7 +700,7 @@ export type OpenTargetOptions = {
 
 /** Delivers `deepLink` to a booted Android device/emulator, an iOS simulator, or (experimentally)
  * a paired physical iOS device. Throws a clear, actionable error (missing tool, no booted device,
- * ambiguous device, missing bundle id) rather than a raw one. */
+ * ambiguous device, missing app id) rather than a raw one. */
 export const deliverToOpenTarget = async (options: OpenTargetOptions): Promise<void> => {
   const exec = options.exec ?? defaultExec;
 
@@ -640,11 +714,26 @@ export const deliverToOpenTarget = async (options: OpenTargetOptions): Promise<v
       exec,
       options.deepLink,
       options.device,
-      options.bundleId,
+      options.appId,
       options.relaunch ?? false,
     );
     return;
   }
 
-  await deliverAndroid(exec, options.deepLink, options.wssPort, options.device, options.env ?? process.env);
+  // Android has no "optional app id" branch the way `ios-sim` does: every real caller resolves one
+  // before minting a link (see `link.ts`/`connect-tool.ts`), and this is the defensive fallback for
+  // one that reached here without doing so — same last-line-of-defence reasoning as the charset
+  // check inside `deliverAndroid`.
+  if (!options.appId) {
+    throw usageError(MISSING_APP_ID_MESSAGE);
+  }
+
+  await deliverAndroid(
+    exec,
+    options.deepLink,
+    options.wssPort,
+    options.device,
+    options.env ?? process.env,
+    options.appId,
+  );
 };
