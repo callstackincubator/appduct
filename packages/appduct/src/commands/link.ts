@@ -15,7 +15,7 @@ export type LinkCommandOptions = {
   scheme?: string;
   open?: string;
   device?: string;
-  bundleId?: string;
+  appId?: string;
   relaunch?: boolean;
 };
 
@@ -54,10 +54,10 @@ export const handleLinkCommand = async (
     throw usageError('"--device" only applies with "--open".');
   }
 
-  // A bundle id is only ever consumed by the `devicectl` launch; accepting it silently elsewhere
-  // would let `--open ios-sim --bundle-id ...` look like it did something it did not.
-  if (options.bundleId !== undefined && openTarget !== "ios-device") {
-    throw usageError('"--bundle-id" only applies with "--open ios-device".');
+  // An app id is only ever consumed by `am start -p`/the `devicectl` launch; accepting it silently
+  // elsewhere would let `--open ios-sim --app-id ...` look like it did something it did not.
+  if (options.appId !== undefined && openTarget !== "android" && openTarget !== "ios-device") {
+    throw usageError('"--app-id" only applies with "--open android" or "--open ios-device".');
   }
 
   if (options.relaunch !== undefined && openTarget !== "ios-device") {
@@ -72,7 +72,7 @@ export const handleLinkCommand = async (
     cwd: context.cwd,
     target: openTarget,
     device: options.device,
-    bundleId: options.bundleId,
+    appId: options.appId,
     relaunch: options.relaunch,
     exec: context.exec,
     env: context.env,

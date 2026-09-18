@@ -8,6 +8,27 @@ This file is maintained by hand. There is no automated changelog tooling (see
 `docs/CI.md#release-policy` for why) — update this file as part of the commit that bumps the
 package versions for a release.
 
+## Unreleased
+
+- **Breaking: `--open android` / `target: "android"` now require the installed app's id.**
+  Previously `adb shell am start` was invoked with an implicit intent (no `-p`); when more than
+  one installed app declared the deep-link scheme, Android showed an "Open with" chooser and
+  `am start` still reported success, so `appduct_wait_for_session`/the CLI blocked its whole
+  timeout with nothing explaining why (issue #63). Delivery now names the package explicitly
+  (`am start ... -p <app-id>`) and requires an app id rather than falling back — for both
+  `android` and the experimental `ios-device` target.
+  - **Migration:** run `appduct init --scheme <s> --android-app-id <id> --ios-app-id <id>` in
+    your app root once (writes `appId.android`/`appId.ios` into `.appduct/config.json`), or pass
+    `--app-id <id>` on `appduct link` / `appId` on the MCP `appduct_connect` tool / `appId` on
+    `mintLink`/`appduct/client`'s `link()` per call. `ios-sim` needs none of this — it is a usage
+    error to pass one there.
+  - **Removed:** `--bundle-id` (CLI), `bundleId` (MCP `appduct_connect`), `bundleId`
+    (`mintLink`/`appduct/client`'s `link()`), and `config.json`'s `iosBundleId` — all replaced by
+    `--app-id`/`appId`/`appId.<platform>` above, which now also covers `android`. There is no
+    deprecation shim: a leftover `iosBundleId` in `config.json` is silently ignored (an unknown
+    key just warns, and `loadConfig`'s `warn` defaults to a no-op), so the delivery-time error
+    above is the only signal that it needs replacing.
+
 ## 0.10.0 (2026-09-16)
 
 - **New: native SDKs for apps without React Native.** The same Appduct core the React Native

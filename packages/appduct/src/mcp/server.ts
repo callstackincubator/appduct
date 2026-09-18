@@ -353,9 +353,9 @@ export type CreateMcpServerOptions = {
   /** Every location consulted while resolving {@link scheme}, so `appduct_connect` can name
    * them when it has to fail. Only meaningful when `scheme` is undefined. */
   schemeTried?: string[];
-  /** `config.json`'s `iosBundleId`; the default bundle id for `appduct_connect`'s experimental
-   * `ios-device` target (issue #31). */
-  iosBundleId?: string;
+  /** Where `appduct_connect` resolves an `appId` from (its project `.appduct/config.json`
+   * walk-up); see `ConnectToolDeps.cwd`. Defaults to `process.cwd()`. */
+  cwd?: string;
   exec?: ExecFn;
   env?: NodeJS.ProcessEnv;
   /** Overrides `ELICITATION_TIMEOUT_MS` (ARCHITECTURE.md §12 / issue #10) — test-only seam so the
@@ -623,7 +623,7 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
             call: stream.call,
             scheme: options.scheme,
             schemeTried: options.schemeTried,
-            iosBundleId: options.iosBundleId,
+            cwd: options.cwd,
             exec: options.exec,
             env: options.env,
           }),

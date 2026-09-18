@@ -11,12 +11,15 @@ import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
 import {
+  describeMissingAppId,
   describeMissingScheme,
   discoverExpoScheme,
   findProjectConfig,
   findProjectConfigs,
   isValidScheme,
+  readProjectConfigAppId,
   readProjectConfigScheme,
+  resolveAppId,
   resolveScheme,
   resolveSchemeOrThrow,
 } from "../scheme.js";
@@ -299,6 +302,56 @@ describe("readProjectConfigScheme", () => {
   });
 });
 
+describe("readProjectConfigAppId", () => {
+  test("reads the platform-specific value", async () => {
+    const dir = await makeDir();
+    const configPath = await writeProjectConfig(dir, {
+      appId: { ios: "com.example.ios", android: "com.example.android" },
+    });
+
+    expect(await readProjectConfigAppId(configPath, "ios")).toBe("com.example.ios");
+    expect(await readProjectConfigAppId(configPath, "android")).toBe("com.example.android");
+  });
+
+  test("returns undefined for a platform with no entry, without touching the other", async () => {
+    const dir = await makeDir();
+    const configPath = await writeProjectConfig(dir, { appId: { android: "com.example.android" } });
+
+    expect(await readProjectConfigAppId(configPath, "ios")).toBeUndefined();
+    expect(await readProjectConfigAppId(configPath, "android")).toBe("com.example.android");
+  });
+
+  test("a config with scheme but no appId at all resolves as nothing found, for either platform", async () => {
+    const dir = await makeDir();
+    const configPath = await writeProjectConfig(dir, { scheme: "myapp" });
+
+    expect(await readProjectConfigAppId(configPath, "ios")).toBeUndefined();
+    expect(await readProjectConfigAppId(configPath, "android")).toBeUndefined();
+  });
+
+  test.each([
+    ["appId is a string, not an object", { appId: "com.example.app" }, ["ios", "android"]],
+    ["appId is an array", { appId: ["com.example.app"] }, ["ios", "android"]],
+    ["appId.ios is not a string", { appId: { ios: 7 } }, ["ios"]],
+    ["appId.android is an empty string", { appId: { android: "" } }, ["android"]],
+  ] as const)("throws for %s — this is Appduct's own file", async (_label, value, badPlatforms) => {
+    const dir = await makeDir();
+    const configPath = await writeProjectConfig(dir, value);
+
+    for (const platform of badPlatforms) {
+      await expect(readProjectConfigAppId(configPath, platform)).rejects.toThrow();
+    }
+  });
+
+  test("throws for an unknown key inside appId, so a typo'd platform name never reads as \"unset\"", async () => {
+    const dir = await makeDir();
+    const configPath = await writeProjectConfig(dir, { appId: { andriod: "com.example.app" } });
+
+    await expect(readProjectConfigAppId(configPath, "android")).rejects.toThrow(/andriod/u);
+    await expect(readProjectConfigAppId(configPath, "ios")).rejects.toThrow(/andriod/u);
+  });
+});
+
 describe("resolveScheme precedence", () => {
   /** An app root carrying a scheme at every one of the five sources at once. */
   const makeFullyLoadedRoot = async (): Promise<{ cwd: string; stateDir: string }> => {
@@ -472,6 +525,113 @@ describe("resolveSchemeOrThrow", () => {
     await expect(resolveSchemeOrThrow({ cwd: dir, env: {} })).rejects.toThrow(
       /Looked in, in order:[\s\S]*APPDUCT_SCHEME[\s\S]*app\.json/u,
     );
+  });
+});
+
+describe("resolveAppId", () => {
+  test("the flag wins over the project config", async () => {
+    const { homeDir, stateDirRoot } = await isolatedLookup();
+    const dir = await makeDir();
+    await writeProjectConfig(dir, { appId: { android: "com.example.fromconfig" } });
+
+    const resolved = await resolveAppId({
+      platform: "android",
+      flagAppId: "com.example.fromflag",
+      cwd: dir,
+      homeDir,
+      stateDirRoot,
+    });
+
+    expect(resolved).toMatchObject({ appId: "com.example.fromflag", source: "flag" });
+  });
+
+  test("falls back to the nearest project config's appId.<platform>, selected per platform", async () => {
+    const { homeDir, stateDirRoot } = await isolatedLookup();
+    const dir = await makeDir();
+    await writeProjectConfig(dir, {
+      appId: { ios: "com.example.ios", android: "com.example.android" },
+    });
+
+    const ios = await resolveAppId({ platform: "ios", cwd: dir, homeDir, stateDirRoot });
+    const android = await resolveAppId({ platform: "android", cwd: dir, homeDir, stateDirRoot });
+
+    expect(ios).toMatchObject({ appId: "com.example.ios", source: "project-config" });
+    expect(android).toMatchObject({ appId: "com.example.android", source: "project-config" });
+  });
+
+  test("walks up to a parent project config, same as resolveScheme", async () => {
+    const { homeDir, stateDirRoot } = await isolatedLookup();
+    const root = await makeDir();
+    const cwd = path.join(root, "packages", "app");
+    await mkdir(cwd, { recursive: true });
+    await writeProjectConfig(root, { appId: { android: "com.example.fromparent" } });
+
+    const resolved = await resolveAppId({ platform: "android", cwd, homeDir, stateDirRoot });
+
+    expect(resolved).toMatchObject({ appId: "com.example.fromparent", source: "project-config" });
+  });
+
+  test("nothing found: appId is undefined, and every location tried is reported", async () => {
+    const { homeDir, stateDirRoot } = await isolatedLookup();
+    const dir = await makeDir();
+
+    const resolved = await resolveAppId({ platform: "ios", cwd: dir, homeDir, stateDirRoot });
+
+    expect(resolved.appId).toBeUndefined();
+    expect(resolved.tried.some((location) => location.includes("--app-id"))).toBe(true);
+  });
+
+  test("a config with scheme but no appId behaves as nothing resolved, not an error", async () => {
+    const { homeDir, stateDirRoot } = await isolatedLookup();
+    const dir = await makeDir();
+    await writeProjectConfig(dir, { scheme: "myapp" });
+
+    const resolved = await resolveAppId({ platform: "android", cwd: dir, homeDir, stateDirRoot });
+
+    expect(resolved.appId).toBeUndefined();
+  });
+
+  test("does not apply charset validation — that happens at the use site", async () => {
+    const { homeDir, stateDirRoot } = await isolatedLookup();
+    const dir = await makeDir();
+
+    // A syntactically wrong-but-safe id is not this function's job to reject.
+    const resolved = await resolveAppId({
+      platform: "android",
+      flagAppId: "not a valid package id!!",
+      cwd: dir,
+      homeDir,
+      stateDirRoot,
+    });
+
+    expect(resolved.appId).toBe("not a valid package id!!");
+  });
+});
+
+describe("describeMissingAppId", () => {
+  test("names the platform, numbers the locations, and names every fix", () => {
+    const message = describeMissingAppId("android", [
+      "the --app-id flag",
+      ".appduct/config.json (searched upwards from /app)",
+    ]);
+
+    expect(message).toContain("Android");
+    expect(message).toContain("1. the --app-id flag");
+    expect(message).toContain("2. .appduct/config.json (searched upwards from /app)");
+    expect(message).toContain("--app-id");
+    expect(message).toContain("appId.android");
+    expect(message).toContain("--android-app-id");
+  });
+
+  test("names the ios flag/key for the ios platform", () => {
+    const message = describeMissingAppId("ios", []);
+
+    expect(message).toContain("appId.ios");
+    expect(message).toContain("--ios-app-id");
+  });
+
+  test("omits the list rather than printing an empty one", () => {
+    expect(describeMissingAppId("android", [])).not.toContain("Looked in");
   });
 });
 
