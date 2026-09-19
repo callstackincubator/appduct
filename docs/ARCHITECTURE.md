@@ -523,6 +523,62 @@ stderr at startup — never stdout, which carries MCP protocol frames only.
 running for a caller that has already exited; the process then exits reporting
 `tool_cancelled`.
 
+### Startup cost
+
+The CLI is invoked once per command, often from an agent loop, so its boot time is paid on every
+call and must stay close to the runtime's own (~30 ms for bare Node). Almost all of the cost of a
+Node CLI's startup is *module loading* — resolving and evaluating files — so the rule is that a
+process loads only the modules the command it is running needs. Concretely:
+
+- **One route module per command, loaded on demand.** `src/cli/dispatch.ts` is the eager entry:
+  it parses argv (`cac`), resolves the global flags and the state directory, and hands off to a
+  router (`src/cli/router.ts`) whose table maps each command word to a
+  `() => import("./routes/<command>.js")`. The route module wires the parsed options to the
+  command's handler (`src/commands/<command>.ts`) and is the only place that imports it. Nothing
+  behind a loader is evaluated unless its word matches.
+- **The router is multi-level.** A route may itself be a router: `routes/daemon/index.ts` maps
+  `run`/`start`/`stop`/`status` to `routes/daemon/<action>.ts`, and each of those has its own
+  handler in `src/commands/daemon/<action>.ts`. So `appduct daemon status` never evaluates `run`'s
+  daemon implementation (`ws`, the certificate stack), and a future `daemon foo bar` nests the
+  same way rather than growing a `switch`.
+- **The eager path stays lean.** `dispatch.ts`, `router.ts`, `runner.ts`, `create-cli.ts`,
+  `errors.ts`, `output.ts` and the RPC client are on every invocation's path; they may depend on
+  `@appduct/shared`, `cac`, `picocolors` and `toqr` (one small file each) and on nothing else
+  third-party. A static import *inside a route module* is fine — the route is already lazy — but
+  a static import of a route, a handler, or a heavy dependency from any eager module defeats the
+  whole scheme.
+- **Adding a command** means: a handler in `src/commands/`, a route in `src/cli/routes/`, a
+  `cli.command(...)` in `create-cli.ts` for parsing and help, and one loader line in
+  `dispatch.ts`'s table. Adding a sub-command of an existing group means a route and a loader
+  line in that group's `index.ts`. Never import the new handler from `dispatch.ts`.
+- **`mcp` and `daemon run` are the exceptions that prove the rule**: they load the MCP SDK (and
+  its schema libraries) and the daemon respectively, but both are long-lived processes, so that
+  cost is paid once per session, not once per command.
+- **The published build is bundled, one file per entry.** Once nothing unneeded is loaded, what
+  remains is Node's per-file resolution cost, so `scripts/bundle.mjs` (esbuild) collapses files:
+  `tsc` emits only the `.d.ts` files, esbuild emits the JS. Every public entry (`bin`, `.`,
+  `./client`) *and every route* is its own self-contained bundle, with no shared chunks: a router's
+  `import("./routes/<name>.js")` is kept as a real runtime import of that route's file, so a command
+  loads exactly `dist/bin.js` and `dist/cli/routes/<command>.js` (plus `cac`, `picocolors`, `toqr`
+  and `@appduct/shared`; every dependency stays external, and `@appduct/shared` in particular is
+  *not* inlined — that would copy it into every bundle, whereas as an external it is one module
+  instance shared by all of them. Its own build bundles it into a single `dist/index.js` for the
+  same reason this one bundles: one resolution, not one per source file). Code splitting was
+  deliberately *not* used: esbuild tree-shakes per bundle, so a chunk shared by several routes
+  carries whatever any of them uses from a module (`invoke` would have loaded the daemon's RPC
+  server because `daemon run` needs it). Bundling each route alone tree-shakes it alone.
+- **Duplication is the accepted price, and it has one rule.** The modules a route shares with the
+  eager entry (`errors`, `output`, `rpc/client`, …) are copied into every route bundle: tens of
+  kilobytes each, parsed in under a millisecond. But a copied module is a second module instance,
+  and `instanceof` fails across copies. So the `RouteContext` — the only thing that crosses from
+  the eager bundle into a route — carries plain data, writers and closures that never throw; in
+  particular the daemon version guard runs on the route side (`cli/version-guard.ts`), so the
+  errors it throws are classified by the same copy of `errors.ts` that created them. Never hand a
+  route a function from the eager bundle that can throw one of our error classes.
+- **No fixed relative paths from `import.meta.url`.** A module's on-disk location differs between
+  `src/` (Vitest), `dist/<entry>.js` and `dist/cli/routes/<route>.js`, so nothing may compute a
+  path with a fixed number of `..` — use `getPackageRoot()` (`src/package-root.ts`).
+
 ## 11. React Native SDK
 
 Package `@appduct/react-native`. The session logic it bridges to — TLS, SPKI pinning,
@@ -831,7 +887,11 @@ packages/
                    link minter, tls (cert minting — reuse host-certificate.ts),
                    event bus, policy, audit
     src/rpc/       RPC client library (connect-or-spawn), shared by cli/ and mcp/
-    src/cli/       command definitions + renderers (keep DI/testability patterns)
+    src/commands/  one handler per command (daemon/<action>.ts per daemon action):
+                   typed options in, CliResult out, no argv parsing — what tests call
+    src/cli/       the eager entry (dispatch.ts: cac parsing, global flags), the lazy
+                   multi-level router (router.ts) and one route per command under
+                   routes/ (routes/daemon/ is a nested router) — §10 "Startup cost"
     src/mcp/       stdio MCP server
   react-native/    @appduct/react-native (entries: ., /auto, /noop). Depends only on
                    @appduct/shared — no third-party runtime deps, which is why no
@@ -847,7 +907,8 @@ playground/        reference app (Expo dev build)
 The repo-root `Package.swift` (SwiftPM manifests must live at the repository root for URL
 dependencies) is the SwiftPM manifest for `packages/native/ios`.
 
-Tooling stays: pnpm workspaces, turbo, Vitest, tsc builds. Node ≥ 20 for the daemon
+Tooling stays: pnpm workspaces, turbo, Vitest, tsc for declarations (`appduct` and
+`@appduct/shared` emit their JS with esbuild — §10 "Startup cost"). Node ≥ 20 for the daemon
 (UDS + `AF_UNIX` on Windows). Windows support is best-effort; the control plane uses the
 named-pipe path `\\.\pipe\appduct-<user>` behind the same client API.
 

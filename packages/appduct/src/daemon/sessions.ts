@@ -39,7 +39,7 @@ import type { WebSocket } from "ws";
 import type { Clock } from "../cli/types.js";
 import type { EventBus } from "./event-bus.js";
 import { createPendingLinkRegistry, type CreatedLink, type PendingLinkRegistry } from "./links.js";
-import { RpcApplicationError } from "./rpc-server.js";
+import { RpcApplicationError } from "./rpc-errors.js";
 import { createToolRegistry, type ToolRegistry } from "./registry.js";
 import { systemTimers, type TimerFns, type TimerHandle } from "./timers.js";
 

@@ -2,4 +2,7 @@ packages:
   - "packages/*"
   - "playground"
 allowBuilds:
+  # esbuild works without its postinstall (it loads the platform binary from its optional
+  # dependency), and CI installs with --ignore-scripts anyway.
+  esbuild: false
   unrs-resolver: true

@@ -28,7 +28,7 @@ import {
 } from "@appduct/shared";
 
 import type { EventBus } from "./event-bus.js";
-import { RpcApplicationError } from "./rpc-server.js";
+import { RpcApplicationError } from "./rpc-errors.js";
 import { systemTimers, type TimerFns, type TimerHandle } from "./timers.js";
 
 /** Re-exported under this module's historical names; the values live in `@appduct/shared` so the

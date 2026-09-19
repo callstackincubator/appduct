@@ -35,7 +35,7 @@
   "license": "MIT",
   "homepage": "https://github.com/callstackincubator/appduct/tree/main/packages/appduct#readme",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/bundle.mjs",
     "clean": "rm -rf dist",
     "test": "vitest run --config ../../vitest.config.ts src/__tests__",
     "typecheck": "tsc -p tsconfig.json"
@@ -53,6 +53,7 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/ws": "^8.18.1",
+    "esbuild": "^0.25.12",
     "typescript": "~5.9.2"
   },
   "files": [

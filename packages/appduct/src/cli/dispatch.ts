@@ -1,37 +1,21 @@
-import type { EventNotification } from "@appduct/shared";
+/**
+ * The CLI's eager entry: everything that runs before a command word is known. Parses argv with
+ * `cac`, resolves the global flags, and hands off to the root router, which lazy-loads exactly one
+ * route module (`./routes/<command>.js`) for the command that matched.
+ *
+ * Keep this module's *static* imports to what every invocation needs (ARCHITECTURE.md §10
+ * "Startup cost"): the parser, the runner, the state-dir resolution and the version guard. A
+ * command's handler, and anything only that command needs, belongs behind its route's loader in
+ * {@link rootRouter}, never up here.
+ */
 
-import {
-  handleDaemonRunCommand,
-  handleDaemonStartCommand,
-  handleDaemonStatusCommand,
-  handleDaemonStopCommand,
-} from "../commands/daemon.js";
-import { handleDoctorCommand } from "../commands/doctor.js";
-import { handleEventsCommand } from "../commands/events.js";
-import { handleInitCommand } from "../commands/init.js";
-import { handleInvokeCommand } from "../commands/invoke.js";
-import { handleKeygenCommand } from "../commands/keygen.js";
-import { handleLinkCommand } from "../commands/link.js";
-import { handleLsCommand } from "../commands/ls.js";
-import { handleMcpCommand } from "../commands/mcp.js";
-import { handleRevokeCommand } from "../commands/revoke.js";
-import { handleToolsCommand } from "../commands/tools.js";
 import { loadConfig } from "../daemon/config.js";
 import { getStateDirPaths, resolveStateDir } from "../daemon/state-dir.js";
 import { usageError } from "../errors.js";
-import { renderEventLine, renderEventsCursorLine } from "../output.js";
 import { getPackageVersion } from "../package-version.js";
-import { ensureDaemonVersionMatches, type VersionCheckOptions } from "../rpc/client.js";
-import {
-  parseJsonInputOption,
-  parseNonNegativeIntegerOption,
-  parsePositiveIntegerOption,
-  splitOptionalSelector,
-  splitOptionalSelectorAndTarget,
-  splitSelectorAndRequiredTarget,
-} from "./command-options.js";
 import { createCli } from "./create-cli.js";
-import { executeCommand, executeHostedCommand } from "./runner.js";
+import { createRouter, unknownCommandError, type RouteContext } from "./router.js";
+import { executeCommand } from "./runner.js";
 import { systemClock } from "./types.js";
 import type { RunCliOptions } from "./types.js";
 
@@ -42,6 +26,28 @@ const DAEMON_RESTART_ENV = "APPDUCT_DAEMON_RESTART";
 const isEnvTruthy = (value: string | undefined): boolean => {
   return value === "1" || value?.toLowerCase() === "true";
 };
+
+/**
+ * One entry per command `create-cli.ts` registers. Each loader is a dynamic `import()` so the
+ * route — and its command handler, and that handler's dependencies — is only evaluated when the
+ * command runs. `daemon` is a router of its own (`routes/daemon/index.ts`), one level down.
+ */
+const rootRouter = createRouter(
+  {
+    init: () => import("./routes/init.js"),
+    keygen: () => import("./routes/keygen.js"),
+    link: () => import("./routes/link.js"),
+    ls: () => import("./routes/ls.js"),
+    tools: () => import("./routes/tools.js"),
+    invoke: () => import("./routes/invoke.js"),
+    revoke: () => import("./routes/revoke.js"),
+    events: () => import("./routes/events.js"),
+    mcp: () => import("./routes/mcp.js"),
+    doctor: () => import("./routes/doctor.js"),
+    daemon: () => import("./routes/daemon/index.js"),
+  },
+  { unknown: unknownCommandError },
+);
 
 export const runCli = async (argv: string[], options: RunCliOptions = {}): Promise<number> => {
   const writers = {
@@ -146,288 +152,20 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
    */
   const cliWarning = json ? () => {} : (message: string) => void writers.stderr.write(message);
 
-  const versionCheckFor = async (onWarning: (message: string) => void): Promise<VersionCheckOptions> => {
-    return {
+  const context: RouteContext = {
+    path: [],
+    // cac has already split the command word off `cli.args`; put it back so the root router
+    // consumes it the same way the nested routers consume theirs.
+    args: [matchedCommand, ...parsedArgs],
+    options: parsedOptions,
+    io,
+    stateDir,
+    versionCheck: {
       clientVersion: getPackageVersion(),
-      forceRestart: await resolveForceRestart(),
-      onWarning,
-    };
+      forceRestart: resolveForceRestart,
+      warn: cliWarning,
+    },
   };
 
-  /**
-   * Wraps a command handler so the daemon's version is verified once, before the command's first
-   * RPC. `autoSpawn: false`: with nothing listening there is no drift to find, and any daemon this
-   * process spawns afterwards is its own build. Applied to every command that talks to the daemon
-   * except `daemon run` (it *is* the daemon), `daemon status` (warns instead — see
-   * `commands/daemon.ts`) and `daemon stop` (already the remedy); `keygen`/`doctor` never open a
-   * daemon connection at all.
-   */
-  const guarded = <T>(handler: () => T | Promise<T>): (() => Promise<T>) => {
-    return async () => {
-      await ensureDaemonVersionMatches({
-        stateDir,
-        autoSpawn: false,
-        checkVersion: await versionCheckFor(cliWarning),
-      });
-
-      return handler();
-    };
-  };
-
-  switch (matchedCommand) {
-    case "init":
-      return executeCommand(
-        "init",
-        () =>
-          handleInitCommand(
-            {
-              scheme: typeof parsedOptions.scheme === "string" ? parsedOptions.scheme : undefined,
-              force: Boolean(parsedOptions.force),
-            },
-            // `init` never reads the state dir, but it must know which directory it is so it can
-            // refuse to write a "safe to commit" project config into the daemon's own state.
-            { stateDir },
-          ),
-        io,
-      );
-
-    case "keygen":
-      return executeCommand(
-        "keygen",
-        () =>
-          handleKeygenCommand(
-            {
-              out: typeof parsedOptions.out === "string" ? parsedOptions.out : undefined,
-              force: Boolean(parsedOptions.force),
-            },
-            { stateDir },
-          ),
-        io,
-      );
-
-    case "link": {
-      return executeCommand(
-        "link",
-        guarded(() =>
-          handleLinkCommand(
-            {
-              ttlSeconds: parsePositiveIntegerOption(parsedOptions.ttl, "--ttl"),
-              scheme: typeof parsedOptions.scheme === "string" ? parsedOptions.scheme : undefined,
-              open: typeof parsedOptions.open === "string" ? parsedOptions.open : undefined,
-              device: typeof parsedOptions.device === "string" ? parsedOptions.device : undefined,
-              // cac camelCases `--bundle-id`; the dashed spelling is kept as a fallback so a
-              // parser change can't silently drop the flag.
-              bundleId:
-                typeof parsedOptions.bundleId === "string"
-                  ? parsedOptions.bundleId
-                  : typeof parsedOptions["bundle-id"] === "string"
-                    ? parsedOptions["bundle-id"]
-                    : undefined,
-              // Left `undefined` when absent rather than coerced to `false`, so that
-              // "--relaunch only applies with --open ios-device" fires on the flag actually being
-              // passed and not on every `link` invocation.
-              relaunch: parsedOptions.relaunch === true ? true : undefined,
-            },
-            { stateDir },
-          ),
-        ),
-        {
-          ...io,
-          qr: Boolean(parsedOptions.qr),
-        },
-      );
-    }
-
-    case "ls":
-      return executeCommand("ls", guarded(() => handleLsCommand({ stateDir })), io);
-
-    case "tools": {
-      const { selector, target, selectorOrTarget } = splitOptionalSelectorAndTarget(
-        parsedArgs,
-        "tools [selector] [name]",
-      );
-
-      return executeCommand(
-        "tools",
-        guarded(() =>
-          handleToolsCommand(
-            { selector: selector ?? selectorOrTarget, name: target },
-            { stateDir },
-          ),
-        ),
-        { ...io, full: Boolean(parsedOptions.full) },
-      );
-    }
-
-    case "invoke": {
-      const { selector, target: tool } = splitSelectorAndRequiredTarget(
-        parsedArgs,
-        "invoke [selector] <tool> --input '<json>'",
-      );
-
-      // SIGINT cancels the in-flight tools.call rather than leaving it running unowned in the app
-      // (issue #9) — the listener is torn down once the command settles either way.
-      const cancelController = new AbortController();
-      const onSigint = (): void => cancelController.abort();
-      process.once("SIGINT", onSigint);
-
-      try {
-        return await executeCommand(
-          "invoke",
-          guarded(() =>
-            handleInvokeCommand(
-              {
-                selector,
-                tool,
-                args: parseJsonInputOption(
-                  typeof parsedOptions.input === "string" ? parsedOptions.input : undefined,
-                ),
-                timeoutMs: parsePositiveIntegerOption(parsedOptions.timeout, "--timeout"),
-              },
-              { stateDir },
-              cancelController.signal,
-            ),
-          ),
-          io,
-        );
-      } finally {
-        process.off("SIGINT", onSigint);
-      }
-    }
-
-    case "revoke": {
-      const { selector } = splitOptionalSelector(parsedArgs, "revoke [selector]");
-
-      return executeCommand(
-        "revoke",
-        guarded(() => handleRevokeCommand({ selector }, { stateDir })),
-        io,
-      );
-    }
-
-    case "events": {
-      const { selector } = splitOptionalSelector(parsedArgs, "events [selector]");
-      const since = parseNonNegativeIntegerOption(parsedOptions.since, "--since");
-      const follow = Boolean(parsedOptions.follow);
-
-      return executeHostedCommand(
-        "events",
-        guarded(() => {
-          // Deferred into the wrapped handler (rather than thrown directly in this case body,
-          // matching the codebase's existing lax convention for that) so `executeHostedCommand`'s
-          // own try/catch renders it as a normal usage_error instead of an uncaught rejection.
-          if (since !== undefined && follow) {
-            throw usageError('"--since" is a one-shot pull and cannot be combined with "--follow".');
-          }
-
-          return handleEventsCommand(
-            { selector, since },
-            {
-              stateDir,
-              onEvent: (event: EventNotification) => {
-                writers.stdout.write(`${renderEventLine(event, { json, color })}\n`);
-              },
-              onCursor: (cursor) => {
-                writers.stdout.write(`${renderEventsCursorLine(cursor, { json, color })}\n`);
-              },
-            },
-          );
-        }),
-        {
-          ...io,
-          reporter: {
-            kind: "interactive",
-            onEvent: () => {},
-            dispose: () => {},
-          },
-        },
-      );
-    }
-
-    case "mcp": {
-      return executeHostedCommand(
-        "mcp",
-        // Unlike every other command the check is threaded into the server itself, not run ahead
-        // of it: the MCP server is long-lived and auto-spawns its own daemon, so the check belongs
-        // on the startup stream that establishes the connection it keeps (ARCHITECTURE.md §9).
-        // The notice always goes to stderr here, `--json` or not: stdout carries MCP protocol
-        // frames, and stderr is this server's only log channel (ARCHITECTURE.md §9).
-        async () =>
-          handleMcpCommand({
-            stateDir,
-            scheme: typeof parsedOptions.scheme === "string" ? parsedOptions.scheme : undefined,
-            checkVersion: await versionCheckFor((message) => void writers.stderr.write(message)),
-          }),
-        {
-          ...io,
-          reporter: {
-            kind: "interactive",
-            onEvent: () => {},
-            dispose: () => {},
-          },
-        },
-      );
-    }
-
-    case "doctor": {
-      return executeCommand(
-        "doctor",
-        () =>
-          handleDoctorCommand({
-            artifactPath: parsedArgs[0],
-            assertPresent: Boolean(parsedOptions.assertPresent),
-            assertAbsent: Boolean(parsedOptions.assertAbsent),
-          }),
-        io,
-      );
-    }
-
-    case "daemon": {
-      const action = parsedArgs[0];
-
-      switch (action) {
-        case "run":
-          return executeHostedCommand(
-            "daemon run",
-            () => handleDaemonRunCommand({ stateDir, clock }),
-            io,
-          );
-
-        case "start":
-          return executeCommand(
-            "daemon start",
-            guarded(() => handleDaemonStartCommand({ stateDir, clock })),
-            io,
-          );
-
-        case "stop":
-          return executeCommand("daemon stop", () => handleDaemonStopCommand({ stateDir, clock }), io);
-
-        case "status":
-          return executeCommand("daemon status", () => handleDaemonStatusCommand({ stateDir, clock }), io);
-
-        default:
-          return executeCommand(
-            "daemon",
-            () => {
-              throw usageError(
-                `The daemon command requires an action: run, start, stop, or status (got ${
-                  action === undefined ? "none" : `"${action}"`
-                }).`,
-              );
-            },
-            io,
-          );
-      }
-    }
-
-    default:
-      return executeCommand(
-        matchedCommand,
-        () => {
-          throw usageError(`Unknown command "${matchedCommand}".`);
-        },
-        io,
-      );
-  }
+  return rootRouter(context);
 };

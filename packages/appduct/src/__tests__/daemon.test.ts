@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { handleDaemonStatusCommand } from "../commands/daemon.js";
+import { handleDaemonStatusCommand } from "../commands/daemon/status.js";
 import { AUDIT_PRUNE_INTERVAL_MS, startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import { DaemonAlreadyRunningError } from "../daemon/pidfile.js";
 import { startRpcServer } from "../daemon/rpc-server.js";

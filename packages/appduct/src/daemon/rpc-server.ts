@@ -7,7 +7,7 @@
 import { createServer, type Server, type Socket } from "node:net";
 import { chmod, rm } from "node:fs/promises";
 
-import type { ErrorType } from "@appduct/shared";
+import { RpcApplicationError } from "./rpc-errors.js";
 
 /** 1 MiB — lines beyond this are dropped by destroying the connection (ARCHITECTURE.md task notes). */
 export const MAX_LINE_BYTES = 1024 * 1024;
@@ -16,18 +16,6 @@ export const MAX_LINE_BYTES = 1024 * 1024;
  * (slow/dead reader) is dropped outright rather than left to back up the daemon indefinitely. */
 export const MAX_NOTIFY_BUFFERED_BYTES = 4 * 1024 * 1024;
 
-export class RpcApplicationError extends Error {
-  constructor(
-    readonly type: ErrorType,
-    message: string,
-    /** JSON-RPC error code; defaults to the shared "server error" range. */
-    readonly code = -32000,
-    readonly details?: unknown,
-  ) {
-    super(message);
-    this.name = "RpcApplicationError";
-  }
-}
 
 export type RpcConnection = {
   readonly id: number;
