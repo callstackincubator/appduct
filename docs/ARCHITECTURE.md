@@ -554,6 +554,15 @@ process loads only the modules the command it is running needs. Concretely:
 - **`mcp` and `daemon run` are the exceptions that prove the rule**: they load the MCP SDK (and
   its schema libraries) and the daemon respectively, but both are long-lived processes, so that
   cost is paid once per session, not once per command.
+- **The published build is bundled.** Once nothing unneeded is loaded, what remains is Node's
+  per-file resolution cost for the ~50 files every command shares, so `scripts/bundle.mjs`
+  (esbuild) collapses them: `tsc` emits only the `.d.ts` files, esbuild emits the JS for the
+  three entry points (`bin`, `.`, `./client`) with code splitting, so each route's dynamic
+  `import()` stays a separate chunk and the router's laziness survives. `@appduct/shared` is
+  inlined (pure functions and constants, no classes); every other dependency stays external.
+  A consequence for the source: a module's on-disk location differs between `src/` (Vitest),
+  `dist/<entry>.js` and `dist/<chunk>.js`, so nothing may compute a path from `import.meta.url`
+  with a fixed number of `..` — use `getPackageRoot()` (`src/package-root.ts`).
 
 ## 11. React Native SDK
 
@@ -883,7 +892,8 @@ playground/        reference app (Expo dev build)
 The repo-root `Package.swift` (SwiftPM manifests must live at the repository root for URL
 dependencies) is the SwiftPM manifest for `packages/native/ios`.
 
-Tooling stays: pnpm workspaces, turbo, Vitest, tsc builds. Node ≥ 20 for the daemon
+Tooling stays: pnpm workspaces, turbo, Vitest, tsc builds (`appduct` additionally bundles its
+JS with esbuild — §10 "Startup cost"). Node ≥ 20 for the daemon
 (UDS + `AF_UNIX` on Windows). Windows support is best-effort; the control plane uses the
 named-pipe path `\\.\pipe\appduct-<user>` behind the same client API.
 

@@ -9,8 +9,9 @@
  */
 
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+
+import { getPackageRoot } from "./package-root.js";
 
 /**
  * Test seam (issue #30): when set, the daemon reports this instead of the real package version in
@@ -30,13 +31,11 @@ const isTestRuntime = (env: NodeJS.ProcessEnv): boolean => {
   return Boolean(env.VITEST) || env.NODE_ENV === "test";
 };
 
-const packageJsonPath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
-
 let cached: string | undefined;
 
 /** The `version` field of this package's `package.json`, read once per process. */
 export const getPackageVersion = (): string => {
-  cached ??= JSON.parse(readFileSync(packageJsonPath, "utf8")).version as string;
+  cached ??= JSON.parse(readFileSync(join(getPackageRoot(), "package.json"), "utf8")).version as string;
   return cached;
 };
 

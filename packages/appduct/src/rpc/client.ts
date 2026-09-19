@@ -7,8 +7,7 @@
 import { connect, type Socket } from "node:net";
 import { spawn as spawnChildProcess } from "node:child_process";
 import { open, readFile, rm, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import { RPC_METHODS, type DaemonStatusResult, type RpcErrorData } from "@appduct/shared";
 
@@ -20,10 +19,10 @@ import {
 import { isProcessAlive } from "../daemon/pidfile.js";
 import { isSocketConnectable } from "../daemon/socket-probe.js";
 import { getStateDirPaths, type StateDirPaths } from "../daemon/state-dir.js";
+import { getPackageRoot } from "../package-root.js";
 import { DAEMON_VERSION_OVERRIDE_ENV } from "../package-version.js";
 
-const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const defaultBinPath = join(packageRoot, "bin.js");
+const defaultBinPath = join(getPackageRoot(), "bin.js");
 
 export type SpawnContext = {
   stateDir: string;
