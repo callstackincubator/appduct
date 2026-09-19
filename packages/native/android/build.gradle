@@ -25,7 +25,7 @@ import groovy.json.JsonSlurper
 
 // Single source of truth for the version every published artifact here carries (core, core-noop,
 // and -- once this project is a real dependency rather than something vendored -- AppductCore).
-// This repo's three npm packages have always versioned in lockstep (docs/CI.md's release policy);
+// This repo's three npm packages have always versioned in lockstep (see CHANGELOG.md's header);
 // reading it from @appduct/react-native's package.json avoids a fourth place that number could
 // drift out of sync, exactly like `Appduct.podspec` already does for iOS.
 def rnPackageJson = new JsonSlurper().parse(file("$rootDir/../../react-native/package.json"))

@@ -1,12 +1,11 @@
 # `packages/native`
 
 The framework-free native core behind Appduct: TLS-pinned session transport, SPKI pinning,
-explicit trust-mode resolution, process-memory resume leases, and the full app-side session
-lifecycle (claim/resume, reconnect backoff, grace-window recovery, the tool registry, per-call
-timeout/cancel/progress, and bootstrap deep-link handling), in plain Swift and Kotlin with no React
-Native dependency. It also ships a small public facade (`Appduct.shared` on iOS, the
-`Appduct` object on Android) that a plain native app calls directly, with no React Native or
-Expo anywhere in the stack.
+trust-mode resolution, resume leases, and the full app-side session lifecycle (claim/resume,
+reconnect backoff, grace-window recovery, the tool registry, per-call timeout/cancel/progress,
+and bootstrap deep-link handling), in plain Swift and Kotlin with no React Native dependency.
+It also ships a small public facade (`Appduct.shared` on iOS, the `Appduct` object on Android)
+that a plain native app calls directly, with no React Native or Expo anywhere in the stack.
 
 ## Consuming this
 

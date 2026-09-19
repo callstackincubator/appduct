@@ -6,7 +6,7 @@ Pod::Spec.new do |s|
   s.name           = 'AppductCore'
   # Version is single-sourced from @appduct/react-native's package.json (see
   # docs/tasks/14-native-core-extraction.md): the RN, Swift, and Kotlin packages have always
-  # versioned in lockstep in this repo (docs/CI.md's release policy), and a native-core-specific
+  # versioned in lockstep in this repo (see CHANGELOG.md's header), and a native-core-specific
   # version number would just be another place that number could drift.
   s.version        = package['version']
   s.summary        = 'Framework-free Swift core for Appduct: TLS-pinned session transport and resume leases.'

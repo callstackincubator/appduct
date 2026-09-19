@@ -10,8 +10,7 @@ integration guide.
 
 If you're integrating from React Native instead, see
 [`packages/react-native/README.md`](../../react-native/README.md) — this package is what that one
-vendors under the hood (`docs/internal/native-core.md`'s "How `@appduct/react-native` vendors
-this").
+vendors under the hood.
 
 ## Install
 
@@ -21,14 +20,14 @@ this").
 .package(url: "https://github.com/callstackincubator/appduct", from: "0.10.0")
 ```
 
-`0.10.0` is a floor, not a pin — it is the first release carrying the Swift manifest, and `from:`
+`0.10.0` is a floor, not a pin — it's the first release carrying the Swift manifest, and `from:`
 resolves to the newest `0.x` tag, so this line stays current without edits.
 
-Add the `AppductCore` product to your app target. **No further configuration ships the real
-implementation only in `Debug`, matching the RN package's own default** (see
-[Compiling out of Release](#compiling-out-of-release) below) — by default a `Release` build links
-the same-API `Stub/` implementation instead, so your app never carries the real connection code in
-what you ship to the App Store unless you opt in.
+Add the `AppductCore` product to your app target. No further configuration is needed to ship the
+real implementation only in `Debug`, matching the RN package's own default (see [Compiling out of
+Release](#compiling-out-of-release) below) — by default a `Release` build links the same-API
+`Stub/` implementation instead, so your app never carries the real connection code in what you
+ship to the App Store unless you opt in.
 
 To carry the real implementation into a `Release` build too (an internal/QA build, say), depend on
 the `AlwaysEnabled` package trait instead:
@@ -111,7 +110,7 @@ func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>)
 }
 ```
 
-`handle(_:)` returns `true` iff the URL actually carried an Appduct bootstrap payload, so you can
+`handle(_:)` returns `true` if the URL actually carried an Appduct bootstrap payload, so you can
 compose it with your own, unrelated deep links:
 
 ```swift
@@ -153,8 +152,8 @@ try Appduct.shared.register(
 ```
 
 - `inputSchema`/`outputSchema` are plain JSON Schema, as `[String: Any]` — there is no schema
-  library on this SDK's boundary (Decision 4, `docs/tasks/18-ios-entry-points.md`); the daemon does
-  no input validation either, matching `@appduct/react-native`'s own native behavior.
+  library on this SDK's boundary; the daemon does no input validation either, matching
+  `@appduct/react-native`'s own native behavior.
 - `handler` is `async throws`, and receives converted `[String: Any]` args; return any
   JSON-representable value (`nil`, a number/string/bool, an `[Any]`, a `[String: Any]`, or nested
   combinations). A value that isn't representable this way (a `Date`, `Data`, or a custom type)
@@ -240,9 +239,7 @@ appduct doctor path/to/YourApp.app --assert-absent    # Release
 `doctor` decides presence from a marker symbol (`AppductCoreMarker`) compiled only into the real
 implementation — never into `Stub/` — so a build genuinely either carries the real code or doesn't;
 there is no runtime `#if DEBUG` check to bypass. See
-[`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) for the full mechanism and
-[`docs/CI.md`](../../../docs/CI.md#release-gate-appduct-doctor) for wiring this into a release
-pipeline as a blocking gate.
+[`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) for the full mechanism.
 
 ## Threading
 
@@ -282,8 +279,6 @@ CocoaPods' `:configurations` restriction, most likely on purpose for an internal
 
 ## Going further
 
-- [`docs/tasks/18-ios-entry-points.md`](../../../docs/tasks/18-ios-entry-points.md) — the API
-  decisions behind this facade, the `[String: Any]` boundary, and the live-check log.
 - [`playground-native/ios`](../../../playground-native/ios) — a full example app built on this SDK.
 - [`docs/SECURITY.md`](../../../docs/SECURITY.md) — trust modes, pins, the threat model.
 - [`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) — how inclusion is decided per build.
