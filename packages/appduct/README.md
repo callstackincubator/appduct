@@ -234,7 +234,7 @@ appduct doctor ./build/MyApp.ipa --assert-absent
 appduct doctor ./build/app-release.apk --assert-absent
 ```
 
-Exit codes, what it inspects per platform, the marker-only detection rules on both platforms, and the CI wiring are in [`docs/CI.md`][ci].
+Exit codes, what it inspects per platform, and the marker-only detection rules on both platforms are documented in `appduct doctor --help`; CI wiring lives in `.github/workflows/test.yaml`.
 
 ## Related packages
 
@@ -247,7 +247,6 @@ Exit codes, what it inspects per platform, the marker-only detection rules on bo
 - [Wire protocol][protocol]
 - [Security model & key rotation][security]
 - [Build variants][build-variants]
-- [CI and the release gate][ci]
 - [Monorepo README](https://github.com/callstackincubator/appduct/blob/main/README.md)
 
 ## Made with ❤️ at Callstack
@@ -263,7 +262,6 @@ Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_camp
 [protocol]: https://github.com/callstackincubator/appduct/blob/main/docs/PROTOCOL.md
 [security]: https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md
 [build-variants]: https://github.com/callstackincubator/appduct/blob/main/docs/BUILD-VARIANTS.md
-[ci]: https://github.com/callstackincubator/appduct/blob/main/docs/CI.md
 [license-badge]: https://img.shields.io/npm/l/appduct?style=for-the-badge
 [license]: https://github.com/callstackincubator/appduct/blob/main/LICENSE
 [npm-downloads-badge]: https://img.shields.io/npm/dm/appduct?style=for-the-badge

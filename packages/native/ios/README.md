@@ -239,9 +239,7 @@ appduct doctor path/to/YourApp.app --assert-absent    # Release
 `doctor` decides presence from a marker symbol (`AppductCoreMarker`) compiled only into the real
 implementation — never into `Stub/` — so a build genuinely either carries the real code or doesn't;
 there is no runtime `#if DEBUG` check to bypass. See
-[`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) for the full mechanism and
-[`docs/CI.md`](../../../docs/CI.md#release-gate-appduct-doctor) for wiring this into a release
-pipeline as a blocking gate.
+[`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) for the full mechanism.
 
 ## Threading
 

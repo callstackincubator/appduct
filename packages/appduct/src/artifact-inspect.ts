@@ -127,9 +127,9 @@ const IOS_INFO_PLIST_KEY_MARKERS = ["AppductCliPins", "AppductTrust", "AppductAl
 // shipped. `doctor` inspects artifacts it did not build -- including an app built against an older
 // Appduct, which is exactly the case a release gate runs into -- and reporting `absent` for an app
 // that genuinely bundles Appduct is the one failure mode this tool must never have: it would
-// rubber-stamp shipping Appduct to production. docs/CI.md states the rule ("a broken check must
-// fail loudly, not rubber-stamp a release"); the cost of honouring it here is one extra buffer
-// scan per signal. The legacy entries are load-bearing and must not be dropped while any artifact
+// rubber-stamp shipping Appduct to production ("a broken check must fail loudly, not rubber-stamp
+// a release"); the cost of honouring it here is one extra buffer scan per signal. The legacy
+// entries are load-bearing and must not be dropped while any artifact
 // built before the rename can still be inspected.
 const ANDROID_KEEP_RULE_MARKER_CLASSES = [
   "com/callstack/appduct/AppductNativeMarker",

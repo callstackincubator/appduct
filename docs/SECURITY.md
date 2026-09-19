@@ -116,9 +116,8 @@ don't want accepting a link-carried pin. Separately, if you don't want Appduct's
 code present in a build at all — regardless of trust mode — exclude it from autolinking (see
 [Compiling Appduct out of production
 builds](BUILD-VARIANTS.md#compiling-appduct-out-of-production-builds)); `appduct doctor`
-([`CI.md`](CI.md#release-gate-appduct-doctor)) verifies that exclusion actually took
-effect in a built artifact, rather than trusting the config that was supposed to produce
-it.
+verifies that exclusion actually took effect in a built artifact, rather than trusting the
+config that was supposed to produce it.
 
 ## Configuring trust
 
@@ -397,8 +396,7 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md#inclusion-is-an-autolinking-decision) has the full
   mechanism.
 
-  Verify the outcome against the built artifact (`appduct doctor`,
-  [`CI.md`](CI.md#release-gate-appduct-doctor)). On Android, `doctor` deliberately trusts
+  Verify the outcome against the built artifact (`appduct doctor`). On Android, `doctor` deliberately trusts
   only its `AppductNativeMarker` keep-rule signal, since the release-default no-op stub
   shares the real implementation's package name and would otherwise look present to a naive
   scan. When the module genuinely isn't present, the JS public API degrades to the exact
@@ -421,9 +419,9 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   The exact snippets, the `package.json`-only placement of `expo.autolinking`, the
   `apple`-overrides-`ios` rule and the iOS codegen coupling live in
   [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md#compiling-appduct-out-of-production-builds).
-  [`CI.md`](CI.md#release-gate-appduct-doctor)'s `appduct doctor` verifies the
-  exclusion actually took effect in a built artifact rather than trusting the config that
-  was supposed to produce it — this whole area is now checked by CI, not just documented.
+  `appduct doctor` verifies the exclusion actually took effect in a built artifact rather
+  than trusting the config that was supposed to produce it — this whole area is now checked
+  by CI, not just documented.
 - **App-store-review note.** An always-installed deep-link listener that can open a
   pinned socket and let an external process invoke code is a legitimate "remote control"
   surface from a reviewer's point of view, even though it can't be exercised without a

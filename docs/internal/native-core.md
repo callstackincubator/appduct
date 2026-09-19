@@ -21,11 +21,11 @@ over resolved pnpm workspace packages, never sees it either.
 | A plain Android app | Maven (`com.callstack.appduct:core`/`:core-noop`) | [`../../packages/native/android/README.md`](../../packages/native/android/README.md) |
 
 CocoaPods trunk and the SwiftPM tag are published by `deploy.yaml`'s `publish-cocoapods` job,
-which runs after the npm publishes on every GitHub release (`docs/CI.md`); the SwiftPM "publish" is
+which runs after the npm publishes on every GitHub release; the SwiftPM "publish" is
 the release's git tag itself, since `Package.swift` carries no version of its own. **Maven Central
 is published by `deploy.yaml`'s `publish-maven` job**, which stages a signed bundle and uploads it
 to the Central Portal for validation; the final Publish is a deliberate manual step in the Portal
-UI. See [`../CI.md`](../CI.md#maven-central).
+UI.
 `playground-native/android`'s `settings.gradle` and `playground-native/ios`'s `project.yml` both
 build against this worktree's own sources directly (Gradle `includeBuild` substitution, a local
 SwiftPM package path respectively) — no publish-then-consume round trip needed for local

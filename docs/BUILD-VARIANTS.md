@@ -92,9 +92,8 @@ way.** The config plugin throws at prebuild. Nothing else does: autolinking's
 `react-native.config.js` swallows the parse error, and `android/build.gradle` treats anything
 but `1`/`true` as off — both fall back to the dev-only default (Debug-only on iOS, the
 `release` stub on Android), exactly as if the variable were unset. A bare-RN pipeline gets no
-error at all — check the built artifact with `appduct doctor`
-([`CI.md`](CI.md#release-gate-appduct-doctor)) rather than trusting the variable's
-spelling.
+error at all — check the built artifact with `appduct doctor` rather than trusting the
+variable's spelling.
 
 **One variable, every surface.** Appduct ships its own `react-native.config.js` that
 reads the variable and sets `ios.configurations` in autolinking accordingly;
@@ -128,9 +127,6 @@ When Appduct *is* linked, its podspec and `build.gradle` print
 Nothing prints when it is excluded, because nothing runs — the line exists to catch a
 release build that carries Appduct by mistake, which is the failure that matters. Treat
 `doctor` as the authority; the log is an early warning.
-
-`doctor`'s exit codes, its Android detection signals, and the CI wiring live in
-[`CI.md`](CI.md#release-gate-appduct-doctor).
 
 ## Compiling Appduct out of production builds
 
@@ -328,8 +324,7 @@ A doctor-detection marker exists on both platforms, compiled only into the real
 implementation and never into the excluded/no-op counterpart: `AppductCoreMarker` (an
 `@objc` class, iOS) and `AppductNativeMarker` (Android) — `doctor`'s presence verdict is
 decided by that marker alone on both platforms, never by a package/class name or a
-manifest/plist key that a no-op build shares with the real one (see
-[`CI.md`](CI.md#release-gate-appduct-doctor)'s "Android detection" for why).
+manifest/plist key that a no-op build shares with the real one.
 **Always run `appduct doctor --assert-absent` against the actual signed artifact you are
 about to ship** — a `Release`/`release` configuration by name, or a dependency/build-setting
 combination you believe excludes the real implementation, is what's supposed to produce that
@@ -341,7 +336,6 @@ build of `packages/native`.
 ## Related
 
 - [`SECURITY.md`](SECURITY.md) — trust modes, pins, and the threat model
-- [`CI.md`](CI.md#release-gate-appduct-doctor) — the `appduct doctor` release gate
 - [`ARCHITECTURE.md`](ARCHITECTURE.md#11-react-native-sdk) — SDK entry points and client behavior
 - [`@appduct/react-native` README](../packages/react-native/README.md) — getting started and API reference
 - [`packages/native/README.md`](../packages/native/README.md) — the native core's consumer entry points

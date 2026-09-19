@@ -212,8 +212,7 @@ appduct doctor path/to/app-debug.apk --assert-present
 (`AppductNativeMarker`, compiled only into `core`, never `core-noop`) to decide presence — not
 just whether the `com.callstack.appduct` package name appears anywhere in the dex, since
 `core-noop`'s classes share that same Kotlin package and would otherwise look present to a naive
-scan. See [`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) and
-[`docs/CI.md`](../../../docs/CI.md#release-gate-appduct-doctor) for the full mechanism.
+scan. See [`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) for the full mechanism.
 
 If you run `appduct` both globally installed and from a workspace build, `pnpm exec appduct` can
 silently resolve the global one instead of the workspace build — confirm with `pnpm exec which

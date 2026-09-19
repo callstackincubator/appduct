@@ -146,7 +146,6 @@ Omit the session selector when only one session is active; pass an alias or sess
 - [Gating a tool by build variant](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#gating-a-tool-by-build-variant) — `enabled`, and why `__DEV__` is wrong here.
 - [Build variants](https://github.com/callstackincubator/appduct/blob/main/docs/BUILD-VARIANTS.md) — `APPDUCT_ENABLED`, autolinking exclusion, compiling Appduct out of production builds.
 - [What a build without the native module does](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#what-a-build-without-the-native-module-does).
-- [Release gate: `appduct doctor`](https://github.com/callstackincubator/appduct/blob/main/docs/CI.md#release-gate-appduct-doctor).
 - [ARCHITECTURE.md §11](https://github.com/callstackincubator/appduct/blob/main/docs/ARCHITECTURE.md#11-react-native-sdk) — resume lease, reconnect, cancellation.
 - [`appduct` CLI and MCP server](https://github.com/callstackincubator/appduct/blob/main/packages/appduct/README.md).
 

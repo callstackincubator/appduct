@@ -124,7 +124,6 @@ Asking an agent to add Appduct to your app or write its tools? Install the skill
 - [`docs/BUILD-VARIANTS.md`](docs/BUILD-VARIANTS.md) — which builds carry Appduct, and how to compile it out
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the pieces fit together
 - [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the wire protocol, if you're implementing a client
-- [`docs/CI.md`](docs/CI.md) — running it in CI, and the `appduct doctor` release gate
 
 ## Made with ❤️ at Callstack
 
