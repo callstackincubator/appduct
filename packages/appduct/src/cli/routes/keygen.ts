@@ -19,6 +19,6 @@ export const route: Route = async (context) => {
         },
         { stateDir },
       ),
-    context.io,
+    context.env,
   );
 };

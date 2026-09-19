@@ -15,6 +15,6 @@ export const route: Route = async (context) => {
   return executeCommand(
     commandName(context),
     guarded(context)(() => handleRevokeCommand({ selector }, { stateDir })),
-    context.io,
+    context.env,
   );
 };

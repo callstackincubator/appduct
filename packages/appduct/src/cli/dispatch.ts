@@ -14,10 +14,11 @@ import { getStateDirPaths, resolveStateDir } from "../daemon/state-dir.js";
 import { usageError } from "../errors.js";
 import { getPackageVersion } from "../package-version.js";
 import { createCli } from "./create-cli.js";
+import { resolveGlobalFlags, resolveGlobalFlagsFromArgv } from "./global-flags.js";
 import { createRouter, unknownCommandError, type RouteContext } from "./router.js";
 import { executeCommand } from "./runner.js";
 import { systemClock } from "./types.js";
-import type { RunCliOptions } from "./types.js";
+import type { CliEnv, RunCliOptions } from "./types.js";
 
 /** `APPDUCT_DAEMON_RESTART=1` forces a version-mismatch restart for one run — the env-var form
  * of `--daemon-restart`, so an MCP launch config (which passes no CLI flags) can opt in. */
@@ -69,8 +70,7 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
         throw error;
       },
       {
-        json: argv.includes("--json"),
-        color: !argv.includes("--no-color"),
+        flags: resolveGlobalFlagsFromArgv(argv),
         stdout: writers.stdout,
         stderr: writers.stderr,
         clock,
@@ -86,6 +86,8 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
     return 0;
   }
 
+  const flags = resolveGlobalFlags(parsedOptions);
+
   if (!matchedCommand) {
     if (parsedArgs[0]) {
       return executeCommand(
@@ -94,8 +96,7 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
           throw usageError(`Unknown command "${parsedArgs[0]}".`);
         },
         {
-          json: Boolean(parsedOptions.json),
-          color: parsedOptions.color !== false,
+          flags,
           stdout: writers.stdout,
           stderr: writers.stderr,
           clock,
@@ -107,9 +108,7 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
     return 0;
   }
 
-  const json = Boolean(parsedOptions.json);
-  const color = parsedOptions.color !== false;
-  const io = { json, color, stdout: writers.stdout, stderr: writers.stderr, clock };
+  const env: CliEnv = { flags, stdout: writers.stdout, stderr: writers.stderr, clock };
   const stateDir = resolveStateDir(
     typeof parsedOptions.stateDir === "string" ? parsedOptions.stateDir : undefined,
   );
@@ -150,7 +149,7 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
    * still behaves identically, it just says nothing. (A structured warning channel would be the
    * better answer; the runner has none today.)
    */
-  const cliWarning = json ? () => {} : (message: string) => void writers.stderr.write(message);
+  const cliWarning = flags.json ? () => {} : (message: string) => void writers.stderr.write(message);
 
   const context: RouteContext = {
     path: [],
@@ -158,7 +157,7 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
     // consumes it the same way the nested routers consume theirs.
     args: [matchedCommand, ...parsedArgs],
     options: parsedOptions,
-    io,
+    env,
     stateDir,
     versionCheck: {
       clientVersion: getPackageVersion(),

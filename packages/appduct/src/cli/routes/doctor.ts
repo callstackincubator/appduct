@@ -17,6 +17,6 @@ export const route: Route = async (context) => {
         assertPresent: Boolean(options.assertPresent),
         assertAbsent: Boolean(options.assertAbsent),
       }),
-    context.io,
+    context.env,
   );
 };

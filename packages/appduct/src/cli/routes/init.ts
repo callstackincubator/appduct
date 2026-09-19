@@ -21,6 +21,6 @@ export const route: Route = async (context) => {
         // refuse to write a "safe to commit" project config into the daemon's own state.
         { stateDir },
       ),
-    context.io,
+    context.env,
   );
 };

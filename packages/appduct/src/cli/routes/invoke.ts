@@ -40,7 +40,7 @@ export const route: Route = async (context) => {
           cancelController.signal,
         ),
       ),
-      context.io,
+      context.env,
     );
   } finally {
     process.off("SIGINT", onSigint);

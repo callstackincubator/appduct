@@ -13,11 +13,10 @@ import { executeHostedCommand } from "../runner.js";
 import { guarded } from "../version-guard.js";
 
 export const route: Route = async (context) => {
-  const { options, stateDir, io } = context;
+  const { options, stateDir, env } = context;
   const { selector } = splitOptionalSelector(context.args, "events [selector]");
   const since = parseNonNegativeIntegerOption(options.since, "--since");
   const follow = Boolean(options.follow);
-  const render = { json: io.json, color: io.color };
 
   return executeHostedCommand(
     commandName(context),
@@ -34,21 +33,19 @@ export const route: Route = async (context) => {
         {
           stateDir,
           onEvent: (event: EventNotification) => {
-            io.stdout.write(`${renderEventLine(event, render)}\n`);
+            env.stdout.write(`${renderEventLine(event, env.flags)}\n`);
           },
           onCursor: (cursor) => {
-            io.stdout.write(`${renderEventsCursorLine(cursor, render)}\n`);
+            env.stdout.write(`${renderEventsCursorLine(cursor, env.flags)}\n`);
           },
         },
       );
     }),
+    env,
     {
-      ...io,
-      reporter: {
-        kind: "interactive",
-        onEvent: () => {},
-        dispose: () => {},
-      },
+      kind: "interactive",
+      onEvent: () => {},
+      dispose: () => {},
     },
   );
 };

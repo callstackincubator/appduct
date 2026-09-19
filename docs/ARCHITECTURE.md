@@ -492,8 +492,11 @@ owns no keys. Every command is one RPC call plus formatting, which is why the CL
 server can't drift in behavior: they are the same calls.
 
 The per-command reference lives in the [`appduct` package README](../packages/appduct/README.md),
-which is where it stays current. Global flags: `--json` (machine output, NDJSON for streams),
-`--no-color`, `--state-dir`, `--daemon-restart` (force a version-drift restart, §4).
+which is where it stays current. Global flags (`cli/global-flags.ts`'s declarative table): `--json`
+(machine output, NDJSON for streams; compact by default), `--pretty` (indent `--json` output and
+embedded JSON values, never NDJSON lines), `--verbose` (include the `meta` block — omitted by
+default in both human and `--json` output), `--no-color`, `--state-dir`, `--daemon-restart` (force
+a version-drift restart, §4).
 
 The deep-link scheme used to compose a link is resolved by `scheme.ts`, shared by `appduct
 link`, `appduct mcp`, `appduct/client`'s `link()` and the MCP `appduct_connect` tool so

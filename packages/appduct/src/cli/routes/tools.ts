@@ -20,6 +20,7 @@ export const route: Route = async (context) => {
     guarded(context)(() =>
       handleToolsCommand({ selector: selector ?? selectorOrTarget, name: target }, { stateDir }),
     ),
-    { ...context.io, full: Boolean(options.full) },
+    context.env,
+    { full: Boolean(options.full) },
   );
 };

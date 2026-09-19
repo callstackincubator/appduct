@@ -10,7 +10,7 @@ import { executeHostedCommand } from "../runner.js";
 import { versionCheckOptions } from "../version-guard.js";
 
 export const route: Route = async (context) => {
-  const { options, stateDir, io } = context;
+  const { options, stateDir, env } = context;
 
   return executeHostedCommand(
     commandName(context),
@@ -23,15 +23,13 @@ export const route: Route = async (context) => {
       handleMcpCommand({
         stateDir,
         scheme: typeof options.scheme === "string" ? options.scheme : undefined,
-        checkVersion: await versionCheckOptions(context, (message) => void io.stderr.write(message)),
+        checkVersion: await versionCheckOptions(context, (message) => void env.stderr.write(message)),
       }),
+    env,
     {
-      ...io,
-      reporter: {
-        kind: "interactive",
-        onEvent: () => {},
-        dispose: () => {},
-      },
+      kind: "interactive",
+      onEvent: () => {},
+      dispose: () => {},
     },
   );
 };

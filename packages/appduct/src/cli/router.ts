@@ -13,7 +13,7 @@
  * that must stay lean.
  */
 
-import type { CliRenderContext } from "./types.js";
+import type { CliEnv } from "./types.js";
 
 import { usageError } from "../errors.js";
 import { executeCommand } from "./runner.js";
@@ -44,13 +44,14 @@ export type VersionCheckInputs = {
  */
 export type RouteContext = {
   /** The command words matched so far, e.g. `["daemon", "status"]`. Joined with spaces it is the
-   * `meta.command` a rendered result reports. */
+   * command name used to pick a success-data renderer, and (under `--verbose`) the `meta.command`
+   * a rendered result reports. */
   readonly path: readonly string[];
   /** The positional arguments left after {@link path}: what the matched command itself receives. */
   readonly args: readonly string[];
   /** Every parsed flag (global and per-command), as `cac` reports them (camelCased). */
   readonly options: Readonly<Record<string, unknown>>;
-  readonly io: CliRenderContext;
+  readonly env: CliEnv;
   /** The resolved state directory (`--state-dir` / `APPDUCT_STATE_DIR` / default). */
   readonly stateDir: string;
   readonly versionCheck: VersionCheckInputs;
@@ -67,7 +68,8 @@ export type RouterOptions = {
   readonly unknown: (word: string | undefined, context: RouteContext) => Error;
 };
 
-/** The `meta.command` string for a context: the matched words joined, or the level's own name. */
+/** The command name for a context (the `meta.command` a rendered result reports under
+ * `--verbose`): the matched words joined, or the level's own name. */
 export const commandName = (context: RouteContext): string => {
   return context.path.join(" ");
 };
@@ -90,7 +92,7 @@ export const createRouter = (table: RouteTable, options: RouterOptions): Route =
         () => {
           throw options.unknown(word, context);
         },
-        context.io,
+        context.env,
       );
     }
 

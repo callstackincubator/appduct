@@ -1,13 +1,16 @@
 import { cac } from "cac";
 
 import { getPackageVersion } from "../package-version.js";
+import { registerGlobalFlags } from "./global-flags.js";
 
 export const createCli = () => {
   const version = getPackageVersion();
   const cli = cac("appduct");
 
-  cli.option("--json", "Print machine-readable JSON (NDJSON for streaming commands).");
-  cli.option("--no-color", "Disable terminal color in human-readable output.");
+  // `--json`/`--pretty`/`--verbose`/`--no-color`: the declarative table in `global-flags.ts`.
+  // `--state-dir`/`--daemon-restart` stay registered by hand below — they are not output flags
+  // and are resolved differently (state-dir resolution, version-drift guard).
+  registerGlobalFlags(cli);
   cli.option("--state-dir <path>", "Override the Appduct state directory (default: ~/.appduct).");
   cli.option(
     "--daemon-restart",

@@ -1,12 +1,38 @@
 import { describe, expect, test } from "vitest";
 
+import type { GlobalFlags } from "../cli/global-flags.js";
 import { executeHostedCommand } from "../cli/runner.js";
+import type { CliEnv } from "../cli/types.js";
 import { sessionError } from "../errors.js";
 import { FIXED_NOW, fixedClock } from "./fixtures.js";
+
+const flags = (overrides: Partial<GlobalFlags> = {}): GlobalFlags => ({
+  json: false,
+  pretty: false,
+  verbose: false,
+  color: false,
+  ...overrides,
+});
 
 describe("executeHostedCommand", () => {
   test("reporter is disposed after hosted command completion", async () => {
     let disposed = 0;
+    const env: CliEnv = {
+      flags: flags(),
+      clock: fixedClock,
+      stdout: {
+        isTTY: true,
+        write() {
+          return true;
+        },
+      },
+      stderr: {
+        write() {
+          return true;
+        },
+      },
+    };
+
     const exitCode = await executeHostedCommand(
       "daemon run",
       async () => ({
@@ -23,27 +49,12 @@ describe("executeHostedCommand", () => {
         completion: Promise.resolve(),
         stop: () => {},
       }),
+      env,
       {
-        json: false,
-        color: false,
-        clock: fixedClock,
-        stdout: {
-          isTTY: true,
-          write() {
-            return true;
-          },
-        },
-        stderr: {
-          write() {
-            return true;
-          },
-        },
-        reporter: {
-          kind: "plain",
-          onEvent() {},
-          dispose() {
-            disposed += 1;
-          },
+        kind: "plain",
+        onEvent() {},
+        dispose() {
+          disposed += 1;
         },
       },
     );
@@ -54,6 +65,22 @@ describe("executeHostedCommand", () => {
 
   test("a live (non-plain) reporter suppresses the default bootstrap render", async () => {
     let stdout = "";
+    const env: CliEnv = {
+      flags: flags(),
+      clock: fixedClock,
+      stdout: {
+        isTTY: false,
+        write(chunk) {
+          stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+          return true;
+        },
+      },
+      stderr: {
+        write() {
+          return true;
+        },
+      },
+    };
 
     const exitCode = await executeHostedCommand(
       "events",
@@ -62,27 +89,11 @@ describe("executeHostedCommand", () => {
         completion: Promise.resolve(),
         stop: () => {},
       }),
+      env,
       {
-        json: false,
-        color: false,
-        clock: fixedClock,
-        stdout: {
-          isTTY: false,
-          write(chunk) {
-            stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-            return true;
-          },
-        },
-        stderr: {
-          write() {
-            return true;
-          },
-        },
-        reporter: {
-          kind: "interactive",
-          onEvent() {},
-          dispose() {},
-        },
+        kind: "interactive",
+        onEvent() {},
+        dispose() {},
       },
     );
 
@@ -90,9 +101,28 @@ describe("executeHostedCommand", () => {
     expect(stdout).toBe("");
   });
 
-  test("json output stays single-shot when the hosted runtime later fails", async () => {
+  test("json output stays single-shot when the hosted runtime later fails, with no meta by default", async () => {
     let stdout = "";
     let stderr = "";
+    const env: CliEnv = {
+      flags: flags({ json: true }),
+      clock: {
+        now: () => new Date(FIXED_NOW.getTime() + 1_000),
+      },
+      stdout: {
+        isTTY: false,
+        write(chunk) {
+          stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+          return true;
+        },
+      },
+      stderr: {
+        write(chunk) {
+          stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+          return true;
+        },
+      },
+    };
 
     const exitCode = await executeHostedCommand(
       "daemon run",
@@ -112,29 +142,12 @@ describe("executeHostedCommand", () => {
         ),
         stop: () => {},
       }),
-      {
-        json: true,
-        color: false,
-        clock: {
-          now: () => new Date(FIXED_NOW.getTime() + 1_000),
-        },
-        stdout: {
-          isTTY: false,
-          write(chunk) {
-            stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-            return true;
-          },
-        },
-        stderr: {
-          write(chunk) {
-            stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-            return true;
-          },
-        },
-      },
+      env,
     );
 
     expect(exitCode).toBe(71);
+    // Single line on stdout (compact JSON, no --pretty) and no `meta` key (no --verbose).
+    expect(stdout.replace(/\n$/u, "").split("\n")).toHaveLength(1);
     expect(JSON.parse(stdout)).toEqual({
       ok: true,
       data: {
@@ -144,20 +157,65 @@ describe("executeHostedCommand", () => {
           socket_path: "/tmp/appduct-state/daemon.sock",
         },
       },
-      meta: {
-        command: "daemon run",
-        timestamp: new Date(FIXED_NOW.getTime() + 1_000).toISOString(),
-        duration_ms: 0,
-      },
     });
 
     // The v1 defect this guards against: a bare, unparseable text line on stderr in --json mode.
     // The fix (runner.ts) emits a full JSON object instead, once stdout's single-object contract is
-    // already fulfilled by the bootstrap render above.
-    expect(() => JSON.parse(stderr)).not.toThrow();
+    // already fulfilled by the bootstrap render above. Also a single line: one JSON document.
+    expect(stderr.replace(/\n$/u, "").split("\n")).toHaveLength(1);
     const parsedStderr = JSON.parse(stderr);
     expect(parsedStderr.ok).toBe(false);
     expect(parsedStderr.error.type).toBe("session_error");
     expect(parsedStderr.error.message).toBe("Pending session TTL expired before any app connected.");
+    expect(parsedStderr).not.toHaveProperty("meta");
+  });
+
+  test("--verbose puts meta on both the bootstrap render and a late json failure", async () => {
+    let stdout = "";
+    let stderr = "";
+    const env: CliEnv = {
+      flags: flags({ json: true, verbose: true }),
+      clock: {
+        now: () => new Date(FIXED_NOW.getTime() + 1_000),
+      },
+      stdout: {
+        isTTY: false,
+        write(chunk) {
+          stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+          return true;
+        },
+      },
+      stderr: {
+        write(chunk) {
+          stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+          return true;
+        },
+      },
+    };
+
+    const exitCode = await executeHostedCommand(
+      "daemon run",
+      async () => ({
+        result: {
+          ok: true,
+          data: {
+            daemon: {
+              pid: 4242,
+              state_dir: "/tmp/appduct-state",
+              socket_path: "/tmp/appduct-state/daemon.sock",
+            },
+          },
+        },
+        completion: Promise.reject(
+          sessionError("Pending session TTL expired before any app connected."),
+        ),
+        stop: () => {},
+      }),
+      env,
+    );
+
+    expect(exitCode).toBe(71);
+    expect(JSON.parse(stdout).meta.command).toBe("daemon run");
+    expect(JSON.parse(stderr).meta.command).toBe("daemon run");
   });
 });

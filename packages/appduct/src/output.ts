@@ -18,22 +18,22 @@ import type {
   RevokeCommandData,
   ToolsCommandData,
 } from "./cli/result-types.js";
+import { formatJson, type GlobalFlags } from "./cli/global-flags.js";
 import { renderQrToTerminal } from "./qr-terminal.js";
 
 type ColorPalette = ReturnType<typeof pc.createColors>;
 
 export type RenderOptions = {
   command: string;
-  json: boolean;
-  color: boolean;
+  flags: GlobalFlags;
+  /** "Now", for the one renderer (`ls`'s Age column) that needs a reference time absent `meta`
+   * (which is only attached under `--verbose`). Defaults to the wall clock when omitted, matching
+   * the pre-`--verbose` fallback behavior for a caller that doesn't care (e.g. non-`ls` tests). */
+  now?: Date;
   /** `link`-only: also render the deep link as terminal QR art (never affects `--json` output). */
   qr?: boolean;
   /** `tools`-only: render full schemas/annotations for every listed tool, not just name+description. */
   full?: boolean;
-};
-
-const indentJson = (value: unknown): string => {
-  return JSON.stringify(value, null, 2);
 };
 
 const renderMetaLines = (meta?: CommandMeta): string[] => {
@@ -49,7 +49,7 @@ const renderMetaLines = (meta?: CommandMeta): string[] => {
   ];
 };
 
-const formatScalar = (value: unknown): string => {
+const formatScalar = (value: unknown, flags: GlobalFlags): string => {
   if (typeof value === "string") {
     return value;
   }
@@ -62,10 +62,14 @@ const formatScalar = (value: unknown): string => {
     return "null";
   }
 
-  return indentJson(value);
+  return formatJson(value, flags);
 };
 
-const renderFields = (title: string, fields: Array<[label: string, value: unknown]>): string[] => {
+const renderFields = (
+  title: string,
+  fields: Array<[label: string, value: unknown]>,
+  flags: GlobalFlags,
+): string[] => {
   const visibleFields = fields.filter(([, value]) => value !== undefined);
 
   if (visibleFields.length === 0) {
@@ -76,7 +80,7 @@ const renderFields = (title: string, fields: Array<[label: string, value: unknow
 
   return [
     title,
-    ...visibleFields.map(([label, value]) => `  ${label.padEnd(width)}  ${formatScalar(value)}`),
+    ...visibleFields.map(([label, value]) => `  ${label.padEnd(width)}  ${formatScalar(value, flags)}`),
   ];
 };
 
@@ -111,19 +115,19 @@ const formatDevice = (device: SessionSummary["device"]): string => {
   return device.os ? `${label} (${device.os})` : label;
 };
 
-const renderLsData = (colors: ColorPalette, data: LsCommandData, meta?: CommandMeta): string[] => {
+const renderLsData = (colors: ColorPalette, data: LsCommandData, now: Date): string[] => {
   if (data.length === 0) {
     return [colors.dim("Sessions"), "  No Appduct sessions are registered."];
   }
 
-  const now = meta?.timestamp ?? new Date().toISOString();
+  const nowIso = now.toISOString();
   const headers = ["Alias", "State", "Device", "Tools", "Age"] as const;
   const rows = data.map((session) => [
     session.alias,
     session.state,
     formatDevice(session.device),
     String(session.toolCount),
-    formatAge(session.claimedAt ?? session.createdAt, now),
+    formatAge(session.claimedAt ?? session.createdAt, nowIso),
   ]);
 
   const widths = headers.map((header, index) =>
@@ -151,47 +155,69 @@ const renderToolSummaryTable = (tools: ToolDescriptor[]): string[] => {
   ];
 };
 
-const renderToolDetail = (colors: ColorPalette, tool: ToolDescriptor): string[] => {
-  return renderFields(colors.green(`Tool: ${tool.name}`), [
-    ["Description", tool.description],
-    ["Input schema", tool.input_schema],
-    ["Output schema", tool.output_schema],
-    ["Annotations", tool.annotations],
-    // Only rendered for a tool that declares one; `renderFields` drops undefined rows, so a tool
-    // on the daemon's default deadline shows no line at all rather than a misleading "10000".
-    ["Timeout (ms)", tool.timeout_ms],
-  ]);
+const renderToolDetail = (colors: ColorPalette, tool: ToolDescriptor, flags: GlobalFlags): string[] => {
+  return renderFields(
+    colors.green(`Tool: ${tool.name}`),
+    [
+      ["Description", tool.description],
+      ["Input schema", tool.input_schema],
+      ["Output schema", tool.output_schema],
+      ["Annotations", tool.annotations],
+      // Only rendered for a tool that declares one; `renderFields` drops undefined rows, so a
+      // tool on the daemon's default deadline shows no line at all rather than a misleading
+      // "10000".
+      ["Timeout (ms)", tool.timeout_ms],
+    ],
+    flags,
+  );
 };
 
-const renderToolsData = (colors: ColorPalette, data: ToolsCommandData, full?: boolean): string[] => {
+const renderToolsData = (
+  colors: ColorPalette,
+  data: ToolsCommandData,
+  flags: GlobalFlags,
+  full?: boolean,
+): string[] => {
   if (!Array.isArray(data)) {
-    return renderToolDetail(colors, data);
+    return renderToolDetail(colors, data, flags);
   }
 
   if (full) {
     return data.length === 0
       ? ["Tools", "  No tools registered."]
-      : data.flatMap((tool, index) => [...(index > 0 ? [""] : []), ...renderToolDetail(colors, tool)]);
+      : data.flatMap((tool, index) => [
+          ...(index > 0 ? [""] : []),
+          ...renderToolDetail(colors, tool, flags),
+        ]);
   }
 
   return [colors.green("Tools"), ...renderToolSummaryTable(data).slice(1)];
 };
 
-const renderInvokeData = (colors: ColorPalette, data: InvokeCommandData): string[] => {
-  return [colors.green("Result"), formatScalar(data)];
+const renderInvokeData = (colors: ColorPalette, data: InvokeCommandData, flags: GlobalFlags): string[] => {
+  return [colors.green("Result"), formatScalar(data, flags)];
 };
 
-const renderLinkData = (colors: ColorPalette, data: LinkCommandData, qr?: boolean): string[] => {
+const renderLinkData = (
+  colors: ColorPalette,
+  data: LinkCommandData,
+  flags: GlobalFlags,
+  qr?: boolean,
+): string[] => {
   const lines = [
     colors.green("Link Created"),
-    ...renderFields("Link", [
-      ["Session", data.sessionId],
-      ["Deep link", data.deepLink],
-      ["Endpoint", formatAgentWebSocketUrl(data.endpoint)],
-      ["Pin", data.pin],
-      ["Expires", new Date(data.expiresAt * 1000).toISOString()],
-      ["Delivered", data.delivered ? `yes (${data.target})` : undefined],
-    ]),
+    ...renderFields(
+      "Link",
+      [
+        ["Session", data.sessionId],
+        ["Deep link", data.deepLink],
+        ["Endpoint", formatAgentWebSocketUrl(data.endpoint)],
+        ["Pin", data.pin],
+        ["Expires", new Date(data.expiresAt * 1000).toISOString()],
+        ["Delivered", data.delivered ? `yes (${data.target})` : undefined],
+      ],
+      flags,
+    ),
   ];
 
   if (qr) {
@@ -205,17 +231,23 @@ const renderRevokeData = (colors: ColorPalette, _data: RevokeCommandData): strin
   return [colors.green("Session Revoked")];
 };
 
-const renderKeygenData = (colors: ColorPalette, data: KeygenCommandData): string[] => {
+const renderKeygenData = (colors: ColorPalette, data: KeygenCommandData, flags: GlobalFlags): string[] => {
   return [
     colors.green("Key Ready"),
-    ...renderFields("Key", [
-      ["Path", data.path],
-      ["Fingerprint", data.pin],
-    ]),
+    ...renderFields(
+      "Key",
+      [
+        ["Path", data.path],
+        ["Fingerprint", data.pin],
+      ],
+      flags,
+    ),
   ];
 };
 
-const renderInitData = (colors: ColorPalette, data: InitCommandData): string[] => {
+const renderInitData = (colors: ColorPalette, data: InitCommandData, flags: GlobalFlags): string[] => {
+  // The pasteable MCP snippet is always shown indented, regardless of `--pretty` — it is meant to
+  // be copied straight into a JSON config file, not machine-parsed output.
   const snippet = JSON.stringify(
     { mcpServers: { appduct: data.mcpServerEntry } },
     null,
@@ -224,15 +256,19 @@ const renderInitData = (colors: ColorPalette, data: InitCommandData): string[] =
 
   return [
     colors.green(data.changed ? "Project Initialized" : "Project Already Initialized"),
-    ...renderFields("Config", [
-      ["Path", data.path],
-      ["Scheme", data.scheme],
-      ["Source", data.source],
-      // Only present for a scheme discovery read off a static project file (app.json, or one of
-      // the native Android/iOS probes) — names the exact file/key, not just which platform.
-      ["Read from", data.origin],
-      ["Written", data.changed ? (data.created ? "created" : "updated") : "unchanged"],
-    ]),
+    ...renderFields(
+      "Config",
+      [
+        ["Path", data.path],
+        ["Scheme", data.scheme],
+        ["Source", data.source],
+        // Only present for a scheme discovery read off a static project file (app.json, or one of
+        // the native Android/iOS probes) — names the exact file/key, not just which platform.
+        ["Read from", data.origin],
+        ["Written", data.changed ? (data.created ? "created" : "updated") : "unchanged"],
+      ],
+      flags,
+    ),
     ...(data.note === undefined ? [] : ["", colors.yellow(`Note: ${data.note}`)]),
     "",
     "MCP server entry",
@@ -243,32 +279,52 @@ const renderInitData = (colors: ColorPalette, data: InitCommandData): string[] =
   ];
 };
 
-const renderDaemonRunData = (colors: ColorPalette, data: DaemonRunCommandData): string[] => {
+const renderDaemonRunData = (
+  colors: ColorPalette,
+  data: DaemonRunCommandData,
+  flags: GlobalFlags,
+): string[] => {
   return [
     colors.green("Daemon Running"),
-    ...renderFields("Daemon", [
-      ["PID", data.daemon.pid],
-      ["State dir", data.daemon.state_dir],
-      ["Socket", data.daemon.socket_path],
-    ]),
+    ...renderFields(
+      "Daemon",
+      [
+        ["PID", data.daemon.pid],
+        ["State dir", data.daemon.state_dir],
+        ["Socket", data.daemon.socket_path],
+      ],
+      flags,
+    ),
   ];
 };
 
-const renderDaemonStartData = (colors: ColorPalette, data: DaemonStartCommandData): string[] => {
+const renderDaemonStartData = (
+  colors: ColorPalette,
+  data: DaemonStartCommandData,
+  flags: GlobalFlags,
+): string[] => {
   return [
     colors.green("Daemon Started"),
-    ...renderFields("Daemon", [
-      ["PID", data.daemon.pid],
-      ["WSS port", data.daemon.wss_port],
-      ["Started at", data.daemon.started_at],
-    ]),
+    ...renderFields(
+      "Daemon",
+      [
+        ["PID", data.daemon.pid],
+        ["WSS port", data.daemon.wss_port],
+        ["Started at", data.daemon.started_at],
+      ],
+      flags,
+    ),
   ];
 };
 
-const renderDaemonStopData = (colors: ColorPalette, data: DaemonStopCommandData): string[] => {
+const renderDaemonStopData = (
+  colors: ColorPalette,
+  data: DaemonStopCommandData,
+  flags: GlobalFlags,
+): string[] => {
   return [
     colors.green("Daemon Stopped"),
-    ...renderFields("Daemon", [["Method", data.daemon.method]]),
+    ...renderFields("Daemon", [["Method", data.daemon.method]], flags),
   ];
 };
 
@@ -288,99 +344,119 @@ const formatByteSize = (bytes: number): string => {
   return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
 };
 
-const renderDaemonStatusData = (colors: ColorPalette, data: DaemonStatusCommandData): string[] => {
+const renderDaemonStatusData = (
+  colors: ColorPalette,
+  data: DaemonStatusCommandData,
+  flags: GlobalFlags,
+): string[] => {
   return [
     colors.green("Daemon Status"),
-    ...renderFields("Daemon", [
-      ["Version", data.daemon.version],
-      ["PID", data.daemon.pid],
-      ["Started at", data.daemon.started_at],
-      ["WSS port", data.daemon.wss_port],
-      ["Pinned keys", data.daemon.pinned_keys.length],
-      ["Sessions", data.daemon.session_count],
-    ]),
+    ...renderFields(
+      "Daemon",
+      [
+        ["Version", data.daemon.version],
+        ["PID", data.daemon.pid],
+        ["Started at", data.daemon.started_at],
+        ["WSS port", data.daemon.wss_port],
+        ["Pinned keys", data.daemon.pinned_keys.length],
+        ["Sessions", data.daemon.session_count],
+      ],
+      flags,
+    ),
     "",
-    ...renderFields("Policy", [
-      ["Default", data.policy.default],
-      ["Destructive", data.policy.destructive],
-      ["Overrides", data.policy.tools ? Object.keys(data.policy.tools).length : 0],
-    ]),
+    ...renderFields(
+      "Policy",
+      [
+        ["Default", data.policy.default],
+        ["Destructive", data.policy.destructive],
+        ["Overrides", data.policy.tools ? Object.keys(data.policy.tools).length : 0],
+      ],
+      flags,
+    ),
     "",
     // The retention rows drop out entirely against a daemon that predates them (`renderFields`
     // skips `undefined`), rather than printing "undefined" or an invented zero.
-    ...renderFields("Audit", [
-      ["Path", data.audit.path],
-      ["Retention", data.audit.retention_days === undefined ? undefined : `${data.audit.retention_days} days`],
-      ["Files", data.audit.files],
-      ["Size", data.audit.bytes === undefined ? undefined : formatByteSize(data.audit.bytes)],
-      ["Failed writes", data.audit.failed_writes],
-      ["Failed prunes", data.audit.failed_prunes],
-    ]),
+    ...renderFields(
+      "Audit",
+      [
+        ["Path", data.audit.path],
+        ["Retention", data.audit.retention_days === undefined ? undefined : `${data.audit.retention_days} days`],
+        ["Files", data.audit.files],
+        ["Size", data.audit.bytes === undefined ? undefined : formatByteSize(data.audit.bytes)],
+        ["Failed writes", data.audit.failed_writes],
+        ["Failed prunes", data.audit.failed_prunes],
+      ],
+      flags,
+    ),
     // Version drift (issue #30) is the one thing here an operator has to act on, so it goes last
     // — the line still on screen after the block scrolls — and in yellow, not a quiet field row.
     ...(data.warning ? ["", colors.yellow(`Warning: ${data.warning}`)] : []),
   ];
 };
 
-const renderDoctorData = (colors: ColorPalette, data: DoctorCommandData): string[] => {
+const renderDoctorData = (colors: ColorPalette, data: DoctorCommandData, flags: GlobalFlags): string[] => {
   return [
     data.present ? colors.green("Appduct Present") : colors.yellow("Appduct Absent"),
-    ...renderFields("Artifact", [
-      ["Path", data.artifact],
-      ["Platform", data.platform],
-      ["Format", data.format],
-      ["Present", data.present],
-      ["Signals", data.signals.length > 0 ? data.signals.join(", ") : "none"],
-      ["Assertion", data.assertion ? `${data.assertion.expected} (holds)` : undefined],
-    ]),
+    ...renderFields(
+      "Artifact",
+      [
+        ["Path", data.artifact],
+        ["Platform", data.platform],
+        ["Format", data.format],
+        ["Present", data.present],
+        ["Signals", data.signals.length > 0 ? data.signals.join(", ") : "none"],
+        ["Assertion", data.assertion ? `${data.assertion.expected} (holds)` : undefined],
+      ],
+      flags,
+    ),
   ];
 };
 
-const renderSuccessData = (
-  colors: ColorPalette,
-  command: string,
-  data: unknown,
-  options: RenderOptions,
-  meta?: CommandMeta,
-): string[] => {
+const renderSuccessData = (colors: ColorPalette, command: string, data: unknown, options: RenderOptions): string[] => {
+  const flags = options.flags;
+
   switch (command) {
     case "init":
-      return renderInitData(colors, data as InitCommandData);
+      return renderInitData(colors, data as InitCommandData, flags);
     case "keygen":
-      return renderKeygenData(colors, data as KeygenCommandData);
+      return renderKeygenData(colors, data as KeygenCommandData, flags);
     case "link":
-      return renderLinkData(colors, data as LinkCommandData, options.qr);
+      return renderLinkData(colors, data as LinkCommandData, flags, options.qr);
     case "ls":
-      return renderLsData(colors, data as LsCommandData, meta);
+      return renderLsData(colors, data as LsCommandData, options.now ?? new Date());
     case "tools":
-      return renderToolsData(colors, data as ToolsCommandData, options.full);
+      return renderToolsData(colors, data as ToolsCommandData, flags, options.full);
     case "invoke":
-      return renderInvokeData(colors, data as InvokeCommandData);
+      return renderInvokeData(colors, data as InvokeCommandData, flags);
     case "revoke":
       return renderRevokeData(colors, data as RevokeCommandData);
     case "daemon run":
-      return renderDaemonRunData(colors, data as DaemonRunCommandData);
+      return renderDaemonRunData(colors, data as DaemonRunCommandData, flags);
     case "daemon start":
-      return renderDaemonStartData(colors, data as DaemonStartCommandData);
+      return renderDaemonStartData(colors, data as DaemonStartCommandData, flags);
     case "daemon stop":
-      return renderDaemonStopData(colors, data as DaemonStopCommandData);
+      return renderDaemonStopData(colors, data as DaemonStopCommandData, flags);
     case "daemon status":
-      return renderDaemonStatusData(colors, data as DaemonStatusCommandData);
+      return renderDaemonStatusData(colors, data as DaemonStatusCommandData, flags);
     case "doctor":
-      return renderDoctorData(colors, data as DoctorCommandData);
+      return renderDoctorData(colors, data as DoctorCommandData, flags);
     default:
-      return [colors.green("Command Complete"), indentJson(data)];
+      return [colors.green("Command Complete"), formatJson(data, flags)];
   }
 };
 
-const renderHumanError = (colors: ColorPalette, error: CliError, meta?: CommandMeta): string => {
+const renderHumanError = (colors: ColorPalette, error: CliError, flags: GlobalFlags, meta?: CommandMeta): string => {
   return [
     colors.red("Command Failed"),
-    ...renderFields("Error", [
-      ["Type", error.type],
-      ["Message", error.message],
-      ["Details", error.details],
-    ]),
+    ...renderFields(
+      "Error",
+      [
+        ["Type", error.type],
+        ["Message", error.message],
+        ["Details", error.details],
+      ],
+      flags,
+    ),
     ...(meta ? ["", ...renderMetaLines(meta)] : []),
   ].join("\n");
 };
@@ -392,22 +468,24 @@ export const renderResult = (
   stdout?: string;
   stderr?: string;
 } => {
-  if (options.json) {
+  if (options.flags.json) {
     return {
-      stdout: `${indentJson(result)}\n`,
+      stdout: `${formatJson(result, options.flags)}\n`,
     };
   }
 
-  const colors = pc.createColors(options.color);
+  const colors = pc.createColors(options.flags.color);
 
   if (!result.ok) {
     return {
-      stderr: `${renderHumanError(colors, result.error, result.meta)}\n`,
+      stderr: `${renderHumanError(colors, result.error, options.flags, result.meta)}\n`,
     };
   }
 
+  // `result.meta` is only present under `--verbose` (`cli/envelope.ts`'s `finalizeResult`), so
+  // rendering it here keys purely off presence — no separate verbose check needed.
   const lines = [
-    ...renderSuccessData(colors, options.command, result.data, options, result.meta),
+    ...renderSuccessData(colors, options.command, result.data, options),
     "",
     ...renderMetaLines(result.meta),
   ].filter((line, index, collection) => {
@@ -424,18 +502,17 @@ export const renderResult = (
 };
 
 /** Renders one `appduct events` line: NDJSON under `--json`, a compact human line otherwise. */
-export const renderEventLine = (
-  event: EventNotification,
-  options: { json: boolean; color: boolean },
-): string => {
-  if (options.json) {
+export const renderEventLine = (event: EventNotification, flags: GlobalFlags): string => {
+  if (flags.json) {
+    // NDJSON is one object per line by contract (a streaming consumer reads it line-by-line, and
+    // the cursor resume logic depends on that) — always compact, `--pretty` never applies here.
     return JSON.stringify(event);
   }
 
-  const colors = pc.createColors(options.color);
+  const colors = pc.createColors(flags.color);
   const timestamp = new Date(event.ts).toISOString();
   const target = event.alias ?? event.sessionId;
-  const dataSuffix = event.data === undefined ? "" : ` ${indentJson(event.data)}`;
+  const dataSuffix = event.data === undefined ? "" : ` ${formatJson(event.data, flags)}`;
 
   return `${colors.dim(timestamp)} ${colors.green(event.kind)}${target ? ` ${target}` : ""}${dataSuffix}`;
 };
@@ -443,11 +520,12 @@ export const renderEventLine = (
 /** Renders the trailing cursor line for `appduct events --since` (issue #6): NDJSON under
  * `--json` so a scripted caller can parse the resume point without maxing `seq` over the printed
  * events (impossible when the response is empty), a human note otherwise. */
-export const renderEventsCursorLine = (cursor: number, options: { json: boolean; color: boolean }): string => {
-  if (options.json) {
+export const renderEventsCursorLine = (cursor: number, flags: GlobalFlags): string => {
+  if (flags.json) {
+    // Same NDJSON rule as renderEventLine above: always one compact line, never `--pretty`.
     return JSON.stringify({ cursor });
   }
 
-  const colors = pc.createColors(options.color);
+  const colors = pc.createColors(flags.color);
   return colors.dim(`cursor: ${cursor} (pass --since ${cursor} to resume from here)`);
 };

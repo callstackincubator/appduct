@@ -1,8 +1,19 @@
 import { describe, expect, test } from "vitest";
 
+import type { GlobalFlags } from "../cli/global-flags.js";
 import type { DaemonStatusCommandData } from "../cli/result-types.js";
 import { renderEventLine, renderEventsCursorLine, renderResult } from "../output.js";
 import { FIXED_NOW } from "./fixtures.js";
+
+/** `GlobalFlags` with sensible test defaults (no color, no --json/--pretty/--verbose), overridable
+ * per call so each test states only the flags it cares about. */
+const flags = (overrides: Partial<GlobalFlags> = {}): GlobalFlags => ({
+  json: false,
+  pretty: false,
+  verbose: false,
+  color: false,
+  ...overrides,
+});
 
 describe("output rendering", () => {
   test("tools list output stays structured", () => {
@@ -17,16 +28,10 @@ describe("output rendering", () => {
             output_schema: { echoed: "unknown" },
           },
         ],
-        meta: {
-          command: "tools",
-          timestamp: FIXED_NOW.toISOString(),
-          duration_ms: 4,
-        },
       },
       {
         command: "tools",
-        json: false,
-        color: false,
+        flags: flags(),
       },
     );
 
@@ -43,9 +48,8 @@ describe("output rendering", () => {
             description: "Signs a test user in.",
             ...(timeoutMs !== undefined ? { timeout_ms: timeoutMs } : {}),
           },
-          meta: { command: "tools", timestamp: FIXED_NOW.toISOString(), duration_ms: 4 },
         },
-        { command: "tools", json: false, color: false },
+        { command: "tools", flags: flags() },
       ).stdout;
 
     expect(renderDetail(60_000)).toContain("Timeout (ms)  60000");
@@ -63,16 +67,10 @@ describe("output rendering", () => {
           input_schema: { type: "object" },
           annotations: { readOnlyHint: true },
         },
-        meta: {
-          command: "tools",
-          timestamp: FIXED_NOW.toISOString(),
-          duration_ms: 4,
-        },
       },
       {
         command: "tools",
-        json: false,
-        color: false,
+        flags: flags(),
       },
     );
 
@@ -90,23 +88,17 @@ describe("output rendering", () => {
           expiresAt: Math.floor(FIXED_NOW.getTime() / 1000) + 30,
           pin: "sha256/example",
         },
-        meta: {
-          command: "link",
-          timestamp: FIXED_NOW.toISOString(),
-          duration_ms: 5,
-        },
       },
       {
         command: "link",
-        json: false,
-        color: false,
+        flags: flags(),
       },
     );
 
     expect(rendered.stdout).toMatchSnapshot();
   });
 
-  test("link json output only includes the trimmed link payload (no QR)", () => {
+  test("link json output only includes the trimmed link payload (no QR, no meta)", () => {
     const rendered = renderResult(
       {
         ok: true,
@@ -117,16 +109,10 @@ describe("output rendering", () => {
           expiresAt: Math.floor(FIXED_NOW.getTime() / 1000) + 30,
           pin: "sha256/example",
         },
-        meta: {
-          command: "link",
-          timestamp: FIXED_NOW.toISOString(),
-          duration_ms: 5,
-        },
       },
       {
         command: "link",
-        json: true,
-        color: false,
+        flags: flags({ json: true }),
         qr: true,
       },
     );
@@ -139,11 +125,6 @@ describe("output rendering", () => {
         endpoint: { family: 4, address: "192.168.1.10", port: 8443 },
         expiresAt: Math.floor(FIXED_NOW.getTime() / 1000) + 30,
         pin: "sha256/example",
-      },
-      meta: {
-        command: "link",
-        timestamp: FIXED_NOW.toISOString(),
-        duration_ms: 5,
       },
     });
   });
@@ -163,16 +144,11 @@ describe("output rendering", () => {
             toolCount: 3,
           },
         ],
-        meta: {
-          command: "ls",
-          timestamp: FIXED_NOW.toISOString(),
-          duration_ms: 2,
-        },
       },
       {
         command: "ls",
-        json: false,
-        color: false,
+        flags: flags(),
+        now: FIXED_NOW,
       },
     );
 
@@ -184,16 +160,11 @@ describe("output rendering", () => {
       {
         ok: true,
         data: [],
-        meta: {
-          command: "ls",
-          timestamp: FIXED_NOW.toISOString(),
-          duration_ms: 1,
-        },
       },
       {
         command: "ls",
-        json: false,
-        color: false,
+        flags: flags(),
+        now: FIXED_NOW,
       },
     );
 
@@ -208,16 +179,10 @@ describe("output rendering", () => {
           path: "/tmp/appduct-key.pem",
           pin: "sha256/example",
         },
-        meta: {
-          command: "keygen",
-          timestamp: FIXED_NOW.toISOString(),
-          duration_ms: 3,
-        },
       },
       {
         command: "keygen",
-        json: false,
-        color: false,
+        flags: flags(),
       },
     );
 
@@ -229,20 +194,29 @@ describe("output rendering", () => {
       {
         ok: true,
         data: { echoed: "hello" },
-        meta: {
-          command: "invoke",
-          timestamp: FIXED_NOW.toISOString(),
-          duration_ms: 6,
-        },
       },
       {
         command: "invoke",
-        json: false,
-        color: false,
+        flags: flags(),
       },
     );
 
     expect(rendered.stdout).toMatchSnapshot();
+  });
+
+  test("human invoke output embeds compact JSON by default, and indented JSON under --pretty", () => {
+    const result = {
+      ok: true as const,
+      data: { echoed: { nested: { value: true } } },
+    };
+
+    const compact = renderResult(result, { command: "invoke", flags: flags() }).stdout ?? "";
+    expect(compact).toContain('{"nested":{"value":true}}');
+    expect(compact).toBe("Result\n{\"echoed\":{\"nested\":{\"value\":true}}}\n");
+
+    const pretty = renderResult(result, { command: "invoke", flags: flags({ pretty: true }) }).stdout ?? "";
+    expect(pretty).toContain('"nested": {');
+    expect(pretty).toContain('"value": true');
   });
 
   test("human errors render on stderr", () => {
@@ -256,23 +230,17 @@ describe("output rendering", () => {
             hint: "test",
           },
         },
-        meta: {
-          command: "invoke",
-          timestamp: FIXED_NOW.toISOString(),
-          duration_ms: 2,
-        },
       },
       {
         command: "invoke",
-        json: false,
-        color: false,
+        flags: flags(),
       },
     );
 
     expect(rendered.stderr).toMatchSnapshot();
   });
 
-  test("json errors preserve the wire error type verbatim", () => {
+  test("json errors preserve the wire error type verbatim, with no meta by default", () => {
     const rendered = renderResult(
       {
         ok: false,
@@ -280,20 +248,41 @@ describe("output rendering", () => {
           type: "tool_execution_error",
           message: "The tool handler threw.",
         },
-        meta: {
-          command: "invoke",
-          timestamp: FIXED_NOW.toISOString(),
-          duration_ms: 2,
-        },
       },
       {
         command: "invoke",
-        json: true,
-        color: false,
+        flags: flags({ json: true }),
       },
     );
 
-    expect(JSON.parse(rendered.stdout ?? "").error.type).toBe("tool_execution_error");
+    const parsed = JSON.parse(rendered.stdout ?? "");
+    expect(parsed.error.type).toBe("tool_execution_error");
+    expect(parsed).not.toHaveProperty("meta");
+  });
+
+  test("the Meta block renders (human and --json) exactly when the result carries meta", () => {
+    const meta = { command: "invoke", timestamp: FIXED_NOW.toISOString(), duration_ms: 4 };
+
+    const human = renderResult(
+      { ok: true, data: { echoed: "hi" }, meta },
+      { command: "invoke", flags: flags() },
+    ).stdout;
+    expect(human).toContain("Meta");
+    expect(human).toContain(`Command: ${meta.command}`);
+    expect(human).toContain(`Timestamp: ${meta.timestamp}`);
+    expect(human).toContain(`Duration: ${meta.duration_ms} ms`);
+
+    const humanNoMeta = renderResult(
+      { ok: true, data: { echoed: "hi" } },
+      { command: "invoke", flags: flags() },
+    ).stdout;
+    expect(humanNoMeta).not.toContain("Meta");
+
+    const json = renderResult(
+      { ok: true, data: { echoed: "hi" }, meta },
+      { command: "invoke", flags: flags({ json: true }) },
+    ).stdout ?? "";
+    expect(JSON.parse(json).meta).toEqual(meta);
   });
 
   /** `appduct init`'s whole point is what it prints, so the human rendering is pinned. */
@@ -309,21 +298,16 @@ describe("output rendering", () => {
         mcpServerEntry: { command: "appduct", args: ["mcp", "--scheme", "myapp"] },
         nextSteps: ['Add `import "@appduct/react-native/auto";` to your app entry.'],
       },
-      meta: {
-        command: "init",
-        timestamp: FIXED_NOW.toISOString(),
-        duration_ms: 3,
-      },
     });
 
   test("init output shows the config, the pasteable MCP entry and the next steps", () => {
-    const rendered = renderResult(initResult(true), { command: "init", json: false, color: false });
+    const rendered = renderResult(initResult(true), { command: "init", flags: flags() });
 
     expect(rendered.stdout).toMatchSnapshot();
   });
 
   test("init output distinguishes an idempotent re-run from a write", () => {
-    const rendered = renderResult(initResult(false), { command: "init", json: false, color: false });
+    const rendered = renderResult(initResult(false), { command: "init", flags: flags() });
 
     expect(rendered.stdout).toContain("Project Already Initialized");
     expect(rendered.stdout).toContain("unchanged");
@@ -333,34 +317,61 @@ describe("output rendering", () => {
     const base = initResult(false);
     const rendered = renderResult(
       { ...base, data: { ...base.data, note: 'app.json declares "renamed"' } },
-      { command: "init", json: false, color: false },
+      { command: "init", flags: flags() },
     );
 
     expect(rendered.stdout).toContain('Note: app.json declares "renamed"');
   });
 
   test("init --json exposes the MCP entry structurally rather than as a pre-rendered string", () => {
-    const rendered = renderResult(initResult(true), { command: "init", json: true, color: false });
+    const rendered = renderResult(initResult(true), { command: "init", flags: flags({ json: true }) });
 
     expect(JSON.parse(rendered.stdout ?? "").data.mcpServerEntry).toEqual({
       command: "appduct",
       args: ["mcp", "--scheme", "myapp"],
     });
   });
+
+  test("--json output is a single line by default, and indented under --pretty", () => {
+    const result = { ok: true as const, data: { a: 1, b: { c: 2 } } };
+
+    const compact = renderResult(result, { command: "invoke", flags: flags({ json: true }) }).stdout ?? "";
+    expect(compact.replace(/\n$/u, "").split("\n")).toHaveLength(1);
+    expect(JSON.parse(compact)).toEqual(result);
+
+    const pretty = renderResult(result, { command: "invoke", flags: flags({ json: true, pretty: true }) }).stdout ?? "";
+    expect(pretty.split("\n").length).toBeGreaterThan(1);
+    expect(JSON.parse(pretty)).toEqual(result);
+  });
 });
 
 describe("renderEventLine", () => {
   test("NDJSON mode emits parseable, verbatim JSON", () => {
     const event = { kind: "session_claimed" as const, sessionId: "s1", alias: "pixel-8", ts: 1_700_000_000_000, data: {}, seq: 1 };
-    const line = renderEventLine(event, { json: true, color: false });
+    const line = renderEventLine(event, flags({ json: true }));
 
+    expect(JSON.parse(line)).toEqual(event);
+  });
+
+  test("NDJSON stays a single line even under --pretty", () => {
+    const event = {
+      kind: "tools_changed" as const,
+      sessionId: "s1",
+      alias: "pixel-8",
+      ts: 1_700_000_000_000,
+      data: { toolCount: 2, nested: { a: 1 } },
+      seq: 1,
+    };
+    const line = renderEventLine(event, flags({ json: true, pretty: true }));
+
+    expect(line.split("\n")).toHaveLength(1);
     expect(JSON.parse(line)).toEqual(event);
   });
 
   test("human mode includes the kind and alias", () => {
     const line = renderEventLine(
       { kind: "tools_changed", sessionId: "s1", alias: "pixel-8", ts: 1_700_000_000_000, data: { toolCount: 2 }, seq: 1 },
-      { json: false, color: false },
+      flags(),
     );
 
     expect(line).toContain("tools_changed");
@@ -370,12 +381,18 @@ describe("renderEventLine", () => {
 
 describe("renderEventsCursorLine", () => {
   test("NDJSON mode emits a parseable { cursor } object", () => {
-    const line = renderEventsCursorLine(42, { json: true, color: false });
+    const line = renderEventsCursorLine(42, flags({ json: true }));
+    expect(JSON.parse(line)).toEqual({ cursor: 42 });
+  });
+
+  test("NDJSON stays a single line even under --pretty", () => {
+    const line = renderEventsCursorLine(42, flags({ json: true, pretty: true }));
+    expect(line.split("\n")).toHaveLength(1);
     expect(JSON.parse(line)).toEqual({ cursor: 42 });
   });
 
   test("human mode includes the cursor value and the resume flag", () => {
-    const line = renderEventsCursorLine(42, { json: false, color: false });
+    const line = renderEventsCursorLine(42, flags());
     expect(line).toContain("42");
     expect(line).toContain("--since 42");
   });
@@ -398,9 +415,8 @@ describe("daemon status rendering", () => {
           policy: { default: "allow", destructive: "deny" },
           audit,
         } satisfies DaemonStatusCommandData,
-        meta: { command: "daemon status", timestamp: FIXED_NOW.toISOString(), duration_ms: 4 },
       },
-      { command: "daemon status", json: false, color: false },
+      { command: "daemon status", flags: flags() },
     ).stdout ?? "";
   };
 
