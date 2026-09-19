@@ -36,15 +36,14 @@ variant's classpath — a compile error, not an inert build.
 
 Android therefore links this project into every variant unconditionally, and
 `android/build.gradle` instead swaps which *vendored source directory* compiles for the
-`release` build type, based on `APPDUCT_ENABLED`. Since
-[the native core extraction](#native-core), `AppductPackage`/`NativeAppductModule`
+`release` build type, based on `APPDUCT_ENABLED`. `AppductPackage`/`NativeAppductModule`
 (`android/src/main/java`) always compile, for every variant — they reference
 `AppductConnectionManager` and friends by unqualified name only, never a build-type
 check. Which implementation that name resolves to is decided by which directory is on the
 variant's compile classpath: `debug` always adds `android/core` (the real implementation,
 vendored from `packages/native/android/core`); `release` adds either the same `android/core`
 (opted in) or `android/core-noop` (the default) — the same public API, every method a no-op.
-There is no `src/debug`/`src/release-stub` source-set split anymore; the split is which
+There is no `src/debug`/`src/release-stub` source-set split; the split is which
 vendored directory gets added to the variant's `java.srcDirs`.
 
 Either way, the real implementation is genuinely absent from the compiled output it is
@@ -113,9 +112,8 @@ nothing, silently.
 to Xcode configurations literally named `Debug`/`Release`; Gradle restricts it to build
 types literally named `debug`/`release`. A custom build-type/configuration name (a
 `staging` flavor, say) gets neither — set `APPDUCT_ENABLED=1` for that pipeline if it
-should carry Appduct. This replaces the `debuggable`/`#if DEBUG` gate removed in 0.4.0
-with a real per-variant linking decision instead of a runtime check compiled into every
-variant.
+should carry Appduct. This is a real per-variant linking decision, not a runtime check
+compiled into every variant.
 
 ## Verifying against the artifact
 
@@ -174,8 +172,8 @@ The Expo-managed equivalent is `expo.autolinking`'s per-platform `exclude` list 
 must live in **`package.json`**, not `app.json` / `app.config.*`.
 `expo-modules-autolinking` reads this config straight from `package.json` at
 pod-install/gradle time; an `expo.autolinking` block in `app.json` is silently ignored, so
-the exclusion never happens and the native module still ships. This has already shipped as
-a bug once, so double-check with the resolver command below after adding it.
+the exclusion never happens and the native module still ships. Double-check with the
+resolver command below after adding it.
 
 ```json
 {
@@ -212,15 +210,14 @@ from the registry instead of resolving the one your build actually uses):
 > imports — for packages it actually autolinks.
 >
 > So if your app excludes `@appduct/react-native` from iOS autolinking but still
-> references the `Appduct` pod directly — for example to attach an XCTest target, as this
-> repo's own playground does — the build fails because the generated header no longer
-> exists. This only affects setups that both exclude and hand-add the pod; a normal consumer
-> app that just wants Appduct gone never hits it.
+> references the `Appduct` pod directly — for example to attach an XCTest target — the
+> build fails because the generated header no longer exists. This only affects setups that
+> both exclude and hand-add the pod; a normal consumer app that just wants Appduct gone
+> never hits it.
 
-There is no corresponding plugin option to keep in sync. Earlier 0.4.0 prereleases had an
-`include` option that only *asserted* the plugin's intent matched autolinking; it was
-removed once `APPDUCT_ENABLED` drove autolinking directly, since there were no longer
-two sources to reconcile. Passing it now throws at prebuild, naming the replacement.
+There is no plugin option to assert this stays in sync with autolinking — the plugin no
+longer accepts an `include` option; passing one throws at prebuild, naming the replacement
+(`APPDUCT_ENABLED`, described above).
 
 ## JS — swap the module at bundle time
 
@@ -251,11 +248,11 @@ entry point is covered automatically) is redirected to `@appduct/react-native/no
 which has no side effect on import, matching `/auto`'s shape without installing anything.
 `/noop` itself is never redirected.
 
-If `config.resolver.resolveRequest` is already set — as it typically will be, e.g. the
-playground's own workspace-symlink-dedup resolver — `withAppduct` **chains to it** for
-every resolution, redirected or not, instead of replacing it; it only falls back to
-`context.resolveRequest` when no existing resolver is present. Your existing resolver's
-return value is what callers see.
+If `config.resolver.resolveRequest` is already set — as it typically will be, e.g. a
+workspace-symlink-dedup resolver — `withAppduct` **chains to it** for every resolution,
+redirected or not, instead of replacing it; it only falls back to `context.resolveRequest`
+when no existing resolver is present. Your existing resolver's return value is what
+callers see.
 
 **Call `withAppduct` last**, after anything else that sets
 `config.resolver.resolveRequest` — it captures the existing resolver by reference when
@@ -273,23 +270,20 @@ const { registerTool, useAppductTool } = __DEV__
 ```
 
 Either way, `/noop` is typed identically to the root entry — both implement the same
-shared interface, see `src/public-api.ts` and `src/__tests__/noop-parity.test.ts` — so
-switching between them is a drop-in swap. `registerTool` still returns a disposer,
-`connect()` still returns a `Promise<void>` (it just always rejects with a
-`AppductDisabledError`, `code: "appduct_disabled"`), and `getAppductState()`
+shared interface — so switching between them is a drop-in swap. `registerTool` still
+returns a disposer, `connect()` still returns a `Promise<void>` (it just always rejects
+with an `AppductDisabledError`, `code: "appduct_disabled"`), and `getAppductState()`
 always reports `"idle"`.
 
 ## Native core
 
 The Swift/Kotlin connection code above — TLS, SPKI pinning, trust-mode resolution, the
 private-LAN check, and the process-memory resume lease — lives canonically in
-`packages/native`, not in `@appduct/react-native` itself
-(`docs/tasks/14-native-core-extraction.md`). `@appduct/react-native` vendors it at
-build/publish time (`scripts/sync-native-core.mjs`) rather than depending on it as a
+`packages/native`, not in `@appduct/react-native` itself. `@appduct/react-native` vendors
+it at build/publish time (`scripts/sync-native-core.mjs`) rather than depending on it as a
 published package, so this package's releases stay independent of separately publishing
-`packages/native` to CocoaPods trunk / Maven Central — that publishing step is deferred to a
-later phase. Nothing here changes what ships in a given build variant; it only changes where
-the source of truth for that code lives.
+`packages/native` to CocoaPods trunk / Maven Central. Nothing here changes what ships in a
+given build variant; it only changes where the source of truth for that code lives.
 
 **iOS** (`packages/native/ios`): a SwiftPM package, `AppductCore`, manifested by the
 repo-root `Package.swift` (SwiftPM requires the manifest at the repository root for URL
@@ -323,28 +317,26 @@ always compile, and `debug`/`release` add whichever vendored directory to `java.
 classpath the way RN's autolinking does.
 
 Three exclusion mechanisms exist across the two platforms and their two consumers, all
-structural and all failing closed (issue #48 decision 2): Android's
-`debugImplementation`/`releaseImplementation` pairing with `core-noop` (a plain app, and the
-vendored copy's `java.srcDirs` swap doing the equivalent internally); iOS CocoaPods'
-`:configurations => ['Debug']`; and iOS SwiftPM's `Debug`-conditioned `APPDUCT_ENABLED`
-compiler define plus the opt-in `AlwaysEnabled` package trait. None of the three is a runtime
-check — in every case the excluded configuration's build genuinely does not contain the real
-implementation's bytecode.
+structural and all failing closed: Android's `debugImplementation`/`releaseImplementation`
+pairing with `core-noop` (a plain app, and the vendored copy's `java.srcDirs` swap doing
+the equivalent internally); iOS CocoaPods' `:configurations => ['Debug']`; and iOS SwiftPM's
+`Debug`-conditioned `APPDUCT_ENABLED` compiler define plus the opt-in `AlwaysEnabled` package
+trait. None of the three is a runtime check — in every case the excluded configuration's
+build genuinely does not contain the real implementation's bytecode.
 
 A doctor-detection marker exists on both platforms, compiled only into the real
 implementation and never into the excluded/no-op counterpart: `AppductCoreMarker` (an
-`@objc` class, iOS) and `AppductNativeMarker` (Android, unchanged from before this
-extraction) — `doctor`'s presence verdict is decided by that marker alone on both platforms,
-never by a package/class name or a manifest/plist key that a no-op build shares with the real
-one (see [`CI.md`](CI.md#release-gate-appduct-doctor)'s "Android detection" for why).
+`@objc` class, iOS) and `AppductNativeMarker` (Android) — `doctor`'s presence verdict is
+decided by that marker alone on both platforms, never by a package/class name or a
+manifest/plist key that a no-op build shares with the real one (see
+[`CI.md`](CI.md#release-gate-appduct-doctor)'s "Android detection" for why).
 **Always run `appduct doctor --assert-absent` against the actual signed artifact you are
 about to ship** — a `Release`/`release` configuration by name, or a dependency/build-setting
 combination you believe excludes the real implementation, is what's supposed to produce that
 outcome, not a guarantee of it; `doctor` checks the artifact itself, which is the only thing
 that matters to an app-store reviewer or an attacker. This applies identically whether the
 artifact is the vendored RN copy's build or a plain native app's own `Release`/`release`
-build of `packages/native` — see the native playground gates in
-[`CI.md`](CI.md#native-playground-gates-issue-48-phase-3) for both.
+build of `packages/native`.
 
 ## Related
 
@@ -353,5 +345,3 @@ build of `packages/native` — see the native playground gates in
 - [`ARCHITECTURE.md`](ARCHITECTURE.md#11-react-native-sdk) — SDK entry points and client behavior
 - [`@appduct/react-native` README](../packages/react-native/README.md) — getting started and API reference
 - [`packages/native/README.md`](../packages/native/README.md) — the native core's consumer entry points
-- [`docs/internal/native-core.md`](internal/native-core.md) — the native core's own layout and vendoring
-- [`docs/tasks/14-native-core-extraction.md`](tasks/14-native-core-extraction.md) — how and why the core was extracted

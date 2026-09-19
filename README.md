@@ -6,9 +6,9 @@ Appduct lets a terminal, a test runner, or an AI agent call functions inside you
 
 ## Why you'd want this
 
-**Your E2E tests stop tapping through setup.** Most of an end-to-end test isn't the thing you're testing. It's logging in, dismissing onboarding, seeding a cart, waiting for a spinner. With Appduct, the test calls `login(userId)` or `seedCart(items)` directly and jumps straight to the part that matters. Faster runs, far less flakiness, and a lot fewer screenshots for an agent to burn tokens on.
+**Your E2E tests stop tapping through setup.** Most of an end-to-end test isn't the thing you're testing. It's logging in, dismissing onboarding, seeding a cart, waiting for a spinner. With Appduct, the test calls `login(userId)` or `seedCart(items)` directly and jumps straight to the part that matters. Faster runs, less flakiness, and fewer screenshots for an agent to burn tokens on.
 
-**Agents can actually drive your app.** Add one line to Claude Code's or Cursor's config and your app's functions show up as tools the agent can call. It can flip a feature flag, jump to a screen, or check some state without you wiring up a single prompt.
+**Agents can drive your app.** Add one line to Claude Code's or Cursor's config and your app's functions show up as tools the agent can call. It can flip a feature flag, jump to a screen, or check some state without you wiring up a single prompt.
 
 **No hidden debug UI.** No secret gestures, no long-press-the-logo admin panel, nothing extra in the app for someone to go find. The only things reachable are functions you deliberately registered.
 
@@ -32,8 +32,7 @@ useAppductTool({
 });
 ```
 
-The hook registers once per mount — re-rendering costs nothing, and the handler always sees the
-latest state it closes over. Apps without React Native register tools from Swift or Kotlin instead — see [Getting started](#getting-started).
+The hook registers once per mount — re-rendering costs nothing, and the handler always sees the latest state it closes over. Apps without React Native register tools from Swift or Kotlin instead — see [Getting started](#getting-started).
 
 Call it from your terminal:
 
@@ -117,7 +116,7 @@ Asking an agent to add Appduct to your app or write its tools? Install the skill
 - **React Native:** iOS 15.1+ and Android, both on the New Architecture. Web gets a no-op stub so shared code doesn't break.
 - **iOS without React Native:** iOS 15.1+. Installing with Swift Package Manager needs Xcode 16.3 or newer.
 - **Android without React Native:** Android 7.0 (API 24) or newer.
-- **CLI:** Node 20 or newer. Windows should work but hasn't been verified yet.
+- **CLI:** Node 20 or newer. Windows should work but hasn't been verified.
 
 ## Docs
 

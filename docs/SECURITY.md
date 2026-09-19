@@ -32,14 +32,13 @@ build at all.
 - **A compromised operator machine.** Anything that can read `key.pem` or connect to
   `daemon.sock` has full control: it can mint links, list/invoke tools on any connected
   device, and read the audit log. The trust boundary is the operator's machine, full
-  stop — see "Localhost/UDS trust boundary" below.
+  stop — see "The localhost/UDS trust boundary" below.
 - **A malicious or compromised app build.** Appduct constrains what an *external*
   caller can do to the app; it assumes the app's own code (and thus whatever tools it
   chooses to register) is trusted. A tool with `destructiveHint` still executes whatever
   its handler does — policy can deny the *call*, not audit the handler's internals.
 - **Key compromise.** The pinned key doubles as both the trust anchor and the TLS
-  identity (§ "Anchor-CA rotation" in `docs/ARCHITECTURE.md` §14 covers the deferred
-  alternative). If `key.pem` leaks, an attacker with network access to a claimed or
+  identity. If `key.pem` leaks, an attacker with network access to a claimed or
   claimable session can impersonate the daemon until every app build with the old pin is
   retired. Rotation (below) is the mitigation, not prevention.
 - **Anonymous internet exposure without policy.** Appduct does not by itself decide
@@ -104,12 +103,12 @@ production or internal-distribution build without `cliPins` for anything beyond 
 development.
 
 A delivered bootstrap link also *supersedes* a session the app is already holding, rather than
-being ignored while one is active (see `deep-link-core.ts`): a link is a deliberate, local act
-by the operator and outranks a session the app happens to be sitting on. Within the residual
-risk above, that means such a link can interrupt a legitimate session as well as stand in for
-a daemon — an availability effect, bounded the same way. It is not a cheap one: the payload is
-parsed and validated in full, against the same address policy and expiry, *before* anything is
-torn down, so a malformed or expired link costs the existing session nothing.
+being ignored while one is active: a link is a deliberate, local act by the operator and
+outranks a session the app happens to be sitting on. Within the residual risk above, that means
+such a link can interrupt a legitimate session as well as stand in for a daemon — an
+availability effect, bounded the same way. It is not a cheap one: the payload is parsed and
+validated in full, against the same address policy and expiry, *before* anything is torn down,
+so a malformed or expired link costs the existing session nothing.
 
 **What actually contains link trust now, since there is no build-type gate:** it is opt-in
 configuration alone. Set `cliPins` (which makes `trust: "pin"` the default) on any build you
@@ -233,7 +232,7 @@ actually has — `{ trust, hasEmbeddedPins, allowPrivateLanOnly }`. It is read v
 real connect attempt would do.
 
 `trust` reports the *effective* bucket — `"pin"` whenever embedded pins are present, since
-they always win; `"link"` otherwise — not the raw config string. On `./noop` it reports the
+they always win; `"link"` otherwise — not the raw config string. On `/noop` it reports the
 documented absent shape: `{ trust: "absent", hasEmbeddedPins: false, allowPrivateLanOnly: true }`.
 Pin fingerprints themselves are never exposed, only whether any are embedded.
 
@@ -241,7 +240,7 @@ Pin fingerprints themselves are never exposed, only whether any are embedded.
 
 With the native module absent — excluded via autolinking, Expo Go, or a
 debug-tooling-free JS-only environment — every exported function on the root
-`@appduct/react-native` entry degrades to the exact `./noop` entry's behavior: one
+`@appduct/react-native` entry degrades to the exact `/noop` entry's behavior: one
 warning log the first time, no throws, `getAppductState()` reporting `"idle"`, and
 `connect()` always rejecting with `AppductDisabledError` (`code: "appduct_disabled"`).
 
@@ -282,7 +281,7 @@ the release-signed, internally-distributed "testing" variant agents actually dri
 Gating a destructive tool on `__DEV__` removes it exactly where it is needed.
 
 `__DEV__` is still fine for tools that are genuinely debug-only — a "dump internal state"
-tool with no purpose outside a local dev loop, say. It just should not be the example every
+tool with no purpose outside a local dev loop, say. It just shouldn't be the example every
 app copies for hardening.
 
 **Consequence for agents and E2E flows:** because registration is the app-side allowlist,
@@ -374,8 +373,8 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   client's, not the daemon's; and `"prompt"` denies unconditionally in CI or any other
   unattended pipeline (there is no consent channel there at all), so a pipeline that
   needs a tool to run unattended must set `allow`/`deny` for it explicitly. Until a
-  non-MCP consent channel ships (see the project's issue tracker), `"deny"` remains the
-  only way to hard-block a tool for CLI callers.
+  non-MCP consent channel ships, `"deny"` remains the only way to hard-block a tool for
+  CLI callers.
 - **Audit.** Every `tools.call` attempt — regardless of outcome — appends one line to
   `audit/<YYYY-MM-DD>.jsonl`: timestamp, session, alias, tool name, a sha256 of the
   canonicalized args (never the raw args), outcome, error type if any, duration, caller
@@ -403,7 +402,7 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   only its `AppductNativeMarker` keep-rule signal, since the release-default no-op stub
   shares the real implementation's package name and would otherwise look present to a naive
   scan. When the module genuinely isn't present, the JS public API degrades to the exact
-  `./noop` entry's behavior — see [What a build without the native module
+  `/noop` entry's behavior — see [What a build without the native module
   does](#what-a-build-without-the-native-module-does).
 - **Compile out of a build you don't want carrying Appduct at all.** Being present and
   trusting nothing (`trust: "pin"` with a `cliPins` set that has no matching daemon, or an
@@ -424,9 +423,7 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md#compiling-appduct-out-of-production-builds).
   [`CI.md`](CI.md#release-gate-appduct-doctor)'s `appduct doctor` verifies the
   exclusion actually took effect in a built artifact rather than trusting the config that
-  was supposed to produce it — this whole area was a config recipe that never worked once
-  before (see [`tasks/02-fix-autolinking-exclusion.md`](tasks/02-fix-autolinking-exclusion.md)),
-  which is why it's now checked by CI, not just documented.
+  was supposed to produce it — this whole area is now checked by CI, not just documented.
 - **App-store-review note.** An always-installed deep-link listener that can open a
   pinned socket and let an external process invoke code is a legitimate "remote control"
   surface from a reviewer's point of view, even though it can't be exercised without a
