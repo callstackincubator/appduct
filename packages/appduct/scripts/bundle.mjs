@@ -30,13 +30,6 @@ const outDir = join(packageRoot, "dist");
 
 const { dependencies } = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
 
-/**
- * `@appduct/shared` is inlined: it is pure functions, constants and types with no runtime
- * dependencies and no classes whose identity could matter across the package boundary, and as a
- * dozen separate files it would otherwise be the largest remaining per-file cost on every command's
- * startup. It stays a declared dependency for the types the `.d.ts` files reference.
- */
-const INLINED = new Set(["@appduct/shared"]);
 
 /** The public entry points, at the paths package.json's `bin` and `exports` name. */
 const publicEntries = ["src/bin.ts", "src/index.ts", "src/client/index.ts"];
@@ -98,12 +91,13 @@ await build({
   platform: "node",
   // The daemon needs Node ≥ 20 (ARCHITECTURE.md §13); the bundle targets the same floor.
   target: "node20",
-  // Every other dependency (`ws`, `cac`, the MCP SDK, …) stays an ordinary import resolved from
+  // Every dependency (`ws`, `cac`, the MCP SDK, …) stays an ordinary import resolved from
   // node_modules at runtime; `external` names them by package so a sub-path import such as
-  // `@modelcontextprotocol/sdk/server/index.js` is covered too.
-  external: Object.keys(dependencies)
-    .filter((name) => !INLINED.has(name))
-    .flatMap((name) => [name, `${name}/*`]),
+  // `@modelcontextprotocol/sdk/server/index.js` is covered too. That includes `@appduct/shared`:
+  // inlining it would copy it into every one of these bundles, whereas as an external it is one
+  // module instance shared by all of them — and it ships as a single file (its own build bundles
+  // it), so it costs one resolution, not one per source file.
+  external: Object.keys(dependencies).flatMap((name) => [name, `${name}/*`]),
   plugins: [lazyRoutesPlugin],
   logLevel: "info",
 });

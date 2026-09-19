@@ -559,8 +559,11 @@ process loads only the modules the command it is running needs. Concretely:
   `tsc` emits only the `.d.ts` files, esbuild emits the JS. Every public entry (`bin`, `.`,
   `./client`) *and every route* is its own self-contained bundle, with no shared chunks: a router's
   `import("./routes/<name>.js")` is kept as a real runtime import of that route's file, so a command
-  loads exactly `dist/bin.js` and `dist/cli/routes/<command>.js` (plus `cac`, `picocolors`, `toqr`;
-  `@appduct/shared` is inlined, every other dependency stays external). Code splitting was
+  loads exactly `dist/bin.js` and `dist/cli/routes/<command>.js` (plus `cac`, `picocolors`, `toqr`
+  and `@appduct/shared`; every dependency stays external, and `@appduct/shared` in particular is
+  *not* inlined — that would copy it into every bundle, whereas as an external it is one module
+  instance shared by all of them. Its own build bundles it into a single `dist/index.js` for the
+  same reason this one bundles: one resolution, not one per source file). Code splitting was
   deliberately *not* used: esbuild tree-shakes per bundle, so a chunk shared by several routes
   carries whatever any of them uses from a module (`invoke` would have loaded the daemon's RPC
   server because `daemon run` needs it). Bundling each route alone tree-shakes it alone.
@@ -904,8 +907,8 @@ playground/        reference app (Expo dev build)
 The repo-root `Package.swift` (SwiftPM manifests must live at the repository root for URL
 dependencies) is the SwiftPM manifest for `packages/native/ios`.
 
-Tooling stays: pnpm workspaces, turbo, Vitest, tsc builds (`appduct` additionally bundles its
-JS with esbuild — §10 "Startup cost"). Node ≥ 20 for the daemon
+Tooling stays: pnpm workspaces, turbo, Vitest, tsc for declarations (`appduct` and
+`@appduct/shared` emit their JS with esbuild — §10 "Startup cost"). Node ≥ 20 for the daemon
 (UDS + `AF_UNIX` on Windows). Windows support is best-effort; the control plane uses the
 named-pipe path `\\.\pipe\appduct-<user>` behind the same client API.
 

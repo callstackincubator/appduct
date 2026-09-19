@@ -101,6 +101,9 @@ importers:
 
   packages/shared:
     devDependencies:
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
       typescript:
         specifier: ~5.9.2
         version: 5.9.3
