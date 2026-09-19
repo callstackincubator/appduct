@@ -32,6 +32,8 @@ import {
   type ToolsCallResult,
   type ToolsCancelParams,
   type ToolsCancelResult,
+  type ToolsListEntry,
+  type ToolsListParams,
   type ToolsListResult,
 } from "@appduct/shared";
 
@@ -149,6 +151,43 @@ const asSelectorParams = (params: unknown): { selector?: string } => {
   }
 
   return { selector };
+};
+
+/** `tools.list`'s `filter` string cap (ARCHITECTURE.md §5) — generous for a name/description
+ * substring search, small enough that a malicious/buggy caller can't use it to bloat a request. */
+const MAX_TOOLS_FILTER_LENGTH = 256;
+
+const asToolsListParams = (params: unknown): ToolsListParams => {
+  const { selector } = asSelectorParams(params);
+  const record = asRecordParams(params);
+
+  const filter = record.filter;
+
+  if (filter !== undefined && (typeof filter !== "string" || filter.length > MAX_TOOLS_FILTER_LENGTH)) {
+    throw new RpcApplicationError(
+      "invalid_request",
+      `"filter" must be a string of at most ${MAX_TOOLS_FILTER_LENGTH} characters.`,
+    );
+  }
+
+  const limit = record.limit;
+
+  if (limit !== undefined && (typeof limit !== "number" || !Number.isInteger(limit) || limit <= 0)) {
+    throw new RpcApplicationError("invalid_request", '"limit" must be a positive integer.');
+  }
+
+  const offset = record.offset;
+
+  if (offset !== undefined && (typeof offset !== "number" || !Number.isInteger(offset) || offset < 0)) {
+    throw new RpcApplicationError("invalid_request", '"offset" must be a non-negative integer.');
+  }
+
+  return {
+    selector,
+    filter: filter as string | undefined,
+    limit: limit as number | undefined,
+    offset: offset as number | undefined,
+  };
 };
 
 const asRecordParams = (params: unknown): Record<string, unknown> => {
@@ -540,7 +579,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           return { ok: true };
         },
         [RPC_METHODS.toolsList]: (params): ToolsListResult => {
-          const { selector } = asSelectorParams(params);
+          const { selector, filter, limit, offset } = asToolsListParams(params);
           // ARCHITECTURE.md §5: tools.list works for ACTIVE and SUSPENDED sessions alike (the
           // retained registry survives suspend); only tools.call requires ACTIVE.
           const resolved = activeSessionManager.resolveForTools(selector);
@@ -548,10 +587,32 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           // Each entry carries its effective policy decision (ARCHITECTURE.md §12) so the MCP
           // server can emit `_meta["anthropic/requiresUserInteraction"]` for "prompt" tools
           // without a second round trip (issue #14).
-          return resolved.registry.list().map((descriptor) => ({
+          const entries: ToolsListEntry[] = resolved.registry.list().map((descriptor) => ({
             ...descriptor,
             policy: evaluatePolicy(descriptor, { alias: resolved.alias }, config.policy),
           }));
+
+          // Sorted by name with a plain code-point comparison — not `localeCompare`, which would
+          // make listing order depend on the daemon process's locale — so an agent narrowing with
+          // `--filter`/paging with `--limit`/`--offset` sees the same order every time.
+          entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+
+          const lowerFilter = filter?.toLowerCase();
+          const matching = lowerFilter
+            ? entries.filter(
+                (entry) =>
+                  entry.name.toLowerCase().includes(lowerFilter) ||
+                  entry.description.toLowerCase().includes(lowerFilter),
+              )
+            : entries;
+
+          const total = matching.length;
+          const page =
+            offset === undefined && limit === undefined
+              ? matching
+              : matching.slice(offset ?? 0, limit === undefined ? undefined : (offset ?? 0) + limit);
+
+          return { tools: page, total };
         },
         // This handler is the single seam every `tools.call` passes through: policy (ARCHITECTURE.md
         // §12) is evaluated once the target tool descriptor is known, and one audit record is

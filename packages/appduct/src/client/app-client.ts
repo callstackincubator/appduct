@@ -166,7 +166,10 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
 
     tools: async (): Promise<ToolDescriptor[]> => {
       try {
-        return await stream.call<ToolsListResult>(RPC_METHODS.toolsList, { selector: sessionId });
+        // No `filter`/`limit`/`offset`: this client's public `tools()` contract is "every tool on
+        // this session", unchanged by `tools.list`'s daemon-side paging (added for the CLI).
+        const { tools } = await stream.call<ToolsListResult>(RPC_METHODS.toolsList, { selector: sessionId });
+        return tools;
       } catch (error) {
         throw toAppductError(error);
       }

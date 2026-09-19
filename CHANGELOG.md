@@ -35,6 +35,18 @@ package versions for a release.
   the trailing `Meta` lines in human mode, the `meta` field on the `--json` envelope.
 - **New: `--pretty` and `--verbose` global flags**, alongside `--json` and `--no-color`. See the
   [`appduct` README](packages/appduct/README.md) for the full description of each.
+- **Breaking (CLI): `appduct tools --json` for a listing now returns `{ tools, total }`** instead
+  of a bare array. The single-tool form (`appduct tools <selector> <name>`) is unchanged — it still
+  returns the bare tool descriptor.
+- **New: a signature-based `tools` listing, with `--filter`/`--limit`/`--offset`.** The human
+  listing now shows one call signature (`name(params) -> result`) plus a one-line description per
+  tool instead of a bare name/description table, and `appduct tools` gains `--filter <text>` to
+  narrow by name/description, and `--limit <n>`/`--offset <n>` to page through a large registry —
+  making it cheap to read `appduct tools` against an app that registers hundreds of tools. See the
+  [`appduct` README](packages/appduct/README.md)'s "`appduct tools`: a signature per tool" section
+  for details.
+- The `appduct` agent skill now defaults its example commands to plain-text output, adding
+  `--json` only where a script (not the agent itself) will parse the result.
 
 ## 0.10.0 (2026-09-16)
 

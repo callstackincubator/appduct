@@ -3,7 +3,11 @@
 import type { Route } from "../router.js";
 
 import { handleToolsCommand } from "../../commands/tools.js";
-import { splitOptionalSelectorAndTarget } from "../command-options.js";
+import {
+  parseNonNegativeIntegerOption,
+  parsePositiveIntegerOption,
+  splitOptionalSelectorAndTarget,
+} from "../command-options.js";
 import { commandName } from "../router.js";
 import { executeCommand } from "../runner.js";
 import { guarded } from "../version-guard.js";
@@ -14,11 +18,17 @@ export const route: Route = async (context) => {
     context.args,
     "tools [selector] [name]",
   );
+  const limit = parsePositiveIntegerOption(options.limit, "--limit");
+  const offset = parseNonNegativeIntegerOption(options.offset, "--offset");
+  const filter = typeof options.filter === "string" ? options.filter : undefined;
 
   return executeCommand(
     commandName(context),
     guarded(context)(() =>
-      handleToolsCommand({ selector: selector ?? selectorOrTarget, name: target }, { stateDir }),
+      handleToolsCommand(
+        { selector: selector ?? selectorOrTarget, name: target, filter, limit, offset },
+        { stateDir },
+      ),
     ),
     context.env,
     { full: Boolean(options.full) },

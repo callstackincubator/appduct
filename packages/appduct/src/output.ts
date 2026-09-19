@@ -1,5 +1,11 @@
 import pc from "picocolors";
-import { formatAgentWebSocketUrl, type EventNotification, type SessionSummary, type ToolDescriptor } from "@appduct/shared";
+import {
+  formatAgentWebSocketUrl,
+  renderToolSignature,
+  type EventNotification,
+  type SessionSummary,
+  type ToolDescriptor,
+} from "@appduct/shared";
 
 import type {
   CliError,
@@ -17,6 +23,7 @@ import type {
   LsCommandData,
   RevokeCommandData,
   ToolsCommandData,
+  ToolsListing,
 } from "./cli/result-types.js";
 import { formatJson, type GlobalFlags } from "./cli/global-flags.js";
 import { renderQrToTerminal } from "./qr-terminal.js";
@@ -141,17 +148,61 @@ const renderLsData = (colors: ColorPalette, data: LsCommandData, now: Date): str
   ];
 };
 
-const renderToolSummaryTable = (tools: ToolDescriptor[]): string[] => {
-  if (tools.length === 0) {
-    return ["Tools", "  No tools registered."];
+/** `renderToolsData` distinguishes the listing form of `ToolsCommandData` (`ToolsListing`, which
+ * carries `tools`/`total`) from the bare single-tool detail form purely by shape — a `ToolDescriptor`
+ * never has a `tools` array of its own, so this never misclassifies either one. */
+const isToolsListing = (data: ToolsCommandData): data is ToolsListing => {
+  return typeof data === "object" && data !== null && Array.isArray((data as ToolsListing).tools);
+};
+
+/** First line of a tool's description, trimmed and capped — the summary listing shows only this,
+ * not the full (possibly multi-line, up to `MAX_TOOL_DESCRIPTION_LENGTH`) text; `tools <name>`/
+ * `--full` still show it in full. */
+const MAX_LISTED_DESCRIPTION_LENGTH = 120;
+
+const summarizeDescription = (description: string): string => {
+  const firstLine = (description.split("\n")[0] ?? "").trim();
+
+  return firstLine.length > MAX_LISTED_DESCRIPTION_LENGTH
+    ? `${firstLine.slice(0, MAX_LISTED_DESCRIPTION_LENGTH)}…`
+    : firstLine;
+};
+
+/** "No tools registered"/"No tools match" for an empty listing (compact or `--full` — both share
+ * this line, only the header differs). */
+const renderEmptyToolsLine = (filter: string | undefined): string => {
+  return filter === undefined ? "  No tools registered." : `  No tools match "${filter}".`;
+};
+
+/** The `Showing n of total tools (offset o). Narrow with --filter <text> or page with --offset
+ * <n>.` line — only when the page actually left tools out, so a listing that already shows
+ * everything (including a filtered one with no more matches) stays quiet. */
+const renderTruncationLine = (data: ToolsListing): string[] => {
+  if (data.tools.length >= data.total) {
+    return [];
   }
 
-  const nameWidth = Math.max(...tools.map((tool) => tool.name.length), "Name".length);
+  return [
+    "",
+    `Showing ${data.tools.length} of ${data.total} tools (offset ${data.offset ?? 0}). ` +
+      "Narrow with --filter <text> or page with --offset <n>.",
+  ];
+};
+
+const renderToolSummaryTable = (colors: ColorPalette, data: ToolsListing): string[] => {
+  if (data.tools.length === 0) {
+    return [colors.green("Tools"), renderEmptyToolsLine(data.filter)];
+  }
 
   return [
-    "Tools",
-    `  ${"Name".padEnd(nameWidth)}  Description`,
-    ...tools.map((tool) => `  ${tool.name.padEnd(nameWidth)}  ${tool.description}`),
+    colors.green("Tools"),
+    ...data.tools.flatMap((tool) => {
+      const tag = tool.policy === "allow" ? "" : `  [${tool.policy}]`;
+      return [`  ${renderToolSignature(tool)}${tag}`, `    ${summarizeDescription(tool.description)}`];
+    }),
+    ...renderTruncationLine(data),
+    "",
+    "Run `appduct tools <name>` for a tool's full schema.",
   ];
 };
 
@@ -159,6 +210,7 @@ const renderToolDetail = (colors: ColorPalette, tool: ToolDescriptor, flags: Glo
   return renderFields(
     colors.green(`Tool: ${tool.name}`),
     [
+      ["Signature", renderToolSignature(tool)],
       ["Description", tool.description],
       ["Input schema", tool.input_schema],
       ["Output schema", tool.output_schema],
@@ -172,26 +224,31 @@ const renderToolDetail = (colors: ColorPalette, tool: ToolDescriptor, flags: Glo
   );
 };
 
+const renderToolsFullListing = (colors: ColorPalette, data: ToolsListing, flags: GlobalFlags): string[] => {
+  if (data.tools.length === 0) {
+    return [colors.green("Tools"), renderEmptyToolsLine(data.filter)];
+  }
+
+  return [
+    ...data.tools.flatMap((tool, index) => [
+      ...(index > 0 ? [""] : []),
+      ...renderToolDetail(colors, tool, flags),
+    ]),
+    ...renderTruncationLine(data),
+  ];
+};
+
 const renderToolsData = (
   colors: ColorPalette,
   data: ToolsCommandData,
   flags: GlobalFlags,
   full?: boolean,
 ): string[] => {
-  if (!Array.isArray(data)) {
+  if (!isToolsListing(data)) {
     return renderToolDetail(colors, data, flags);
   }
 
-  if (full) {
-    return data.length === 0
-      ? ["Tools", "  No tools registered."]
-      : data.flatMap((tool, index) => [
-          ...(index > 0 ? [""] : []),
-          ...renderToolDetail(colors, tool, flags),
-        ]);
-  }
-
-  return [colors.green("Tools"), ...renderToolSummaryTable(data).slice(1)];
+  return full ? renderToolsFullListing(colors, data, flags) : renderToolSummaryTable(colors, data);
 };
 
 const renderInvokeData = (colors: ColorPalette, data: InvokeCommandData, flags: GlobalFlags): string[] => {

@@ -262,7 +262,7 @@ Methods:
 | `sessions.list` | — | `SessionSummary[]` |
 | `sessions.describe` | `{ selector? }` | full session detail incl. device metadata, state timestamps, tool count |
 | `sessions.revoke` | `{ selector? }` | `{ ok: true }` — closes socket (code 1000), frees alias |
-| `tools.list` | `{ selector? }` | `ToolsListEntry[]` — `ToolDescriptor` (full schema + annotations) plus the tool's effective `policy: "allow" \| "deny" \| "prompt"` (§12), resolved daemon-side |
+| `tools.list` | `{ selector?, filter?, limit?, offset? }` | `{ tools: ToolsListEntry[], total }` — `tools` is the registry sorted by `name` (code-point order), `filter`ed (case-insensitive substring match against name/description) and paged with `limit`/`offset`; each entry is a `ToolDescriptor` (full schema + annotations) plus the tool's effective `policy: "allow" \| "deny" \| "prompt"` (§12), resolved daemon-side. `total` is the filtered count *before* paging, so a caller can tell how much a page left out |
 | `tools.call` | `{ selector?, name, args, timeoutMs?, caller?: "cli" \| "mcp", consent?: "client" \| "elicitation" }` | `{ result, callId }` on success — `callId` lets a caller with several in-flight calls match `tool_call_progress`/`tool_call_finished` events back to this call; JSON-RPC error with `data.type` preserving the wire error type on failure. `caller` attributes the audit record (§12); `consent` is the MCP server's evidence of a `"prompt"`-policy human gate (§12) — `"client"` (the flag-based gate) or `"elicitation"` (the elicitation-based gate), absent for the CLI. |
 | `tools.cancel` | `{ selector?, callId, reason? }` | `{ cancelled: boolean }` — sends `tool_cancel` (§7) to the app for a still-pending call; `false` for an unknown/already-finished `callId` or no active socket (a no-op, not an error) |
 | `events.subscribe` | `{ sessionSelector?, kinds? }` | `{ ok: true }`, then `event` notifications on this connection |
@@ -492,7 +492,10 @@ owns no keys. Every command is one RPC call plus formatting, which is why the CL
 server can't drift in behavior: they are the same calls.
 
 The per-command reference lives in the [`appduct` package README](../packages/appduct/README.md),
-which is where it stays current. Global flags (`cli/global-flags.ts`'s declarative table): `--json`
+which is where it stays current. `appduct tools`'s human listing renders each tool through
+`@appduct/shared`'s `renderToolSignature` (a one-line call signature derived from the tool's JSON
+Schema) rather than printing the raw schema, so it stays cheap to read against an app that
+registers hundreds of tools. Global flags (`cli/global-flags.ts`'s declarative table): `--json`
 (machine output, NDJSON for streams; compact by default), `--pretty` (indent `--json` output and
 embedded JSON values, never NDJSON lines), `--verbose` (include the `meta` block — omitted by
 default in both human and `--json` output), `--no-color`, `--state-dir`, `--daemon-restart` (force

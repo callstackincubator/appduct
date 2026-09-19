@@ -26,10 +26,8 @@ export const fetchEffectiveTools = async (call: DaemonCall): Promise<NamespacedT
 
   for (const session of sessions) {
     try {
-      toolsByAlias.set(
-        session.alias,
-        await call<ToolsListResult>(RPC_METHODS.toolsList, { selector: session.alias }),
-      );
+      const { tools } = await call<ToolsListResult>(RPC_METHODS.toolsList, { selector: session.alias });
+      toolsByAlias.set(session.alias, tools);
     } catch (error) {
       // The session can transition (revoke/expire) between `sessions.list` and this per-session
       // `tools.list` call; treat it as having no tools rather than failing the whole listing.

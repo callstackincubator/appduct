@@ -20,14 +20,18 @@ describe("output rendering", () => {
     const rendered = renderResult(
       {
         ok: true,
-        data: [
-          {
-            name: "echo",
-            description: "Echo a payload on the connected device.",
-            input_schema: {},
-            output_schema: { echoed: "unknown" },
-          },
-        ],
+        data: {
+          tools: [
+            {
+              name: "echo",
+              description: "Echo a payload on the connected device.",
+              input_schema: {},
+              output_schema: { echoed: "unknown" },
+              policy: "allow",
+            },
+          ],
+          total: 1,
+        },
       },
       {
         command: "tools",
@@ -36,6 +40,156 @@ describe("output rendering", () => {
     );
 
     expect(rendered.stdout).toMatchSnapshot();
+  });
+
+  test("tools list output shows a signature per tool, a policy tag for non-allow tools, and the trailing hint", () => {
+    const rendered = renderResult(
+      {
+        ok: true,
+        data: {
+          tools: [
+            {
+              name: "seed_cart",
+              description: "Fill the cart with test items for the current user.\nSecond line ignored.",
+              input_schema: {
+                type: "object",
+                properties: {
+                  items: { type: "integer" },
+                  sku: { type: "string" },
+                  clear: { type: "boolean", default: true },
+                },
+                required: ["items"],
+              },
+              output_schema: {
+                type: "object",
+                properties: { added: { type: "integer" }, cartId: { type: "string" } },
+                required: ["added", "cartId"],
+              },
+              policy: "allow",
+            },
+            {
+              name: "set_flag",
+              description: "Toggle a feature flag.",
+              input_schema: {
+                type: "object",
+                properties: {
+                  name: { enum: ["dark_mode", "new_checkout"] },
+                  enabled: { type: "boolean" },
+                },
+                required: ["name", "enabled"],
+              },
+              policy: "prompt",
+            },
+          ],
+          total: 2,
+        },
+      },
+      { command: "tools", flags: flags() },
+    );
+
+    expect(rendered.stdout).toBe(
+      [
+        "Tools",
+        "  seed_cart(items: int, sku?: string, clear?: bool = true) -> { added: int, cartId: string }",
+        "    Fill the cart with test items for the current user.",
+        '  set_flag(name: "dark_mode" | "new_checkout", enabled: bool)  [prompt]',
+        "    Toggle a feature flag.",
+        "",
+        "Run `appduct tools <name>` for a tool's full schema.",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("tools list output truncated by paging shows the Showing line with the given offset", () => {
+    const rendered = renderResult(
+      {
+        ok: true,
+        data: {
+          tools: [{ name: "echo", description: "Echoes input.", policy: "allow" }],
+          total: 5,
+          offset: 2,
+          limit: 1,
+        },
+      },
+      { command: "tools", flags: flags() },
+    ).stdout ?? "";
+
+    expect(rendered).toContain(
+      "Showing 1 of 5 tools (offset 2). Narrow with --filter <text> or page with --offset <n>.",
+    );
+  });
+
+  test("tools list output with a filter and no matches says so", () => {
+    const rendered = renderResult(
+      { ok: true, data: { tools: [], total: 0, filter: "nope" } },
+      { command: "tools", flags: flags() },
+    ).stdout ?? "";
+
+    expect(rendered).toContain('No tools match "nope".');
+  });
+
+  test("tools list output with no tools and no filter keeps the original message", () => {
+    const rendered = renderResult(
+      { ok: true, data: { tools: [], total: 0 } },
+      { command: "tools", flags: flags() },
+    ).stdout ?? "";
+
+    expect(rendered).toContain("No tools registered.");
+    expect(rendered).not.toContain("Run `appduct tools <name>`");
+  });
+
+  test("a description longer than 120 characters is cut with a trailing ellipsis", () => {
+    const longDescription = `A. ${"x".repeat(130)}`;
+    const rendered =
+      renderResult(
+        {
+          ok: true,
+          data: { tools: [{ name: "verbose", description: longDescription, policy: "allow" }], total: 1 },
+        },
+        { command: "tools", flags: flags() },
+      ).stdout ?? "";
+
+    const descriptionLine = rendered.split("\n").find((line) => line.startsWith("    A."));
+    expect(descriptionLine).toBeDefined();
+    expect(descriptionLine!.length).toBe(4 + 120 + 1); // 4-space indent + 120 chars + "…"
+    expect(descriptionLine!.endsWith("…")).toBe(true);
+  });
+
+  test("a tool with no input/output schema at all still gets a signature", () => {
+    const rendered =
+      renderResult(
+        { ok: true, data: { tools: [{ name: "ping", description: "Health check.", policy: "allow" }], total: 1 } },
+        { command: "tools", flags: flags() },
+      ).stdout ?? "";
+
+    expect(rendered).toContain("  ping(...)");
+  });
+
+  test("--full listing renders full detail blocks and still shows the Showing line, with no trailing hint", () => {
+    const rendered = renderResult(
+      {
+        ok: true,
+        data: {
+          tools: [
+            {
+              name: "echo",
+              description: "Echoes its input.",
+              input_schema: { type: "object", properties: { text: { type: "string" } } },
+              policy: "allow",
+            },
+          ],
+          total: 3,
+          offset: 0,
+        },
+      },
+      { command: "tools", flags: flags(), full: true },
+    ).stdout ?? "";
+
+    expect(rendered).toContain("Tool: echo");
+    expect(rendered).toMatch(/Signature\s+echo\(text\?: string\)/);
+    expect(rendered).toContain("Showing 1 of 3 tools (offset 0).");
+    expect(rendered).not.toContain("Run `appduct tools <name>`");
   });
 
   test("tools detail shows a declared timeout_ms, and no timeout line when the tool declares none", () => {

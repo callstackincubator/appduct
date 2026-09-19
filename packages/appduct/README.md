@@ -39,7 +39,7 @@ That's the whole loop. There is no host process to start — `appduct` auto-spaw
 | `appduct keygen [--out <path>] [--force]` | generate a daemon private key, print its app pin |
 | `appduct link [--ttl <s>] [--qr] [--open android\|ios-sim\|ios-device] [--device <id>] [--bundle-id <id>] [--scheme <s>]` | mint a pending session and print its deep link |
 | `appduct ls` | list sessions: alias, state, device, tool count |
-| `appduct tools [selector] [name] [--full]` | list a session's tools, or show one tool's full schema |
+| `appduct tools [selector] [name] [--full] [--filter <text>] [--limit <n>] [--offset <n>]` | list a session's tools (one call signature + description per line), or show one tool's full schema |
 | `appduct invoke [selector] <tool> --input '<json>' [--timeout <ms>]` | call a tool |
 | `appduct events [selector] [--follow] [--since <cursor>]` | stream session/tool events (default), or one-shot pull everything retained since `<cursor>` (`--since`); `--json` emits NDJSON |
 | `appduct revoke [selector]` | revoke a session |
@@ -50,6 +50,24 @@ That's the whole loop. There is no host process to start — `appduct` auto-spaw
 Every command that targets a session accepts an optional `selector` (a session id or an alias from `appduct ls`); omit it when exactly one session is active. Global flags: `--json` (machine-readable output; compact by default, one line), `--pretty` (indent `--json` output, and JSON values embedded in human output, 2 spaces — never NDJSON event lines), `--verbose` (include the `meta` block — `command`, `timestamp`, `duration_ms` — omitted by default in both human and `--json` output), `--no-color`, `--state-dir <path>` (default `~/.appduct`), `--daemon-restart` (on a daemon/CLI version mismatch, restart the daemon even though that drops live sessions and unclaimed links — `APPDUCT_DAEMON_RESTART=1` and `config.json`'s `restartDaemonOnVersionMismatch` do the same for every command, and `--no-daemon-restart` overrules both for one). Run `appduct <command> --help` for the exact flags of any command.
 
 `--timeout` on `invoke` is clamped to 1,000–600,000 ms and can only **shorten** the deadline, never extend it past the app's own timer: the app aborts the handler at the tool's declared `timeoutMs`, or 10 seconds for a tool that declares none, regardless of what the caller asks for. If a tool needs more room, declare `timeoutMs` on its registration.
+
+### `appduct tools`: a signature per tool
+
+`appduct tools` prints one call signature plus a one-line description per tool, not the full schema — cheap to read even against an app that registers hundreds of tools:
+
+```
+Tools
+  seed_cart(items: int, sku?: string, clear?: bool = true) -> { added: int, cartId: string }
+    Fill the cart with test items for the current user.
+  set_flag(name: "dark_mode" | "new_checkout", enabled: bool)  [prompt]
+    Toggle a feature flag.
+
+Run `appduct tools <name>` for a tool's full schema.
+```
+
+A signature is derived straight from the tool's JSON Schema: required params are `name: type`, optional ones `name?: type` (with `= <default>` when the schema declares a short one), and `-> type` is the result when the tool declares an `output_schema`. `...` anywhere means the schema shape wasn't one this renderer could summarize — the tool's full schema (`appduct tools <name>`) still has it. A `[prompt]`/`[deny]` tag follows a tool whose effective policy isn't `"allow"`.
+
+Use `--filter <text>` to narrow the listing to tools whose name or description contains `<text>` (case-insensitive), and `--limit <n>`/`--offset <n>` to page through it; a truncated listing prints a trailing `Showing n of total tools (offset o). Narrow with --filter <text> or page with --offset <n>.` line so you know more were left out. `appduct tools --json` returns `{ tools, total }` — `total` is the count after `--filter` but before `--limit`/`--offset`. `appduct tools <name>` (a single tool) is unaffected by any of this and always returns the bare tool descriptor.
 
 ### The deep-link scheme
 

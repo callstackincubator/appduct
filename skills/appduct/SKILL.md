@@ -14,21 +14,27 @@ auto-spawn it on first use — there is no separate "start the host" step to man
 
 ## Agent workflow (CLI)
 
-1. Run **`appduct ls --json`**. `data` is a list of sessions, each with `sessionId`,
-   `alias`, `state`, `device`, `toolCount`. An empty list means no device has claimed a
-   session yet — go to **Establish a session** below.
+1. Run **`appduct ls`**. It lists sessions, each with a session id, alias, state,
+   device, and tool count. An empty list means no device has claimed a session yet — go
+   to **Establish a session** below.
 2. Every session-targeting command takes an optional **selector** (a session id or
    `alias` from step 1) as its first positional argument. **Omit it** when exactly one
    session is active — the CLI picks it automatically; pass it explicitly when several
    sessions exist (the CLI errors with `ambiguous_session` and lists the aliases if you
    don't).
-3. **`appduct tools [selector] --json`** — list tools registered in the app.
-4. **`appduct tools [selector] <tool-name> --full --json`** — inspect one tool's
-   input/output schema before calling it.
-5. **`appduct invoke [selector] <tool-name> --input '{"key":"value"}' --json`** —
-   invoke the tool with JSON args.
-6. **`appduct events [selector] --json`** — stream session/tool events (NDJSON) if you
-   need to watch for `session_claimed`, `tools_changed`, or `app_event` without polling.
+3. **`appduct tools [selector]`** — list tools registered in the app. Each line is a
+   call signature (`name(params) -> result`) plus a one-line description, not a full
+   schema — cheap to read even for an app with hundreds of tools. `...` anywhere in a
+   signature means the CLI could not summarize that part of the schema; fetch the full
+   tool (step 4) to see it. On a large app, narrow first with `--filter <text>` (matches
+   name or description) and page with `--limit <n>`/`--offset <n>` if the listing says
+   tools were left out.
+4. **`appduct tools [selector] <tool-name>`** — the tool's full input/output schema
+   (`--full` is implied for a single tool, no need to pass it).
+5. **`appduct invoke [selector] <tool-name> --input '{"key":"value"}'`** — invoke the
+   tool with JSON args.
+6. **`appduct events [selector]`** — stream session/tool events if you need to watch for
+   `session_claimed`, `tools_changed`, or `app_event` without polling.
 
 There is no `--session-id` flag in v2 — use the positional selector instead.
 
@@ -175,8 +181,10 @@ arguments to pass (issue #34).
 
 ## Notes
 
-- Use **`--json`** for structured CLI output in agent flows; runtime failures in
-  `--json` mode are JSON on stderr, not bare text.
+- Plain text is the CLI's default output and is meant to be read, not parsed — its exact
+  wording and layout may change between versions. Add **`--json`** only when a script (not
+  you) will parse the output, and `--pretty` to indent it for readability. Runtime failures
+  under `--json` are JSON on stderr, not bare text.
 - `appduct init`, run once in an app root, records the scheme in
   `.appduct/config.json` and prints the MCP server entry to paste. Re-running it is
   always safe (it keeps the recorded scheme; `--force` re-adopts `app.json`'s), it never

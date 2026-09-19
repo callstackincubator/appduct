@@ -122,6 +122,7 @@ exports[`output rendering > ls human output includes alias, state, device, tools
 
 exports[`output rendering > tools detail output renders full schema/annotations 1`] = `
 "Tool: echo
+  Signature     echo(...)
   Description   Echo a payload on the connected device.
   Input schema  {"type":"object"}
   Annotations   {"readOnlyHint":true}
@@ -130,7 +131,9 @@ exports[`output rendering > tools detail output renders full schema/annotations 
 
 exports[`output rendering > tools list output stays structured 1`] = `
 "Tools
-  Name  Description
-  echo  Echo a payload on the connected device.
+  echo(...) -> ...
+    Echo a payload on the connected device.
+
+Run \`appduct tools <name>\` for a tool's full schema.
 "
 `;
