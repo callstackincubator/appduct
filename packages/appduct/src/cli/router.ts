@@ -14,12 +14,34 @@
  */
 
 import type { CliRenderContext } from "./types.js";
-import type { VersionCheckOptions } from "../rpc/client.js";
 
 import { usageError } from "../errors.js";
 import { executeCommand } from "./runner.js";
 
-/** Everything a route needs to run one command; built once by `dispatch.ts`, narrowed per level. */
+/** The inputs of the daemon version check (ARCHITECTURE.md §4 "Version drift"), as plain data so
+ * they can cross the bundle boundary; `cli/version-guard.ts` turns them into the check itself. */
+export type VersionCheckInputs = {
+  /** The version this client actually is — always the real package version, never an override. */
+  readonly clientVersion: string;
+  /** Resolves `--daemon-restart` / `APPDUCT_DAEMON_RESTART` / `restartDaemonOnVersionMismatch`;
+   * memoized by the caller, and it never throws (an unreadable config reads as `false`). */
+  readonly forceRestart: () => Promise<boolean>;
+  /** Where a "the daemon is newer than this client" notice goes for a command that is checked
+   * ahead of its first RPC; a no-op under `--json`, whose stdout/stderr contract has no room for
+   * it. A command that owns its own log channel (`mcp`) substitutes its own writer. */
+  readonly warn: (message: string) => void;
+};
+
+/**
+ * Everything a route needs to run one command; built once by `dispatch.ts`, narrowed per level.
+ *
+ * This object is the only thing that crosses from the eager bundle (`dist/bin.js`) into a route
+ * bundle (`dist/cli/routes/<command>.js`), and each route bundle carries its *own copy* of the
+ * modules it shares with the eager one (`scripts/bundle.mjs`). Two copies of a module mean two
+ * copies of its classes, and `instanceof` fails across them — so the context carries plain data,
+ * writers and closures that never throw. A closure that could throw an `AppductCliError` made in
+ * the eager bundle would reach the route's copy of `toCliError` and render as `internal_error`.
+ */
 export type RouteContext = {
   /** The command words matched so far, e.g. `["daemon", "status"]`. Joined with spaces it is the
    * `meta.command` a rendered result reports. */
@@ -31,15 +53,7 @@ export type RouteContext = {
   readonly io: CliRenderContext;
   /** The resolved state directory (`--state-dir` / `APPDUCT_STATE_DIR` / default). */
   readonly stateDir: string;
-  /**
-   * Wraps a handler so the daemon's version is verified once before the command's first RPC
-   * (ARCHITECTURE.md §4 "Version drift"). Every command that talks to the daemon uses it, except
-   * the ones `dispatch.ts` documents as exempt.
-   */
-  readonly guarded: <T>(handler: () => T | Promise<T>) => () => Promise<T>;
-  /** The version-check options for a command that threads the check into its own startup instead
-   * of running it ahead (`mcp`); `onWarning` decides where the drift notice goes. */
-  readonly versionCheckFor: (onWarning: (message: string) => void) => Promise<VersionCheckOptions>;
+  readonly versionCheck: VersionCheckInputs;
 };
 
 export type Route = (context: RouteContext) => Promise<number>;

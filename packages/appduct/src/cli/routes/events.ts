@@ -10,6 +10,7 @@ import { renderEventLine, renderEventsCursorLine } from "../../output.js";
 import { parseNonNegativeIntegerOption, splitOptionalSelector } from "../command-options.js";
 import { commandName } from "../router.js";
 import { executeHostedCommand } from "../runner.js";
+import { guarded } from "../version-guard.js";
 
 export const route: Route = async (context) => {
   const { options, stateDir, io } = context;
@@ -20,7 +21,7 @@ export const route: Route = async (context) => {
 
   return executeHostedCommand(
     commandName(context),
-    context.guarded(() => {
+    guarded(context)(() => {
       // Deferred into the wrapped handler (rather than thrown directly in the route body,
       // matching the codebase's existing lax convention for that) so `executeHostedCommand`'s
       // own try/catch renders it as a normal usage_error instead of an uncaught rejection.

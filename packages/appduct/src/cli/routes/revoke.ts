@@ -6,6 +6,7 @@ import { handleRevokeCommand } from "../../commands/revoke.js";
 import { splitOptionalSelector } from "../command-options.js";
 import { commandName } from "../router.js";
 import { executeCommand } from "../runner.js";
+import { guarded } from "../version-guard.js";
 
 export const route: Route = async (context) => {
   const { stateDir } = context;
@@ -13,7 +14,7 @@ export const route: Route = async (context) => {
 
   return executeCommand(
     commandName(context),
-    context.guarded(() => handleRevokeCommand({ selector }, { stateDir })),
+    guarded(context)(() => handleRevokeCommand({ selector }, { stateDir })),
     context.io,
   );
 };

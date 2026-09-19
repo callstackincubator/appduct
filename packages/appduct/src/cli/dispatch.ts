@@ -13,7 +13,6 @@ import { loadConfig } from "../daemon/config.js";
 import { getStateDirPaths, resolveStateDir } from "../daemon/state-dir.js";
 import { usageError } from "../errors.js";
 import { getPackageVersion } from "../package-version.js";
-import { ensureDaemonVersionMatches, type VersionCheckOptions } from "../rpc/client.js";
 import { createCli } from "./create-cli.js";
 import { createRouter, unknownCommandError, type RouteContext } from "./router.js";
 import { executeCommand } from "./runner.js";
@@ -153,34 +152,6 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
    */
   const cliWarning = json ? () => {} : (message: string) => void writers.stderr.write(message);
 
-  const versionCheckFor = async (onWarning: (message: string) => void): Promise<VersionCheckOptions> => {
-    return {
-      clientVersion: getPackageVersion(),
-      forceRestart: await resolveForceRestart(),
-      onWarning,
-    };
-  };
-
-  /**
-   * Wraps a command handler so the daemon's version is verified once, before the command's first
-   * RPC. `autoSpawn: false`: with nothing listening there is no drift to find, and any daemon this
-   * process spawns afterwards is its own build. Applied to every command that talks to the daemon
-   * except `daemon run` (it *is* the daemon), `daemon status` (warns instead — see
-   * `commands/daemon/status.ts`) and `daemon stop` (already the remedy); `keygen`/`doctor` never
-   * open a daemon connection at all.
-   */
-  const guarded = <T>(handler: () => T | Promise<T>): (() => Promise<T>) => {
-    return async () => {
-      await ensureDaemonVersionMatches({
-        stateDir,
-        autoSpawn: false,
-        checkVersion: await versionCheckFor(cliWarning),
-      });
-
-      return handler();
-    };
-  };
-
   const context: RouteContext = {
     path: [],
     // cac has already split the command word off `cli.args`; put it back so the root router
@@ -189,8 +160,11 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
     options: parsedOptions,
     io,
     stateDir,
-    guarded,
-    versionCheckFor,
+    versionCheck: {
+      clientVersion: getPackageVersion(),
+      forceRestart: resolveForceRestart,
+      warn: cliWarning,
+    },
   };
 
   return rootRouter(context);

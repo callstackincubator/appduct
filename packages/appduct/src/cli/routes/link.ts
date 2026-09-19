@@ -6,13 +6,14 @@ import { handleLinkCommand } from "../../commands/link.js";
 import { parsePositiveIntegerOption } from "../command-options.js";
 import { commandName } from "../router.js";
 import { executeCommand } from "../runner.js";
+import { guarded } from "../version-guard.js";
 
 export const route: Route = async (context) => {
   const { options, stateDir } = context;
 
   return executeCommand(
     commandName(context),
-    context.guarded(() =>
+    guarded(context)(() =>
       handleLinkCommand(
         {
           ttlSeconds: parsePositiveIntegerOption(options.ttl, "--ttl"),

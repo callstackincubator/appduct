@@ -1,21 +1,34 @@
 /**
- * Bundles the package's three entry points (`bin`, `.`, `./client`) into `dist/` with esbuild.
+ * Bundles the package with esbuild: one self-contained file per entry point, no shared chunks.
  *
  * Why bundle at all: the CLI is spawned once per command, and on Node a startup is dominated by
  * per-file module resolution, not by code. The lazy router (`src/cli/router.ts`, ARCHITECTURE.md
  * §10 "Startup cost") already keeps each command from loading the others; bundling collapses the
- * ~50 files every command still shares into one chunk. Code splitting keeps each route's dynamic
- * `import()` a separate chunk, so the router's laziness survives the bundle.
+ * files a command does need into as few as possible.
+ *
+ * Why no code splitting: esbuild's tree-shaking is per bundle, and a chunk shared by several
+ * routes carries everything *any* of them uses from the modules in it (`invoke` would load the
+ * daemon's RPC server because `daemon run` needs it). Making every route its own entry point
+ * bundles each one alone, so each is tree-shaken alone and a command loads exactly two files of
+ * ours: `dist/bin.js` and its route. The price is that the modules a route shares with the eager
+ * entry (`errors`, `output`, `rpc/client`, …) are duplicated into every route bundle — a few tens
+ * of kilobytes each, parsed in well under a millisecond — and that a route runs its own *copy* of
+ * them: see `RouteContext` in `src/cli/router.ts` for the one rule that follows from that.
  *
  * Types are not produced here: `tsc -p tsconfig.build.json` emits the `.d.ts` files beside these
  * outputs (see the `build` script in package.json).
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
 
 import { build } from "esbuild";
 
-const { dependencies } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const packageRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
+const srcDir = join(packageRoot, "src");
+const outDir = join(packageRoot, "dist");
+
+const { dependencies } = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
 
 /**
  * `@appduct/shared` is inlined: it is pure functions, constants and types with no runtime
@@ -25,12 +38,62 @@ const { dependencies } = JSON.parse(readFileSync(new URL("../package.json", impo
  */
 const INLINED = new Set(["@appduct/shared"]);
 
+/** The public entry points, at the paths package.json's `bin` and `exports` name. */
+const publicEntries = ["src/bin.ts", "src/index.ts", "src/client/index.ts"];
+
+/** Every route module: what the routers `import()` at runtime, each bundled on its own. */
+const routesDir = join(srcDir, "cli", "routes");
+const routeEntries = readdirSync(routesDir, { recursive: true, withFileTypes: true })
+  .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+  .map((entry) => relative(packageRoot, join(entry.parentPath ?? entry.path, entry.name)))
+  .sort();
+
+/** Where `file` (a source path) is emitted, given `outbase: src`. */
+const outputPathOf = (file) => join(outDir, relative(srcDir, file)).replace(/\.ts$/, ".js");
+
+/**
+ * Keeps a router's `import("./routes/<name>.js")` a real runtime import — of the route's own
+ * bundle — instead of letting esbuild inline the route into the importer. The path is rewritten
+ * to be relative to where the *importer* is emitted: `src/cli/dispatch.ts` is bundled into the
+ * public entries at the `dist` root, so its `./routes/x.js` becomes `./cli/routes/x.js`; a nested
+ * router (`routes/daemon/index.ts`) is itself a route bundle whose siblings mirror `src`, so its
+ * paths already hold.
+ */
+const lazyRoutesPlugin = {
+  name: "lazy-routes",
+  setup(pluginBuild) {
+    pluginBuild.onResolve({ filter: /^\.\.?\/.*\.js$/ }, (args) => {
+      if (args.kind !== "dynamic-import") {
+        return undefined;
+      }
+
+      const target = resolve(args.resolveDir, args.path).replace(/\.js$/, ".ts");
+
+      if (!target.startsWith(join(srcDir, "cli", "routes"))) {
+        return undefined;
+      }
+
+      const importerIsPublicEntry = basename(args.importer) === "dispatch.ts";
+      const importerOutputDir = importerIsPublicEntry ? outDir : dirname(outputPathOf(args.importer));
+      let path = relative(importerOutputDir, outputPathOf(target)).split("\\").join("/");
+
+      if (!path.startsWith(".")) {
+        path = `./${path}`;
+      }
+
+      return { path, external: true };
+    });
+  },
+};
+
 await build({
-  entryPoints: ["src/bin.ts", "src/index.ts", "src/client/index.ts"],
+  absWorkingDir: packageRoot,
+  entryPoints: [...publicEntries, ...routeEntries],
   outdir: "dist",
   outbase: "src",
+  entryNames: "[dir]/[name]",
   bundle: true,
-  splitting: true,
+  splitting: false,
   format: "esm",
   platform: "node",
   // The daemon needs Node ≥ 20 (ARCHITECTURE.md §13); the bundle targets the same floor.
@@ -41,9 +104,6 @@ await build({
   external: Object.keys(dependencies)
     .filter((name) => !INLINED.has(name))
     .flatMap((name) => [name, `${name}/*`]),
-  // Entries keep their `src`-relative paths so package.json's `exports` stay valid; shared chunks
-  // land beside them at the `dist` root.
-  entryNames: "[dir]/[name]",
-  chunkNames: "[name]-[hash]",
+  plugins: [lazyRoutesPlugin],
   logLevel: "info",
 });

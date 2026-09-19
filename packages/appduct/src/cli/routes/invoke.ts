@@ -10,6 +10,7 @@ import {
 } from "../command-options.js";
 import { commandName } from "../router.js";
 import { executeCommand } from "../runner.js";
+import { guarded } from "../version-guard.js";
 
 export const route: Route = async (context) => {
   const { options, stateDir } = context;
@@ -27,7 +28,7 @@ export const route: Route = async (context) => {
   try {
     return await executeCommand(
       commandName(context),
-      context.guarded(() =>
+      guarded(context)(() =>
         handleInvokeCommand(
           {
             selector,

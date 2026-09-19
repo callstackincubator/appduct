@@ -554,15 +554,27 @@ process loads only the modules the command it is running needs. Concretely:
 - **`mcp` and `daemon run` are the exceptions that prove the rule**: they load the MCP SDK (and
   its schema libraries) and the daemon respectively, but both are long-lived processes, so that
   cost is paid once per session, not once per command.
-- **The published build is bundled.** Once nothing unneeded is loaded, what remains is Node's
-  per-file resolution cost for the ~50 files every command shares, so `scripts/bundle.mjs`
-  (esbuild) collapses them: `tsc` emits only the `.d.ts` files, esbuild emits the JS for the
-  three entry points (`bin`, `.`, `./client`) with code splitting, so each route's dynamic
-  `import()` stays a separate chunk and the router's laziness survives. `@appduct/shared` is
-  inlined (pure functions and constants, no classes); every other dependency stays external.
-  A consequence for the source: a module's on-disk location differs between `src/` (Vitest),
-  `dist/<entry>.js` and `dist/<chunk>.js`, so nothing may compute a path from `import.meta.url`
-  with a fixed number of `..` — use `getPackageRoot()` (`src/package-root.ts`).
+- **The published build is bundled, one file per entry.** Once nothing unneeded is loaded, what
+  remains is Node's per-file resolution cost, so `scripts/bundle.mjs` (esbuild) collapses files:
+  `tsc` emits only the `.d.ts` files, esbuild emits the JS. Every public entry (`bin`, `.`,
+  `./client`) *and every route* is its own self-contained bundle, with no shared chunks: a router's
+  `import("./routes/<name>.js")` is kept as a real runtime import of that route's file, so a command
+  loads exactly `dist/bin.js` and `dist/cli/routes/<command>.js` (plus `cac`, `picocolors`, `toqr`;
+  `@appduct/shared` is inlined, every other dependency stays external). Code splitting was
+  deliberately *not* used: esbuild tree-shakes per bundle, so a chunk shared by several routes
+  carries whatever any of them uses from a module (`invoke` would have loaded the daemon's RPC
+  server because `daemon run` needs it). Bundling each route alone tree-shakes it alone.
+- **Duplication is the accepted price, and it has one rule.** The modules a route shares with the
+  eager entry (`errors`, `output`, `rpc/client`, …) are copied into every route bundle: tens of
+  kilobytes each, parsed in under a millisecond. But a copied module is a second module instance,
+  and `instanceof` fails across copies. So the `RouteContext` — the only thing that crosses from
+  the eager bundle into a route — carries plain data, writers and closures that never throw; in
+  particular the daemon version guard runs on the route side (`cli/version-guard.ts`), so the
+  errors it throws are classified by the same copy of `errors.ts` that created them. Never hand a
+  route a function from the eager bundle that can throw one of our error classes.
+- **No fixed relative paths from `import.meta.url`.** A module's on-disk location differs between
+  `src/` (Vitest), `dist/<entry>.js` and `dist/cli/routes/<route>.js`, so nothing may compute a
+  path with a fixed number of `..` — use `getPackageRoot()` (`src/package-root.ts`).
 
 ## 11. React Native SDK
 

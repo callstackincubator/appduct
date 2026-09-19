@@ -5,13 +5,14 @@ import type { Route } from "../router.js";
 import { handleLsCommand } from "../../commands/ls.js";
 import { commandName } from "../router.js";
 import { executeCommand } from "../runner.js";
+import { guarded } from "../version-guard.js";
 
 export const route: Route = async (context) => {
   const { stateDir } = context;
 
   return executeCommand(
     commandName(context),
-    context.guarded(() => handleLsCommand({ stateDir })),
+    guarded(context)(() => handleLsCommand({ stateDir })),
     context.io,
   );
 };

@@ -7,6 +7,7 @@ import type { Route } from "../router.js";
 import { handleMcpCommand } from "../../commands/mcp.js";
 import { commandName } from "../router.js";
 import { executeHostedCommand } from "../runner.js";
+import { versionCheckOptions } from "../version-guard.js";
 
 export const route: Route = async (context) => {
   const { options, stateDir, io } = context;
@@ -22,7 +23,7 @@ export const route: Route = async (context) => {
       handleMcpCommand({
         stateDir,
         scheme: typeof options.scheme === "string" ? options.scheme : undefined,
-        checkVersion: await context.versionCheckFor((message) => void io.stderr.write(message)),
+        checkVersion: await versionCheckOptions(context, (message) => void io.stderr.write(message)),
       }),
     {
       ...io,

@@ -32,8 +32,7 @@ const makeContext = (args: string[]): { context: RouteContext; stdout: () => str
       stderr: { write: () => true },
     },
     stateDir: "/nonexistent",
-    guarded: (handler) => async () => handler(),
-    versionCheckFor: async (onWarning) => ({ clientVersion: "0.0.0", forceRestart: false, onWarning }),
+    versionCheck: { clientVersion: "0.0.0", forceRestart: async () => false, warn: () => {} },
   };
 
   return { context, stdout: () => stdout };
