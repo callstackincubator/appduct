@@ -9,7 +9,6 @@
 
 import { spawnSync } from "node:child_process";
 import { connect, type Socket } from "node:net";
-import { connect as tlsConnect, type TLSSocket as TlsSocket } from "node:tls";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -160,11 +159,11 @@ describe("daemon lifecycle", () => {
     expect(decoded).not.toBeNull();
     expect(decoded!.port).toBe(bound);
 
-    // And the bound port is genuinely reachable — `0` was a request, not a literal bind.
-    const probe = await new Promise<TlsSocket>((resolve, reject) => {
-      const connection = tlsConnect({ host: "127.0.0.1", port: bound!, rejectUnauthorized: false }, () =>
-        resolve(connection),
-      );
+    // And the bound port is genuinely reachable — `0` was a request, not a literal bind. A plain
+    // TCP connect is enough to prove that, and it is all this case is about: what the listener
+    // does with the connection (TLS, pinning, the wire protocol) has its own tests.
+    const probe = await new Promise<Socket>((resolve, reject) => {
+      const connection = connect({ host: "127.0.0.1", port: bound! }, () => resolve(connection));
       connection.once("error", reject);
     });
     probe.destroy();

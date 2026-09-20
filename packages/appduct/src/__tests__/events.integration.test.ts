@@ -88,7 +88,9 @@ const claimAppOverCli = async (
 
   // The bootstrap payload carries the port the daemon actually bound - the state dir's
   // `wssPort: 0` deliberately names none, and this is the very number a real app would dial.
-  const socket = new WebSocket(`wss://127.0.0.1:${decoded.port}`, { rejectUnauthorized: false });
+  const port = decoded.port;
+
+  const socket = new WebSocket(`wss://127.0.0.1:${port}`, { rejectUnauthorized: false });
   await new Promise<void>((resolve, reject) => {
     socket.once("open", () => resolve());
     socket.once("error", reject);
