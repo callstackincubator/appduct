@@ -14,7 +14,9 @@
  */
 
 import { createHash, X509Certificate } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { connect as connectUds, type Socket } from "node:net";
+import path from "node:path";
 import { text } from "node:stream/consumers";
 import { connect as tlsConnect } from "node:tls";
 
@@ -331,6 +333,78 @@ export const waitUntil = async (
   }
 
   throw new Error(`Timed out after ${timeoutMs}ms waiting for: ${options.description ?? "condition"}.`);
+};
+
+/**
+ * Polls today's `audit/<YYYY-MM-DD>.jsonl` until `predicate` holds over the records it contains,
+ * then returns them.
+ *
+ * Reading the file straight after the calls that should have produced its last lines is a race
+ * across a process boundary. `daemon/audit.ts` serializes writes on an internal promise queue and
+ * `record()` returns the moment it has *enqueued* one, precisely so a slow disk cannot stall the
+ * `tools.call` response path — so the response a CLI subprocess already returned proves the call
+ * finished, never that its audit line has landed. In-process that gap is closed by
+ * `AuditLogger.flush()`; from another process there is nothing to await, so the only honest answer
+ * is to re-read until the records are there.
+ *
+ * On timeout it throws with what it last saw (and how many records), because "expected 3, saw 2"
+ * names a different bug from "expected 3, saw 0" and a bare timeout tells them apart for nobody.
+ */
+export const waitForAuditRecords = async <TRecord = Record<string, unknown>>(
+  stateDir: string,
+  predicate: (records: TRecord[]) => boolean,
+  options: { timeoutMs?: number; intervalMs?: number; description?: string } = {},
+): Promise<TRecord[]> => {
+  const timeoutMs = options.timeoutMs ?? 5000;
+  const intervalMs = options.intervalMs ?? 25;
+  const deadline = Date.now() + timeoutMs;
+  const dayFile = path.join(getStateDirPaths(stateDir).auditDir, `${new Date().toISOString().slice(0, 10)}.jsonl`);
+
+  const read = async (): Promise<TRecord[]> => {
+    let raw: string;
+
+    try {
+      raw = await readFile(dayFile, "utf8");
+    } catch (error) {
+      // The audit directory and its day file are both created lazily, on the first record — an
+      // ENOENT here means "nothing audited yet", which is a state to keep waiting through, not an
+      // error to report.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return [];
+      }
+
+      throw error;
+    }
+
+    return raw
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      // A partially-flushed final line is possible while the daemon is mid-append; treat it as
+      // not-yet-there rather than failing the whole read.
+      .flatMap((line) => {
+        try {
+          return [JSON.parse(line) as TRecord];
+        } catch {
+          return [];
+        }
+      });
+  };
+
+  let records = await read();
+
+  while (!predicate(records) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    records = await read();
+  }
+
+  if (!predicate(records)) {
+    throw new Error(
+      `Timed out after ${timeoutMs}ms waiting for ${options.description ?? "audit records"} in "${dayFile}". ` +
+        `Saw ${records.length} record(s): ${JSON.stringify(records)}`,
+    );
+  }
+
+  return records;
 };
 
 export type EventWaiter = {

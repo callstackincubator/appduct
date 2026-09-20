@@ -40,8 +40,9 @@ afterEach(async () => {
 
 const stateDirs: string[] = [];
 
-/** The shared fixture's `wssPort: 0` matters here: this file used to write no `config.json`, so
- * every `startDaemon` below bound the default 8443 and raced every other daemon on the machine. */
+/** A temp state dir for the fake daemons below. Nothing here binds a wss port — the fakes speak
+ * only the control socket — but it carries the shared fixture's `wssPort: 0` anyway, so that a
+ * case which ever does let a real daemon start cannot collide with another process's. */
 const makeTempStateDir = async (): Promise<string> => {
   const stateDir = await makeSharedStateDir({}, { prefix: "appduct-rpc-client-test-" });
   stateDirs.push(stateDir);

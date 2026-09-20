@@ -20,6 +20,7 @@ import {
   mintLink,
   runCliJson,
   subscribeToEvents,
+  waitForAuditRecords,
 } from "./harness.js";
 
 afterEach(cleanupAfterEach);
@@ -36,16 +37,13 @@ type AuditRecord = {
   caller: "cli" | "mcp";
 };
 
-const readTodaysAuditRecords = async (stateDir: string): Promise<AuditRecord[]> => {
-  const paths = getStateDirPaths(stateDir);
-  const dateStamp = new Date().toISOString().slice(0, 10);
-  const raw = await readFile(path.join(paths.auditDir, `${dateStamp}.jsonl`), "utf8");
-
-  return raw
-    .trim()
-    .split("\n")
-    .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as AuditRecord);
+/** The two `invoke`s below (the allowed one and the denied one) each land a line in today's audit
+ * file. The daemon is a separate process and answers a call before its line is necessarily on disk
+ * (`daemon/audit.ts`'s write queue), so this waits for both rather than reading once. */
+const waitForBothAuditRecords = async (stateDir: string): Promise<AuditRecord[]> => {
+  return waitForAuditRecords<AuditRecord>(stateDir, (records) => records.length >= 2, {
+    description: "the allowed and the denied invoke, both audited",
+  });
 };
 
 describe("e2e: policy and audit", () => {
@@ -88,7 +86,7 @@ describe("e2e: policy and audit", () => {
       // The hint names the config file the operator would edit to change this (ARCHITECTURE.md §12).
       expect(deniedInvoke.error?.details).toMatchObject({ hint: expect.stringContaining("config.json") });
 
-      const records = await readTodaysAuditRecords(stateDir);
+      const records = await waitForBothAuditRecords(stateDir);
       expect(records.length).toBeGreaterThanOrEqual(2);
 
       const rawAuditContents = await readFile(
