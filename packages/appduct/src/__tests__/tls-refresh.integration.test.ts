@@ -11,16 +11,13 @@
  * so the "network changed" case is deterministic without touching `os.networkInterfaces()` globally.
  */
 
-import { connect as connectUds, createServer as createNetServer, type Socket } from "node:net";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { connect as connectUds, type Socket } from "node:net";
 
 import { afterEach, describe, expect, test } from "vitest";
 import WebSocket from "ws";
 
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
-import { writeTestHostKey } from "./fixtures.js";
+import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
 // Client pinning is the app's job; tests skip it client-side for their throwaway self-signed key.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -34,21 +31,9 @@ afterEach(async () => {
   }
 
   while (stateDirs.length > 0) {
-    await rm(stateDirs.pop()!, { force: true, recursive: true });
+    await removeStateDir(stateDirs.pop()!);
   }
 });
-
-const pickFreePort = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const server = createNetServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = address && typeof address !== "string" ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-};
 
 const rpcCall = (socketPath: string, method: string, params?: unknown): Promise<unknown> => {
   return new Promise((resolve, reject) => {
@@ -94,12 +79,10 @@ const connectClient = (port: number): Promise<WebSocket> => {
 
 describe("TLS re-mint on advertised-IP change", () => {
   test("link.create re-detects the address, re-mints on change, and the listener keeps accepting connections", async () => {
-    const stateDir = await mkdtemp(path.join(tmpdir(), "appduct-tls-refresh-"));
+    // `advertisedIp` is deliberately left out: this case injects `detectAddress` below and the
+    // whole point is what detection returns, not a configured override.
+    const stateDir = await makeTempStateDir({ advertisedIp: undefined }, { prefix: "appduct-tls-refresh-" });
     stateDirs.push(stateDir);
-    await writeTestHostKey(path.join(stateDir, "key.pem"));
-
-    const port = await pickFreePort();
-    await writeFile(path.join(stateDir, "config.json"), JSON.stringify({ wssPort: port }));
 
     // Startup consumes the first call (initial mint); the daemon starts advertising "127.0.0.1".
     // The next call ("still 127.0.0.1") must not force a re-mint; the call after that simulates the
@@ -129,7 +112,8 @@ describe("TLS re-mint on advertised-IP change", () => {
     // must still succeed (this is exactly what a bare cert/key swap without `setSecureContext`
     // would fail to achieve: the old context would keep serving the stale SAN, or worse, the server
     // would need a restart).
-    const socket = await connectClient(port);
+    // The port the listener actually bound (the config asked for an OS-assigned one).
+    const socket = await connectClient(daemon.listener.port()!);
     socket.close();
 
     const status = (await rpcCall(daemon.paths.socketPath, "daemon.status")) as { pid: number };

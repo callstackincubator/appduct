@@ -8,6 +8,16 @@ This file is maintained by hand. There is no automated changelog tooling (see
 `docs/CI.md#release-policy` for why) — update this file as part of the commit that bumps the
 package versions for a release.
 
+## Unreleased
+
+- **`config.json`'s `wssPort` accepts `0`, meaning "bind an OS-assigned port".** The pinned-wss
+  listener takes whatever ephemeral port the OS hands it, and everything that reports or advertises
+  the port — `daemon.status`'s `wssPort`, a minted link's `endpoint.port`, and so the deep link and
+  QR code composed from it — carries the *bound* port rather than the configured `0`. This lets
+  several daemons (separate state dirs) coexist on one machine without an operator hand-picking a
+  port for each. Every other value must still be a port number in `1..65535`; the default is
+  unchanged at `8443`.
+
 ## 0.10.0 (2026-09-16)
 
 - **New: native SDKs for apps without React Native.** The same Appduct core the React Native

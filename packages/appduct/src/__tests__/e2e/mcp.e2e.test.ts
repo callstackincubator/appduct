@@ -12,6 +12,7 @@ import { CallToolResultSchema, ListToolsResultSchema, ToolListChangedNotificatio
 
 import { FakeAppClient } from "./app-client.js";
 import {
+  daemonWssPort,
   binEntry,
   cleanupAfterEach,
   ensureDaemon,
@@ -40,7 +41,10 @@ describe("e2e: mcp (real stdio subprocess)", () => {
   test(
     "tools/list, tools/call, and list_changed against a real `appduct mcp` subprocess",
     async () => {
-      const { stateDir, port } = await makeTempStateDir({ scheme: "appduct-mcp-e2e" });
+      const { stateDir } = await makeTempStateDir({ scheme: "appduct-mcp-e2e" });
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       // The daemon is brought up first (via a real CLI subprocess) so the `mcp` subprocess never
       // needs to win an auto-spawn race with this test's own setup, and so the pin can be fetched
       // before the fake app ever connects.

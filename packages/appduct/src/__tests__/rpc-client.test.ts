@@ -1,7 +1,5 @@
-import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { rm, utimes, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
-import { tmpdir } from "node:os";
-import path from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -17,7 +15,7 @@ import {
   resetDaemonVersionChecks,
   type SpawnFn,
 } from "../rpc/client.js";
-import { writeTestHostKey } from "./fixtures.js";
+import { makeTempStateDir as makeSharedStateDir, removeStateDir } from "./fixtures.js";
 
 const runningDaemons: RunningDaemon[] = [];
 const fakeDaemons: FakeDaemon[] = [];
@@ -33,11 +31,19 @@ afterEach(async () => {
   }
 
   resetDaemonVersionChecks();
+
+  while (stateDirs.length > 0) {
+    await removeStateDir(stateDirs.pop()!);
+  }
 });
 
+const stateDirs: string[] = [];
+
+/** The shared fixture's `wssPort: 0` matters here: this file used to write no `config.json`, so
+ * every `startDaemon` below bound the default 8443 and raced every other daemon on the machine. */
 const makeTempStateDir = async (): Promise<string> => {
-  const stateDir = await mkdtemp(path.join(tmpdir(), "appduct-rpc-client-test-"));
-  await writeTestHostKey(path.join(stateDir, "key.pem"));
+  const stateDir = await makeSharedStateDir({}, { prefix: "appduct-rpc-client-test-" });
+  stateDirs.push(stateDir);
   return stateDir;
 };
 

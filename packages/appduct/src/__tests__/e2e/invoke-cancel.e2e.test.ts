@@ -8,6 +8,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { FakeAppClient } from "./app-client.js";
 import {
+  daemonWssPort,
   cleanupAfterEach,
   ensureDaemon,
   fetchPinnedKeys,
@@ -23,8 +24,11 @@ describe("e2e: appduct invoke + SIGINT", () => {
   test(
     "SIGINT cancels the in-flight call: the app receives tool_cancel and the CLI exits non-zero as tool_cancelled",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const link = await mintLink(stateDir);

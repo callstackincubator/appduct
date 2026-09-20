@@ -6,10 +6,7 @@
  * daemon internals would only prove the mocks were called, not that the wire protocol works.
  */
 
-import { connect as connectUds, createServer as createNetServer, type Socket } from "node:net";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { connect as connectUds, type Socket } from "node:net";
 
 import { afterEach, describe, expect, test } from "vitest";
 import WebSocket from "ws";
@@ -25,7 +22,7 @@ import {
 import { connect } from "../client/index.js";
 import { handleInvokeCommand } from "../commands/invoke.js";
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
-import { writeTestHostKey } from "./fixtures.js";
+import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
 // Client pinning is the app's job; tests skip it client-side for their throwaway self-signed key.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -39,21 +36,9 @@ afterEach(async () => {
   }
 
   while (stateDirs.length > 0) {
-    await rm(stateDirs.pop()!, { force: true, recursive: true });
+    await removeStateDir(stateDirs.pop()!);
   }
 });
-
-const pickFreePort = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const server = createNetServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = address && typeof address !== "string" ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-};
 
 type TestDaemon = {
   daemon: RunningDaemon;
@@ -61,20 +46,16 @@ type TestDaemon = {
 };
 
 const startTestDaemon = async (configOverrides: Record<string, unknown> = {}): Promise<TestDaemon> => {
-  const stateDir = await mkdtemp(path.join(tmpdir(), "appduct-tool-invocation-"));
+  const stateDir = await makeTempStateDir(configOverrides, { prefix: "appduct-tool-invocation-" });
   stateDirs.push(stateDir);
-  await writeTestHostKey(path.join(stateDir, "key.pem"));
-
-  const port = await pickFreePort();
-  await writeFile(
-    path.join(stateDir, "config.json"),
-    JSON.stringify({ wssPort: port, advertisedIp: "127.0.0.1", ...configOverrides }),
-  );
 
   const daemon = await startDaemon({ stateDir });
   runningDaemons.push(daemon);
 
-  return { daemon, port };
+  // The daemon's `config.json` asks for an OS-assigned port (`wssPort: 0`), so the real port is
+  // only knowable from the listener that bound it — never pre-picked, which is what used to race
+  // another vitest process for the same number.
+  return { daemon, port: daemon.listener.port()! };
 };
 
 /** Raw newline-delimited JSON-RPC call over the daemon's UDS control socket. */

@@ -1,10 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { connect, createServer as createNetServer, type Socket } from "node:net";
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { connect, type Socket } from "node:net";
+import { connect as tlsConnect, type TLSSocket as TlsSocket } from "node:tls";
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
+
+import { decodeBootstrap } from "@appduct/shared";
 
 import { handleDaemonStatusCommand } from "../commands/daemon/status.js";
 import { AUDIT_PRUNE_INTERVAL_MS, startDaemon, type RunningDaemon } from "../daemon/daemon.js";
@@ -12,7 +14,7 @@ import { DaemonAlreadyRunningError } from "../daemon/pidfile.js";
 import { startRpcServer } from "../daemon/rpc-server.js";
 import { getStateDirPaths } from "../daemon/state-dir.js";
 import { systemTimers, type IntervalHandle, type TimerFns } from "../daemon/timers.js";
-import { writeTestHostKey } from "./fixtures.js";
+import { makeTempStateDir as makeSharedStateDir, removeStateDir } from "./fixtures.js";
 
 const runningDaemons: RunningDaemon[] = [];
 
@@ -29,10 +31,14 @@ afterEach(async () => {
   }
 });
 
+/**
+ * The shared fixture writes `wssPort: 0` ("bind an OS-assigned port", ARCHITECTURE.md §3). This
+ * file used to write no `config.json` at all, so every daemon it started bound the default 8443
+ * and collided with any other daemon on the machine — including the ones a second vitest process
+ * (another worktree, another agent session) is running at the same time.
+ */
 const makeTempStateDir = async (): Promise<string> => {
-  const stateDir = await mkdtemp(path.join(tmpdir(), "appduct-daemon-test-"));
-  await writeTestHostKey(path.join(stateDir, "key.pem"));
-  return stateDir;
+  return makeSharedStateDir({}, { prefix: "appduct-daemon-test-" });
 };
 
 /** Reads newline-delimited JSON-RPC responses off a raw socket, resolving each awaited line. */
@@ -103,16 +109,61 @@ describe("daemon lifecycle", () => {
     expect(response.id).toBe(1);
     expect(response.result).toMatchObject({
       pid: process.pid,
-      wssPort: 8443,
       sessions: [],
     });
+    // The state dir asks for an OS-assigned port, so the only correct assertion is that the
+    // *bound* port is reported — a status echoing the configured `0` back would be reporting the
+    // one number no app can ever connect to.
+    expect(response.result.wssPort).toBeGreaterThan(0);
+    expect(Number.isInteger(response.result.wssPort)).toBe(true);
+    expect(response.result.wssPort).toBe(daemon.listener.port());
     expect(response.result.pinnedKeys).toHaveLength(1);
     expect(response.result.pinnedKeys[0]).toMatch(/^sha256\//u);
     expect(response.result.version).toBeTypeOf("string");
     expect(response.result.startedAt).toBe(daemon.startedAt.toISOString());
 
     socket.destroy();
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
+  });
+
+  test("wssPort: 0 binds an OS-assigned port, and both daemon.status and a minted link carry it", async () => {
+    const stateDir = await makeTempStateDir();
+    const daemon = await startTrackedDaemon(stateDir);
+    const paths = getStateDirPaths(stateDir);
+
+    const bound = daemon.listener.port();
+    expect(bound).toBeGreaterThan(0);
+
+    const socket = await connectRaw(paths.socketPath);
+    const reader = createLineReader(socket);
+
+    socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "daemon.status", params: {} })}\n`);
+    const status = JSON.parse(await reader.nextLine());
+    expect(status.result.wssPort).toBe(bound);
+
+    // The link is the part that actually matters to an app: a bootstrap payload advertising the
+    // configured `0` would be undialable, and nothing downstream could tell it from a real port.
+    socket.write(
+      `${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "link.create", params: { ttlSeconds: 60 } })}\n`,
+    );
+    const link = JSON.parse(await reader.nextLine());
+    expect(link.result.endpoint.port).toBe(bound);
+
+    const decoded = decodeBootstrap(link.result.deepLinkPayload);
+    expect(decoded).not.toBeNull();
+    expect(decoded!.port).toBe(bound);
+
+    // And the bound port is genuinely reachable — `0` was a request, not a literal bind.
+    const probe = await new Promise<TlsSocket>((resolve, reject) => {
+      const connection = tlsConnect({ host: "127.0.0.1", port: bound!, rejectUnauthorized: false }, () =>
+        resolve(connection),
+      );
+      connection.once("error", reject);
+    });
+    probe.destroy();
+
+    socket.destroy();
+    await removeStateDir(stateDir);
   });
 
   test("malformed JSON line gets a JSON-RPC parse error and the connection stays usable", async () => {
@@ -133,7 +184,7 @@ describe("daemon lifecycle", () => {
     expect(goodLineResponse.result.pid).toBe(process.pid);
 
     socket.destroy();
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 
   test("unknown method returns JSON-RPC -32601", async () => {
@@ -150,7 +201,7 @@ describe("daemon lifecycle", () => {
     expect(response.error.code).toBe(-32601);
 
     socket.destroy();
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 
   test("a line beyond the configured cap gets an error and the connection is dropped", async () => {
@@ -186,7 +237,7 @@ describe("daemon lifecycle", () => {
       expect(socket.destroyed).toBe(true);
     } finally {
       await server.close();
-      await rm(stateDir, { force: true, recursive: true });
+      await removeStateDir(stateDir);
     }
   });
 
@@ -209,7 +260,7 @@ describe("daemon lifecycle", () => {
     await expect(stat(paths.pidFilePath)).rejects.toThrow();
 
     socket.destroy();
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 
   test("second daemon against the same state dir throws DaemonAlreadyRunningError", async () => {
@@ -219,7 +270,7 @@ describe("daemon lifecycle", () => {
     await expect(startDaemon({ stateDir })).rejects.toThrow(DaemonAlreadyRunningError);
 
     await first.shutdown();
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 
   test("takes over a stale pidfile and stale socket left by a dead process", async () => {
@@ -250,7 +301,7 @@ describe("daemon lifecycle", () => {
 
     socket.destroy();
     void daemon;
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 
   test("config.json invalid values throw a clear error naming the key", async () => {
@@ -262,7 +313,7 @@ describe("daemon lifecycle", () => {
 
     await expect(startDaemon({ stateDir })).rejects.toThrow(/wssPort/u);
 
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 
   test("config.json unknown keys warn instead of throwing", async () => {
@@ -270,7 +321,7 @@ describe("daemon lifecycle", () => {
     const paths = getStateDirPaths(stateDir);
     const { mkdir } = await import("node:fs/promises");
     await mkdir(stateDir, { recursive: true });
-    await writeFile(paths.configPath, JSON.stringify({ totallyUnknownKey: true, wssPort: 9000 }));
+    await writeFile(paths.configPath, JSON.stringify({ totallyUnknownKey: true, wssPort: 0 }));
 
     const warnings: string[] = [];
     const daemon = await startTrackedDaemon(stateDir);
@@ -282,10 +333,10 @@ describe("daemon lifecycle", () => {
       warn: (message) => warnings.push(message),
     });
 
-    expect(config.wssPort).toBe(9000);
+    expect(config.wssPort).toBe(0);
     expect(warnings.some((message) => message.includes("totallyUnknownKey"))).toBe(true);
 
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 
   test("config.json iosBundleId is a known key, loaded as-is and validated as a non-empty string", async () => {
@@ -317,11 +368,40 @@ describe("daemon lifecycle", () => {
     // Deliberately *not* charset-checked here, only where the value is used. This loader runs on
     // every daemon start, so a typo in a CLI-side convenience key must not stop the daemon from
     // starting — it surfaces as a usage error against the `link`/`connect` call that needed it.
-    await writeFile(paths.configPath, JSON.stringify({ iosBundleId: "--console" }));
+    // `wssPort: 0` because this line's config is the one the daemon below actually starts on.
+    await writeFile(paths.configPath, JSON.stringify({ iosBundleId: "--console", wssPort: 0 }));
     await expect(loadConfig(paths)).resolves.toMatchObject({ iosBundleId: "--console" });
     await expect(startTrackedDaemon(stateDir)).resolves.toBeDefined();
 
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
+  });
+
+  test("wssPort accepts 0 (OS-assigned) and rejects anything that is not a port number", async () => {
+    const stateDir = await makeTempStateDir();
+    const paths = getStateDirPaths(stateDir);
+    const { mkdir } = await import("node:fs/promises");
+    const { loadConfig } = await import("../daemon/config.js");
+    await mkdir(stateDir, { recursive: true });
+
+    // The documented default when the key is absent (ARCHITECTURE.md §3).
+    await writeFile(paths.configPath, JSON.stringify({}));
+    expect((await loadConfig(paths)).wssPort).toBe(8443);
+
+    // `0` is not a degenerate port here but a request for an OS-assigned one, so it must load
+    // as-is rather than being rejected by the positive-integer rule every other numeric key uses.
+    await writeFile(paths.configPath, JSON.stringify({ wssPort: 0 }));
+    expect((await loadConfig(paths)).wssPort).toBe(0);
+
+    await writeFile(paths.configPath, JSON.stringify({ wssPort: 8443 }));
+    expect((await loadConfig(paths)).wssPort).toBe(8443);
+
+    // Everything that still is not a port: negatives, non-integers, out-of-range, wrong type.
+    for (const invalid of [-1, 1.5, 65_536, "8443", null]) {
+      await writeFile(paths.configPath, JSON.stringify({ wssPort: invalid }));
+      await expect(loadConfig(paths)).rejects.toThrow(/wssPort/u);
+    }
+
+    await removeStateDir(stateDir);
   });
 
   test("restartDaemonOnVersionMismatch defaults to false and must be a boolean", async () => {
@@ -343,7 +423,7 @@ describe("daemon lifecycle", () => {
     await writeFile(paths.configPath, JSON.stringify({ restartDaemonOnVersionMismatch: "true" }));
     await expect(loadConfig(paths)).rejects.toThrow(/restartDaemonOnVersionMismatch/u);
 
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 });
 
@@ -382,21 +462,6 @@ describe("daemon: audit retention", () => {
     await writeFile(path.join(auditDir, `${stamp}.jsonl`), "{}\n", { mode: 0o600 });
   };
 
-  /** These tests are about the audit directory, not the wss listener, so they pin a free port
-   * rather than inheriting the default 8443 — nothing here should fail because something else on
-   * the machine happens to hold it. */
-  const pickFreePort = async (): Promise<number> => {
-    return new Promise((resolve, reject) => {
-      const server = createNetServer();
-      server.once("error", reject);
-      server.listen(0, "127.0.0.1", () => {
-        const address = server.address();
-        const port = address && typeof address !== "string" ? address.port : 0;
-        server.close(() => resolve(port));
-      });
-    });
-  };
-
   /** Both sweeps are fire-and-forget (`void auditLogger.prune()`), so the assertion polls rather
    * than sleeping on a guessed duration. */
   const waitForAuditDir = async (auditDir: string, expected: string[]): Promise<void> => {
@@ -419,7 +484,7 @@ describe("daemon: audit retention", () => {
     const paths = getStateDirPaths(stateDir);
     const { mkdir } = await import("node:fs/promises");
     await mkdir(paths.auditDir, { recursive: true });
-    await writeFile(paths.configPath, JSON.stringify({ auditRetentionDays: 7, wssPort: await pickFreePort() }));
+    await writeFile(paths.configPath, JSON.stringify({ auditRetentionDays: 7, wssPort: 0 }));
 
     await writeDayFile(paths.auditDir, "2026-09-05"); // today per the clock below
     await writeDayFile(paths.auditDir, "2026-08-01"); // stale at startup
@@ -444,7 +509,7 @@ describe("daemon: audit retention", () => {
     await daemon.shutdown();
     expect(intervals[0]!.cleared).toBe(true);
 
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 
   test("daemon.status reports the audit footprint and the effective retention", async () => {
@@ -452,7 +517,7 @@ describe("daemon: audit retention", () => {
     const paths = getStateDirPaths(stateDir);
     const { mkdir } = await import("node:fs/promises");
     await mkdir(paths.auditDir, { recursive: true });
-    await writeFile(paths.configPath, JSON.stringify({ auditRetentionDays: 45, wssPort: await pickFreePort() }));
+    await writeFile(paths.configPath, JSON.stringify({ auditRetentionDays: 45, wssPort: 0 }));
 
     // Clock-injected, and the fixture's name is derived from it, for two reasons: the file must
     // be dated relative to the daemon's own idea of "today" rather than the calendar the suite
@@ -480,7 +545,7 @@ describe("daemon: audit retention", () => {
     });
 
     socket.destroy();
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 
   test("daemon status degrades cleanly against a daemon that predates retention", async () => {
@@ -535,7 +600,7 @@ describe("daemon: audit retention", () => {
       await legacyDaemon.close();
     }
 
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 
   test("an invalid auditRetentionDays/daemonLogMaxBytes fails the daemon like any other config key", async () => {
@@ -550,6 +615,6 @@ describe("daemon: audit retention", () => {
     await writeFile(paths.configPath, JSON.stringify({ daemonLogMaxBytes: 1.5 }));
     await expect(startDaemon({ stateDir })).rejects.toThrow(/daemonLogMaxBytes.*positive integer/u);
 
-    await rm(stateDir, { force: true, recursive: true });
+    await removeStateDir(stateDir);
   });
 });

@@ -8,14 +8,17 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { link, waitForSession, AppductError } from "../../client/index.js";
 import { FakeAppClient } from "./app-client.js";
-import { cleanupAfterEach, decodeDeepLink, ensureDaemon, fetchPinnedKeys, makeTempStateDir } from "./harness.js";
+import { cleanupAfterEach, daemonWssPort, decodeDeepLink, ensureDaemon, fetchPinnedKeys, makeTempStateDir } from "./harness.js";
 
 afterEach(cleanupAfterEach);
 
 describe("e2e: appduct/client bootstrap", () => {
   test("link() mints a claimable deep link, and waitForSession() resolves once a fake app claims it concurrently with the subscribe", async () => {
-    const { stateDir, port } = await makeTempStateDir();
+    const { stateDir } = await makeTempStateDir();
     await ensureDaemon(stateDir);
+    // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+    // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+    const port = await daemonWssPort(stateDir);
     const pinnedKeys = await fetchPinnedKeys(stateDir);
 
     const minted = await link({ stateDir, ttlSeconds: 60 });
@@ -41,8 +44,11 @@ describe("e2e: appduct/client bootstrap", () => {
   });
 
   test("waitForSession() resolves immediately when the session is already claimed", async () => {
-    const { stateDir, port } = await makeTempStateDir();
+    const { stateDir } = await makeTempStateDir();
     await ensureDaemon(stateDir);
+    // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+    // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+    const port = await daemonWssPort(stateDir);
     const pinnedKeys = await fetchPinnedKeys(stateDir);
 
     const minted = await link({ stateDir });

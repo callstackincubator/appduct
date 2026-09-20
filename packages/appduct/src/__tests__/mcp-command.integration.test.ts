@@ -4,8 +4,7 @@
  * (the transport-close path most other hosted commands rely on for graceful shutdown).
  */
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer as createNetServer } from "node:net";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -19,7 +18,7 @@ import { decodeBootstrap } from "@appduct/shared";
 
 import { handleMcpCommand, type McpHostedResult } from "../commands/mcp.js";
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
-import { writeTestHostKey } from "./fixtures.js";
+import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
 const runningDaemons: RunningDaemon[] = [];
 const stateDirs: string[] = [];
@@ -35,7 +34,7 @@ afterEach(async () => {
   }
 
   while (stateDirs.length > 0) {
-    await rm(stateDirs.pop()!, { force: true, recursive: true });
+    await removeStateDir(stateDirs.pop()!);
   }
 });
 
@@ -43,28 +42,9 @@ const failIfCalled = (): never => {
   throw new Error("auto-spawn should never be needed: the test daemon is already running.");
 };
 
-const pickFreePort = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const server = createNetServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = address && typeof address !== "string" ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-};
-
 const startTestDaemon = async (extraConfig: Record<string, unknown> = {}): Promise<{ stateDir: string }> => {
-  const stateDir = await mkdtemp(path.join(tmpdir(), "appduct-mcp-cmd-"));
+  const stateDir = await makeTempStateDir(extraConfig, { prefix: "appduct-mcp-cmd-" });
   stateDirs.push(stateDir);
-  await writeTestHostKey(path.join(stateDir, "key.pem"));
-
-  const port = await pickFreePort();
-  await writeFile(
-    path.join(stateDir, "config.json"),
-    JSON.stringify({ wssPort: port, advertisedIp: "127.0.0.1", ...extraConfig }),
-  );
 
   const daemon = await startDaemon({ stateDir });
   runningDaemons.push(daemon);

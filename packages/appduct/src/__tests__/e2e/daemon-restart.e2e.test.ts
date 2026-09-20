@@ -10,6 +10,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { FakeAppClient } from "./app-client.js";
 import {
+  daemonWssPort,
   cleanupAfterEach,
   ensureDaemon,
   fetchPinnedKeys,
@@ -26,8 +27,11 @@ describe("e2e: daemon restart", () => {
   test(
     "SIGKILL mid-session -> next command auto-spawns a fresh daemon, old session gone, new link/claim works",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       const firstPid = await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const link = await mintLink(stateDir);

@@ -6,10 +6,7 @@
  * the WebSocket layer, and synchronizes on the in-process event bus instead of sleeping.
  */
 
-import { connect as connectUds, createServer as createNetServer, type Socket } from "node:net";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { connect as connectUds, type Socket } from "node:net";
 
 import { afterEach, describe, expect, test } from "vitest";
 import WebSocket from "ws";
@@ -17,7 +14,7 @@ import WebSocket from "ws";
 import { decodeBootstrap, type EventKind, type EventNotification } from "@appduct/shared";
 
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
-import { writeTestHostKey } from "./fixtures.js";
+import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
 // Client pinning is the app's job (ARCHITECTURE.md task notes); tests skip it client-side. Under
 // Vitest runs these clients against a throwaway self-signed key, so the leaf-cert check is
@@ -33,21 +30,9 @@ afterEach(async () => {
   }
 
   while (stateDirs.length > 0) {
-    await rm(stateDirs.pop()!, { force: true, recursive: true });
+    await removeStateDir(stateDirs.pop()!);
   }
 });
-
-const pickFreePort = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const server = createNetServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = address && typeof address !== "string" ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-};
 
 type TestDaemon = {
   daemon: RunningDaemon;
@@ -55,20 +40,16 @@ type TestDaemon = {
 };
 
 const startTestDaemon = async (configOverrides: Record<string, unknown> = {}): Promise<TestDaemon> => {
-  const stateDir = await mkdtemp(path.join(tmpdir(), "appduct-session-engine-"));
+  const stateDir = await makeTempStateDir(configOverrides, { prefix: "appduct-session-engine-" });
   stateDirs.push(stateDir);
-  await writeTestHostKey(path.join(stateDir, "key.pem"));
-
-  const port = await pickFreePort();
-  await writeFile(
-    path.join(stateDir, "config.json"),
-    JSON.stringify({ wssPort: port, advertisedIp: "127.0.0.1", ...configOverrides }),
-  );
 
   const daemon = await startDaemon({ stateDir });
   runningDaemons.push(daemon);
 
-  return { daemon, port };
+  // The daemon's `config.json` asks for an OS-assigned port (`wssPort: 0`), so the real port is
+  // only knowable from the listener that bound it — never pre-picked, which is what used to race
+  // another vitest process for the same number.
+  return { daemon, port: daemon.listener.port()! };
 };
 
 /** Raw newline-delimited JSON-RPC call over the daemon's UDS control socket. */
@@ -443,17 +424,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
   });
 
   test("unclaimed socket idle past the pre-claim timeout closes 1008 pre_claim_timeout", async () => {
-    const stateDir = await mkdtemp(path.join(tmpdir(), "appduct-session-engine-"));
-    stateDirs.push(stateDir);
-    await writeTestHostKey(path.join(stateDir, "key.pem"));
-    const port = await pickFreePort();
-    await writeFile(
-      path.join(stateDir, "config.json"),
-      JSON.stringify({ wssPort: port, advertisedIp: "127.0.0.1" }),
-    );
-
-    const daemon = await startDaemon({ stateDir });
-    runningDaemons.push(daemon);
+    const { port } = await startTestDaemon();
 
     const socket = await connectClient(port);
     const closed = nextClose(socket);

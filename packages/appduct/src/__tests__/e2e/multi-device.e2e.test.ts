@@ -10,6 +10,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { FakeAppClient } from "./app-client.js";
 import {
+  daemonWssPort,
   cleanupAfterEach,
   ensureDaemon,
   fetchPinnedKeys,
@@ -25,8 +26,11 @@ describe("e2e: multi-device", () => {
   test(
     "distinct aliases, ambiguous_session without a selector, revoke isolates the other session",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
       const events = await subscribeToEvents(stateDir);
 

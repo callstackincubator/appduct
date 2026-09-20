@@ -5,17 +5,18 @@
  * NDJSON, then confirms Ctrl-C (SIGINT) ends the stream cleanly (exit 0).
  */
 
-import { createServer as createNetServer } from "node:net";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
 import { afterEach, describe, expect, test } from "vitest";
 import WebSocket from "ws";
 
 import { decodeBootstrap } from "@appduct/shared";
 
-import { runCliBinary, spawnCliBinary, waitForExit, writeTestHostKey } from "./fixtures.js";
+import {
+  makeTempStateDir as makeSharedStateDir,
+  removeStateDir,
+  runCliBinary,
+  spawnCliBinary,
+  waitForExit,
+} from "./fixtures.js";
 
 // Client pinning is the app's job; this test skips it client-side for its throwaway self-signed key.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -45,36 +46,15 @@ afterEach(async () => {
   }
 
   while (stateDirs.length > 0) {
-    await rm(stateDirs.pop()!, { force: true, recursive: true });
+    await removeStateDir(stateDirs.pop()!);
   }
 });
 
-const pickFreePort = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const server = createNetServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = address && typeof address !== "string" ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-};
-
-const makeTempStateDir = async (): Promise<{ stateDir: string; port: number }> => {
-  const directory = await mkdtemp(path.join(tmpdir(), "appduct-events-cli-"));
-  await writeTestHostKey(path.join(directory, "key.pem"));
-
-  // A free-port config avoids EADDRINUSE collisions with the other test files' daemons that also
-  // bind a wss listener concurrently when test files are run in parallel.
-  const port = await pickFreePort();
-  await writeFile(
-    path.join(directory, "config.json"),
-    JSON.stringify({ wssPort: port, advertisedIp: "127.0.0.1" }),
-  );
+const makeTempStateDir = async (): Promise<{ stateDir: string }> => {
+  const directory = await makeSharedStateDir({}, { prefix: "appduct-events-cli-" });
 
   stateDirs.push(directory);
-  return { stateDir: directory, port };
+  return { stateDir: directory };
 };
 
 const runCliJson = (args: string[], stateDir: string) => {
@@ -99,7 +79,6 @@ const nextMessage = (socket: WebSocket): Promise<Record<string, unknown>> => {
  * identity plus the open socket (caller closes it). */
 const claimAppOverCli = async (
   stateDir: string,
-  port: number,
 ): Promise<{ socket: WebSocket; alias: string; sessionId: string }> => {
   const linkResult = runCliJson(["link", "--ttl", "30", "--scheme", "appduct-events-since-test"], stateDir);
   expect(linkResult.ok).toBe(true);
@@ -107,7 +86,9 @@ const claimAppOverCli = async (
   const payload = (linkResult.data.deepLink as string).split("appduct=")[1]!.split("&")[0]!;
   const decoded = decodeBootstrap(payload)!;
 
-  const socket = new WebSocket(`wss://127.0.0.1:${port}`, { rejectUnauthorized: false });
+  // The bootstrap payload carries the port the daemon actually bound - the state dir's
+  // `wssPort: 0` deliberately names none, and this is the very number a real app would dial.
+  const socket = new WebSocket(`wss://127.0.0.1:${decoded.port}`, { rejectUnauthorized: false });
   await new Promise<void>((resolve, reject) => {
     socket.once("open", () => resolve());
     socket.once("error", reject);
@@ -194,13 +175,13 @@ describe("appduct events --json", () => {
   }, 15_000);
 
   test("--since pulls retained events one-shot for a claimed session, and a later pull with the returned cursor sees nothing new", async () => {
-    const { stateDir, port } = await makeTempStateDir();
+    const { stateDir } = await makeTempStateDir();
 
     const status = runCliJson(["daemon", "status"], stateDir);
     expect(status.ok).toBe(true);
     daemonPids.push(status.data.daemon.pid);
 
-    const { socket, alias, sessionId } = await claimAppOverCli(stateDir, port);
+    const { socket, alias, sessionId } = await claimAppOverCli(stateDir);
     socket.send(JSON.stringify({ type: "event", session_id: sessionId, name: "greeting", ts: Date.now() }));
     // The claim ack round-trip already guarantees `session_claimed` landed; give the `event` frame a
     // beat to reach the daemon and land in the retention buffer before pulling.

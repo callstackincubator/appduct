@@ -12,7 +12,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { connect, AppductError } from "../../client/index.js";
 import { getStateDirPaths } from "../../daemon/state-dir.js";
 import { FakeAppClient } from "./app-client.js";
-import { cleanupAfterEach, ensureDaemon, fetchPinnedKeys, makeTempStateDir, mintLink, subscribeToEvents } from "./harness.js";
+import { cleanupAfterEach, daemonWssPort, ensureDaemon, fetchPinnedKeys, makeTempStateDir, mintLink, subscribeToEvents } from "./harness.js";
 
 afterEach(cleanupAfterEach);
 
@@ -49,8 +49,11 @@ describe("e2e: appduct/client", () => {
   test(
     "connect() -> tools() -> call() -> waitForEvent() round-trips against a real daemon and app, audited as caller \"client\"",
     async () => {
-      const { stateDir, port } = await makeTempStateDir({ policy: { destructive: "deny" } });
+      const { stateDir } = await makeTempStateDir({ policy: { destructive: "deny" } });
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);
@@ -115,8 +118,11 @@ describe("e2e: appduct/client", () => {
   test(
     "call()'s transport timeout never fires before the daemon's own tool_timeout, even for a timeoutMs above the transport default",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);
@@ -147,8 +153,11 @@ describe("e2e: appduct/client", () => {
   );
 
   test("waitForEvent() rejects (rather than crashing the connection) when its match predicate throws", async () => {
-    const { stateDir, port } = await makeTempStateDir();
+    const { stateDir } = await makeTempStateDir();
     await ensureDaemon(stateDir);
+    // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+    // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+    const port = await daemonWssPort(stateDir);
     const pinnedKeys = await fetchPinnedKeys(stateDir);
 
     const events = await subscribeToEvents(stateDir);
@@ -186,8 +195,11 @@ describe("e2e: appduct/client", () => {
   test(
     "waitForEvent() resolves from the retained buffer for an event emitted before it was called (no live-subscribe race)",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);
@@ -221,8 +233,11 @@ describe("e2e: appduct/client", () => {
   test(
     "events() drains the retained buffer, and waitForEvent()'s since skips events already seen",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);

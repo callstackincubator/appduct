@@ -12,6 +12,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { getStateDirPaths } from "../../daemon/state-dir.js";
 import { FakeAppClient } from "./app-client.js";
 import {
+  daemonWssPort,
   cleanupAfterEach,
   ensureDaemon,
   fetchPinnedKeys,
@@ -51,8 +52,11 @@ describe("e2e: policy and audit", () => {
   test(
     "a destructive-hinted tool is denied by policy via `appduct invoke`, and every attempt is audited without raw args",
     async () => {
-      const { stateDir, port } = await makeTempStateDir({ policy: { destructive: "deny" } });
+      const { stateDir } = await makeTempStateDir({ policy: { destructive: "deny" } });
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);

@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { spawn, spawnSync, type ChildProcessByStdio } from "node:child_process";
-import { writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Readable } from "node:stream";
 
@@ -112,4 +113,60 @@ export const runCliWithCapture = async (
     stdout,
     stderr,
   };
+};
+
+/**
+ * A temp state dir every daemon-starting test can share: a throwaway host key plus a `config.json`
+ * that asks for an OS-assigned wss port (`wssPort: 0`, ARCHITECTURE.md §3) and advertises
+ * loopback.
+ *
+ * This replaces the `pickFreePort` helper that used to be copy-pasted into a dozen test files.
+ * Pre-picking a port and then writing it into a config is a TOCTOU race *by construction*: between
+ * the probe socket closing and the daemon binding, any other process on the machine — including
+ * another vitest process running this same suite in another worktree — can take that port. Asking
+ * the OS to assign one at bind time has no window at all. A test that needs the number reads it
+ * back from the running daemon (`RunningDaemon.listener.port()` in-process, `daemon status --json`
+ * across a process boundary) rather than deciding it up front.
+ *
+ * Callers clean the directory up themselves ({@link removeStateDir}) — this suite's files all keep
+ * their own `afterEach` sweep, and a hook registered here would be this file's, not theirs.
+ */
+export const makeTempStateDir = async (
+  configOverrides: Record<string, unknown> = {},
+  options: { prefix?: string } = {},
+): Promise<string> => {
+  const directory = await mkdtemp(path.join(tmpdir(), options.prefix ?? "appduct-test-"));
+  await writeTestHostKey(path.join(directory, "key.pem"));
+
+  await writeFile(
+    path.join(directory, "config.json"),
+    JSON.stringify({ wssPort: 0, advertisedIp: "127.0.0.1", ...configOverrides }),
+    { encoding: "utf8", mode: 0o600 },
+  );
+
+  return directory;
+};
+
+/** Recursive, never-throwing removal of a temp state dir. */
+export const removeStateDir = async (directory: string): Promise<void> => {
+  await rm(directory, { force: true, recursive: true });
+};
+
+/**
+ * The port a daemon started from {@link makeTempStateDir} actually bound, read back over the real
+ * CLI (`daemon status --json`) — the only way to learn it across a process boundary, since the
+ * config deliberately does not name one.
+ */
+export const readDaemonWssPort = async (stateDir: string): Promise<number> => {
+  const result = runCliBinary(["daemon", "status", "--json"], { stateDir });
+  const payload = JSON.parse(result.stdout) as {
+    ok: boolean;
+    data?: { daemon: { wss_port: number; pid: number } };
+  };
+
+  if (!payload.ok || !payload.data) {
+    throw new Error(`Failed to read daemon status for "${stateDir}": ${result.stdout}${result.stderr}`);
+  }
+
+  return payload.data.daemon.wss_port;
 };

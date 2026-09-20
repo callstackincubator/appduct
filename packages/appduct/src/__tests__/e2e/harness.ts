@@ -14,17 +14,22 @@
  */
 
 import { createHash, X509Certificate } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { connect as connectUds, createServer as createNetServer, type Socket } from "node:net";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { connect as connectUds, type Socket } from "node:net";
 import { text } from "node:stream/consumers";
 import { connect as tlsConnect } from "node:tls";
 
 import { decodeBootstrap, type EventKind, type EventNotification } from "@appduct/shared";
 
 import { getStateDirPaths } from "../../daemon/state-dir.js";
-import { binEntry, packageRoot, spawnCliBinary, waitForExit, writeTestHostKey } from "../fixtures.js";
+import {
+  binEntry,
+  makeTempStateDir as makeSharedStateDir,
+  packageRoot,
+  removeStateDir,
+  spawnCliBinary,
+  waitForExit,
+  writeTestHostKey,
+} from "../fixtures.js";
 
 export { binEntry, packageRoot, writeTestHostKey };
 export { waitForExit } from "../fixtures.js";
@@ -68,7 +73,7 @@ export const cleanupAfterEach = async (): Promise<void> => {
   }
 
   while (stateDirs.length > 0) {
-    await rm(stateDirs.pop()!, { force: true, recursive: true });
+    await removeStateDir(stateDirs.pop()!);
   }
 };
 
@@ -91,37 +96,26 @@ export const trackCleanup = (fn: () => void | Promise<void>): void => {
   extraCleanups.push(fn);
 };
 
-export const pickFreePort = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const server = createNetServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = address && typeof address !== "string" ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-};
-
 export type TestStateDir = {
   stateDir: string;
-  port: number;
 };
 
-/** Always pins a free port and a throwaway host key: every e2e scenario runs several concurrent
- * test files, each with its own real daemon subprocess/listener. */
+/**
+ * A throwaway host key plus a `config.json` asking for an OS-assigned wss port (`wssPort: 0`,
+ * ARCHITECTURE.md §3). Every e2e scenario runs its own real daemon subprocess with its own
+ * listener, and several vitest processes may be running this suite at once on one machine, so no
+ * scenario may name a port: pre-picking one and writing it into a config leaves a window in which
+ * anything else can take it. The port a scenario needs is read back from the running daemon
+ * ({@link daemonWssPort}) instead.
+ */
 export const makeTempStateDir = async (configOverrides: Record<string, unknown> = {}): Promise<TestStateDir> => {
-  const directory = await mkdtemp(path.join(tmpdir(), "appduct-e2e-"));
-  await writeTestHostKey(path.join(directory, "key.pem"));
-
-  const port = await pickFreePort();
-  await writeFile(
-    path.join(directory, "config.json"),
-    JSON.stringify({ wssPort: port, advertisedIp: "127.0.0.1", scheme: "appduct-e2e", ...configOverrides }),
+  const directory = await makeSharedStateDir(
+    { scheme: "appduct-e2e", ...configOverrides },
+    { prefix: "appduct-e2e-" },
   );
 
   stateDirs.push(directory);
-  return { stateDir: directory, port };
+  return { stateDir: directory };
 };
 
 export type CliJsonResult<T = unknown> = {
@@ -178,6 +172,22 @@ export const ensureDaemon = async (stateDir: string): Promise<number> => {
   const pid = status.data.daemon.pid;
   trackDaemonPid(pid);
   return pid;
+};
+
+/**
+ * The wss port the daemon for `stateDir` actually bound, read back over a real `daemon status
+ * --json` — the only way to learn it across a process boundary, since the state dir's config asks
+ * for an OS-assigned one rather than naming a number. Auto-spawns the daemon like any other CLI
+ * call, so a scenario can ask for the port before it has explicitly started one.
+ */
+export const daemonWssPort = async (stateDir: string): Promise<number> => {
+  const status = await runCliJson<{ daemon: { wss_port: number } }>(["daemon", "status"], stateDir);
+
+  if (!status.ok || !status.data) {
+    throw new Error(`Failed to read the wss port for "${stateDir}": ${JSON.stringify(status)}`);
+  }
+
+  return status.data.daemon.wss_port;
 };
 
 /** Fetches the daemon's advertised SPKI pin-set via a real `daemon status --json` CLI call. */

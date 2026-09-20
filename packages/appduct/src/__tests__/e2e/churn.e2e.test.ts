@@ -14,6 +14,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { FakeAppClient } from "./app-client.js";
 import {
+  daemonWssPort,
   cleanupAfterEach,
   ensureDaemon,
   fetchPinnedKeys,
@@ -29,8 +30,11 @@ describe("e2e: churn", () => {
   test(
     "suspend on socket loss, session_suspended on invoke, resume, then grace expiry frees the alias",
     async () => {
-      const { stateDir, port } = await makeTempStateDir({ graceSeconds: 2 });
+      const { stateDir } = await makeTempStateDir({ graceSeconds: 2 });
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);

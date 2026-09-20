@@ -101,6 +101,13 @@ The daemon refuses to load a key file that is group/world-readable.
 }
 ```
 
+`wssPort` is the pinned-wss listener's TCP port. **`0` binds an OS-assigned port**: the listener
+takes whatever ephemeral port the OS hands it, and everything that reports or advertises the port
+afterwards — `daemon.status`'s `wssPort` (§5) and a minted link's `endpoint.port` (§5, §8) — carries
+the *bound* port, never the configured `0`. That is how several daemons coexist on one machine
+without an operator hand-picking a port for each (the test suite's daemons all run this way).
+Any other value must be a port number in `1..65535`.
+
 `advertisedIp` overrides auto-detection of the address advertised in minted bootstrap
 payloads. `scheme` is the deep-link URI scheme composed into `appduct link`'s output
 when `--scheme` is not passed (§10) — set it once here instead of on every invocation.

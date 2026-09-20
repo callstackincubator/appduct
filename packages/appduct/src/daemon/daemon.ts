@@ -98,6 +98,10 @@ export type RunningDaemon = {
 
 const buildStatusResult = async (
   config: AppductConfig,
+  /** The port the listener actually bound. Differs from `config.wssPort` whenever that is `0`
+   * ("bind an OS-assigned port", ARCHITECTURE.md §3) — and a status that echoed the configured
+   * `0` back would be worse than useless: it is precisely the number nobody can connect to. */
+  boundWssPort: number,
   startedAt: Date,
   tls: TlsManager,
   sessionManager: SessionManager,
@@ -113,7 +117,7 @@ const buildStatusResult = async (
     version: packageVersion(),
     pid: process.pid,
     startedAt: startedAt.toISOString(),
-    wssPort: config.wssPort,
+    wssPort: boundWssPort,
     pinnedKeys: tls.pinnedKeys(),
     sessions: sessionManager.list(),
     pendingLinks: sessionManager.pendingLinkCount(),
@@ -345,6 +349,10 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
   let sessionManager: SessionManager | undefined;
   let callsManager: CallsManager | undefined;
   let eventBus: EventBus | undefined;
+  // The port the listener ended up on. Seeded with the configured value and overwritten with the
+  // real one the moment the listener is up; `config.wssPort: 0` means the two differ (§3). Read
+  // lazily through closures (`getEndpoint`, `daemon.status`), all of which run after startup.
+  let boundWssPort = config.wssPort;
   let shuttingDown = false;
   let resolveExited!: () => void;
   const exited = new Promise<void>((resolve) => {
@@ -401,7 +409,9 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
       graceSeconds: config.graceSeconds,
       keepaliveIntervalSeconds: config.keepaliveIntervalSeconds,
       linkTtlSeconds: config.linkTtlSeconds,
-      getEndpoint: () => toAgentEndpoint(tls.current().advertisedAddress, config.wssPort),
+      // `boundWssPort`, not `config.wssPort`: a link minted by a daemon on an OS-assigned port
+      // must advertise the port the app can actually reach, not the `0` that asked for one.
+      getEndpoint: () => toAgentEndpoint(tls.current().advertisedAddress, boundWssPort),
       eventBus: activeEventBus,
       clock,
       onToolFrame: (message) => {
@@ -443,6 +453,11 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
     });
 
     const activeListener = listener;
+    // `DaemonListener.port()` reads `httpsServer.address()`, which is only meaningful once the
+    // server is listening — which `startListener` has already awaited. It can only be undefined
+    // for a non-TCP handle, which this listener never is, so the configured value is a
+    // never-taken fallback kept purely so a bound port is always a number.
+    boundWssPort = activeListener.port() ?? config.wssPort;
 
     // `events.subscribe` fan-out: one global listener pushes matching notifications to every RPC
     // connection currently marked as a subscriber (state stashed by the `events.subscribe` handler
@@ -475,7 +490,15 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
       socketPath: getSocketPath(paths),
       dispatch: {
         [RPC_METHODS.daemonStatus]: async (): Promise<DaemonStatusResult> => {
-          return buildStatusResult(config, startedAt, tls, activeSessionManager, auditLogger, paths.auditDir);
+          return buildStatusResult(
+            config,
+            boundWssPort,
+            startedAt,
+            tls,
+            activeSessionManager,
+            auditLogger,
+            paths.auditDir,
+          );
         },
         [RPC_METHODS.daemonShutdown]: (_params, context): DaemonShutdownResult => {
           context.afterSend(() => {
