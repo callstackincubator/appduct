@@ -42,7 +42,9 @@ final class AppductAPITests: XCTestCase {
     let (facade, transport) = makeFacade()
     let connectTaskInput = connectInput()
     let connectTask = Task { try await facade.client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    // A `session_ack` is only picked up once a handshake is actually in flight; the handshake
+    // calls `transport.connect` right after arming itself, so this counter is that signal.
+    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
     return (facade, transport)
@@ -109,7 +111,9 @@ final class AppductAPITests: XCTestCase {
     }
 
     transport.simulateIncoming(toolCallText(id: "call-1", name: "echo", args: ["value": "hi"]))
-    await drainPendingTasks()
+    try await waitUntil("the tool result reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_result") }
+    }
 
     let response = try XCTUnwrap(transport.sentMessages.first { $0.contains("tool_result") })
     XCTAssertTrue(response.contains("\"value\":\"hi!\""))
@@ -123,7 +127,9 @@ final class AppductAPITests: XCTestCase {
     }
 
     transport.simulateIncoming(toolCallText(id: "call-2", name: "with_context"))
-    await drainPendingTasks()
+    try await waitUntil("the tool result reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_result") }
+    }
 
     let response = try XCTUnwrap(transport.sentMessages.first { $0.contains("tool_result") })
     XCTAssertTrue(response.contains("with_context"))
@@ -135,7 +141,9 @@ final class AppductAPITests: XCTestCase {
     try facade.register(name: "bad_result", description: "x") { _ in Date() }
 
     transport.simulateIncoming(toolCallText(id: "call-3", name: "bad_result"))
-    await drainPendingTasks()
+    try await waitUntil("the tool error reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_error") }
+    }
 
     let response = try XCTUnwrap(transport.sentMessages.first { $0.contains("tool_error") })
     XCTAssertTrue(response.contains("tool_serialization_error"))
@@ -152,9 +160,9 @@ final class AppductAPITests: XCTestCase {
     let (facade, transport) = makeFacade()
 
     XCTAssertTrue(facade.handle(bootstrapUrl(sessionId: "session-9")))
-    await drainPendingTasks()
+    try await waitUntil("the deep link reached the transport handshake") { transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-9")
-    await drainPendingTasks()
+    try await waitUntil("the facade snapshot turned active") { facade.state == .active }
 
     XCTAssertEqual(facade.state, .active)
     XCTAssertEqual(facade.sessionId, "session-9")
@@ -166,10 +174,14 @@ final class AppductAPITests: XCTestCase {
     let (facade, transport) = try await activeFacade()
 
     let registration = try facade.register(name: "removable", description: "x") { _ in nil }
-    await drainPendingTasks()
+    try await waitUntil("the upsert delta was sent") {
+      transport.sentMessages.contains { $0.contains("tool_registry_delta") && $0.contains("upsert") }
+    }
 
     registration.remove()
-    await drainPendingTasks()
+    try await waitUntil("the remove delta was sent") {
+      transport.sentMessages.contains { $0.contains("tool_registry_delta") && $0.contains("remove") }
+    }
 
     let delta = transport.sentMessages.first { $0.contains("tool_registry_delta") && $0.contains("remove") }
     XCTAssertNotNil(delta)
@@ -183,14 +195,23 @@ final class AppductAPITests: XCTestCase {
 
     let events = EventCollector<AppductEvent>()
     let subscription = facade.addListener { events.append($0) }
-    await drainPendingTasks()
+    // `addListener` registers with the actor asynchronously, and it registers the error channel
+    // last -- so once that one is in place, all three are.
+    try await waitUntil("the facade's listeners were registered on the client") {
+      await facade.client.errorListeners.count >= 1
+    }
 
     let connectTaskInput = connectInput()
     let connectTask = Task { try await facade.client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
-    await drainPendingTasks()
+    try await waitUntil("the listener saw the active state change") {
+      events.all.contains {
+        if case .stateChange(let event) = $0 { return event.state == .active }
+        return false
+      }
+    }
 
     let states: [AppductClientState] = events.all.compactMap {
       if case .stateChange(let event) = $0 { return event.state }
@@ -207,14 +228,21 @@ final class AppductAPITests: XCTestCase {
 
     let events = EventCollector<AppductEvent>()
     _ = facade.addListener { events.append($0) }
-    await drainPendingTasks()
+    try await waitUntil("the facade's listeners were registered on the client") {
+      await facade.client.errorListeners.count >= 1
+    }
 
     let connectTaskInput = connectInput()
     let connectTask = Task { try await facade.client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", alias: "iphone-1")
     try await connectTask.value
-    await drainPendingTasks()
+    try await waitUntil("the listener saw the session change") {
+      events.all.contains {
+        if case .sessionChange(let event) = $0 { return event.sessionId == "session-1" }
+        return false
+      }
+    }
 
     let sessionIds: [String?] = events.all.compactMap {
       if case .sessionChange(let event) = $0 { return event.sessionId }

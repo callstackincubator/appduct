@@ -5,6 +5,7 @@
 // front of.
 
 import Foundation
+import XCTest
 @testable import AppductCore
 
 /// Scripted fake standing in for `AppductConnectionManager` in `AppductClient` tests, so the
@@ -160,8 +161,9 @@ final class FakeClientTimers: AppductClientTimers, @unchecked Sendable {
   }
 
   /// Advances the virtual clock by `deltaMs` and fires every timer now due. Handlers themselves
-  /// typically just kick off a `Task` to hop back onto the actor -- call `Probe.drain()`
-  /// afterwards to let that queued work actually run.
+  /// typically just kick off a `Task` to hop back onto the actor, so a test must `waitUntil` the
+  /// observable effect of that queued work (a new `connectCallCount`, a state change, a frame on
+  /// the wire) rather than assert immediately after this returns.
   func advance(byMs deltaMs: Double) {
     lock.lock()
     currentTimeMs += deltaMs
@@ -177,17 +179,48 @@ final class FakeClientTimers: AppductClientTimers, @unchecked Sendable {
   }
 }
 
-/// Test-only helper: yields repeatedly so `Task { await ... }` work queued by a fake timer firing
-/// (or by any other fire-and-forget hop onto the `AppductClient` actor) has a chance to run
-/// before the test asserts on the result.
-func drainPendingTasks(iterations: Int = 20) async {
-  for _ in 0..<iterations {
-    await Task.yield()
-  }
-  try? await Task.sleep(nanoseconds: 5_000_000)
-  for _ in 0..<iterations {
-    await Task.yield()
-  }
+/// Thrown by `waitUntil` (right after it records an `XCTFail`) when its condition never held.
+struct WaitTimedOutError: Error, CustomStringConvertible {
+  let description: String
+}
+
+/// Polls `condition` until it holds, or fails the test and throws once `timeout` elapses.
+///
+/// This replaces the fixed `Task.yield()` draining these tests used to do (issue #61):
+/// `Task.yield()` is a scheduling hint, not a wait, so a fixed number of yields guarantees
+/// neither that the `AppductClient` actor has reached the point a simulated event needs (a
+/// handshake actually in flight, say -- a `session_ack` that arrives before `transport.connect`
+/// has been called is dropped as stray) nor that it has already applied an event a test is about
+/// to assert on. Every wait is therefore expressed as an *observable* condition -- a transport
+/// counter, a frame on the wire, an actor state snapshot, a collected listener event -- and is
+/// bounded, so a genuinely broken expectation fails with a readable message instead of hanging.
+///
+/// `condition` may be sync or async (a sync closure literal converts implicitly).
+func waitUntil(
+  _ what: String,
+  timeout: TimeInterval = 5,
+  pollIntervalMs: UInt64 = 2,
+  file: StaticString = #filePath,
+  line: UInt = #line,
+  _ condition: () async -> Bool
+) async throws {
+  let deadline = Date().addingTimeInterval(timeout)
+  repeat {
+    if await condition() { return }
+    try? await Task.sleep(nanoseconds: pollIntervalMs * 1_000_000)
+  } while Date() < deadline
+  if await condition() { return }
+
+  let message = "Timed out after \(timeout)s waiting for: \(what)"
+  XCTFail(message, file: file, line: line)
+  throw WaitTimedOutError(description: message)
+}
+
+/// Bounded wait used *only* for negative assertions ("and then nothing else happens"), where
+/// there is by definition no condition to poll for: gives whatever work is queued on the client
+/// actor a real chance to run, so the follow-up assertion is meaningful rather than merely early.
+func allowQueuedWorkToRun(ms: UInt64 = 150) async {
+  try? await Task.sleep(nanoseconds: ms * 1_000_000)
 }
 
 /// A one-shot async gate a test can hold open until it is ready for a handler to proceed --
