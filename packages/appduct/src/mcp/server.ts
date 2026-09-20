@@ -334,9 +334,26 @@ const proxiedToolResultContent = (tool: NamespacedTool, result: unknown): CallTo
   return toolSuccessContent(result);
 };
 
+/**
+ * How this server opens a daemon connection. Both the startup stream and each short-lived
+ * progress stream go through it, so a caller can put something other than a real daemon on the
+ * other end. The only production implementation is {@link openDaemonStream}; the seam exists so
+ * the behaviour that is purely this module's own — name mapping, schema degradation, consent
+ * flags, namespacing, `list_changed` — can be tested without a TLS listener, a pidfile and a
+ * subprocess, none of which those behaviours depend on.
+ */
+export type OpenDaemonStreamFn = (options: {
+  stateDir: string;
+  spawn?: SpawnFn;
+  checkVersion?: VersionCheckOptions;
+}) => Promise<DaemonStream>;
+
 export type CreateMcpServerOptions = {
   stateDir: string;
   spawn?: SpawnFn;
+  /** Overrides how daemon connections are opened; defaults to {@link openDaemonStream}. Test-only
+   * seam — every real caller (`cli/mcp-command.ts`) leaves it unset. */
+  openStream?: OpenDaemonStreamFn;
   /**
    * Daemon/CLI version check (issue #30), applied to the startup stream only — never to the
    * short-lived progress streams below, which must never restart the daemon out from under a call
@@ -371,10 +388,11 @@ export type McpServerHandle = {
 };
 
 export const createMcpServer = async (options: CreateMcpServerOptions): Promise<McpServerHandle> => {
+  const openStream = options.openStream ?? openDaemonStream;
   let stream: DaemonStream;
 
   try {
-    stream = await openDaemonStream({
+    stream = await openStream({
       stateDir: options.stateDir,
       spawn: options.spawn,
       checkVersion: options.checkVersion,
@@ -501,7 +519,7 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
     // `tool_call_started` it sees for this tool name is unambiguously this call — the daemon only
     // reveals `callId` once the call is already in flight (ARCHITECTURE.md §5's `ToolsCallResult`
     // doc comment), so this is the only way to correlate it before the call finishes.
-    const progressStream = await openDaemonStream({ stateDir: options.stateDir, spawn: options.spawn });
+    const progressStream = await openStream({ stateDir: options.stateDir, spawn: options.spawn });
 
     try {
       await progressStream.call(RPC_METHODS.eventsSubscribe, {
