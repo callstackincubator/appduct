@@ -1,6 +1,11 @@
 ---
 // Splash-page hero in the keynote "cover" style: mono eyebrow, a big light two-beat headline,
-// a short lede, and square CTAs. `hero.title` may carry an <em> for the accented second beat.
+// a short lede, square CTAs — and, beside them, a diagram of a call travelling from a caller
+// through the appduct service into a running app. `hero.title` may carry an <em> for the
+// accented second beat.
+//
+// The hero is sized to the first viewport: the nav height and the content panel's own padding
+// come off 100svh, so the rail at the bottom lands just above the fold.
 import { Icon } from '@astrojs/starlight/components';
 
 const { hero } = Astro.locals.starlightRoute.entry.data;
@@ -8,35 +13,211 @@ const { title = '', tagline, actions = [] } = hero ?? {};
 ---
 
 <header class="cs-hero">
-	<p class="cs-eyebrow">Open source · React Native · iOS · Android</p>
-	<h1 class="cs-hero-title" set:html={title} />
-	{tagline && <p class="cs-hero-lede" set:html={tagline} />}
-	{
-		actions.length > 0 && (
-			<div class="cs-hero-actions">
-				{actions.map(({ text, link, variant, icon, attrs }) => (
-					<a href={link} class:list={['cs-button', `cs-button--${variant}`]} {...attrs}>
-						{text}
-						{icon?.type === 'icon' && <Icon name={icon.name} size="1em" />}
-					</a>
-				))}
-			</div>
-		)
-	}
+	<div class="cs-hero-grid">
+		<div class="cs-hero-copy">
+			<p class="cs-eyebrow">Open source · React Native · iOS · Android</p>
+			<h1 class="cs-hero-title" set:html={title} />
+			{tagline && <p class="cs-hero-lede" set:html={tagline} />}
+			{
+				actions.length > 0 && (
+					<div class="cs-hero-actions">
+						{actions.map(({ text, link, variant, icon, attrs }) => (
+							<a href={link} class:list={['cs-button', `cs-button--${variant}`]} {...attrs}>
+								{text}
+								{icon?.type === 'icon' && <Icon name={icon.name} size="1em" />}
+							</a>
+						))}
+					</div>
+				)
+			}
+		</div>
+
+		<!--
+			The diagram. Everything is one SVG on a fixed viewBox so the hairlines, the mono
+			labels and the phone stay in proportion at every width, and so the travelling dot can
+			be painted *under* the service box — it disappears while it crosses it.
+		-->
+		<div class="cs-stage">
+			<svg
+				class="cs-scene"
+				viewBox="0 0 600 440"
+				role="img"
+				aria-labelledby="cs-scene-title cs-scene-desc"
+				preserveAspectRatio="xMidYMid meet"
+			>
+				<title id="cs-scene-title">How Appduct works</title>
+				<desc id="cs-scene-desc">
+					A test run, a terminal and an agent each call a function registered inside a running
+					React Native app — login, seed_cart and open_screen — through the appduct service. The
+					app reacts to each call. Only the three registered tools are reachable.
+				</desc>
+
+				<!-- ============ Callers ============ -->
+				<g id="cs-caller-test">
+					<rect class="d-box" x="16.5" y="50.5" width="180" height="64"></rect>
+					<text class="d-label d-fg" x="32" y="72">Test run</text>
+					<text class="d-sub d-faint" x="32" y="88">checkout.test.ts</text>
+					<text class="d-sub d-accent d-call" id="cs-call-test" x="32" y="106">login("u_42")</text>
+				</g>
+				<g id="cs-caller-cli">
+					<rect class="d-box" x="16.5" y="203.5" width="180" height="64"></rect>
+					<text class="d-label d-fg" x="32" y="225">Terminal</text>
+					<text class="d-sub d-faint" x="32" y="241">appduct invoke</text>
+					<text class="d-sub d-accent d-call" id="cs-call-cli" x="32" y="259">seed_cart({'{items:3}'})</text>
+				</g>
+				<g id="cs-caller-agent">
+					<rect class="d-box" x="16.5" y="356.5" width="180" height="64"></rect>
+					<text class="d-label d-fg" x="32" y="378">Agent</text>
+					<text class="d-sub d-faint" x="32" y="394">claude code · mcp</text>
+					<text class="d-sub d-accent d-call" id="cs-call-agent" x="32" y="412">
+						open_screen("checkout")
+					</text>
+				</g>
+
+				<!-- ============ Wires ============ -->
+				<!-- One unbroken path per caller, all the way to the app. The stretch that crosses
+				     the service box is covered by that box's own fill. -->
+				<path class="d-wire" d="M196.5 82.5 H225.5 V235.5 H404.5"></path>
+				<path class="d-wire" d="M196.5 235.5 H404.5"></path>
+				<path class="d-wire" d="M196.5 388.5 H225.5 V235.5 H404.5"></path>
+
+				<!-- The dot's halo goes under the flow line, so the line stays unbroken through it. -->
+				<circle class="d-glow" id="cs-packet-glow" r="7" cx="-20" cy="-20"></circle>
+
+				<path class="d-flow" id="cs-flow-test" d="M196.5 82.5 H225.5 V235.5 H404.5"></path>
+				<path class="d-flow" id="cs-flow-cli" d="M196.5 235.5 H404.5"></path>
+				<path class="d-flow" id="cs-flow-agent" d="M196.5 388.5 H225.5 V235.5 H404.5"></path>
+
+				<!-- The dot sits here in the paint order: the service box and the app cover it as it
+				     passes through them. -->
+				<circle class="d-packet" id="cs-packet" r="3.5" cx="-20" cy="-20"></circle>
+
+				<!-- ============ The service ============ -->
+				<g>
+					<rect class="d-box" id="cs-hub" x="254.5" y="211.5" width="92" height="48"></rect>
+					<text class="d-label d-fg" x="300" y="234" text-anchor="middle">appduct</text>
+					<text class="d-sub d-faint" x="300" y="249" text-anchor="middle">service</text>
+				</g>
+
+				<!-- ============ The app ============ -->
+				<g>
+					<rect class="d-box" id="cs-app" x="404.5" y="40.5" width="180" height="390"></rect>
+					<rect class="d-screen" x="414.5" y="50.5" width="160" height="370"></rect>
+
+					<text
+						class="d-ui d-fg"
+						id="cs-app-title"
+						x="428"
+						y="76"
+						font-size="16"
+						letter-spacing="-0.02em">Cart</text
+					>
+					<text class="d-sub d-faint" id="cs-app-guest" x="428" y="91">guest</text>
+					<g id="cs-app-user" class="d-state">
+						<text class="d-sub d-accent" x="428" y="91">u_42 · signed in</text>
+					</g>
+					<rect class="d-hair" x="544.5" y="62.5" width="22" height="18" fill="none"></rect>
+					<text class="d-mono d-fg" id="cs-app-badge" x="555.5" y="75.5" text-anchor="middle" font-size="10"
+						>0</text
+					>
+					<line class="d-hair" x1="414.5" y1="100.5" x2="574.5" y2="100.5"></line>
+
+					<g id="cs-app-empty" class="d-state is-on">
+						<text class="d-sub d-faint" x="428" y="136">Nothing in the cart</text>
+					</g>
+
+					<g id="cs-row-0" class="d-row">
+						<line class="d-hair" x1="428.5" y1="112.5" x2="560.5" y2="112.5"></line>
+						<text class="d-ui d-fg" x="428" y="132" font-size="12.5">Runner Low</text>
+						<text class="d-mono d-muted" x="560" y="132" text-anchor="end" font-size="10.5">$120</text>
+					</g>
+					<g id="cs-row-1" class="d-row">
+						<line class="d-hair" x1="428.5" y1="148.5" x2="560.5" y2="148.5"></line>
+						<text class="d-ui d-fg" x="428" y="168" font-size="12.5">Cotton Tee</text>
+						<text class="d-mono d-muted" x="560" y="168" text-anchor="end" font-size="10.5">$32</text>
+					</g>
+					<g id="cs-row-2" class="d-row">
+						<line class="d-hair" x1="428.5" y1="184.5" x2="560.5" y2="184.5"></line>
+						<text class="d-ui d-fg" x="428" y="204" font-size="12.5">Field Cap</text>
+						<text class="d-mono d-muted" x="560" y="204" text-anchor="end" font-size="10.5">$24</text>
+					</g>
+
+					<g id="cs-app-checkout" class="d-state">
+						<line class="d-hair" x1="428.5" y1="224.5" x2="560.5" y2="224.5"></line>
+						<text class="d-micro d-faint" x="428" y="243">Total</text>
+						<text class="d-ui d-fg" x="428" y="272" font-size="26" letter-spacing="-0.04em">$176.00</text>
+						<rect class="d-pay" x="428" y="282" width="132" height="30"></rect>
+						<text class="d-micro d-on-accent" x="494" y="301" text-anchor="middle">Pay now</text>
+					</g>
+
+					<!-- What the app made callable. Nothing outside this list is reachable. -->
+					<line class="d-hair" x1="414.5" y1="326.5" x2="574.5" y2="326.5"></line>
+					<text class="d-micro d-faint" x="428" y="344">Appduct · 3 tools</text>
+					<g id="cs-tool-login">
+						<rect class="d-tool-dot" x="428" y="358" width="6" height="6"></rect>
+						<text class="d-mono d-tool-name" x="444" y="364">login</text>
+					</g>
+					<g id="cs-tool-seed_cart">
+						<rect class="d-tool-dot" x="428" y="380" width="6" height="6"></rect>
+						<text class="d-mono d-tool-name" x="444" y="386">seed_cart</text>
+					</g>
+					<g id="cs-tool-open_screen">
+						<rect class="d-tool-dot" x="428" y="402" width="6" height="6"></rect>
+						<text class="d-mono d-tool-name" x="444" y="408">open_screen</text>
+					</g>
+				</g>
+			</svg>
+		</div>
+	</div>
+
+	<p class="cs-hero-rail">
+		<span><span class="cs-prompt" aria-hidden="true">$</span>npm install -g appduct</span>
+		<span class="cs-scroll" aria-hidden="true">Why you’d want this ↓</span>
+	</p>
 </header>
 
 <style>
+	/*
+	 * The diagram needs opaque fills — the travelling dot hides behind the service box and the
+	 * app — so it carries solid equivalents of the theme's alpha hairlines. Dark is the default,
+	 * light is the override, matching theme.css.
+	 */
 	.cs-hero {
-		padding-top: clamp(3rem, 9vw, 7.5rem);
+		--d-line: #292929;
+		--d-line-soft: #171717;
+		--d-wash: #0a0a0a;
+		--d-live-wash: #120e1a;
+		--d-halo: #25124a;
+
+		display: flex;
+		flex-direction: column;
+		min-height: calc(100svh - var(--sl-nav-height) - 3rem);
 	}
+	:global(:root[data-theme='light']) .cs-hero {
+		--d-line: #dbdbdb;
+		--d-line-soft: #ebebeb;
+		--d-wash: #fafafa;
+		--d-live-wash: #f2eaff;
+		--d-halo: #ece2ff;
+	}
+
+	.cs-hero-grid {
+		flex: 1;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+		align-items: center;
+		gap: clamp(2rem, 4vw, 4.5rem);
+		padding-block: clamp(1.5rem, 3vh, 3rem);
+	}
+
 	.cs-hero-title {
-		margin: 1.5rem 0 0;
-		max-width: 13ch;
+		margin: 1.25rem 0 0;
+		max-width: 14ch;
 		font-family: var(--cs-font-display);
 		font-weight: 400;
-		font-size: clamp(3rem, 0.9rem + 8.4vw, 8.25rem);
-		line-height: 0.97;
-		letter-spacing: -0.06em;
+		font-size: clamp(2.5rem, 0.9rem + 4.1vw, 5rem);
+		line-height: 0.98;
+		letter-spacing: -0.055em;
 		color: var(--sl-color-white);
 		text-wrap: balance;
 	}
@@ -45,9 +226,9 @@ const { title = '', tagline, actions = [] } = hero ?? {};
 		color: var(--cs-accent);
 	}
 	.cs-hero-lede {
-		margin: clamp(1.75rem, 3vw, 2.5rem) 0 0;
-		max-width: 38rem;
-		font-size: clamp(1.125rem, 1rem + 0.4vw, 1.3125rem);
+		margin: clamp(1.25rem, 2.2vh, 2rem) 0 0;
+		max-width: 34rem;
+		font-size: clamp(1rem, 0.95rem + 0.25vw, 1.1875rem);
 		line-height: 1.5;
 		color: var(--cs-muted);
 	}
@@ -55,6 +236,388 @@ const { title = '', tagline, actions = [] } = hero ?? {};
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.75rem;
-		margin-top: 2.5rem;
+		margin-top: clamp(1.5rem, 3vh, 2.25rem);
+	}
+
+	/* The install line closes the first screen. */
+	.cs-hero-rail {
+		display: flex;
+		align-items: center;
+		gap: 1.5rem;
+		margin: 0;
+		padding-block: 0.875rem;
+		border-top: 1px solid var(--cs-line);
+		font-family: var(--cs-font-mono);
+		font-size: 0.8125rem;
+		color: var(--cs-muted);
+	}
+	.cs-prompt {
+		color: var(--cs-accent);
+		margin-inline-end: 0.5rem;
+	}
+	.cs-scroll {
+		margin-inline-start: auto;
+		font-size: 0.6875rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--sl-color-gray-4);
+		white-space: nowrap;
+	}
+
+	/* ---------- Diagram ---------- */
+	.cs-stage {
+		min-width: 0;
+	}
+	.cs-scene {
+		display: block;
+		width: 100%;
+		max-width: 100%;
+		height: auto;
+		max-height: calc(100svh - 11rem);
+	}
+
+	.d-label {
+		font-family: var(--cs-font-mono);
+		font-size: 11px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+	.d-sub,
+	.d-micro {
+		font-family: var(--cs-font-mono);
+		font-size: 9.5px;
+		letter-spacing: 0.06em;
+	}
+	.d-micro {
+		font-size: 8.5px;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+	.d-mono {
+		font-family: var(--cs-font-mono);
+		font-size: 11px;
+		letter-spacing: 0.01em;
+	}
+	.d-ui {
+		font-family: var(--cs-font-display);
+		font-weight: 400;
+	}
+	.d-fg {
+		fill: var(--sl-color-white);
+	}
+	.d-muted {
+		fill: var(--cs-muted);
+	}
+	.d-faint {
+		fill: var(--sl-color-gray-4);
+	}
+	.d-accent {
+		fill: var(--cs-accent);
+	}
+	.d-on-accent {
+		fill: #ffffff;
+	}
+
+	.d-box {
+		fill: var(--d-wash);
+		stroke: var(--d-line);
+		stroke-width: 1;
+		transition:
+			stroke 0.25s ease,
+			fill 0.25s ease;
+	}
+	.d-box.is-live {
+		stroke: var(--cs-accent);
+		fill: var(--d-live-wash);
+	}
+	/* The app is large, so a filled wash would read as a slab: it takes the accent edge only. */
+	#cs-app.is-live {
+		fill: var(--d-wash);
+	}
+	.d-screen {
+		fill: none;
+		stroke: var(--d-line-soft);
+		stroke-width: 1;
+	}
+	.d-hair {
+		stroke: var(--d-line-soft);
+		stroke-width: 1;
+	}
+	.d-wire {
+		fill: none;
+		stroke: var(--d-line);
+		stroke-width: 1;
+	}
+	/* One live colour on the wires: the theme's accent, so the signal reads at the same weight
+	   on white and on black. */
+	.d-flow {
+		fill: none;
+		stroke: var(--cs-accent);
+		stroke-width: 1.5;
+		opacity: 0;
+		transition: opacity 0.35s ease;
+	}
+	.d-packet {
+		fill: var(--cs-accent);
+		opacity: 0;
+	}
+	.d-glow {
+		fill: var(--d-halo);
+		opacity: 0;
+	}
+	.d-pay {
+		fill: var(--cs-purple);
+	}
+
+	/* The call each source is sending, revealed only while that source is live. */
+	.d-call {
+		opacity: 0;
+		transition: opacity 0.25s ease;
+	}
+	.d-call.is-on {
+		opacity: 1;
+	}
+
+	/* Screens of the app, cross-faded by the timeline. */
+	.d-state {
+		opacity: 0;
+		transition: opacity 0.4s ease;
+	}
+	.d-state.is-on {
+		opacity: 1;
+	}
+	.d-row {
+		opacity: 0;
+		transform: translateX(6px);
+		transition:
+			opacity 0.35s ease,
+			transform 0.35s ease;
+	}
+	.d-row.is-on {
+		opacity: 1;
+		transform: none;
+	}
+	.d-tool-dot {
+		fill: var(--sl-color-gray-4);
+		transition: fill 0.25s ease;
+	}
+	.d-tool-name {
+		fill: var(--cs-muted);
+		transition: fill 0.25s ease;
+	}
+	.is-active .d-tool-dot {
+		fill: var(--cs-accent);
+	}
+	.is-active .d-tool-name {
+		fill: var(--sl-color-white);
+	}
+
+	/* Stacked: copy first, then the diagram, and the hero grows past one screen. */
+	@media (max-width: 62rem) {
+		.cs-hero-grid {
+			grid-template-columns: minmax(0, 1fr);
+			align-content: center;
+			gap: 2rem;
+		}
+		.cs-hero-title {
+			max-width: 16ch;
+		}
+		.cs-scene {
+			max-height: 52svh;
+		}
+		.cs-scroll {
+			display: none;
+		}
+	}
+	/* On a phone the scene would scale to about 0.6, which puts its mono labels under 6px —
+	   unreadable. The copy and the install line carry the hero there instead. */
+	@media (max-width: 50rem) {
+		.cs-hero {
+			min-height: 0;
+		}
+		.cs-stage {
+			display: none;
+		}
 	}
 </style>
+
+<script>
+	// Drives the hero diagram: three beats inside an eight-second loop. Each beat sends one
+	// call from one source, through the service, into the app; the app reacts, then returns to
+	// its resting state and the next source takes a turn.
+	const hero = document.querySelector<SVGSVGElement>('.cs-scene');
+
+	if (hero) {
+		const el = <T extends Element>(id: string) => document.getElementById(id) as unknown as T;
+		const packet = el<SVGCircleElement>('cs-packet');
+		const glow = el<SVGCircleElement>('cs-packet-glow');
+		const SOURCES = ['test', 'cli', 'agent'] as const;
+		const TOOLS = ['login', 'seed_cart', 'open_screen'] as const;
+
+		const steps = [
+			{
+				source: 'test',
+				tool: 'login',
+				apply: () => {
+					el<SVGTextElement>('cs-app-guest').style.opacity = '0';
+					el<SVGGElement>('cs-app-user').classList.add('is-on');
+				},
+			},
+			{
+				source: 'cli',
+				tool: 'seed_cart',
+				apply: () => {
+					el<SVGGElement>('cs-app-empty').classList.remove('is-on');
+					[0, 1, 2].forEach((i) =>
+						setTimeout(() => el<SVGGElement>(`cs-row-${i}`).classList.add('is-on'), i * 90),
+					);
+					let n = 0;
+					const tick = setInterval(() => {
+						n += 1;
+						el<SVGTextElement>('cs-app-badge').textContent = String(n);
+						if (n >= 3) clearInterval(tick);
+					}, 90);
+				},
+			},
+			{
+				source: 'agent',
+				tool: 'open_screen',
+				apply: () => {
+					el<SVGTextElement>('cs-app-title').textContent = 'Checkout';
+					el<SVGGElement>('cs-app-empty').classList.remove('is-on');
+					el<SVGGElement>('cs-app-checkout').classList.add('is-on');
+				},
+			},
+		];
+
+		// The app at rest — where every beat starts and ends.
+		const rest = () => {
+			el<SVGTextElement>('cs-app-title').textContent = 'Cart';
+			el<SVGTextElement>('cs-app-guest').style.opacity = '1';
+			el<SVGGElement>('cs-app-user').classList.remove('is-on');
+			el<SVGGElement>('cs-app-empty').classList.add('is-on');
+			el<SVGGElement>('cs-app-checkout').classList.remove('is-on');
+			[0, 1, 2].forEach((i) => el<SVGGElement>(`cs-row-${i}`).classList.remove('is-on'));
+			el<SVGTextElement>('cs-app-badge').textContent = '0';
+		};
+
+		const clearFlow = () => {
+			SOURCES.forEach((s) => {
+				el<SVGGElement>(`cs-caller-${s}`).querySelector('.d-box')?.classList.remove('is-live');
+				el<SVGTextElement>(`cs-call-${s}`).classList.remove('is-on');
+				el<SVGPathElement>(`cs-flow-${s}`).style.opacity = '0';
+			});
+			TOOLS.forEach((t) => el<SVGGElement>(`cs-tool-${t}`).classList.remove('is-active'));
+			el<SVGRectElement>('cs-hub').classList.remove('is-live');
+			el<SVGRectElement>('cs-app').classList.remove('is-live');
+			packet.style.opacity = '0';
+			glow.style.opacity = '0';
+		};
+
+		// Draws the accent overlay from the wire's start up to p.
+		const drawFlow = (path: SVGPathElement, p: number) => {
+			const len = path.getTotalLength();
+			path.style.opacity = '1';
+			path.style.strokeDasharray = String(len);
+			path.style.strokeDashoffset = String(len * (1 - p));
+		};
+
+		// Returns where the dot landed, so the timeline knows what it is passing.
+		const movePacket = (path: SVGPathElement, p: number) => {
+			const pt = path.getPointAtLength(p * path.getTotalLength());
+			[packet, glow].forEach((c) => {
+				c.setAttribute('cx', String(pt.x));
+				c.setAttribute('cy', String(pt.y));
+				c.style.opacity = '1';
+			});
+			return pt;
+		};
+
+		const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+		const span = (t: number, a: number, b: number) => Math.min(1, Math.max(0, (t - a) / (b - a)));
+
+		const STEP_MS = 2650;
+		const LEAD_IN = 140;
+		const SPEED = 0.38; // viewBox units per millisecond, so a longer path simply takes longer
+		const RESET_AT = STEP_MS - 360;
+		const HUB_LEFT = 254.5;
+
+		if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			// One call, shown landed. Nothing moves.
+			el<SVGGElement>('cs-app-empty').classList.remove('is-on');
+			[0, 1, 2].forEach((i) => el<SVGGElement>(`cs-row-${i}`).classList.add('is-on'));
+			el<SVGTextElement>('cs-app-badge').textContent = '3';
+			el<SVGGElement>('cs-tool-seed_cart').classList.add('is-active');
+			el<SVGGElement>('cs-caller-cli').querySelector('.d-box')?.classList.add('is-live');
+			el<SVGRectElement>('cs-hub').classList.add('is-live');
+			el<SVGRectElement>('cs-app').classList.add('is-live');
+			el<SVGPathElement>('cs-flow-cli').style.opacity = '1';
+			el<SVGTextElement>('cs-call-cli').classList.add('is-on');
+		} else {
+			let index = 0;
+			let stepStart = performance.now() + 500;
+			let phase = 0; // 0 before the beat, 1 in flight, 2 handler ran, 3 back at rest
+
+			const frame = (now: number) => {
+				const step = steps[index]!;
+				const elapsed = now - stepStart;
+
+				if (elapsed < 0) {
+					requestAnimationFrame(frame);
+					return;
+				}
+
+				const wire = el<SVGPathElement>(`cs-flow-${step.source}`);
+				const arrivesAt = LEAD_IN + wire.getTotalLength() / SPEED;
+
+				if (phase === 0) {
+					phase = 1;
+					clearFlow();
+					rest();
+					el<SVGTextElement>(`cs-call-${step.source}`).classList.add('is-on');
+					el<SVGGElement>(`cs-caller-${step.source}`)
+						.querySelector('.d-box')
+						?.classList.add('is-live');
+					el<SVGGElement>(`cs-tool-${step.tool}`).classList.add('is-active');
+				}
+
+				// In flight, without stopping: the dot is painted under the service box, so it
+				// vanishes while it is crossing it.
+				if (elapsed < arrivesAt) {
+					const p = ease(span(elapsed, LEAD_IN, arrivesAt));
+					drawFlow(wire, p);
+					const pt = movePacket(wire, p);
+					el<SVGRectElement>('cs-hub').classList.toggle('is-live', pt.x > HUB_LEFT - 8);
+				}
+				// Landed: the handler runs and the app changes.
+				else if (elapsed < RESET_AT) {
+					drawFlow(wire, 1);
+					packet.style.opacity = '0';
+					glow.style.opacity = '0';
+					el<SVGRectElement>('cs-hub').classList.add('is-live');
+					el<SVGRectElement>('cs-app').classList.add('is-live');
+					if (phase === 1) {
+						phase = 2;
+						step.apply();
+					}
+				}
+				// Back to rest, ready for the next source.
+				else if (phase === 2) {
+					phase = 3;
+					clearFlow();
+					rest();
+				}
+
+				if (elapsed >= STEP_MS) {
+					index = (index + 1) % steps.length;
+					stepStart = now;
+					phase = 0;
+				}
+
+				requestAnimationFrame(frame);
+			};
+
+			requestAnimationFrame(frame);
+		}
+	}
+</script>
