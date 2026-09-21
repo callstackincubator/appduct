@@ -128,6 +128,55 @@ describe("createAppductClient (bridge contract)", () => {
     expect(fake.unregisterToolCalls).toEqual(["seed_cart"]);
   });
 
+  test("registerTool puts group on the wire descriptor only when one is declared", () => {
+    const fake = createFakeNativeModule();
+    const client = createAppductClient(fake.module);
+
+    client.registerTool({
+      name: "pay",
+      description: "Pay.",
+      group: "checkout/payment",
+      handler: () => undefined,
+    });
+    client.registerTool({
+      name: "ping",
+      description: "Ping.",
+      handler: () => undefined,
+    });
+
+    expect(JSON.parse(fake.registerToolCalls[0]!)).toMatchObject({
+      name: "pay",
+      group: "checkout/payment",
+    });
+    expect(JSON.parse(fake.registerToolCalls[1]!)).not.toHaveProperty("group");
+  });
+
+  test("createToolGroup binds the group onto every registration it makes", async () => {
+    const fake = createFakeNativeModule();
+    const client = createAppductClient(fake.module);
+    const { createToolGroupFactory } = await import("../tool-group");
+
+    const registerCartTool = createToolGroupFactory((registration) =>
+      client.registerTool(registration),
+    )("cart");
+    const registration = registerCartTool({
+      name: "add_item",
+      description: "Add.",
+      handler: () => undefined,
+    });
+    registerCartTool({
+      name: "clear",
+      description: "Clear.",
+      handler: () => undefined,
+    });
+
+    const groups = fake.registerToolCalls.map((json) => JSON.parse(json).group);
+    expect(groups).toEqual(["cart", "cart"]);
+
+    registration.remove();
+    expect(fake.unregisterToolCalls).toEqual(["add_item"]);
+  });
+
   test("onToolCall dispatches to the registered handler and answers via respondToToolCall", async () => {
     const fake = createFakeNativeModule();
     fake.setSessionId("session-1");

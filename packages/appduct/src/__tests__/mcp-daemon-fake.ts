@@ -19,6 +19,7 @@
 
 import {
   RPC_METHODS,
+  summarizeToolGroups,
   type ErrorType,
   type EventNotification,
   type SessionSummary,
@@ -188,7 +189,7 @@ export const createFakeDaemon = (): FakeDaemon => {
         };
         const entries = toolsByAlias.get(resolveSession(selector).alias)!;
 
-        // The daemon's `{ tools, total }` shape: sorted by name as the daemon sorts its registry,
+        // The daemon's `{ tools, total, groups }` shape: sorted by name as the daemon sorts its registry,
         // `filter`ed on name and description, `total` counted before paging.
         const lowerFilter = filter?.toLowerCase();
         const matching = entries
@@ -203,7 +204,7 @@ export const createFakeDaemon = (): FakeDaemon => {
         const start = offset ?? 0;
         const tools = matching.slice(start, limit === undefined ? undefined : start + limit);
 
-        return { tools, total: matching.length } as TResult;
+        return { tools, total: matching.length, groups: summarizeToolGroups(entries) } as TResult;
       }
 
       if (method === RPC_METHODS.toolsCall) {

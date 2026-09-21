@@ -39,6 +39,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
 
     const names: (keyof CordierePublicApi)[] = [
       "registerTool",
+      "createToolGroup",
       "useAppductTool",
       "jsonSchema",
       "postEvent",
@@ -105,6 +106,34 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
         handler: (args) => {
           expectType<{ a: number }>(args);
         },
+      }).remove();
+    }
+
+    // A group-bound registrar infers handler args exactly like `registerTool`, and refuses a
+    // registration that tries to set its own `group`.
+    const groupFactories: CordierePublicApi["createToolGroup"][] = [
+      realModule.createToolGroup,
+      noopModule.createToolGroup,
+    ];
+
+    for (const createToolGroup of groupFactories) {
+      const registerCartTool = createToolGroup("cart");
+
+      registerCartTool({
+        name: "grouped-paired",
+        description: "d",
+        inputSchema: pairedSchema,
+        handler: (args) => {
+          expectType<{ a: number }>(args);
+        },
+      }).remove();
+
+      registerCartTool({
+        name: "grouped-override",
+        description: "d",
+        // @ts-expect-error -- the bound group cannot be overridden per registration.
+        group: "other",
+        handler: () => undefined,
       }).remove();
     }
 

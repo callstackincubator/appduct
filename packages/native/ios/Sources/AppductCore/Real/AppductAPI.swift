@@ -54,6 +54,7 @@ public final class Appduct: Sendable {
     outputSchema: [String: Any]? = nil,
     annotations: ToolAnnotations? = nil,
     timeoutMs: Int? = nil,
+    group: String? = nil,
     handler: @escaping @Sendable ([String: Any], ToolCallContext) async throws -> Any?
   ) throws -> ToolRegistration {
     let descriptor = try makeToolDescriptor(
@@ -62,7 +63,8 @@ public final class Appduct: Sendable {
       inputSchema: inputSchema,
       outputSchema: outputSchema,
       annotations: annotations,
-      timeoutMs: timeoutMs
+      timeoutMs: timeoutMs,
+      group: group
     )
 
     let coreHandler: ToolHandler = { args, context in
@@ -87,6 +89,7 @@ public final class Appduct: Sendable {
     outputSchema: [String: Any]? = nil,
     annotations: ToolAnnotations? = nil,
     timeoutMs: Int? = nil,
+    group: String? = nil,
     handler: @escaping @Sendable ([String: Any]) async throws -> Any?
   ) throws -> ToolRegistration {
     try register(
@@ -96,6 +99,7 @@ public final class Appduct: Sendable {
       outputSchema: outputSchema,
       annotations: annotations,
       timeoutMs: timeoutMs,
+      group: group,
       handler: { args, _ in try await handler(args) }
     )
   }
@@ -285,7 +289,8 @@ private func makeToolDescriptor(
   inputSchema: [String: Any]?,
   outputSchema: [String: Any]?,
   annotations: ToolAnnotations?,
-  timeoutMs: Int?
+  timeoutMs: Int?,
+  group: String?
 ) throws -> ToolDescriptor {
   func toJSONObject(_ dict: [String: Any]?, label: String) throws -> JSONObject? {
     guard let dict else { return nil }
@@ -301,7 +306,8 @@ private func makeToolDescriptor(
     inputSchema: try toJSONObject(inputSchema, label: "inputSchema"),
     outputSchema: try toJSONObject(outputSchema, label: "outputSchema"),
     annotations: annotations,
-    timeoutMs: timeoutMs
+    timeoutMs: timeoutMs,
+    group: group
   )
   try validateToolDescriptor(descriptor)
   return descriptor

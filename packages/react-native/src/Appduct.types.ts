@@ -312,6 +312,15 @@ export type AppductToolDefinition<
    * client-wide `defaultToolTimeoutMs` is deliberately never sent.
    */
   timeoutMs?: number;
+  /**
+   * The group this tool belongs to: a top-level group (`"checkout"`) or a subgroup
+   * (`"checkout/payment"`) — one or two `/`-separated segments, each `[a-zA-Z0-9_-]{1,64}`.
+   * Agents list a large app's tools one group at a time (`appduct tools --groups`, then
+   * `--group checkout`, which includes `checkout/*`). Optional; an ungrouped tool is listed under
+   * `(ungrouped)`. A malformed group makes registration throw, like a malformed `name`.
+   * `createToolGroup("checkout")` binds it for a whole feature module.
+   */
+  group?: string;
 };
 
 export type AppductToolRegistration<

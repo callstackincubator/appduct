@@ -21,10 +21,15 @@ import type {
 } from "./Appduct.types";
 import { AppductDisabledError } from "./Appduct.types";
 import type { AppductSubscription } from "./public-api";
+import { createToolGroupFactory } from "./tool-group";
 import { createUseAppductTool } from "./useAppductTool";
 
 export * from "./Appduct.types";
-export type { CordierePublicApi, AppductSubscription } from "./public-api";
+export type {
+  CordierePublicApi,
+  AppductSubscription,
+  AppductToolGroupRegistrar,
+} from "./public-api";
 export type { UseAppductToolOptions } from "./useAppductTool";
 
 const noopSubscription: AppductSubscription = { remove() {} };
@@ -45,6 +50,10 @@ export function registerTool<
  * decide how often to re-run a no-op, and the import alone would pull `schema.ts` into a bundle
  * whose whole purpose is to carry no Appduct work. */
 export const useAppductTool = createUseAppductTool(registerTool);
+
+/** Same signature as the real entry's; the bound registrar is the inert `registerTool` above, and
+ * no group is validated since nothing is ever registered. */
+export const createToolGroup = createToolGroupFactory(registerTool);
 
 /** No-op: never sends anything. */
 export async function postEvent(

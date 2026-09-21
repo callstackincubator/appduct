@@ -1,6 +1,6 @@
 import type { ErrorType } from "./errors.js";
 import type { AgentEndpoint } from "./transport.js";
-import type { ToolDescriptor } from "./tool-descriptor.js";
+import type { ToolDescriptor, ToolGroupSummary } from "./tool-descriptor.js";
 
 /** Control-plane RPC method name constants (ARCHITECTURE.md §5). Types only — no transport here. */
 export const RPC_METHODS = {
@@ -144,6 +144,10 @@ export type SessionsRevokeResult = { ok: true };
 export const MAX_TOOLS_FILTER_LENGTH = 256;
 
 export type ToolsListParams = SessionSelectorParams & {
+  /** Only tools in this group (PROTOCOL.md §5 group syntax), matched by segment: `checkout`
+   * includes every `checkout/*` subgroup, `checkout/payment` is exactly that subgroup, and
+   * `checkout` never matches `checkoutx`. Case-sensitive. */
+  group?: string;
   /** Case-insensitive substring match against name and description. */
   filter?: string;
   /** Page size; omitted means everything from `offset` on. */
@@ -162,14 +166,22 @@ export type ToolsListEntry = ToolDescriptor & {
 
 /**
  * `tools.list`'s result: the registry sorted by `name` (plain code-point order, so it is
- * deterministic across locales), `filter`ed, then paged with `limit`/`offset` — `total` is the
- * count *after* filtering but *before* paging, so a caller (the CLI) can say how many tools were
- * left out of the page it got back.
+ * deterministic across locales), narrowed to `group`, `filter`ed, then paged with `limit`/`offset`
+ * — `total` is the count *after* the group and filter but *before* paging, so a caller (the CLI)
+ * can say how many tools were left out of the page it got back.
  */
 export type ToolsListResult = {
   tools: ToolsListEntry[];
-  /** Matching tools before `limit`/`offset` were applied. */
+  /** Tools matching `group` and `filter`, before `limit`/`offset` were applied. */
   total: number;
+  /**
+   * The session's groups with tool counts, over the whole registry — never narrowed by `group`,
+   * `filter`, `limit` or `offset`, so a caller can always see what there is to narrow to. One
+   * entry per top-level group (its `total` includes its subgroups), one per subgroup, and a
+   * `group: null` entry for ungrouped tools when there are any. Sorted by group path with a parent
+   * right before its subgroups, `null` last. Empty for an empty registry.
+   */
+  groups: ToolGroupSummary[];
 };
 
 export type ToolsCallParams = SessionSelectorParams & {

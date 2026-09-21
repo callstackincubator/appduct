@@ -87,7 +87,7 @@ All of these throw a `TypeError` at registration naming what to fix.
 
 ## Registration is per mount, not per render
 
-The hook registers once when the component mounts and re-registers only when something that changes the registration itself changed: `name`, `description`, the exported input/output JSON Schemas, `annotations`, `timeoutMs`, or `enabled`. Re-rendering the component — including on every keystroke of some unrelated state — sends nothing over the wire.
+The hook registers once when the component mounts and re-registers only when something that changes the registration itself changed: `name`, `description`, the exported input/output JSON Schemas, `annotations`, `timeoutMs`, `group`, or `enabled`. Re-rendering the component — including on every keystroke of some unrelated state — sends nothing over the wire and does not make agents re-fetch `tools/list`.
 
 **Your handler is always fresh.** The hook registers a stable wrapper that forwards to the handler from the latest render, so a handler that closes over component state sees the current value on the next call without being re-registered and without `useRef` workarounds:
 
@@ -112,6 +112,35 @@ Because exportable schemas are compared by their *exported* JSON Schema, the reg
 **Two mounted hooks registering the same tool name** are not a supported configuration (the registry dev-warns and the later registration overwrites the earlier). One consequence is worth knowing: when the later hook unmounts, the earlier one no longer re-claims the name on its next render, so the tool stays unregistered until that hook re-registers for its own reasons. Give each tool one owner.
 
 **`deps` is an optional, advanced override.** Passing it replaces the derived key entirely with `useEffect`'s own semantics (`enabled` is still appended), which is occasionally useful — for example, forcing a re-registration on something the descriptor doesn't capture. Most call sites should simply omit it. Pass it consistently if you pass it at all: alternating between passing `deps` and omitting it changes the dependency-array length between renders, which React warns about, exactly as it does for a hand-written `useEffect`.
+
+## Group tools in a large app
+
+Once your app registers more tools than fit on a screen, give each one a `group`. An agent then runs `appduct tools --groups` to see your app's areas, and `appduct tools --group cart` to list one of them, instead of guessing words to `--filter` on.
+
+```ts
+useAppductTool({
+  name: "add_item",
+  description: "Add a product to the cart",
+  group: "cart",
+  inputSchema: z.object({ sku: z.string(), quantity: z.number() }),
+  handler: async ({ sku, quantity }) => cart.add(sku, quantity),
+});
+```
+
+A group is a top-level name (`cart`) or one subgroup below it (`checkout/payment`). Each part uses the same characters as a tool name (letters, digits, `_` and `-`, at most 64). Nothing deeper than one subgroup is allowed. Add a subgroup only when a group itself outgrows a screen: `appduct tools --group checkout` lists `checkout` together with every `checkout/...` subgroup, and `--group checkout/payment` lists only that subgroup.
+
+To register several tools in one group without repeating its name, bind it once with `createToolGroup`:
+
+```ts
+import { createToolGroup } from "@appduct/react-native";
+
+const registerCartTool = createToolGroup("cart");
+
+registerCartTool({ name: "add_item", description: "Add a product to the cart", handler: addItem });
+registerCartTool({ name: "clear_cart", description: "Remove every item from the cart", handler: clearCart });
+```
+
+A malformed group (`"checkout/"`, `"a/b/c"`, `"check out"`) makes the registration throw, like a malformed tool name. Groups only change how `appduct tools` lists your tools. They don't change tool names, how tools are called, or what an MCP client sees.
 
 ## Make the input schema accept an object
 

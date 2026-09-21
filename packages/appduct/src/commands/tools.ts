@@ -1,7 +1,8 @@
 /**
- * `appduct tools` (ARCHITECTURE.md §10): `tools [selector] [--full] [--filter <text>] [--limit
- * <n>] [--offset <n>]` lists tools for a session; `tools [selector] <name>` shows one tool's full
- * schema/annotations.
+ * `appduct tools` (ARCHITECTURE.md §10): `tools [selector] [--full] [--group <name>] [--filter
+ * <text>] [--limit <n>] [--offset <n>]` lists tools for a session; `tools [selector] --groups`
+ * lists only the session's groups with their tool counts; `tools [selector] <name>` shows one
+ * tool's full schema/annotations.
  *
  * The command table gives both forms a leading optional `[selector]`, which makes a single
  * positional argument inherently ambiguous (is it the selector, or the tool name in `tools <name>`
@@ -10,20 +11,25 @@
  * exists there (or the implicit selector doesn't resolve, e.g. `ambiguous_session`), fall back to
  * treating it as a selector and list that session's tools instead.
  *
- * `--filter`/`--limit`/`--offset` only ever reach the daemon on a *listing* request: the detail
+ * `--group`/`--filter`/`--limit`/`--offset` only ever reach the daemon on a *listing* request: the detail
  * path (an explicit `<name>`, or the ambiguous single-arg probe above) always asks for the whole,
  * unpaged registry, so a name lookup can never miss a tool that paging would have left off a page.
  */
 
 import { RPC_METHODS, type ToolDescriptor, type ToolsListResult } from "@appduct/shared";
 
-import type { CliResult, ToolsCommandData, ToolsListing } from "../cli/result-types.js";
+import type { CliResult, ToolGroupsListing, ToolsCommandData, ToolsListing } from "../cli/result-types.js";
 import { usageError } from "../errors.js";
 import { callDaemon, DaemonRpcError, type SpawnFn } from "../rpc/client.js";
 
 export type ToolsCommandOptions = {
   selector?: string;
   name?: string;
+  /** Only tools in this group (`checkout` includes `checkout/*`). Listing only. */
+  group?: string;
+  /** List the session's groups with tool counts instead of its tools. Listing only, and
+   * exclusive with every other listing flag. */
+  groups?: boolean;
   /** Case-insensitive substring match against name and description. Listing only. */
   filter?: string;
   /** Page size. Listing only. */
@@ -37,7 +43,7 @@ export type ToolsCommandContext = {
   spawn?: SpawnFn;
 };
 
-type ListParams = { filter?: string; limit?: number; offset?: number };
+type ListParams = { group?: string; filter?: string; limit?: number; offset?: number };
 
 const listTools = (
   selector: string | undefined,
@@ -56,7 +62,21 @@ const findTool = (tools: ToolDescriptor[], name: string): ToolDescriptor | undef
 };
 
 const hasPagingOptions = (options: ToolsCommandOptions): boolean => {
-  return options.filter !== undefined || options.limit !== undefined || options.offset !== undefined;
+  return (
+    options.group !== undefined ||
+    options.filter !== undefined ||
+    options.limit !== undefined ||
+    options.offset !== undefined
+  );
+};
+
+const hasListingOnlyOptions = (options: ToolsCommandOptions): boolean => {
+  return hasPagingOptions(options) || options.groups === true;
+};
+
+/** Only the daemon-bound listing params — never `selector`/`name`/`groups`. */
+const toListParams = (options: ToolsCommandOptions): ListParams => {
+  return { group: options.group, filter: options.filter, limit: options.limit, offset: options.offset };
 };
 
 /** Echoes back only the paging/filter inputs actually given, alongside the daemon's result — the
@@ -65,6 +85,7 @@ const hasPagingOptions = (options: ToolsCommandOptions): boolean => {
 const toListing = (result: ToolsListResult, params: ListParams): ToolsListing => {
   return {
     ...result,
+    ...(params.group !== undefined ? { group: params.group } : {}),
     ...(params.filter !== undefined ? { filter: params.filter } : {}),
     ...(params.limit !== undefined ? { limit: params.limit } : {}),
     ...(params.offset !== undefined ? { offset: params.offset } : {}),
@@ -73,15 +94,45 @@ const toListing = (result: ToolsListResult, params: ListParams): ToolsListing =>
 
 const listingOnlyError = () => {
   return usageError(
-    '"--filter", "--limit", and "--offset" only apply to a tools listing, not a single tool lookup.',
+    '"--group", "--groups", "--filter", "--limit", and "--offset" only apply to a tools listing, not a single tool lookup.',
   );
+};
+
+/** `--groups` answers from the `groups` summary alone, which the daemon computes over the whole
+ * registry: `limit: 1` keeps the tool page itself (which is discarded) down to one entry, and
+ * `total` with no group/filter is the registry's size. */
+const listGroups = async (
+  selector: string | undefined,
+  context: ToolsCommandContext,
+): Promise<ToolGroupsListing> => {
+  const result = await listTools(selector, context, { limit: 1 });
+  return { groups: result.groups ?? [], total: result.total };
+};
+
+const listOrGroups = async (
+  selector: string | undefined,
+  options: ToolsCommandOptions,
+  context: ToolsCommandContext,
+): Promise<ToolsCommandData> => {
+  if (options.groups === true) {
+    return listGroups(selector, context);
+  }
+
+  const params = toListParams(options);
+  return toListing(await listTools(selector, context, params), params);
 };
 
 export const handleToolsCommand = async (
   options: ToolsCommandOptions,
   context: ToolsCommandContext,
 ): Promise<CliResult<ToolsCommandData>> => {
-  if (options.name !== undefined && hasPagingOptions(options)) {
+  if (options.groups === true && hasPagingOptions(options)) {
+    throw usageError(
+      '"--groups" lists every group in the session and cannot be combined with "--group", "--filter", "--limit", or "--offset".',
+    );
+  }
+
+  if (options.name !== undefined && hasListingOnlyOptions(options)) {
     throw listingOnlyError();
   }
 
@@ -117,7 +168,7 @@ export const handleToolsCommand = async (
       if (tool) {
         // The same rule as an explicit `<selector> <name>`: silently dropping the listing flags
         // here would make `tools <name> --limit 5` behave differently from `tools <sel> <name>`.
-        if (hasPagingOptions(options)) {
+        if (hasListingOnlyOptions(options)) {
           throw listingOnlyError();
         }
 
@@ -127,10 +178,8 @@ export const handleToolsCommand = async (
 
     // Not a tool name on the implicit session (or there is no implicit session): treat the arg as
     // a selector and list that session's tools instead.
-    const result = await listTools(options.selector, context, options);
-    return { ok: true, data: toListing(result, options) };
+    return { ok: true, data: await listOrGroups(options.selector, options, context) };
   }
 
-  const result = await listTools(undefined, context, options);
-  return { ok: true, data: toListing(result, options) };
+  return { ok: true, data: await listOrGroups(undefined, options, context) };
 };

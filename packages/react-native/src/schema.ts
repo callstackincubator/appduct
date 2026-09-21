@@ -474,7 +474,7 @@ export const validateToolSchema = async (
 /** A tool definition whose schemas have already been through `normalizeToolSchema`. */
 export type AppductNormalizedToolDefinition = Pick<
   AppductToolDefinition,
-  "name" | "description" | "annotations" | "timeoutMs"
+  "name" | "description" | "annotations" | "timeoutMs" | "group"
 > & {
   inputSchema?: AppductNormalizedToolSchema;
   outputSchema?: AppductNormalizedToolSchema;
@@ -573,5 +573,8 @@ export const toToolDescriptor = (
     // `defaultToolTimeoutMs`, which stays a purely app-side fallback. Omitted entirely (no
     // `timeout_ms: undefined` key) when the tool declares none, so the daemon keeps its default.
     ...(wireTimeoutMs !== undefined ? { timeout_ms: wireTimeoutMs } : {}),
+    // Passed through unvalidated: native validates the descriptor (PROTOCOL.md §5) and throws
+    // synchronously on a malformed group, exactly as it does for a malformed name.
+    ...(definition.group !== undefined ? { group: definition.group } : {}),
   };
 };

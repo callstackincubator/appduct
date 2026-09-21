@@ -105,6 +105,11 @@ const runCliHuman = async (args: string[], stateDir: string): Promise<{ stdout: 
   return { stdout, stderr };
 };
 
+/** Headings are colored even when piped (the CLI's palette is not TTY-gated), so line-level
+ * assertions compare the text without SGR sequences. */
+// eslint-disable-next-line no-control-regex
+const stripAnsi = (value: string): string => value.replace(/\[[0-9;]*m/gu, "");
+
 const connectFakeApp = (port: number): Promise<WebSocket> => {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(`wss://127.0.0.1:${port}`, { rejectUnauthorized: false });
@@ -428,5 +433,150 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(stopResult.ok).toBe(true);
     },
     20_000,
+  );
+
+  test(
+    "tools on a grouped registry: headings, the group-aware footer, --group (parent and subgroup), --groups, and usage errors",
+    async () => {
+      const stateDir = await makeTempStateDir();
+
+      const status = await runCliJson(["daemon", "status"], stateDir);
+      expect(status.ok).toBe(true);
+      daemonPids.push((status.data as { daemon: { pid: number } }).daemon.pid);
+      const port = (status.data as { daemon: { wss_port: number } }).daemon.wss_port;
+
+      const linkResult = await runCliJson(["link", "--ttl", "60"], stateDir);
+      const linkData = linkResult.data as { deepLink: string };
+      const linkPayload = linkData.deepLink
+        .slice(linkData.deepLink.indexOf("appduct=") + "appduct=".length)
+        .split("&")[0]!;
+      const decoded = decodeBootstrap(linkPayload)!;
+
+      const socket = await connectFakeApp(port);
+      socket.send(
+        JSON.stringify({
+          type: "session_claim",
+          protocol_version: 2,
+          session_id: decoded.sessionId,
+          token: decoded.token,
+          device_model: "Pixel 8",
+        }),
+      );
+      const ack = await nextMessage(socket);
+      const alias = ack.alias as string;
+
+      // The #67 large-registry shape, split into three groups — `checkout` with a `payment`
+      // subgroup — plus ungrouped tools: 12 cart, 5 checkout + 3 checkout/payment, 6 flags, 4 none.
+      const tool = (name: string, group?: string) => ({
+        name,
+        description: `Does something with ${name}.`,
+        ...(group !== undefined ? { group } : {}),
+      });
+      const tools = [
+        ...Array.from({ length: 12 }, (_, index) => tool(`cart_${String(index).padStart(2, "0")}`, "cart")),
+        ...Array.from({ length: 5 }, (_, index) => tool(`checkout_${index}`, "checkout")),
+        ...Array.from({ length: 3 }, (_, index) => tool(`payment_${index}`, "checkout/payment")),
+        ...Array.from({ length: 6 }, (_, index) => tool(`flag_${index}`, "flags")),
+        ...Array.from({ length: 4 }, (_, index) => tool(`misc_${index}`)),
+      ];
+      socket.send(JSON.stringify({ type: "tool_registry_snapshot", session_id: decoded.sessionId, tools }));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // --json: `group` on each entry, `groups` on the listing (whole registry, parent first).
+      const json = await runCliJson(["tools", alias], stateDir);
+      expect(json.ok).toBe(true);
+      const jsonData = json.data as {
+        tools: Array<{ name: string; group?: string }>;
+        total: number;
+        groups: Array<{ group: string | null; total: number }>;
+      };
+      expect(jsonData.total).toBe(30);
+      expect(jsonData.tools.find((entry) => entry.name === "payment_0")?.group).toBe("checkout/payment");
+      expect(jsonData.groups).toEqual([
+        { group: "cart", total: 12 },
+        { group: "checkout", total: 8 },
+        { group: "checkout/payment", total: 3 },
+        { group: "flags", total: 6 },
+        { group: null, total: 4 },
+      ]);
+
+      // Human listing: group headings, a subgroup as an indented sub-heading, ungrouped last.
+      const human = await runCliHuman(["tools", alias], stateDir);
+      const lines = stripAnsi(human.stdout).split("\n");
+      const indexOfLine = (line: string) => lines.indexOf(line);
+      expect(indexOfLine("  cart")).toBeGreaterThan(-1);
+      expect(indexOfLine("    cart_00()")).toBe(indexOfLine("  cart") + 1);
+      expect(indexOfLine("  checkout")).toBeGreaterThan(indexOfLine("  cart"));
+      expect(indexOfLine("    checkout/payment")).toBeGreaterThan(indexOfLine("  checkout"));
+      expect(indexOfLine("      payment_0()")).toBe(indexOfLine("    checkout/payment") + 1);
+      expect(indexOfLine("  flags")).toBeGreaterThan(indexOfLine("    checkout/payment"));
+      expect(indexOfLine("  (ungrouped)")).toBeGreaterThan(indexOfLine("  flags"));
+      expect(indexOfLine("    misc_0()")).toBe(indexOfLine("  (ungrouped)") + 1);
+      // Nothing was left out, so no footer.
+      expect(human.stdout).not.toContain("Showing");
+
+      // Truncated: the footer names the top-level groups (never subgroups) to narrow to.
+      const truncated = await runCliHuman(["tools", alias, "--limit", "5"], stateDir);
+      expect(truncated.stdout).toContain(
+        "Showing 5 of 30 tools (offset 0). Narrow with --group <name> (groups: cart 12, checkout 8, flags 6) " +
+          "or --filter <text>, or page with --offset <n>.",
+      );
+
+      // --group <parent>: includes the subgroup; `total` is the group's size.
+      const parent = await runCliJson(["tools", alias, "--group", "checkout"], stateDir);
+      const parentData = parent.data as { tools: Array<{ name: string }>; total: number; group: string };
+      expect(parentData.total).toBe(8);
+      expect(parentData.group).toBe("checkout");
+      expect(parentData.tools.map((entry) => entry.name)).toEqual([
+        "checkout_0",
+        "checkout_1",
+        "checkout_2",
+        "checkout_3",
+        "checkout_4",
+        "payment_0",
+        "payment_1",
+        "payment_2",
+      ]);
+
+      // --group <parent>/<sub>: exactly the subgroup, flat (no headings), under its own title.
+      const sub = await runCliHuman(["tools", alias, "--group", "checkout/payment"], stateDir);
+      expect(stripAnsi(sub.stdout)).toContain("Tools in group checkout/payment");
+      expect(sub.stdout).toContain("  payment_0()");
+      expect(sub.stdout).not.toContain("checkout_0");
+      expect(sub.stdout).not.toContain("(ungrouped)");
+
+      // --group combines with --filter and paging; the footer drops the group hint once narrowed.
+      const combined = await runCliHuman(["tools", alias, "--group", "cart", "--filter", "cart_1", "--limit", "1"], stateDir);
+      expect(combined.stdout).toContain("Showing 1 of 2 tools (offset 0). Narrow with --filter <text> or page with --offset <n>.");
+
+      // --groups: groups and counts only, subgroups indented under their parent.
+      const groupsHuman = await runCliHuman(["tools", alias, "--groups"], stateDir);
+      expect(stripAnsi(groupsHuman.stdout)).toContain("Groups\n  cart                12\n  checkout             8\n    checkout/payment   3\n  flags                6\n  (ungrouped)          4\n");
+      expect(groupsHuman.stdout).not.toContain("cart_00");
+
+      const groupsJson = await runCliJson(["tools", alias, "--groups"], stateDir);
+      expect(groupsJson.data).toEqual({ groups: jsonData.groups, total: 30 });
+
+      // Usage errors: a listing flag with a tool name, --groups with a narrowing flag, a bad group.
+      for (const args of [
+        ["tools", alias, "cart_00", "--group", "cart"],
+        ["tools", "cart_00", "--group", "cart"],
+        ["tools", alias, "cart_00", "--groups"],
+        ["tools", alias, "--groups", "--group", "cart"],
+        ["tools", alias, "--groups", "--filter", "x"],
+        ["tools", alias, "--group", "a/b/c"],
+        ["tools", alias, "--group", "checkout/"],
+      ]) {
+        const result = await runCliJson(args, stateDir);
+        expect(result.ok, args.join(" ")).toBe(false);
+        expect(result.error?.type, args.join(" ")).toBe("usage_error");
+      }
+
+      socket.close();
+
+      const stopResult = await runCliJson(["daemon", "stop"], stateDir);
+      expect(stopResult.ok).toBe(true);
+    },
+    30_000,
   );
 });

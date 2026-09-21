@@ -76,7 +76,8 @@ object Appduct {
 
     /**
      * Registers (or replaces, by [name]) a tool. Throws `IllegalArgumentException` synchronously
-     * for an invalid [name]/[description]/[annotations]/[timeoutMs] (PROTOCOL.md §5). [handler]
+     * for an invalid [name]/[description]/[annotations]/[timeoutMs]/[group] (PROTOCOL.md §5). [group]
+     * is `"checkout"` or a subgroup like `"checkout/payment"`, or `null` for an ungrouped tool. [handler]
      * runs on this client's own background dispatcher, never the main thread -- hop to
      * `Dispatchers.Main` yourself for UI work. Its return value is converted to JSON the same way
      * this module's `AppductClient` always has (`org.json` values, and plain Kotlin/Java
@@ -90,6 +91,7 @@ object Appduct {
         outputSchema: JSONObject? = null,
         annotations: ToolAnnotations? = null,
         timeoutMs: Long? = null,
+        group: String? = null,
         handler: suspend (args: JSONObject, context: ToolCallContext) -> Any?,
     ): ToolRegistration {
         val descriptor =
@@ -100,6 +102,7 @@ object Appduct {
                 outputSchema = outputSchema,
                 annotations = annotations?.toWireJson(),
                 timeoutMs = timeoutMs,
+                group = group,
             )
         client().registerTool(descriptor) { args, context -> handler(args, ToolCallContext(context)) }
         return ToolRegistration(name) { client().unregisterTool(name) }
@@ -114,9 +117,10 @@ object Appduct {
         outputSchema: JSONObject? = null,
         annotations: ToolAnnotations? = null,
         timeoutMs: Long? = null,
+        group: String? = null,
         handler: suspend (args: JSONObject) -> Any?,
     ): ToolRegistration =
-        register(name, description, inputSchema, outputSchema, annotations, timeoutMs) { args, _ -> handler(args) }
+        register(name, description, inputSchema, outputSchema, annotations, timeoutMs, group) { args, _ -> handler(args) }
 
     // --- deep links ---
 

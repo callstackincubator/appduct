@@ -138,6 +138,7 @@ export const createAppductClient = (
         outputSchema,
         annotations: registration.annotations,
         timeoutMs: registration.timeoutMs,
+        group: registration.group,
       });
 
       if (tools.has(registration.name)) {

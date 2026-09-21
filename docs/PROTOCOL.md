@@ -147,7 +147,8 @@ must always use the token from its most recent `session_ack`, never a cached old
     "input_schema": { "type": "object", "properties": { "a": { "type": "number" }, "b": { "type": "number" } }, "required": ["a", "b"] },
     "output_schema": { "type": "object", "properties": { "total": { "type": "number" } } },
     "annotations": { "readOnlyHint": true },
-    "timeout_ms": 60000 }
+    "timeout_ms": 60000,
+    "group": "math" }
 ] }
 ```
 
@@ -249,7 +250,8 @@ can ask "what happened?" after the fact instead of only listening live.
   "input_schema": { /* draft 2020-12 JSON Schema */ },   // optional
   "output_schema": { /* draft 2020-12 JSON Schema */ },  // optional
   "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true },
-  "timeout_ms": 60000 }                // optional, positive integer
+  "timeout_ms": 60000,                 // optional, positive integer
+  "group": "math/arithmetic" }         // optional, one or two "/"-separated name segments
 ```
 
 Schemas come from whatever the app registered the tool with: a Standard Schema JSON Schema
@@ -280,6 +282,20 @@ never an app-wide default such as `defaultToolTimeoutMs`. Older apps omit the fi
 entirely and keep the daemon's 10 s default, so it is safe to add in either direction. It
 is a daemon-side scheduling hint; agents see it through `appduct tools <name>` and
 `appduct_describe_tool`.
+
+`group` puts the tool in an app-declared group so an agent can list a large registry one
+area at a time (`tools.list`'s `group` param, `appduct tools --group`). It is a single string
+of one or two `/`-separated segments, each matching the name pattern
+`^[a-zA-Z0-9_-]{1,64}$`: a top-level group (`checkout`) or a subgroup (`checkout/payment`),
+nothing deeper. As one pattern: `^[a-zA-Z0-9_-]{1,64}(/[a-zA-Z0-9_-]{1,64})?$`, matched against
+the whole string. Anything else — an empty string, an empty segment (`checkout/`, `/payment`,
+`a//b`), three or more segments, any other character, a non-string, or an explicit `null` —
+fails `isToolDescriptor` and invalidates the whole snapshot, exactly like a bad `timeout_ms`.
+Omit the field for an ungrouped tool. Groups are matched by segment and case-sensitively:
+selecting `checkout` includes `checkout/*`, and never `checkoutx`. `group` is a descriptor
+field rather than an annotation because `annotations` is exactly the three MCP hints above; it
+is never emitted on the MCP `Tool` JSON. A daemon that predates groups ignores the field (like
+any unknown descriptor key), so an app can send it to any daemon.
 
 ## 6. Session state machine
 

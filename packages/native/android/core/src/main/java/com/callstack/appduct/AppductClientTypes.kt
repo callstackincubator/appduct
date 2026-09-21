@@ -41,6 +41,9 @@ internal data class AppductToolDescriptor(
     val outputSchema: JSONObject? = null,
     val annotations: JSONObject? = null,
     val timeoutMs: Long? = null,
+    /** The tool's group (PROTOCOL.md §5): `"checkout"` or a subgroup like `"checkout/payment"`;
+     * `null` for an ungrouped tool. */
+    val group: String? = null,
 ) {
     internal fun toWireJson(): JSONObject =
         JSONObject().apply {
@@ -50,6 +53,7 @@ internal data class AppductToolDescriptor(
             if (outputSchema != null) put("output_schema", outputSchema)
             if (annotations != null) put("annotations", annotations)
             if (timeoutMs != null) put("timeout_ms", timeoutMs)
+            if (group != null) put("group", group)
         }
 
     companion object {
@@ -109,6 +113,18 @@ internal data class AppductToolDescriptor(
                     null
                 }
 
+            // Unlike the fields above, an explicit JSON `null` is rejected rather than read as
+            // "absent": `@appduct/shared`'s `isToolDescriptor` only treats a *missing* `group` as
+            // ungrouped (packages/native/fixtures/tool-descriptors.json's "group-null" case). The
+            // segment rules themselves are checked by validateAppductToolDescriptor.
+            val group: String? =
+                if (obj.has("group")) {
+                    obj.opt("group") as? String
+                        ?: throw AppductInvalidToolDescriptorException("Tool \"$name\" group must be a string.")
+                } else {
+                    null
+                }
+
             return AppductToolDescriptor(
                 name = name,
                 description = requiredStringOrEmpty("description", "Tool \"$name\""),
@@ -116,6 +132,7 @@ internal data class AppductToolDescriptor(
                 outputSchema = optionalObject("output_schema"),
                 annotations = optionalObject("annotations"),
                 timeoutMs = timeoutMs,
+                group = group,
             )
         }
     }

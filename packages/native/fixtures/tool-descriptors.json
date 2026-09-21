@@ -327,6 +327,204 @@
     "valid": true
   },
   {
+    "name": "name-trailing-newline",
+    "descriptor": {
+      "name": "tool\n",
+      "description": "x"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-valid",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "checkout"
+    },
+    "valid": true
+  },
+  {
+    "name": "group-subgroup-valid",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "checkout/payment"
+    },
+    "valid": true
+  },
+  {
+    "name": "group-segments-64-chars-valid",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg/gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg"
+    },
+    "valid": true
+  },
+  {
+    "name": "group-mixed-charset-valid",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "Feature_1/sub-area_2"
+    },
+    "valid": true
+  },
+  {
+    "name": "group-omitted-valid",
+    "descriptor": {
+      "name": "tool",
+      "description": "x"
+    },
+    "valid": true
+  },
+  {
+    "name": "group-empty",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "group-empty-segment",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "checkout/"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-empty-leading-segment",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "/payment"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-empty-middle-segment",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "a//b"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-slash-only",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "/"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-too-deep",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "a/b/c"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-segment-65-chars",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-subgroup-segment-65-chars",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "checkout/ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-bad-char",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "check out"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-bad-char-dot",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "checkout.payment"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-bad-char-backslash",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "checkout\\payment"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-non-ascii",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "café"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-trailing-newline",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": "checkout\n"
+    },
+    "valid": false
+  },
+  {
+    "name": "group-non-string",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": 42
+    },
+    "valid": false
+  },
+  {
+    "name": "group-array",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": [
+        "checkout"
+      ]
+    },
+    "valid": false
+  },
+  {
+    "name": "group-null",
+    "descriptor": {
+      "name": "tool",
+      "description": "x",
+      "group": null
+    },
+    "valid": false
+  },
+  {
     "name": "descriptor-not-an-object-string",
     "descriptor": "not-an-object",
     "valid": false

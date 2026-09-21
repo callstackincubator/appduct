@@ -17,6 +17,7 @@ import { parseBootstrapPayload, parseBootstrapUrl } from "./bootstrap";
 import { appductClient, noopIfNativeUnavailable } from "./default-client";
 import * as noop from "./noop";
 import { exportToolSchemaForKey } from "./schema";
+import { createToolGroupFactory } from "./tool-group";
 import { createUseAppductTool } from "./useAppductTool";
 
 export * from "./Appduct.types";
@@ -29,7 +30,11 @@ export {
 } from "./client";
 export { appductNativeModule };
 export { appductClient };
-export type { CordierePublicApi, AppductSubscription } from "./public-api";
+export type {
+  CordierePublicApi,
+  AppductSubscription,
+  AppductToolGroupRegistrar,
+} from "./public-api";
 export type { UseAppductToolOptions } from "./useAppductTool";
 
 /**
@@ -47,6 +52,19 @@ export function registerTool<
     () => noop.registerTool(registration),
   );
 }
+
+/**
+ * `registerTool` bound to one group, for a feature module that registers several tools:
+ *
+ * ```ts
+ * const registerCartTool = createToolGroup("cart");
+ * registerCartTool({ name: "add_item", description: "...", handler });
+ * ```
+ *
+ * `group` is a top-level group (`"cart"`) or a subgroup (`"checkout/payment"`). A malformed one
+ * makes each registration throw, exactly like passing it as `registerTool`'s own `group`.
+ */
+export const createToolGroup = createToolGroupFactory(registerTool);
 
 /** Emits an `event` frame on the default client while active; drops (dev warning) otherwise. */
 export function postEvent(name: string, payload?: unknown): Promise<void> {
@@ -143,7 +161,7 @@ export function getAppductBuildConfig(): AppductBuildConfig {
 /**
  * `useEffect` wrapper around `registerTool`: registers once per mount and re-registers only when
  * the registration itself changed (name, description, exported schemas, annotations, `timeoutMs`,
- * `enabled`), disposing the previous registration first (identity-safe — see `registerTool`'s doc
+ * `group`, `enabled`), disposing the previous registration first (identity-safe — see `registerTool`'s doc
  * comment). Calls are routed through the latest render's handler, so `deps` is an optional
  * override rather than something every call site has to remember. `options.enabled` (default
  * `true`) gates registration without breaking the rules of hooks — see `docs/SECURITY.md`'s

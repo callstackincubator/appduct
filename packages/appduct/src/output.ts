@@ -6,6 +6,8 @@ import {
   type EventNotification,
   type SessionSummary,
   type ToolDescriptor,
+  type ToolGroupSummary,
+  type ToolsListEntry,
 } from "@appduct/shared";
 
 import type {
@@ -23,6 +25,7 @@ import type {
   LinkCommandData,
   LsCommandData,
   RevokeCommandData,
+  ToolGroupsListing,
   ToolsCommandData,
   ToolsListing,
 } from "./cli/result-types.js";
@@ -156,6 +159,31 @@ const isToolsListing = (data: ToolsCommandData): data is ToolsListing => {
   return typeof data === "object" && data !== null && Array.isArray((data as ToolsListing).tools);
 };
 
+/** `--groups`' form: a `groups` array and no `tools` array (a listing carries both). */
+const isToolGroupsListing = (data: ToolsCommandData): data is ToolGroupsListing => {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    Array.isArray((data as ToolGroupsListing).groups) &&
+    !Array.isArray((data as ToolsListing).tools)
+  );
+};
+
+/** The heading for the ungrouped bucket, in both the grouped listing and `--groups`. */
+const UNGROUPED_LABEL = "(ungrouped)";
+
+/** How many top-level groups the truncation footer names before pointing at `--groups`. */
+const MAX_FOOTER_GROUPS = 10;
+
+/** Whether the registry (per the daemon's unfiltered `groups` summary) has any grouped tool. */
+const hasAnyGroup = (groups: readonly ToolGroupSummary[] | undefined): boolean => {
+  return (groups ?? []).some((entry) => entry.group !== null);
+};
+
+const topLevelGroups = (groups: readonly ToolGroupSummary[] | undefined): ToolGroupSummary[] => {
+  return (groups ?? []).filter((entry) => entry.group !== null && !entry.group.includes("/"));
+};
+
 /** "No tools registered"/"No tools match" for an empty listing (compact or `--full` — both share
  * this line, only the header differs). */
 const renderEmptyToolsLine = (data: ToolsListing): string => {
@@ -168,19 +196,110 @@ const renderEmptyToolsLine = (data: ToolsListing): string => {
   return data.filter === undefined ? "  No tools registered." : `  No tools match ${JSON.stringify(data.filter)}.`;
 };
 
+/** `--group <name> (groups: cart 12, checkout 8)` — the footer's pointer at the registry's
+ * top-level groups, only for a listing that was not already narrowed to a group. Counts are the
+ * daemon's whole-registry totals (a parent's includes its subgroups). */
+const renderGroupHint = (data: ToolsListing): string | undefined => {
+  if (data.group !== undefined || !hasAnyGroup(data.groups)) {
+    return undefined;
+  }
+
+  const top = topLevelGroups(data.groups);
+  const named = top.slice(0, MAX_FOOTER_GROUPS).map((entry) => `${entry.group} ${entry.total}`);
+  const more = top.length > MAX_FOOTER_GROUPS ? `, ... ${top.length - MAX_FOOTER_GROUPS} more; see --groups` : "";
+
+  return `--group <name> (groups: ${named.join(", ")}${more})`;
+};
+
 /** The `Showing n of total tools (offset o). Narrow with --filter <text> or page with --offset
  * <n>.` line — only when the page actually left tools out, so a listing that already shows
- * everything (including a filtered one with no more matches) stays quiet. */
+ * everything (including a filtered one with no more matches) stays quiet. On a registry with
+ * groups (and no `--group` given) it names the top-level groups to narrow to first. */
 const renderTruncationLine = (data: ToolsListing): string[] => {
   if (data.tools.length >= data.total) {
     return [];
   }
 
+  const groupHint = renderGroupHint(data);
+  const narrow =
+    groupHint === undefined ? "--filter <text> or" : `${groupHint} or --filter <text>, or`;
+
   return [
     "",
     `Showing ${data.tools.length} of ${data.total} tools (offset ${data.offset ?? 0}). ` +
-      "Narrow with --filter <text> or page with --offset <n>.",
+      `Narrow with ${narrow} page with --offset <n>.`,
   ];
+};
+
+/** One tool's two summary lines (signature + first description line), indented by `indent`. */
+const renderToolSummaryLines = (tool: ToolsListEntry, indent: string): string[] => {
+  const tag = tool.policy === "allow" ? "" : `  [${tool.policy}]`;
+  return [`${indent}${renderToolSignature(tool)}${tag}`, `${indent}  ${summarizeToolDescription(tool.description)}`];
+};
+
+/**
+ * The page's tools under group headings: top-level groups as headings, subgroups as indented
+ * sub-headings under their parent, ungrouped tools last under `(ungrouped)`. Headings follow the
+ * daemon's `groups` order (a parent right before its subgroups); tools keep the daemon's name
+ * order within each heading. Only headings that have a tool on this page are printed, plus the
+ * parent heading of any subgroup that does.
+ */
+const renderGroupedToolLines = (colors: ColorPalette, tools: readonly ToolsListEntry[]): string[] => {
+  const byGroup = new Map<string | null, ToolsListEntry[]>();
+
+  for (const tool of tools) {
+    const key = tool.group ?? null;
+    const bucket = byGroup.get(key);
+
+    if (bucket) {
+      bucket.push(tool);
+    } else {
+      byGroup.set(key, [tool]);
+    }
+  }
+
+  // The same order the daemon's `groups` summary uses (parent before its subgroups, code-point
+  // order, never locale-dependent), derived from the page itself so it holds even for a page
+  // whose headings the summary would order the same way anyway.
+  const tops = new Map<string, string[]>();
+
+  for (const key of byGroup.keys()) {
+    if (key === null) {
+      continue;
+    }
+
+    const slash = key.indexOf("/");
+    const top = slash === -1 ? key : key.slice(0, slash);
+    const subs = tops.get(top) ?? [];
+
+    if (slash !== -1) {
+      subs.push(key);
+    }
+
+    tops.set(top, subs);
+  }
+
+  const byCodePoint = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+  const lines: string[] = [];
+
+  for (const top of [...tops.keys()].sort(byCodePoint)) {
+    lines.push(`  ${colors.cyan(top)}`);
+    lines.push(...(byGroup.get(top) ?? []).flatMap((tool) => renderToolSummaryLines(tool, "    ")));
+
+    for (const sub of tops.get(top)!.sort(byCodePoint)) {
+      lines.push(`    ${colors.cyan(sub)}`);
+      lines.push(...byGroup.get(sub)!.flatMap((tool) => renderToolSummaryLines(tool, "      ")));
+    }
+  }
+
+  const ungrouped = byGroup.get(null);
+
+  if (ungrouped) {
+    lines.push(`  ${colors.cyan(UNGROUPED_LABEL)}`);
+    lines.push(...ungrouped.flatMap((tool) => renderToolSummaryLines(tool, "    ")));
+  }
+
+  return lines;
 };
 
 const renderToolSummaryTable = (colors: ColorPalette, data: ToolsListing): string[] => {
@@ -188,12 +307,15 @@ const renderToolSummaryTable = (colors: ColorPalette, data: ToolsListing): strin
     return [colors.green("Tools"), renderEmptyToolsLine(data)];
   }
 
+  // Headings only when the registry has groups and the listing was not already narrowed to one —
+  // under `--group` every tool is in the requested group, so a heading would say nothing new.
+  const grouped = data.group === undefined && hasAnyGroup(data.groups);
+
   return [
-    colors.green("Tools"),
-    ...data.tools.flatMap((tool) => {
-      const tag = tool.policy === "allow" ? "" : `  [${tool.policy}]`;
-      return [`  ${renderToolSignature(tool)}${tag}`, `    ${summarizeToolDescription(tool.description)}`];
-    }),
+    colors.green(data.group === undefined ? "Tools" : `Tools in group ${data.group}`),
+    ...(grouped
+      ? renderGroupedToolLines(colors, data.tools)
+      : data.tools.flatMap((tool) => renderToolSummaryLines(tool, "  "))),
     ...renderTruncationLine(data),
     "",
     "Run `appduct tools <name>` for a tool's full schema.",
@@ -208,6 +330,7 @@ const renderToolDetail = (colors: ColorPalette, tool: ToolDescriptor, flags: Glo
       ["Description", tool.description],
       ["Input schema", tool.input_schema],
       ["Output schema", tool.output_schema],
+      ["Group", tool.group],
       ["Annotations", tool.annotations],
       // Only rendered for a tool that declares one; `renderFields` drops undefined rows, so a
       // tool on the daemon's default deadline shows no line at all rather than a misleading
@@ -232,12 +355,44 @@ const renderToolsFullListing = (colors: ColorPalette, data: ToolsListing, flags:
   ];
 };
 
+/** `appduct tools --groups`: every group with its tool count, subgroups indented under their
+ * parent, ungrouped last — in the daemon's `groups` order, which already puts a parent right
+ * before its subgroups. */
+const renderToolGroups = (colors: ColorPalette, data: ToolGroupsListing): string[] => {
+  if (data.groups.length === 0) {
+    return [colors.green("Groups"), "  No tools registered."];
+  }
+
+  const label = (entry: ToolGroupSummary): string => {
+    if (entry.group === null) {
+      return UNGROUPED_LABEL;
+    }
+
+    return entry.group.includes("/") ? `  ${entry.group}` : entry.group;
+  };
+
+  const width = Math.max(...data.groups.map((entry) => label(entry).length));
+  const countWidth = Math.max(...data.groups.map((entry) => String(entry.total).length));
+
+  return [
+    colors.green("Groups"),
+    ...data.groups.map((entry) => `  ${label(entry).padEnd(width)}  ${String(entry.total).padStart(countWidth)}`),
+    "",
+    `${data.total} tool${data.total === 1 ? "" : "s"} in total. ` +
+      (hasAnyGroup(data.groups) ? "Run `appduct tools --group <name>` to list one group's tools." : "No tool declares a group."),
+  ];
+};
+
 const renderToolsData = (
   colors: ColorPalette,
   data: ToolsCommandData,
   flags: GlobalFlags,
   full?: boolean,
 ): string[] => {
+  if (isToolGroupsListing(data)) {
+    return renderToolGroups(colors, data);
+  }
+
   if (!isToolsListing(data)) {
     return renderToolDetail(colors, data, flags);
   }

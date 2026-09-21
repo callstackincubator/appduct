@@ -10,6 +10,26 @@ package versions for a release.
 
 ## Unreleased
 
+- **New: tool groups.** A tool can declare an optional `group` — a top-level group (`"cart"`)
+  or one subgroup below it (`"checkout/payment"`); each part matches the tool-name pattern
+  `[a-zA-Z0-9_-]{1,64}`. Set it with `registerTool`/`useAppductTool`'s `group` option (a change
+  to it re-registers the tool), with `createToolGroup("cart")` to bind one group for a whole
+  feature module, or with the `group` parameter of the Swift and Kotlin `register` calls. An
+  invalid group invalidates the registry snapshot exactly like an invalid `timeout_ms`, so all
+  three SDKs reject it at registration. A daemon that predates groups ignores the field.
+- **New: `appduct tools --group <name>` and `appduct tools --groups`.** `--group checkout` lists
+  the `checkout` group and all its subgroups (`checkout/payment` lists just that subgroup) and
+  combines with `--filter`/`--limit`/`--offset`; `--groups` lists only the groups and their tool
+  counts. Without `--group`, a registry with groups is listed under group headings, and a
+  truncated listing's footer names the top-level groups to narrow to. `tools.list` gains a
+  `group` param (applied before `total` and paging) and a `groups` summary of the whole registry
+  on every result, so `appduct tools --json` now returns `{ tools, total, groups }` and each
+  entry carries its `group`. The MCP built-ins (`appduct_list_tools` and friends) don't take a
+  `group` yet.
+- **Fixed (iOS): a tool name with a trailing newline (`"tool\n"`) is now rejected**, matching
+  `@appduct/shared` and Android. The Swift core's name check accepted it because ICU's `$` also
+  matches before a final line terminator; the daemon would then have rejected the snapshot.
+
 - **Breaking (MCP): the app's tools are no longer listed as MCP tools.** An agent reaches them
   through three built-ins that mirror the CLI: `appduct_list_tools` (one-line signatures and
   each tool's policy, with `filter`/`limit`/`offset`, like `appduct tools`),

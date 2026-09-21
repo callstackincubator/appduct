@@ -71,7 +71,12 @@ invalid characters), the description length bounds (empty, 4096 chars, 4097 char
 non-string), schema fields that must be a JSON object if present (`input_schema`/`output_schema`),
 `annotations` that must be a JSON object of only the three known boolean keys, and `timeout_ms`
 that must be a positive integer if present (rejecting `0`, negative, fractional, and string
-values) while a `timeoutMs` camelCase key is a harmless unknown extra, never a substitute. Also
+values) while a `timeoutMs` camelCase key is a harmless unknown extra, never a substitute, and
+`group` that must be one or two `/`-separated name-pattern segments if present (rejecting an empty
+string, empty segments such as `checkout/`, `/payment` and `a//b`, three segments, a 65-character
+segment, other characters, a trailing newline, and non-string values including `null`). A
+trailing-newline tool name is covered too: ICU's `$` matches before a final line terminator, so the
+Swift port must check that its match spans the whole string. Also
 covers a descriptor that is not a JSON object at all (a string, an array, `null`).
 
 Hand-written directly as JSON (no generator needed — these are just JSON Schema-shaped documents,

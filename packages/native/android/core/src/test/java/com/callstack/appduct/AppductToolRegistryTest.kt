@@ -129,6 +129,46 @@ class AppductToolRegistryTest {
         assertEquals(APPDUCT_MAX_TOOL_TIMEOUT_MS, snapshot[0].getLong("timeout_ms"))
     }
 
+    // --- group ---
+
+    @Test
+    fun `one- or two-segment groups are accepted`() {
+        for (group in listOf("checkout", "checkout/payment", "A1_-2/b", "x".repeat(64) + "/" + "y".repeat(64))) {
+            validateAppductToolDescriptor(AppductToolDescriptor("sum", "Add.", group = group))
+        }
+    }
+
+    @Test
+    fun `malformed groups are rejected`() {
+        for (group in listOf("", "/", "checkout/", "/payment", "a//b", "a/b/c", "a b", "checkout\n", "x".repeat(65))) {
+            assertThrows(group, AppductInvalidToolDescriptorException::class.java) {
+                validateAppductToolDescriptor(AppductToolDescriptor("sum", "Add.", group = group))
+            }
+        }
+    }
+
+    @Test
+    fun `group round-trips through fromJson and the wire snapshot`() {
+        val parsed = AppductToolDescriptor.fromJson("""{"name":"pay","description":"Pay.","group":"checkout/payment"}""")
+        assertEquals("checkout/payment", parsed.group)
+
+        val registry = AppductToolRegistry()
+        registry.upsert(parsed, noopHandler)
+        assertEquals("checkout/payment", registry.snapshotWireJson()[0].getString("group"))
+
+        registry.upsert(descriptor(name = "ungrouped"), noopHandler)
+        assertTrue(!registry.snapshotWireJson()[1].has("group"))
+    }
+
+    @Test
+    fun `a non-string or null group is rejected by fromJson`() {
+        for (raw in listOf("42", "null", "[\"a\"]")) {
+            assertThrows(raw, AppductInvalidToolDescriptorException::class.java) {
+                AppductToolDescriptor.fromJson("""{"name":"pay","description":"Pay.","group":$raw}""")
+            }
+        }
+    }
+
     @Test
     fun `an in-range timeoutMs is stored unchanged`() {
         val registry = AppductToolRegistry()

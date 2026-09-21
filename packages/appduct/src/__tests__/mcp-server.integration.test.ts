@@ -345,6 +345,55 @@ describe("mcp: calling app tools", () => {
     app.socket.close();
   });
 
+  test("grouped tools are listed and called over MCP exactly like ungrouped ones, and the group never reaches MCP", async () => {
+    const { daemon, stateDir, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+    await snapshotTools(daemon, app, [
+      { name: "pay", group: "checkout/payment" },
+      { name: "begin", group: "checkout" },
+      { name: "ping" },
+    ]);
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const listed = await client.request(
+      { method: "tools/call", params: { name: "appduct_list_tools", arguments: {} } },
+      CallToolResultSchema,
+    );
+    expect((listed.structuredContent as { tools: Array<{ name: string }> }).tools.map((tool) => tool.name)).toEqual([
+      "begin",
+      "pay",
+      "ping",
+    ]);
+    expect(JSON.stringify(listed.structuredContent)).not.toContain("checkout");
+
+    const described = await client.request(
+      { method: "tools/call", params: { name: "appduct_describe_tool", arguments: { name: "pay" } } },
+      CallToolResultSchema,
+    );
+    expect(described.structuredContent).not.toHaveProperty("group");
+
+    app.socket.on("message", (data) => {
+      const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+
+      if (msg.type === "tool_call") {
+        app.socket.send(
+          JSON.stringify({ type: "tool_result", session_id: app.sessionId, id: msg.id, result: { paid: true } }),
+        );
+      }
+    });
+
+    const called = await client.request(
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "pay" } } },
+      CallToolResultSchema,
+    );
+    expect(called.isError).not.toBe(true);
+    expect(called.structuredContent).toEqual({ paid: true });
+
+    app.socket.close();
+  });
+
   test("tool_call_progress frames map to MCP progress notifications when the client sends a progressToken", async () => {
     const { daemon, stateDir, port } = await startTestDaemon();
     const app = await claimApp(daemon, port);

@@ -428,6 +428,91 @@ describe("tools.list / tools.call: round trip", () => {
       rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias, filter: "x".repeat(257) }),
     ).rejects.toMatchObject({ data: { type: "invalid_request" } });
 
+    for (const group of [42, null, "", "checkout/", "/payment", "a//b", "a/b/c", "a b", "g".repeat(65)]) {
+      await expect(
+        rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias, group }),
+      ).rejects.toMatchObject({ data: { type: "invalid_request" } });
+    }
+
+    app.socket.close();
+  });
+
+  test("tools.list narrows by group segment before filter, total and paging; groups always reflects the whole registry", async () => {
+    const { daemon, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+
+    await snapshotTools(daemon, app, [
+      { name: "add_item", description: "Adds to the cart.", group: "cart" },
+      { name: "begin", description: "Starts checkout.", group: "checkout" },
+      { name: "pay_card", description: "Pays by card.", group: "checkout/payment" },
+      { name: "pay_cash", description: "Pays in cash.", group: "checkout/payment" },
+      { name: "set_address", description: "Sets the address.", group: "checkout/address" },
+      // A string-prefix match on "checkout" would wrongly include this one.
+      { name: "lookalike", description: "Not checkout.", group: "checkoutx" },
+      { name: "ping", description: "Health check." },
+    ]);
+
+    const wholeRegistryGroups = [
+      { group: "cart", total: 1 },
+      { group: "checkout", total: 4 },
+      { group: "checkout/address", total: 1 },
+      { group: "checkout/payment", total: 2 },
+      { group: "checkoutx", total: 1 },
+      { group: null, total: 1 },
+    ];
+
+    type Listing = { tools: Array<{ name: string; group?: string }>; total: number; groups: unknown };
+    const list = async (params: Record<string, unknown>) =>
+      (await rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias, ...params })) as Listing;
+
+    const all = await list({});
+    expect(all.total).toBe(7);
+    expect(all.groups).toEqual(wholeRegistryGroups);
+    // `group` rides along on each entry, straight off the descriptor.
+    expect(all.tools.find((tool) => tool.name === "pay_card")?.group).toBe("checkout/payment");
+    expect(all.tools.find((tool) => tool.name === "ping")).not.toHaveProperty("group");
+
+    // A parent includes its subgroups, never a longer top-level name.
+    const checkout = await list({ group: "checkout" });
+    expect(checkout.tools.map((tool) => tool.name)).toEqual(["begin", "pay_card", "pay_cash", "set_address"]);
+    expect(checkout.total).toBe(4);
+    expect(checkout.groups).toEqual(wholeRegistryGroups);
+
+    // A subgroup is exactly that subgroup.
+    const payment = await list({ group: "checkout/payment" });
+    expect(payment.tools.map((tool) => tool.name)).toEqual(["pay_card", "pay_cash"]);
+    expect(payment.total).toBe(2);
+
+    // Case-sensitive, and an unknown group is an empty result, not an error.
+    const upper = await list({ group: "Checkout" });
+    expect(upper.tools).toEqual([]);
+    expect(upper.total).toBe(0);
+    expect(upper.groups).toEqual(wholeRegistryGroups);
+
+    // group + filter: `total` counts tools matching both, before paging.
+    const groupAndFilter = await list({ group: "checkout", filter: "PAYS" });
+    expect(groupAndFilter.tools.map((tool) => tool.name)).toEqual(["pay_card", "pay_cash"]);
+    expect(groupAndFilter.total).toBe(2);
+
+    // group + paging: the page is sliced from the group, `total` is the group's size.
+    const paged = await list({ group: "checkout", limit: 2, offset: 1 });
+    expect(paged.tools.map((tool) => tool.name)).toEqual(["pay_card", "pay_cash"]);
+    expect(paged.total).toBe(4);
+    expect(paged.groups).toEqual(wholeRegistryGroups);
+
+    app.socket.close();
+  });
+
+  test("tools.list on a registry with no groups returns only the ungrouped bucket", async () => {
+    const { daemon, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+    await snapshotTools(daemon, app, [{ name: "echo" }, { name: "ping" }]);
+
+    const listing = (await rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias })) as {
+      groups: unknown;
+    };
+    expect(listing.groups).toEqual([{ group: null, total: 2 }]);
+
     app.socket.close();
   });
 });
