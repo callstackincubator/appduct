@@ -11,10 +11,41 @@ import XCTest
 /// Scripted fake standing in for `AppductConnectionManager` in `AppductClient` tests, so the
 /// reconnect/registry/tool-invocation state machine is testable without a real TLS/WebSocket stack.
 final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
-  var emitStateChange: (@Sendable (String) -> Void)?
-  var emitMessageRaw: (@Sendable (String) -> Void)?
-  var emitError: (@Sendable (AppductErrorDetails) -> Void)?
-  var emitClose: (@Sendable (NSDictionary) -> Void)?
+  // The client assigns these from its own actor (in a `Task` its initializer queues) while tests
+  // read them from the test's thread, so they sit behind the same lock as the counters below.
+  private var _emitStateChange: (@Sendable (String) -> Void)?
+  private var _emitMessageRaw: (@Sendable (String) -> Void)?
+  private var _emitError: (@Sendable (AppductErrorDetails) -> Void)?
+  private var _emitClose: (@Sendable (NSDictionary) -> Void)?
+
+  var emitStateChange: (@Sendable (String) -> Void)? {
+    get { withLock { _emitStateChange } }
+    set { withLock { _emitStateChange = newValue } }
+  }
+
+  var emitMessageRaw: (@Sendable (String) -> Void)? {
+    get { withLock { _emitMessageRaw } }
+    set { withLock { _emitMessageRaw = newValue } }
+  }
+
+  var emitError: (@Sendable (AppductErrorDetails) -> Void)? {
+    get { withLock { _emitError } }
+    set { withLock { _emitError = newValue } }
+  }
+
+  var emitClose: (@Sendable (NSDictionary) -> Void)? {
+    get { withLock { _emitClose } }
+    set { withLock { _emitClose = newValue } }
+  }
+
+  /// Whether the client has installed its transport callbacks yet. `AppductClient.init` defers
+  /// that wiring to a `Task`, which is not ordered against a `connect` the test starts right
+  /// after construction: `transport.connect` can be reached before the callbacks exist, and a
+  /// `simulateAck` sent then goes nowhere. Handshake waits therefore check this *and*
+  /// `connectCallCount`.
+  var isWired: Bool {
+    withLock { _emitMessageRaw != nil && _emitClose != nil }
+  }
 
   private let lock = NSLock()
   private var _stateSnapshot = "idle"
@@ -86,8 +117,12 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
 
   // MARK: Test-side simulation helpers
 
-  func simulateIncoming(_ text: String) {
-    emitMessageRaw?(text)
+  func simulateIncoming(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
+    guard let emitMessageRaw else {
+      XCTFail("simulated a frame before the client wired its transport callbacks; it was dropped", file: file, line: line)
+      return
+    }
+    emitMessageRaw(text)
   }
 
   func simulateAck(
@@ -116,7 +151,11 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
     let dict = NSMutableDictionary()
     if let code { dict["code"] = code }
     if let reason { dict["reason"] = reason }
-    emitClose?(dict)
+    guard let emitClose else {
+      XCTFail("simulated a close before the client wired its transport callbacks; it was dropped")
+      return
+    }
+    emitClose(dict)
   }
 }
 

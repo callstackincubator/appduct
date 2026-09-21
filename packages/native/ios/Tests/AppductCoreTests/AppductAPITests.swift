@@ -43,8 +43,9 @@ final class AppductAPITests: XCTestCase {
     let connectTaskInput = connectInput()
     let connectTask = Task { try await facade.client.connect(connectTaskInput) }
     // A `session_ack` is only picked up once a handshake is actually in flight; the handshake
-    // calls `transport.connect` right after arming itself, so this counter is that signal.
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    // calls `transport.connect` right after arming itself, so this counter is that signal. The
+    // client must also have wired its transport callbacks, or the ack has nowhere to go.
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
     return (facade, transport)
@@ -160,7 +161,7 @@ final class AppductAPITests: XCTestCase {
     let (facade, transport) = makeFacade()
 
     XCTAssertTrue(facade.handle(bootstrapUrl(sessionId: "session-9")))
-    try await waitUntil("the deep link reached the transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the deep link reached the transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-9")
     try await waitUntil("the facade snapshot turned active") { facade.state == .active }
 
@@ -203,7 +204,7 @@ final class AppductAPITests: XCTestCase {
 
     let connectTaskInput = connectInput()
     let connectTask = Task { try await facade.client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
     try await waitUntil("the listener saw the active state change") {
@@ -234,7 +235,7 @@ final class AppductAPITests: XCTestCase {
 
     let connectTaskInput = connectInput()
     let connectTask = Task { try await facade.client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", alias: "iphone-1")
     try await connectTask.value
     try await waitUntil("the listener saw the session change") {

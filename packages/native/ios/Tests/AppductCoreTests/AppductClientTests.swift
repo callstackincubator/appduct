@@ -45,7 +45,7 @@ final class AppductClientTests: XCTestCase {
 
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", alias: "iphone-1")
 
     try await connectTask.value
@@ -66,7 +66,7 @@ final class AppductClientTests: XCTestCase {
 
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
     try await waitUntil("the registry snapshot reached the wire") {
@@ -96,7 +96,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
@@ -112,14 +112,14 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let firstConnectInput = connectInput(sessionId: "session-1")
     let firstConnect = Task { try await client.connect(firstConnectInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await firstConnect.value
 
     let secondConnectInput = connectInput(sessionId: "session-2")
     let secondConnect = Task { try await client.connect(secondConnectInput, supersede: true) }
     try await waitUntil("the superseding connect started its own transport handshake") {
-      transport.connectCallCount >= 2
+      transport.isWired && transport.connectCallCount >= 2
     }
     transport.simulateAck(sessionId: "session-2")
     try await secondConnect.value
@@ -135,7 +135,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
@@ -161,7 +161,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", graceS: 120)
     try await connectTask.value
 
@@ -180,7 +180,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", resumeToken: "resume-1", graceS: 120)
     try await connectTask.value
 
@@ -197,7 +197,7 @@ final class AppductClientTests: XCTestCase {
     // Fire the scheduled reconnect timer; the resume attempt re-simulates an ack.
     timers.advance(byMs: AppductBackoff.capMs)
     try await waitUntil("the resume attempt started a second transport handshake") {
-      transport.connectCallCount >= 2
+      transport.isWired && transport.connectCallCount >= 2
     }
     transport.simulateAck(sessionId: "session-1", resumeToken: "resume-2", graceS: 120)
     try await waitUntil("the client went active again after the resume ack") {
@@ -216,7 +216,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", graceS: 10)
     try await connectTask.value
 
@@ -248,7 +248,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", graceS: 120)
     try await connectTask.value
 
@@ -272,7 +272,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", graceS: 120)
     try await connectTask.value
 
@@ -296,7 +296,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
@@ -314,7 +314,7 @@ final class AppductClientTests: XCTestCase {
     try client.registerTool(ToolDescriptor(name: "tool_a", description: "x"), handler: { _, _ in .null })
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
@@ -353,7 +353,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
     return (client, transport)
@@ -446,7 +446,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
@@ -573,7 +573,7 @@ final class AppductClientTests: XCTestCase {
   func testHandleUrlReturnsTrueAndConnectsForValidLink() async throws {
     let (client, transport) = makeClient()
     XCTAssertTrue(client.handleUrl(bootstrapUrl(sessionId: "session-9")))
-    try await waitUntil("the deep link reached the transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the deep link reached the transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-9")
     try await waitUntil("the client went active after the ack") { await client.state == .active }
 
@@ -598,13 +598,13 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput(sessionId: "session-1")
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
     XCTAssertTrue(client.handleUrl(bootstrapUrl(sessionId: "session-2")))
     try await waitUntil("the superseding link started a second transport handshake") {
-      transport.connectCallCount >= 2
+      transport.isWired && transport.connectCallCount >= 2
     }
     transport.simulateAck(sessionId: "session-2")
     // `sessionId` alone would be satisfied by `connectingSessionId` the moment the superseding
@@ -623,7 +623,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput(sessionId: "session-1")
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
@@ -664,7 +664,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let restored = await client.restoreSession()
     XCTAssertTrue(restored)
-    try await waitUntil("the resume attempt started a transport handshake") { transport.connectCallCount >= 1 }
+    try await waitUntil("the resume attempt started a transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-restored", resumeToken: "resume-token-2")
     try await waitUntil("the client went active after the resume ack") { await client.state == .active }
 
