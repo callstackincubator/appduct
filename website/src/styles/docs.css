@@ -141,7 +141,6 @@ h1#_top {
 	font-weight: 400;
 	color: var(--sl-color-white);
 	background: var(--cs-wash);
-	box-shadow: inset 2px 0 0 var(--cs-purple);
 }
 .sidebar-content ul ul li:has(> a[aria-current='page']) {
 	border-inline-start-color: var(--cs-purple);

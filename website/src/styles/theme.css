@@ -175,10 +175,18 @@ site-search button[data-open-modal]:hover {
 	border-color: var(--cs-accent) !important;
 	color: var(--sl-color-white) !important;
 }
-site-search button[data-open-modal] kbd {
+/* The shortcut is a <kbd> wrapping one <kbd> per key: frame the wrapper only, so the keys
+   don't draw overlapping boxes inside it. */
+site-search button[data-open-modal] > kbd {
 	background: transparent !important;
 	border: 1px solid var(--cs-line);
 	font-family: var(--cs-font-mono);
+}
+site-search button[data-open-modal] > kbd kbd {
+	background: transparent !important;
+	border: 0 !important;
+	padding: 0 0.1em;
+	font-family: inherit;
 }
 site-search dialog {
 	border: 1px solid var(--cs-line) !important;
