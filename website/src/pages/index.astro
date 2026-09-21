@@ -1,0 +1,542 @@
+---
+// The landing page. Rendered through StarlightPage so the header, search, theme toggle and
+// footer stay identical to the docs; the hero comes from the Hero override, the rest is here.
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { Code } from '@astrojs/starlight/components';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const docs = (slug: string) => `${base}/${slug}/`;
+const repo = 'https://github.com/callstackincubator/appduct';
+
+const toolCode = `import { useAppductTool } from "@appduct/react-native";
+import { z } from "zod";
+
+useAppductTool({
+  name: "seed_cart",
+  description: "Fill the cart with test items.",
+  inputSchema: z.object({ items: z.number() }),
+  handler: async ({ items }) => ({ added: items }),
+});`;
+
+const invokeCode = `appduct invoke seed_cart --input '{"items":3}'`;
+
+const testCode = `import { connect } from "appduct/client";
+
+const app = await connect();
+await app.call("seed_cart", { items: 3 });`;
+
+const mcpCode = `{
+  "mcpServers": {
+    "appduct": { "command": "appduct", "args": ["mcp"] }
+  }
+}`;
+
+const why = [
+	{
+		title: 'Tests stop tapping through setup.',
+		body: 'Call login(userId) or seedCart(items) directly and jump to the part you are actually testing. Faster runs, less flakiness.',
+	},
+	{
+		title: 'Agents can drive your app.',
+		body: 'One line of MCP config and the agent can find and call your app’s functions. Flip a flag, open a screen, check some state.',
+	},
+	{
+		title: 'No hidden debug UI.',
+		body: 'No secret gestures, no admin panel behind a long-press. Only the functions you registered are reachable.',
+	},
+	{
+		title: 'A dev loop that holds.',
+		body: 'Reloads, backgrounding, flaky Wi-Fi — the session survives and picks back up. One service, every device you plug in.',
+	},
+];
+
+const platforms = [
+	{
+		name: 'React Native',
+		pkg: '@appduct/react-native',
+		body: 'iOS 15.1+ and Android on the New Architecture. Expo dev builds or bare apps.',
+		href: docs('install/react-native'),
+	},
+	{
+		name: 'iOS',
+		pkg: 'AppductCore',
+		body: 'Swift, iOS 15.1+. Swift Package Manager or CocoaPods. Nothing from React Native.',
+		href: docs('install/ios'),
+	},
+	{
+		name: 'Android',
+		pkg: 'com.callstack.appduct:core',
+		body: 'Kotlin, Android 7.0 (API 24)+. Maven Central, with a no-op artifact for release.',
+		href: docs('install/android'),
+	},
+];
+---
+
+<StarlightPage
+	frontmatter={{
+		title: 'Let agents and tests reach into your running app',
+		description:
+			'Let agents and tests reach into your running app — without shipping a debug menu. For React Native, iOS, and Android.',
+		template: 'splash',
+		editUrl: false,
+		lastUpdated: false,
+		hero: {
+			title: 'Let agents and tests <em>reach into your running app.</em>',
+			tagline:
+				'Appduct lets a terminal, a test runner, or an AI agent call functions inside your app while it’s running. You pick what’s callable. Nothing else is reachable.',
+			actions: [
+				{ text: 'Quick start', link: docs('start/quick-start'), variant: 'primary', icon: 'right-arrow' },
+				{ text: 'GitHub', link: repo, variant: 'secondary', icon: 'external' },
+			],
+		},
+	}}
+	hasSidebar={false}
+>
+	<div class="landing not-content">
+		<p class="install" aria-label="Install the CLI">
+			<span class="prompt" aria-hidden="true">$</span> npm install -g appduct
+		</p>
+
+		<!-- Why -->
+		<section class="section" aria-labelledby="why-title">
+			<p class="cs-eyebrow">Why you’d want this</p>
+			<h2 class="title" id="why-title">
+				Skip the setup. <em>Test the part that matters.</em>
+			</h2>
+			<div class="topics">
+				{
+					why.map(({ title, body }) => (
+						<article class="topic">
+							<h3>{title}</h3>
+							<p>{body}</p>
+						</article>
+					))
+				}
+			</div>
+		</section>
+
+		<!-- What it looks like -->
+		<section class="section" aria-labelledby="looks-title">
+			<p class="cs-eyebrow">What it looks like</p>
+			<h2 class="title" id="looks-title">
+				Register a function. <em>Call it from anywhere.</em>
+			</h2>
+			<div class="split">
+				<div class="split-col">
+					<p class="step-label"><span>01</span> In your app</p>
+					<Code code={toolCode} lang="tsx" title="CartScreen.tsx" />
+					<p class="note">
+						Registers once per mount. The handler always sees the latest state it closes over. Native apps
+						register the same way from Swift or Kotlin.
+					</p>
+				</div>
+				<div class="split-col">
+					<p class="step-label"><span>02</span> From your terminal</p>
+					<Code code={invokeCode} lang="sh" frame="terminal" title="Terminal" wrap />
+					<p class="step-label"><span>03</span> Or from a test</p>
+					<Code code={testCode} lang="ts" title="checkout.test.ts" />
+					<p class="note">
+						The CLI reads your deep-link scheme from <code>app.json</code>, <code>Info.plist</code>, or{' '}
+						<code>build.gradle</code>. There is nothing to configure.
+					</p>
+				</div>
+			</div>
+		</section>
+
+		<!-- Purple statement band -->
+		<section class="band" aria-labelledby="band-title">
+			<p class="cs-eyebrow">Build variants</p>
+			<h2 class="statement" id="band-title">Nothing ships in your release build.</h2>
+			<div class="band-rows">
+				<p>Debug builds only, by default.</p>
+				<p>Release builds compile it out, not just switch it off.</p>
+				<p>Opt in per build for TestFlight or internal tracks.</p>
+			</div>
+			<a class="band-link" href={docs('guides/build-variants')}>Build variants <span aria-hidden="true">→</span></a>
+		</section>
+
+		<!-- Agents -->
+		<section class="section" aria-labelledby="agents-title">
+			<p class="cs-eyebrow">Use it with an agent</p>
+			<h2 class="title" id="agents-title">
+				One line of config. <em>Your app becomes a toolset.</em>
+			</h2>
+			<div class="split split--agents">
+				<div class="split-col">
+					<Code code={mcpCode} lang="json" title="MCP config" />
+				</div>
+				<div class="split-col lanes">
+					<div class="lane">
+						<span class="lane-label">MCP</span>
+						<span class="lane-value">Claude Code, Cursor, or any MCP client. The agent lists your app’s tools, reads their schemas, and calls them.</span>
+					</div>
+					<div class="lane">
+						<span class="lane-label">CLI + skill</span>
+						<span class="lane-value">For agents that work in a shell: <code>npx skills add callstackincubator/appduct --skill appduct</code></span>
+					</div>
+					<div class="lane">
+						<span class="lane-label">Trust</span>
+						<span class="lane-value">Encrypted connection. The app checks who is on the other end. <a href={docs('guides/security')}>Security model →</a></span>
+					</div>
+					<a class="text-link" href={docs('guides/agents')}>Agents guide <span aria-hidden="true">→</span></a>
+				</div>
+			</div>
+		</section>
+
+		<!-- Platforms -->
+		<section class="section" aria-labelledby="platforms-title">
+			<p class="cs-eyebrow">Runs where your app runs</p>
+			<h2 class="title" id="platforms-title">
+				React Native. <em>Or no React Native at all.</em>
+			</h2>
+			<div class="platforms">
+				{
+					platforms.map(({ name, pkg, body, href }) => (
+						<a class="platform" href={href}>
+							<h3>{name}</h3>
+							<code>{pkg}</code>
+							<p>{body}</p>
+							<span class="platform-cta">
+								Set up <span aria-hidden="true">→</span>
+							</span>
+						</a>
+					))
+				}
+			</div>
+		</section>
+
+		<!-- Closer -->
+		<section class="section closer" aria-labelledby="closer-title">
+			<h2 class="statement" id="closer-title">
+				Register one tool. <em>See where it goes.</em>
+			</h2>
+			<div class="closer-actions">
+				<a class="cs-button cs-button--primary" href={docs('start/quick-start')}>Quick start <span aria-hidden="true">→</span></a>
+				<a class="cs-button" href={docs('start/playground')}>Try the playground</a>
+				<a class="cs-button" href={`${base}/llms.txt`}>llms.txt</a>
+			</div>
+		</section>
+	</div>
+</StarlightPage>
+
+<style>
+	.landing {
+		--gap: clamp(1.5rem, 4vw, 4.5rem);
+		padding-bottom: 4rem;
+	}
+	.landing em {
+		font-style: normal;
+		color: var(--cs-accent);
+	}
+	.landing code {
+		font-family: var(--cs-font-mono);
+		font-size: 0.875em;
+	}
+
+	.install {
+		margin: 2.5rem 0 0;
+		font-family: var(--cs-font-mono);
+		font-size: 0.875rem;
+		color: var(--cs-muted);
+	}
+	.install .prompt {
+		color: var(--cs-accent);
+		margin-inline-end: 0.5rem;
+	}
+
+	.section {
+		margin-top: clamp(5rem, 10vw, 9rem);
+	}
+	.section .cs-eyebrow {
+		margin-bottom: 1.25rem;
+	}
+
+	.title {
+		margin: 0;
+		max-width: 22ch;
+		text-wrap: balance;
+		font-family: var(--cs-font-display);
+		font-weight: 400;
+		font-size: clamp(2.25rem, 1.2rem + 3.6vw, 4.25rem);
+		line-height: 1.04;
+		letter-spacing: -0.052em;
+		color: var(--sl-color-white);
+	}
+	.statement {
+		margin: 0;
+		font-family: var(--cs-font-display);
+		font-weight: 400;
+		font-size: clamp(2.75rem, 1rem + 6.2vw, 6.5rem);
+		line-height: 1;
+		letter-spacing: -0.058em;
+	}
+
+	/* Topic columns: top-ruled, no fills. */
+	.topics {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 2.5rem var(--gap);
+		margin-top: clamp(2.5rem, 5vw, 4.5rem);
+	}
+	.topic {
+		padding-top: 1.25rem;
+		border-top: 1px solid var(--cs-line);
+	}
+	.topic h3 {
+		margin: 0;
+		font-family: var(--cs-font-display);
+		font-weight: 400;
+		font-size: 1.625rem;
+		line-height: 1.12;
+		letter-spacing: -0.035em;
+		color: var(--sl-color-white);
+	}
+	.topic p {
+		margin: 1rem 0 0;
+		font-size: 1rem;
+		line-height: 1.55;
+		color: var(--cs-muted);
+	}
+
+	/* Two-column split, divided by a hairline. */
+	.split {
+		display: grid;
+		grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+		gap: var(--gap);
+		margin-top: clamp(2.5rem, 5vw, 4.5rem);
+	}
+	.split--agents {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		align-items: start;
+	}
+	.split-col {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		min-width: 0;
+	}
+	.split-col + .split-col {
+		padding-inline-start: var(--gap);
+		border-inline-start: 1px solid var(--cs-line);
+	}
+	.step-label {
+		margin: 0;
+		font-family: var(--cs-font-mono);
+		font-size: 0.75rem;
+		letter-spacing: 0.055em;
+		text-transform: uppercase;
+		color: var(--cs-muted);
+	}
+	.step-label:not(:first-child) {
+		margin-top: 1.5rem;
+	}
+	.step-label span {
+		color: var(--cs-accent);
+		margin-inline-end: 0.75rem;
+	}
+	.note {
+		margin: 0.25rem 0 0;
+		font-size: 0.9375rem;
+		line-height: 1.55;
+		color: var(--cs-muted);
+	}
+	.split :global(.expressive-code) {
+		margin: 0;
+	}
+
+	/* Purple, full-bleed statement band. The border-image paints the purple out to the viewport
+	   edges without widening the layout (it is ink overflow, so no horizontal scroll). */
+	.band {
+		--cs-muted: #e0ceff;
+		--cs-line: #ffffff4d;
+		position: relative;
+		margin-top: clamp(5rem, 10vw, 9rem);
+		padding-block: clamp(4rem, 9vw, 7.5rem);
+		color: #ffffff;
+		border-image: conic-gradient(var(--cs-purple) 0 0) fill 0 / / 0 100vw;
+	}
+	.band .cs-eyebrow {
+		margin-bottom: 1.5rem;
+		color: #e0ceff;
+	}
+	.band .statement {
+		max-width: 12ch;
+		color: #ffffff;
+	}
+	.band-rows {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0 var(--gap);
+		margin-top: clamp(2.5rem, 5vw, 4.5rem);
+	}
+	.band-rows p {
+		margin: 0;
+		padding: 1.25rem 0;
+		border-top: 1px solid var(--cs-line);
+		font-family: var(--cs-font-display);
+		font-size: clamp(1.25rem, 1rem + 0.8vw, 1.625rem);
+		line-height: 1.2;
+		letter-spacing: -0.03em;
+	}
+	.band-link {
+		display: inline-block;
+		margin-top: 2rem;
+		font-family: var(--cs-font-mono);
+		font-size: 0.8125rem;
+		letter-spacing: 0.055em;
+		text-transform: uppercase;
+		color: #ffffff;
+		text-decoration: none;
+		border-bottom: 1px solid #ffffff80;
+		padding-bottom: 0.25rem;
+	}
+	.band-link:hover {
+		border-bottom-color: #ffffff;
+	}
+
+	/* Mono label + value rows. */
+	.lanes {
+		gap: 0;
+	}
+	.lane {
+		display: grid;
+		grid-template-columns: 7.5rem minmax(0, 1fr);
+		gap: 1.5rem;
+		padding: 1.25rem 0;
+		border-bottom: 1px solid var(--cs-line);
+	}
+	.lane:first-child {
+		border-top: 1px solid var(--cs-line);
+	}
+	.lane-label {
+		padding-top: 0.2rem;
+		font-family: var(--cs-font-mono);
+		font-size: 0.75rem;
+		letter-spacing: 0.055em;
+		text-transform: uppercase;
+		color: var(--cs-muted);
+	}
+	.lane-value {
+		font-size: 1.0625rem;
+		line-height: 1.5;
+		color: var(--sl-color-white);
+		overflow-wrap: anywhere;
+	}
+	.lane-value a,
+	.text-link {
+		color: var(--cs-accent);
+		text-decoration: none;
+	}
+	.lane-value a:hover,
+	.text-link:hover {
+		text-decoration: underline;
+		text-underline-offset: 0.2em;
+	}
+	.text-link {
+		margin-top: 1.5rem;
+		font-family: var(--cs-font-mono);
+		font-size: 0.8125rem;
+		letter-spacing: 0.055em;
+		text-transform: uppercase;
+	}
+
+	/* Platforms: three outlined columns; the whole column is the link. */
+	.platforms {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		margin-top: clamp(2.5rem, 5vw, 4.5rem);
+		border: 1px solid var(--cs-line);
+	}
+	.platform {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: clamp(1.5rem, 3vw, 2.5rem);
+		text-decoration: none;
+		color: inherit;
+		transition: background-color 0.15s ease;
+	}
+	.platform + .platform {
+		border-inline-start: 1px solid var(--cs-line);
+	}
+	.platform:hover {
+		background: var(--cs-wash);
+	}
+	.platform h3 {
+		margin: 0;
+		font-family: var(--cs-font-display);
+		font-weight: 400;
+		font-size: clamp(2rem, 1.4rem + 1.6vw, 2.75rem);
+		line-height: 1.05;
+		letter-spacing: -0.045em;
+		color: var(--sl-color-white);
+	}
+	.platform code {
+		color: var(--cs-accent);
+		font-size: 0.8125rem;
+		overflow-wrap: anywhere;
+	}
+	.platform p {
+		margin: 0.5rem 0 0;
+		flex: 1;
+		line-height: 1.55;
+		color: var(--cs-muted);
+	}
+	.platform-cta {
+		margin-top: 1rem;
+		font-family: var(--cs-font-mono);
+		font-size: 0.75rem;
+		letter-spacing: 0.055em;
+		text-transform: uppercase;
+		color: var(--sl-color-white);
+	}
+	.platform:hover .platform-cta {
+		color: var(--cs-accent);
+	}
+
+	.closer {
+		padding-top: clamp(2.5rem, 5vw, 4rem);
+		border-top: 1px solid var(--cs-line);
+	}
+	.closer .statement {
+		max-width: 14ch;
+		color: var(--sl-color-white);
+	}
+	.closer-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		margin-top: 2.5rem;
+	}
+
+	@media (max-width: 72rem) {
+		.topics {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	@media (max-width: 50rem) {
+		.split,
+		.split--agents,
+		.band-rows,
+		.platforms {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.split-col + .split-col {
+			padding-inline-start: 0;
+			border-inline-start: 0;
+		}
+		.platform + .platform {
+			border-inline-start: 0;
+			border-top: 1px solid var(--cs-line);
+		}
+	}
+	@media (max-width: 36rem) {
+		.topics {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.lane {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 0.5rem;
+		}
+	}
+</style>

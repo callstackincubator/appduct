@@ -1,0 +1,153 @@
+---
+title: Use Appduct with an agent
+description: Connect Claude Code, Cursor, or another agent to your app over MCP or through the CLI, and require approval for risky tools.
+sidebar:
+  order: 1
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+An agent can list your app's tools, call them, and connect a simulator on its own. There are two ways to hook it up:
+
+- **Over MCP**, for Claude Code, Cursor, and any other MCP client. Nothing else to install.
+- **Through the CLI**, for agents that work in a shell, and for scripts. Install the Appduct skill so the agent knows the commands.
+
+Both need the CLI installed on your computer (`npm install -g appduct`) and an app with Appduct set up. See the [Quick start](/appduct/start/quick-start/).
+
+## Add Appduct as an MCP server
+
+Add this entry to your agent's MCP config:
+
+<Tabs>
+  <TabItem label="Claude Code">
+    In `.mcp.json` at your project root:
+
+    ```json title=".mcp.json"
+    {
+      "mcpServers": {
+        "appduct": { "command": "appduct", "args": ["mcp"] }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Cursor">
+    In `.cursor/mcp.json` at your project root:
+
+    ```json title=".cursor/mcp.json"
+    {
+      "mcpServers": {
+        "appduct": { "command": "appduct", "args": ["mcp"] }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Other clients">
+    Configure a stdio server that runs `appduct mcp`. There's no separate server to start: it starts Appduct's background service the same way the CLI does.
+  </TabItem>
+</Tabs>
+
+**Name your app's scheme in the entry.** An MCP server usually starts in a directory you don't control, so Appduct may not find your app's scheme there. Run `appduct init` in your app's root: it prints an entry that includes the scheme, like this:
+
+```json
+{
+  "mcpServers": {
+    "appduct": { "command": "appduct", "args": ["mcp", "--scheme", "myapp"] }
+  }
+}
+```
+
+Without a scheme, the server still starts, and the agent can use a device you've already connected from the terminal. Only connecting new devices fails.
+
+## What the agent sees
+
+Your app's tools aren't added to the agent's tool list one by one. Instead, the agent gets seven built-in tools. Three of them reach your app's tools, and work like the CLI:
+
+| Tool | What it does | CLI equivalent |
+| --- | --- | --- |
+| `appduct_list_tools` | Lists your app's tools as one-line signatures, with each tool's group and policy, and your app's groups with counts. Returns 50 at a time unless given `limit`; takes `group`, `filter`, and `offset`. | `appduct tools` |
+| `appduct_describe_tool` | Shows one tool's full input and output schema. | `appduct tools <name>` |
+| `appduct_call_tool` | Calls a tool by `name` with `args`. Progress and errors come through unchanged. | `appduct invoke` |
+
+So an app with hundreds of tools adds only these to the agent's context, and the list doesn't change when tools register or a device connects.
+
+The other four connect devices and read app events:
+
+| Tool | What it does |
+| --- | --- |
+| `appduct_connect` | Creates a connection link and opens it on a booted iOS Simulator or Android emulator it finds. If there's none, it returns a QR code for you to scan. |
+| `appduct_wait_for_session` | Waits until the device connects. |
+| `appduct_events` | Returns events your app posted with `postEvent`, since a cursor. |
+| `appduct_wait_for_event` | Waits for a specific app event, checking events that already arrived first. |
+
+With more than one device connected, the agent passes `selector`, the session's alias or id, to pick one.
+
+### How an agent connects a device
+
+1. It calls `appduct_connect` with no arguments. If a simulator or emulator is running, the link is opened there and the result says `delivered: true`.
+2. It calls `appduct_wait_for_session`, which returns once the app connects.
+3. It lists, describes, and calls tools.
+
+If nothing is running, `appduct_connect` returns a QR code and instructions to show it to you. Scan it with your device's camera; the agent waits afterward.
+
+**Android needs your package name.** Record it once with `appduct init --android-app-id com.example.shop` in your app root, or the agent has to pass `appId` on every connect. Without one, connecting to Android fails before anything happens.
+
+**Physical iPhones are never picked automatically**, since a paired iPhone is often someone's personal phone. The agent can target one only if you ask it to (`target: "ios-device"` with `appId`); it's experimental and has [extra requirements](/appduct/guides/cli/#physical-iphone-or-ipad-experimental).
+
+## Require approval for risky tools
+
+Your MCP client asks permission for `appduct_call_tool` as a single tool. If you choose "always allow" there, you approve **every** tool your app registers, destructive ones included.
+
+To keep approving those calls yourself, set `policy.destructive` to `"prompt"` in Appduct's config file, `~/.appduct/config.json`:
+
+```json title="~/.appduct/config.json"
+{
+  "policy": { "destructive": "prompt" }
+}
+```
+
+Each call to a tool marked `destructiveHint: true` then asks you to approve it, with the tool name, device, and arguments. Tools without that annotation follow `policy.default` instead. See [Annotate what a tool does](/appduct/guides/writing-tools/#annotate-what-a-tool-does).
+
+Things to know before you rely on it:
+
+- **Set it before you connect.** Appduct reads `config.json` only when its background service starts. To apply a change, run `appduct daemon stop`. This disconnects every device, so connect them again, and restart the MCP server in your client too.
+- **The prompt needs a client that supports MCP elicitation.** In a client that doesn't, and from the CLI, a `"prompt"` tool is refused with `policy_denied` (reason `no_consent_channel`). It's never silently allowed.
+- **Unattended runs can't approve anything.** In CI, or non-interactive Claude Code (`claude -p`), `"prompt"` tools are always refused. Set such tools to `"allow"` or `"deny"` for those pipelines.
+- **A client set up to answer prompts automatically approves them** without showing you anything. Appduct can't tell that apart from you clicking approve.
+- **If you decline, the agent gets an error** for that call. It shouldn't retry on its own.
+
+You can also allow, prompt, or deny individual tools. See [Limit what callers can run](/appduct/guides/security/#limit-what-callers-can-run).
+
+## Use the CLI from a shell agent
+
+Agents that run shell commands can use the CLI directly. Install the Appduct skill so the agent knows the workflow and the rules for tool schemas:
+
+```bash
+npx skills add callstackincubator/appduct --skill appduct
+```
+
+Install it too if you're asking an agent to add Appduct to your app or to write tools: it covers setup.
+
+A typical session from an agent:
+
+```bash
+appduct ls                          # is a device connected?
+appduct link --open ios-sim         # connect one if not
+appduct tools --groups              # large app: see the areas first
+appduct tools --group cart          # then list one area
+appduct tools add_item              # full schema for one tool
+appduct invoke add_item --input '{"sku":"SKU-1042","quantity":2}'
+```
+
+Plain-text output is meant for reading, and may change between versions. Scripts should add `--json`. See the [CLI guide](/appduct/guides/cli/).
+
+## Troubleshooting
+
+**The MCP server fails to start after you upgraded Appduct.** The background service from the old version is still running with connected devices, and replacing it would disconnect them. The server's error output names both versions. Run `appduct daemon stop`, then restart the MCP server.
+
+**`appduct_connect` fails with `invalid_request` about the scheme.** The server couldn't find your app's scheme. Add `"--scheme", "myapp"` to the server's `args`, as `appduct init` prints.
+
+**`appduct_wait_for_session` seems to hang.** Nothing opened the link. If `appduct_connect` returned a QR code, it has to be scanned first. On Android, check that the app id is right.
+
+**Calls fail with `policy_denied`.** The tool's policy is `"deny"`, or `"prompt"` in a client that can't ask you. Retrying won't help; change the policy or use a client that supports elicitation.
+
+**The agent can't find a tool you just added.** The component that registers it isn't mounted, or the app hasn't reloaded. Ask the agent to list tools again after the change.

@@ -1,0 +1,61 @@
+---
+title: Introduction
+description: Appduct lets a terminal, a test runner, or an AI agent call functions inside your running React Native, iOS, or Android app.
+sidebar:
+  order: 1
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Appduct lets a terminal, a test runner, or an AI agent call functions inside your app while it's running. You choose what's callable by registering a few functions, called **tools**. Nothing else in the app is reachable.
+
+It works with React Native apps, and with plain iOS (Swift) and Android (Kotlin) apps.
+
+## Who it's for
+
+- **Teams writing end-to-end tests** who are tired of tapping through login, onboarding, and seeding data before every test.
+- **Developers working with coding agents** such as Claude Code or Cursor, who want the agent to flip a feature flag, jump to a screen, or read app state without clicking through the UI.
+- **QA and internal-build workflows** that need a controlled way to put an app into a known state.
+
+## Why use it
+
+**Your E2E tests skip the setup.** Most of an end-to-end test isn't the thing you're testing. It's logging in, dismissing onboarding, seeding a cart. With Appduct, the test calls `login(userId)` or `seedCart(items)` directly and moves on to the part that matters. Runs get faster and less flaky, and an agent burns fewer screenshots.
+
+**Agents can drive your app.** Add Appduct to your agent's MCP config and it can list and call your app's tools.
+
+**There's no hidden debug UI.** No secret gestures, no long-press admin panel, nothing in the app for someone to go find. The only things reachable are the tools you registered.
+
+**Release builds don't include it.** Appduct is in debug builds only. A release build leaves it out at compile time rather than switching it off. You can opt in for internal builds, such as a TestFlight build your CI drives. See [Build variants](/appduct/guides/build-variants/).
+
+**Your dev loop keeps working.** Reloads, backgrounding the app, and flaky Wi-Fi don't end the session: it reconnects on its own. One background service on your machine handles every device you connect.
+
+## How the pieces fit
+
+You install the `appduct` CLI on your computer and add the Appduct library to your app. The CLI runs a background service (the daemon) that your app connects to over an encrypted connection. To connect a device, you open a one-time link in the app, either delivered automatically to a simulator or emulator or scanned as a QR code. After that, the CLI, your MCP-connected agent, and your test runner all talk to the same service and see the same tools. The service starts itself the first time you run a command.
+
+For more detail, see [How it works](/appduct/reference/architecture/).
+
+## Requirements
+
+| Where | Requirement |
+| --- | --- |
+| React Native app | iOS 15.1+ and Android, New Architecture. A development build or bare React Native app; Expo Go isn't supported. Web gets a stub that does nothing. |
+| iOS app without React Native | iOS 15.1+. Installing with Swift Package Manager needs Xcode 16.3 or newer. |
+| Android app without React Native | Android 7.0 (API 24) or newer. |
+| CLI | Node 20 or newer, on macOS or Linux. Windows hasn't been verified. |
+
+## Where to go next
+
+<CardGrid>
+  <LinkCard title="Quick start" description="Register a tool and call it from your terminal." href="/appduct/start/quick-start/" />
+  <LinkCard title="Try the playground" description="Run a working example app end to end." href="/appduct/start/playground/" />
+  <LinkCard title="Is it safe to ship?" description="What Appduct protects against, and what it doesn't." href="/appduct/guides/security/" />
+</CardGrid>
+
+### Choose your platform
+
+<CardGrid>
+  <LinkCard title="React Native setup" description="Add Appduct to an Expo or bare React Native app." href="/appduct/install/react-native/" />
+  <LinkCard title="iOS setup" description="Add Appduct to a plain iOS app, in Swift." href="/appduct/install/ios/" />
+  <LinkCard title="Android setup" description="Add Appduct to a plain Android app, in Kotlin." href="/appduct/install/android/" />
+</CardGrid>

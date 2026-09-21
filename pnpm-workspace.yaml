@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
   - "playground"
+  - "website"
 allowBuilds:
   # esbuild works without its postinstall (it loads the platform binary from its optional
   # dependency), and CI installs with --ignore-scripts anyway.

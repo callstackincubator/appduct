@@ -1,0 +1,238 @@
+---
+title: Use the CLI
+description: Connect devices, list and call tools, watch events, check build artifacts, and drive your app from end-to-end tests.
+sidebar:
+  order: 2
+---
+
+The `appduct` CLI connects to your running app, lists the tools it registered, and calls them. This page covers everyday tasks. For every command and flag, see the [CLI reference](/appduct/reference/cli/).
+
+Install it with `npm install -g appduct` (Node 20 or newer). There's no server to start: the first command starts Appduct's background service, which keeps running and holds your device connections.
+
+## Connect a device
+
+A device connects by opening a one-time link in your app. `appduct link` creates the link; how it reaches the device depends on the device. Run `appduct link` from your app's root directory, so it finds your deep-link scheme (see [How the CLI finds your scheme](#how-the-cli-finds-your-scheme)).
+
+| Device | Command | Needs |
+| --- | --- | --- |
+| iOS Simulator | `appduct link --open ios-sim` | A booted simulator |
+| Android emulator or USB device | `appduct link --open android` | `adb`, and your app's package name |
+| Any device on your local network | `appduct link --qr` | Scan the QR code with the device's camera |
+| Physical iPhone or iPad (experimental) | `appduct link --open ios-device` | See [below](#physical-iphone-or-ipad-experimental) |
+
+The link expires after 5 minutes and works once. Run `appduct ls` to check the session's state; once the app opens the link, it shows `active`.
+
+**Android needs your app's package name**, so the link opens your app and not another one that declares the same scheme. Pass `--app-id com.example.shop`, or record it once in your project:
+
+```bash
+appduct init --android-app-id com.example.shop --ios-app-id com.example.shop
+```
+
+**With several simulators or devices running**, `--open` lists them and stops instead of guessing. Pick one with `--device <udid or serial>`. For Android, setting `ANDROID_SERIAL` also works.
+
+**A QR code needs the phone and computer on the same network.** The link carries your computer's local network address. If the detected address is wrong, set `advertisedIp` in `~/.appduct/config.json`.
+
+### Physical iPhone or iPad (experimental)
+
+`--open ios-device` opens the link on a connected iPhone without scanning a QR code. It relies on an undocumented Xcode feature, so if it fails, fall back to `--qr`. It needs:
+
+- iOS 17 or newer on the device, and Xcode 15 or newer on your Mac.
+- The device connected, paired, and trusted, with Developer Mode on (Settings → Privacy & Security → Developer Mode).
+- A development-signed build of your app already installed.
+- The phone on the same network as your Mac.
+- Your app's bundle id: `--app-id`, or `appId.ios` recorded by `appduct init --ios-app-id`.
+
+```bash
+appduct link --open ios-device --app-id com.example.shop
+```
+
+If the app is already running and nothing happens, add `--relaunch` to restart it first.
+
+## Work with several devices
+
+One background service handles every connected device. Each session gets an alias based on the device model, such as `pixel-8` or `iphone15-2`:
+
+```bash
+appduct ls
+```
+
+Every command that targets a device takes an optional **selector** — an alias or session id — as its first argument. Leave it out when only one device is connected; with several, the command fails with `ambiguous_session` and lists the aliases.
+
+```bash
+appduct tools pixel-8
+appduct invoke pixel-8 seed_cart --input '{"items":3}'
+```
+
+## Find a tool
+
+```bash
+appduct tools
+```
+
+This prints one call signature and a one-line description per tool:
+
+```
+Tools
+  seed_cart(items: int, sku?: string, clear?: bool = true) -> { added: int, cartId: string }
+    Fill the cart with test items for the current user.
+  set_flag(name: "dark_mode" | "new_checkout", enabled: bool)  [prompt]
+    Toggle a feature flag.
+```
+
+- `name?:` marks an optional argument, and `= value` its default.
+- `-> …` is the result, when the tool declares an output schema.
+- `...` means the signature couldn't summarize that part. The full schema has it.
+- `[prompt]` or `[deny]` marks a tool whose [policy](/appduct/guides/security/#limit-what-callers-can-run) isn't "allow".
+
+For one tool's full input and output schema:
+
+```bash
+appduct tools seed_cart
+```
+
+**On an app with many tools**, look at its groups first, then list one:
+
+```bash
+appduct tools --groups
+appduct tools --group checkout            # checkout and its subgroups
+appduct tools --group checkout/payment    # only that subgroup
+```
+
+You can also narrow by text with `--filter <text>`, which matches names and descriptions, and page with `--limit <n>` and `--offset <n>`. A cut-off listing ends with a line telling you how many tools were left out.
+
+## Call a tool
+
+```bash
+appduct invoke seed_cart --input '{"items":3}'
+```
+
+`--input` is required and must be a JSON object. Use `--input '{}'` for a tool that takes no arguments.
+
+A call can run for the tool's own time limit: 10 seconds unless the tool declares `timeoutMs`. `--timeout <ms>` can make that shorter, never longer. If a tool needs more time, raise its `timeoutMs` in the app. See [Long-running tools](/appduct/guides/writing-tools/#long-running-tools).
+
+Pressing Ctrl-C during a call cancels it in the app too.
+
+When a call fails, the error type comes from the app unchanged, for example `tool_input_validation_error`, `tool_execution_error`, or `tool_timeout`. See [Error types](/appduct/reference/protocol/#error-types).
+
+## Watch events
+
+Your app can post events with `postEvent`, and Appduct reports its own, such as a device connecting or a tool call finishing. To stream them:
+
+```bash
+appduct events
+```
+
+This keeps running until you stop it. To print what already happened and exit, pass the cursor from an earlier result with `--since <cursor>`. Add `--json` for one JSON object per line.
+
+## Disconnect a device
+
+```bash
+appduct revoke pixel-8
+```
+
+This ends one session and frees its alias. Other devices stay connected.
+
+## Script the CLI
+
+Plain-text output is for reading and can change between versions. For scripts, add `--json`:
+
+```bash
+appduct invoke seed_cart --input '{"items":3}' --json
+```
+
+The result is one compact JSON line on stdout. Errors are JSON on stderr. Add `--pretty` to indent it.
+
+Exit codes tell failures apart without parsing: for example, `71` for a session problem (no device, or more than one), `72` for a tool error, `77` for a denied call. See [Exit codes](/appduct/reference/cli/#exit-codes).
+
+## Drive the app from a test suite
+
+The `appduct/client` module lets an end-to-end test call tools directly, instead of tapping through setup screens. It works with Jest, Vitest, Detox, or any Node test runner.
+
+Install `appduct` as a dev dependency of your test project, then connect in a global setup:
+
+```ts title="global-setup.ts"
+import { link, waitForSession } from "appduct/client";
+
+export default async function setup() {
+  const { sessionId } = await link({ target: "ios-sim" });
+  await waitForSession(sessionId, { timeoutMs: 60_000 });
+}
+```
+
+For Android, use `link({ target: "android", appId: "com.example.shop" })`, or record the app id with `appduct init`.
+
+In a test, call tools and wait for events the app posts:
+
+```ts
+import { connect } from "appduct/client";
+
+type Tools = {
+  login: { args: { userId: string }; result: { ok: boolean } };
+  seed_cart: { args: { items: number }; result: { added: number } };
+};
+
+const app = await connect<Tools>();
+
+await app.call("login", { userId: "qa-user-17" });
+await app.call("seed_cart", { items: 3 });
+// ...drive the checkout screen with your UI test tool...
+const { payload } = await app.waitForEvent("checkout_completed", { timeoutMs: 5_000 });
+
+app.close();
+```
+
+- `connect()` picks the only connected device. Pass `{ selector: "pixel-8" }` to choose one.
+- The `Tools` type is optional. Without it, arguments and results aren't type-checked; Appduct can't infer them, because the app registers tools at runtime.
+- Failures reject with an `AppductError` whose `type` is the error type, so you can assert on it:
+
+  ```ts
+  await expect(app.call("checkout", {})).rejects.toMatchObject({ type: "policy_denied" });
+  ```
+
+- `waitForEvent` checks events that already arrived before waiting, so it's safe to call after the action that posts the event. To skip events you've already handled, pass `since` with the `cursor` from `app.events()`.
+
+:::note
+A tool set can differ between builds, for example when a build [leaves out destructive tools](/appduct/guides/security/#keep-a-tool-out-of-some-builds). Have tests check `app.tools()` rather than assume a tool exists.
+:::
+
+:::caution
+A tool with policy `"prompt"` is always refused in CI, because nobody can approve it. Set such tools to `"allow"` in the CI machine's `~/.appduct/config.json`.
+:::
+
+## Check a build artifact
+
+`appduct doctor` checks whether a built app contains Appduct. Use it in your release pipeline to make sure Appduct didn't ship by accident:
+
+```bash
+appduct doctor build/Shop.ipa --assert-absent
+appduct doctor app/build/outputs/apk/release/app-release.apk --assert-absent
+```
+
+It reads `.app`, `.ipa`, `.apk`, and `.aab` files. With `--assert-absent` or `--assert-present`, it exits `3` if the assertion fails, and `66` if it couldn't inspect the file, so "couldn't tell" never passes as "absent". See [Build variants](/appduct/guides/build-variants/).
+
+## How the CLI finds your scheme
+
+`appduct link`, `appduct mcp`, and the agent's `appduct_connect` need your app's deep-link scheme. They use the first of:
+
+1. The `--scheme` flag.
+2. The `APPDUCT_SCHEME` environment variable.
+3. The nearest `.appduct/config.json` with a `scheme`, searching up from the current directory. `appduct init` writes this file.
+4. `scheme` in `~/.appduct/config.json`.
+5. Your project files, in the current directory: `app.json` (`expo.scheme`), then Android (`appductScheme` in `app/build.gradle(.kts)`, or `AndroidManifest.xml`), then iOS (`CFBundleURLSchemes` in an `Info.plist`, or XcodeGen's `project.yml`).
+
+If none has a scheme, the error lists every place it looked. If two project files declare different schemes, it stops and names both rather than picking one. From a React Native root, it reads only `app.json` and the iOS files, because it looks for Android's files in `app/` of the current directory, not in `android/`. Appduct never runs `app.config.js` or a Gradle build to find the scheme; for dynamic config, use `appduct init --scheme`.
+
+## Keep the background service healthy
+
+You rarely need to manage it, but:
+
+- `appduct daemon status` shows its version, port, connected sessions, and policy.
+- `appduct daemon stop` stops it and disconnects every device. The next command starts it again.
+
+**After upgrading Appduct**, the next command replaces the old service automatically if no device is connected. If one is, the command stops and tells you, rather than dropping your sessions. Run `appduct daemon stop`, or pass `--daemon-restart` to replace it anyway.
+
+Its files live in `~/.appduct`. To use a different directory, for example one per user on a shared CI machine, set `APPDUCT_STATE_DIR` or pass `--state-dir`.
+
+:::danger
+Never point `--state-dir` at a project's `.appduct/` directory. The state directory holds a private key, and a project's `.appduct/` is committed.
+:::

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://callstackincubator.github.io/appduct/sitemap-index.xml

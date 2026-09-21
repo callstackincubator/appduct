@@ -1,0 +1,245 @@
+---
+title: iOS setup
+description: Add Appduct to a SwiftUI or UIKit app without React Native, register tools in Swift, and connect it to the CLI.
+sidebar:
+  label: iOS
+  order: 2
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+This page adds Appduct to a plain iOS app, with no React Native or Expo. You register tools in Swift, and the CLI or an agent calls them the same way as in a React Native app. Building with React Native instead? See [React Native setup](/appduct/install/react-native/).
+
+**Requirements**
+
+- iOS 15.1 or newer.
+- Xcode 16.3 or newer if you install with Swift Package Manager.
+- The `appduct` CLI on your Mac: `npm install -g appduct` (Node 20 or newer).
+
+## Set up the app
+
+<Steps>
+
+1. Add the `AppductCore` library:
+
+   <Tabs syncKey="ios-pm">
+     <TabItem label="Swift Package Manager">
+       ```swift title="Package.swift"
+       .package(url: "https://github.com/callstackincubator/appduct", from: "0.10.0")
+       ```
+
+       Add the `AppductCore` product to your app target. In Xcode: File → Add Package Dependencies, then paste the repository URL.
+
+       `from: "0.10.0"` resolves to the newest `0.x` release.
+     </TabItem>
+     <TabItem label="CocoaPods">
+       ```ruby title="Podfile"
+       pod 'AppductCore', :configurations => ['Debug']
+       ```
+
+       The `:configurations` restriction keeps the pod out of your Release build.
+     </TabItem>
+   </Tabs>
+
+   With either option, your **Release** build doesn't contain Appduct's connection code. See [Ship Appduct in a Release build](#ship-appduct-in-a-release-build) to change that.
+
+2. Declare a URL scheme in `Info.plist` (Xcode: target → Info → URL Types):
+
+   ```xml title="Info.plist"
+   <key>CFBundleURLTypes</key>
+   <array>
+     <dict>
+       <key>CFBundleURLSchemes</key>
+       <array>
+         <string>myapp</string>
+       </array>
+     </dict>
+   </array>
+   ```
+
+   Appduct connects by opening a link with this scheme. The CLI reads it from `Info.plist` when you run it from your project directory.
+
+3. Forward incoming links to Appduct:
+
+   <Tabs syncKey="ios-ui">
+     <TabItem label="SwiftUI">
+       ```swift
+       import AppductCore
+       import SwiftUI
+
+       @main
+       struct ShopApp: App {
+         var body: some Scene {
+           WindowGroup {
+             ContentView()
+               .onOpenURL { url in
+                 _ = Appduct.shared.handle(url)
+               }
+           }
+         }
+       }
+       ```
+     </TabItem>
+     <TabItem label="UIKit">
+       In your scene delegate, forward from `scene(_:openURLContexts:)`, and from `connectionOptions.urlContexts` in `scene(_:willConnectTo:options:)` for a launch from a link:
+
+       ```swift
+       func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+         for context in URLContexts {
+           _ = Appduct.shared.handle(context.url)
+         }
+       }
+       ```
+     </TabItem>
+   </Tabs>
+
+   `handle(_:)` returns `true` when the link was meant for Appduct, so you can pass other links to your own handling:
+
+   ```swift
+   .onOpenURL { url in
+     if !Appduct.shared.handle(url) {
+       router.open(url)
+     }
+   }
+   ```
+
+4. Register a tool, for example at app startup:
+
+   ```swift
+   import AppductCore
+
+   try Appduct.shared.register(
+     name: "seed_cart",
+     description: "Fill the cart with test items.",
+     inputSchema: [
+       "type": "object",
+       "properties": ["items": ["type": "number"]],
+       "required": ["items"],
+     ]
+   ) { args in
+     let items = (args["items"] as? NSNumber)?.intValue ?? 0
+     return ["added": items]
+   }
+   ```
+
+   See [Register tools in Swift](#register-tools-in-swift) for the details.
+
+5. In your project directory, record the bundle id so the CLI can open links on a physical iPhone:
+
+   ```bash
+   appduct init --ios-app-id com.example.shop
+   ```
+
+   This writes `.appduct/config.json`, which you commit, and prints an MCP config entry for this app.
+
+</Steps>
+
+## Connect and check it works
+
+Build and run the **Debug** configuration on a simulator, then, from your project directory:
+
+```bash
+appduct link --open ios-sim
+appduct tools
+appduct invoke seed_cart --input '{"items":3}'
+```
+
+For a physical device, run `appduct link --qr` and scan the code with the phone's camera. The phone must be on the same local network as your Mac. See [Connect a device](/appduct/guides/cli/#connect-a-device) for other options.
+
+The app restores its session on its own after a short network drop. If the app process is killed, connect again with a new link.
+
+## Register tools in Swift
+
+- **Schemas are plain JSON Schema**, written as `[String: Any]`. Appduct doesn't validate arguments against them: they tell agents what to send. Your handler receives the arguments as `[String: Any]`.
+- **The handler is `async throws`.** Return any JSON-compatible value: `nil`, a number, string, or bool, an array, a dictionary, or nested combinations. Returning something else, such as `Date` or `Data`, fails the call with `tool_serialization_error`. Throwing fails the call with `tool_execution_error`.
+- **Handlers run off the main actor.** Wrap UI work in `await MainActor.run { … }`:
+
+  ```swift
+  try Appduct.shared.register(name: "show_alert", description: "Show a native alert.") { _ in
+    await MainActor.run {
+      // present UI here
+    }
+    return nil
+  }
+  ```
+
+- **Optional arguments:** `outputSchema`, `annotations` (`ToolAnnotations(readOnlyHint:destructiveHint:idempotentHint:)`), `timeoutMs` (default 10 seconds), and `group`. See [Writing tools](/appduct/guides/writing-tools/) for what each one does.
+- **Progress:** a handler that takes a second `ToolCallContext` argument can call `context.reportProgress(progress:message:)`.
+- **Unregistering:** `register` returns a `ToolRegistration`. Call `.remove()` to unregister. Letting it go out of scope doesn't unregister the tool.
+- **Registering the same name twice** replaces the first handler.
+- A malformed name or group makes `register` throw.
+
+## Watch the connection and send events
+
+```swift
+let subscription = Appduct.shared.addListener { event in
+  switch event {
+  case .stateChange(let change):
+    print("state ->", change.state.rawValue, change.reason ?? "")
+  case .sessionChange(let change):
+    print("session ->", change.sessionId ?? "none")
+  case .error(let error):
+    print("error [\(error.phase)]:", error.message)
+  }
+}
+
+// Stop listening:
+subscription.cancel()
+```
+
+`Appduct.shared.state` and `Appduct.shared.sessionId` give the current values without a listener.
+
+To tell a test or agent that something happened, post an event. It throws unless a session is connected:
+
+```swift
+try await Appduct.shared.postEvent("checkout_completed", payload: ["orderId": "ord_4821"])
+```
+
+Read events with `appduct events`, or wait for one from a test. See [Wait for app events](/appduct/guides/cli/#watch-events).
+
+## Ship Appduct in a Release build
+
+For an internal or QA build that needs Appduct in its Release configuration:
+
+- **Swift Package Manager:** enable the `AlwaysEnabled` package trait:
+
+  ```swift
+  .package(url: "https://github.com/callstackincubator/appduct", from: "0.10.0", traits: ["AlwaysEnabled"])
+  ```
+
+- **CocoaPods:** remove the `:configurations` restriction.
+
+Pin that build to your key before it leaves your team. Set these `Info.plist` keys:
+
+| Key | Value |
+| --- | --- |
+| `AppductCliPins` | Array of `sha256/...` strings, printed by `appduct keygen` |
+| `AppductTrust` | `"link"` or `"pin"`. Any other value fails every connection attempt. |
+| `AppductAllowPrivateLanOnly` | Boolean. Defaults to `true`: links must point to a local network address. |
+
+See [Security](/appduct/guides/security/) for what each mode protects against. `Appduct.shared.buildConfig` reports what a running build actually uses.
+
+Always check the built app, not the build settings:
+
+```bash
+appduct doctor build/Shop.app --assert-absent    # a Release build that shouldn't have it
+appduct doctor build/Shop.app --assert-present   # a build that should
+```
+
+## Troubleshooting
+
+**`handle(_:)` always returns `false`.** The URL doesn't carry an Appduct link. Check that the scheme in `Info.plist` matches what `appduct link` used, and that you pass the URL you received, unchanged.
+
+**A tool call never reaches the handler.** Check that `Appduct.shared.state` is `.active`, and that `appduct tools` lists the tool's name. Calls to an unregistered name fail with `tool_not_found`.
+
+**A Release build still connects.** You enabled `AlwaysEnabled` or removed the CocoaPods restriction. Run `appduct doctor` on the artifact to confirm what shipped.
+
+**The app crashes or misbehaves when a tool updates the UI.** The handler touched UI off the main actor. Use `await MainActor.run`.
+
+## Next steps
+
+- [Write more useful tools](/appduct/guides/writing-tools/): schemas, timeouts, and groups. Tool registration lives in Swift, on this page.
+- [Connect an agent](/appduct/guides/agents/) such as Claude Code or Cursor over MCP.
+- [Drive the app from a CLI or an E2E test](/appduct/guides/cli/).
+- [Keep Appduct out of your Release builds](/appduct/guides/build-variants/#verify-the-built-app), and verify it with `appduct doctor`.
+- Try the [native iOS playground](/appduct/start/playground/#native-ios-playground) for a working example app.

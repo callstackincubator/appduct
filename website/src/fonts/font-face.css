@@ -1,0 +1,26 @@
+/*
+ * Switzer by Jérémie Blanc, distributed by the Indian Type Foundry under the ITF Free Font
+ * License (https://www.fontshare.com/licenses/itf-ffl). Self-hosted so the site makes no requests
+ * to third-party font services.
+ */
+@font-face {
+	font-family: 'Switzer';
+	src: url('./Switzer-Light.woff2') format('woff2');
+	font-weight: 300;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Switzer';
+	src: url('./Switzer-Regular.woff2') format('woff2');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Switzer';
+	src: url('./Switzer-Medium.woff2') format('woff2');
+	font-weight: 500;
+	font-style: normal;
+	font-display: swap;
+}

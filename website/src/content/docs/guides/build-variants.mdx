@@ -1,0 +1,156 @@
+---
+title: Build variants
+description: Control which builds include Appduct, ship it in an internal release build, strip it completely, and verify the result.
+sidebar:
+  order: 4
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+By default, Appduct is in your **debug** builds and not in your **release** builds. A release build doesn't contain its native code at all, rather than containing it switched off. This page covers changing that default and checking what actually shipped.
+
+Which builds include Appduct and what an included build trusts are separate decisions. For trust, see [Security](/appduct/guides/security/).
+
+## React Native: the `APPDUCT_ENABLED` variable
+
+One environment variable controls the native module on both platforms:
+
+| `APPDUCT_ENABLED` | Debug build | Release build |
+| --- | --- | --- |
+| not set (default) | Included | Not included |
+| `1` or `true` | Included | Included |
+| `0` or `false` | Not included | Not included |
+
+Values are case-insensitive.
+
+**Set it when native dependencies are resolved**, not only when compiling: during `expo prebuild`, `pod install`, and Gradle configuration. Changing it and rebuilding without re-running those steps does nothing.
+
+To include Appduct in a release build, for example an internal build your CI or an agent drives:
+
+```bash
+APPDUCT_ENABLED=1 npx expo prebuild && APPDUCT_ENABLED=1 npx expo run:ios --configuration Release
+```
+
+To leave it out even of debug builds:
+
+```bash
+APPDUCT_ENABLED=0 npx expo prebuild && APPDUCT_ENABLED=0 npx expo run:ios
+```
+
+:::caution[Build names matter]
+The default applies to Xcode configurations named exactly `Debug` and `Release`, and Gradle build types named exactly `debug` and `release`. A custom name, such as a `staging` configuration, doesn't get Appduct unless you set `APPDUCT_ENABLED=1` for that pipeline.
+:::
+
+**A misspelled value falls back to the default.** On Expo, prebuild fails with an error. In a bare React Native project, nothing reports it. Check the built app with [`appduct doctor`](#verify-the-built-app).
+
+When Appduct is included, `pod install` and Gradle print `[appduct] native module INCLUDED in this build`. Nothing prints when it's left out. Treat the line as an early warning; `appduct doctor` is the real check.
+
+## Strip Appduct's JavaScript too
+
+Leaving out the native module doesn't remove Appduct's JavaScript from the bundle: the library is still there, finds no native module, and does nothing. To remove the JavaScript as well, wrap your Metro config with `withAppduct`:
+
+```js title="metro.config.js"
+const { getDefaultConfig } = require("expo/metro-config");
+const { withAppduct } = require("@appduct/react-native/metro");
+
+const config = getDefaultConfig(__dirname);
+
+module.exports = withAppduct(config);
+```
+
+With no options, it reads `APPDUCT_ENABLED`, so `APPDUCT_ENABLED=0` removes both halves at once. To decide another way, pass `{ include: false }` or `{ include: someBoolean }`.
+
+When stripping, every import of `@appduct/react-native` resolves to `@appduct/react-native/noop`: the same API, with nothing running.
+
+**Call `withAppduct` last.** If something else sets `resolver.resolveRequest` after it, the strip is silently lost. `withAppduct` keeps any resolver set before it.
+
+Removing both the native module and the JavaScript is what an app store reviewer who expects no remote-control code at all will want to see. Either half alone still gives you a working app where Appduct does nothing.
+
+## Leave Appduct out permanently
+
+To make sure a project never includes Appduct on a platform, regardless of environment variables:
+
+<Tabs>
+  <TabItem label="Bare React Native">
+    ```js title="react-native.config.js"
+    module.exports = {
+      dependencies: {
+        "@appduct/react-native": {
+          platforms: {
+            ios: null,
+            android: null,
+          },
+        },
+      },
+    };
+    ```
+  </TabItem>
+  <TabItem label="Expo">
+    Add an `expo.autolinking` exclude to **`package.json`**:
+
+    ```json title="package.json"
+    {
+      "expo": {
+        "autolinking": {
+          "ios": { "exclude": ["@appduct/react-native"] },
+          "android": { "exclude": ["@appduct/react-native"] }
+        }
+      }
+    }
+    ```
+
+    <Aside type="caution">
+    This must go in `package.json`. The same block in `app.json` or `app.config.*` is silently ignored, and Appduct still ships.
+    </Aside>
+
+    If `package.json` also has an `expo.autolinking.apple` block, it replaces `ios` on iOS. Add the exclude to `apple` as well.
+
+    Check that the exclusion worked. From your app root, after installing dependencies:
+
+    ```bash
+    ./node_modules/.bin/expo-modules-autolinking react-native-config --json --platform ios
+    ```
+
+    `@appduct/react-native` must not appear under `dependencies`.
+  </TabItem>
+</Tabs>
+
+## Plain iOS and Android apps
+
+Apps using Appduct without React Native get the same debug-only default through their dependency setup:
+
+- **iOS with Swift Package Manager:** Debug builds get the real library; Release builds get a version that does nothing. Enable the `AlwaysEnabled` package trait to include it in Release. See [iOS setup](/appduct/install/ios/#ship-appduct-in-a-release-build).
+- **iOS with CocoaPods:** `pod 'AppductCore', :configurations => ['Debug']`. Remove the restriction to include it everywhere.
+- **Android:** `debugImplementation` of `core`, `releaseImplementation` of `core-noop`. Depend on `core` for a variant to include it. See [Android setup](/appduct/install/android/#ship-appduct-in-a-release-build).
+
+`APPDUCT_ENABLED` doesn't apply to these apps.
+
+## Verify the built app
+
+Whatever your setup, check the artifact you're about to ship:
+
+```bash
+appduct doctor build/Shop.ipa --assert-absent
+appduct doctor app/build/outputs/apk/release/app-release.apk --assert-absent
+```
+
+`appduct doctor` inspects the `.app`, `.ipa`, `.apk`, or `.aab` itself, not the config that was supposed to produce it. Exit codes:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | The assertion held |
+| `3` | The assertion failed: Appduct is present when it shouldn't be, or the reverse |
+| `66` | The file couldn't be inspected, for example a missing tool or a corrupt archive |
+
+Add it as a step in your release pipeline, run against the signed artifact.
+
+## What a build without Appduct does
+
+In a build without the native module — excluded, a default release build, or Expo Go — the JavaScript API still works and does nothing:
+
+- Registering tools and posting events do nothing, and never throw.
+- `getAppductState()` returns `"idle"`.
+- `connect()` rejects with `appduct_disabled`.
+- A warning is logged once.
+
+Shared code doesn't need `if` checks around Appduct calls.

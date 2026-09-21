@@ -1,0 +1,12 @@
+---
+// Adds a pointer to each docs page's raw-Markdown twin (served by src/pages/[...slug].md.ts) so
+// agents that land on the HTML can fetch the source instead of scraping it.
+import Default from '@astrojs/starlight/components/Head.astro';
+
+const { entry } = Astro.locals.starlightRoute;
+const isDocsEntry = 'filePath' in entry && typeof entry.filePath === 'string';
+const markdownHref = isDocsEntry && entry.id ? `${import.meta.env.BASE_URL.replace(/\/$/, '')}/${entry.id}.md` : null;
+---
+
+<Default />
+{markdownHref && <link rel="alternate" type="text/markdown" href={markdownHref} />}
