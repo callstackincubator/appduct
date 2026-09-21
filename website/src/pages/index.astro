@@ -93,10 +93,6 @@ const platforms = [
 	hasSidebar={false}
 >
 	<div class="landing not-content">
-		<p class="install" aria-label="Install the CLI">
-			<span class="prompt" aria-hidden="true">$</span> npm install -g appduct
-		</p>
-
 		<!-- Why -->
 		<section class="section" aria-labelledby="why-title">
 			<p class="cs-eyebrow">Why you’d want this</p>
@@ -233,19 +229,12 @@ const platforms = [
 		font-size: 0.875em;
 	}
 
-	.install {
-		margin: 2.5rem 0 0;
-		font-family: var(--cs-font-mono);
-		font-size: 0.875rem;
-		color: var(--cs-muted);
-	}
-	.install .prompt {
-		color: var(--cs-accent);
-		margin-inline-end: 0.5rem;
-	}
-
 	.section {
 		margin-top: clamp(5rem, 10vw, 9rem);
+	}
+	/* The hero already closes on its own rule, so the first section sets its own rhythm. */
+	.section:first-child {
+		margin-top: clamp(4rem, 8vw, 7rem);
 	}
 	.section .cs-eyebrow {
 		margin-bottom: 1.25rem;
