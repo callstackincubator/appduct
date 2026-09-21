@@ -45,7 +45,7 @@ final class AppductClientTests: XCTestCase {
 
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", alias: "iphone-1")
 
     try await connectTask.value
@@ -66,10 +66,12 @@ final class AppductClientTests: XCTestCase {
 
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
-    await drainPendingTasks()
+    try await waitUntil("the registry snapshot reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_registry_snapshot") }
+    }
 
     let snapshotMessage = transport.sentMessages.first { $0.contains("tool_registry_snapshot") }
     let snapshot = try XCTUnwrap(snapshotMessage)
@@ -94,7 +96,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
@@ -110,13 +112,15 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let firstConnectInput = connectInput(sessionId: "session-1")
     let firstConnect = Task { try await client.connect(firstConnectInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await firstConnect.value
 
     let secondConnectInput = connectInput(sessionId: "session-2")
     let secondConnect = Task { try await client.connect(secondConnectInput, supersede: true) }
-    await drainPendingTasks()
+    try await waitUntil("the superseding connect started its own transport handshake") {
+      transport.isWired && transport.connectCallCount >= 2
+    }
     transport.simulateAck(sessionId: "session-2")
     try await secondConnect.value
 
@@ -131,7 +135,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
@@ -157,12 +161,14 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", graceS: 120)
     try await connectTask.value
 
     transport.simulateClose(code: 1_006, reason: nil)
-    await drainPendingTasks()
+    try await waitUntil("the client moved to reconnecting after the socket closed") {
+      await client.state == .reconnecting
+    }
 
     let state = await client.state
     XCTAssertEqual(state, .reconnecting)
@@ -174,7 +180,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", resumeToken: "resume-1", graceS: 120)
     try await connectTask.value
 
@@ -182,15 +188,21 @@ final class AppductClientTests: XCTestCase {
     _ = await client.onSessionChange { event in sessionChanges.append(event) }
 
     transport.simulateClose(code: 1_006, reason: nil)
-    await drainPendingTasks()
+    try await waitUntil("the client moved to reconnecting after the socket closed") {
+      await client.state == .reconnecting
+    }
     let stateAfterClose = await client.state
     XCTAssertEqual(stateAfterClose, .reconnecting)
 
     // Fire the scheduled reconnect timer; the resume attempt re-simulates an ack.
     timers.advance(byMs: AppductBackoff.capMs)
-    await drainPendingTasks()
+    try await waitUntil("the resume attempt started a second transport handshake") {
+      transport.isWired && transport.connectCallCount >= 2
+    }
     transport.simulateAck(sessionId: "session-1", resumeToken: "resume-2", graceS: 120)
-    await drainPendingTasks()
+    try await waitUntil("the client went active again after the resume ack") {
+      await client.state == .active
+    }
 
     let stateAfterResume = await client.state
     XCTAssertEqual(stateAfterResume, .active)
@@ -204,7 +216,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", graceS: 10)
     try await connectTask.value
 
@@ -212,12 +224,16 @@ final class AppductClientTests: XCTestCase {
     _ = await client.onSessionChange { event in sessionChanges.append(event) }
 
     transport.simulateClose(code: 1_006, reason: nil)
-    await drainPendingTasks()
+    try await waitUntil("the client moved to reconnecting after the socket closed") {
+      await client.state == .reconnecting
+    }
     let stateAfterClose = await client.state
     XCTAssertEqual(stateAfterClose, .reconnecting)
 
     timers.advance(byMs: 10_000)
-    await drainPendingTasks()
+    try await waitUntil("the grace window expired and closed the session") {
+      await client.state == .closed
+    }
 
     let stateAfterGraceExpiry = await client.state
     XCTAssertEqual(stateAfterGraceExpiry, .closed)
@@ -232,7 +248,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", graceS: 120)
     try await connectTask.value
 
@@ -240,7 +256,9 @@ final class AppductClientTests: XCTestCase {
     _ = await client.onSessionChange { event in sessionChanges.append(event) }
 
     transport.simulateClose(code: 1_008, reason: "unknown_session")
-    await drainPendingTasks()
+    try await waitUntil("the terminal close finalized the session") {
+      await client.state == .closed
+    }
 
     let state = await client.state
     XCTAssertEqual(state, .closed)
@@ -254,7 +272,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", graceS: 120)
     try await connectTask.value
 
@@ -262,7 +280,9 @@ final class AppductClientTests: XCTestCase {
     _ = await client.onSessionChange { event in sessionChanges.append(event) }
 
     transport.simulateClose(code: 1_000, reason: nil)
-    await drainPendingTasks()
+    try await waitUntil("the revoked close finalized the session") {
+      await client.state == .closed
+    }
 
     let state = await client.state
     XCTAssertEqual(state, .closed)
@@ -276,12 +296,14 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
     try client.registerTool(ToolDescriptor(name: "new_tool", description: "x"), handler: { _, _ in .null })
-    await drainPendingTasks()
+    try await waitUntil("the upsert delta reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_registry_delta") && $0.contains("upsert") }
+    }
 
     let delta = transport.sentMessages.first { $0.contains("tool_registry_delta") && $0.contains("upsert") }
     XCTAssertNotNil(delta)
@@ -292,12 +314,14 @@ final class AppductClientTests: XCTestCase {
     try client.registerTool(ToolDescriptor(name: "tool_a", description: "x"), handler: { _, _ in .null })
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
     client.unregisterTool("tool_a")
-    await drainPendingTasks()
+    try await waitUntil("the remove delta reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_registry_delta") && $0.contains("remove") }
+    }
 
     let delta = transport.sentMessages.first { $0.contains("tool_registry_delta") && $0.contains("remove") }
     XCTAssertNotNil(delta)
@@ -329,7 +353,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
     return (client, transport)
@@ -340,7 +364,9 @@ final class AppductClientTests: XCTestCase {
     _ = client
 
     transport.simulateIncoming(toolCallText(id: "call-1", name: "missing_tool"))
-    await drainPendingTasks()
+    try await waitUntil("a tool error reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_error") }
+    }
 
     let response = transport.sentMessages.first { $0.contains("tool_error") }
     let response2 = try XCTUnwrap(response)
@@ -354,7 +380,9 @@ final class AppductClientTests: XCTestCase {
     }
 
     transport.simulateIncoming(toolCallText(id: "call-1", name: "echo", args: ["value": "hi"]))
-    await drainPendingTasks()
+    try await waitUntil("the tool result reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_result") }
+    }
 
     let response = try XCTUnwrap(transport.sentMessages.first { $0.contains("tool_result") })
     XCTAssertTrue(response.contains("\"value\":\"hi\""))
@@ -366,7 +394,9 @@ final class AppductClientTests: XCTestCase {
     try client.registerTool(ToolDescriptor(name: "boom", description: "x")) { _, _ in throw Boom() }
 
     transport.simulateIncoming(toolCallText(id: "call-1", name: "boom"))
-    await drainPendingTasks()
+    try await waitUntil("a tool error reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_error") }
+    }
 
     let response = try XCTUnwrap(transport.sentMessages.first { $0.contains("tool_error") })
     XCTAssertTrue(response.contains("tool_execution_error"))
@@ -379,7 +409,9 @@ final class AppductClientTests: XCTestCase {
     }
 
     transport.simulateIncoming(toolCallText(id: "call-1", name: "bad_input"))
-    await drainPendingTasks()
+    try await waitUntil("a tool error reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_error") }
+    }
 
     let response = try XCTUnwrap(transport.sentMessages.first { $0.contains("tool_error") })
     XCTAssertTrue(response.contains("tool_input_validation_error"))
@@ -401,7 +433,9 @@ final class AppductClientTests: XCTestCase {
     await fulfillment(of: [handlerStarted], timeout: 2)
 
     transport.simulateIncoming(toolCancelText(id: "call-1"))
-    await drainPendingTasks(iterations: 40)
+    try await waitUntil("the cancelled tool answered with an error frame") {
+      transport.sentMessages.contains { $0.contains("tool_error") }
+    }
 
     let response = try XCTUnwrap(transport.sentMessages.first { $0.contains("tool_error") })
     XCTAssertTrue(response.contains("tool_cancelled"))
@@ -412,7 +446,7 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
@@ -434,11 +468,16 @@ final class AppductClientTests: XCTestCase {
     await fulfillment(of: [handlerStarted], timeout: 2)
 
     timers.advance(byMs: 1_000)
-    await drainPendingTasks()
+    try await waitUntil("the timeout answered the call") {
+      transport.sentMessages.contains { $0.contains("tool_timeout") }
+    }
 
     gate.open()
     await fulfillment(of: [handlerFinished], timeout: 2)
-    await drainPendingTasks()
+    // Negative assertion below ("the late result is dropped"): there is no frame to wait for, so
+    // this is a deliberate bounded pause giving the late resolution every chance to (wrongly)
+    // reach the wire before the assertions run.
+    await allowQueuedWorkToRun()
 
     let toolErrorMessages = transport.sentMessages.filter { $0.contains("tool_error") }
     XCTAssertEqual(toolErrorMessages.count, 1)
@@ -454,7 +493,9 @@ final class AppductClientTests: XCTestCase {
     }
 
     transport.simulateIncoming(toolCallText(id: "call-1", name: "nan_tool"))
-    await drainPendingTasks()
+    try await waitUntil("a tool error reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_error") }
+    }
 
     let response = try XCTUnwrap(transport.sentMessages.first { $0.contains("tool_error") })
     XCTAssertTrue(response.contains("tool_serialization_error"))
@@ -471,7 +512,9 @@ final class AppductClientTests: XCTestCase {
 
     transport.simulateIncoming(toolCallText(id: "call-1", name: "progressive"))
     await fulfillment(of: [progressSent], timeout: 2)
-    await drainPendingTasks()
+    try await waitUntil("the progress frame reached the wire") {
+      transport.sentMessages.contains { $0.contains("tool_call_progress") }
+    }
 
     let progressMessage = transport.sentMessages.first { $0.contains("tool_call_progress") }
     XCTAssertNotNil(progressMessage)
@@ -482,7 +525,9 @@ final class AppductClientTests: XCTestCase {
   func testPostEventSendsEventFrameWhileActive() async throws {
     let (client, transport) = try await activeClient()
     try await client.postEvent("greeting", payload: .string("hi"))
-    await drainPendingTasks()
+    try await waitUntil("the event frame reached the wire") {
+      transport.sentMessages.contains { $0.contains("\"type\":\"event\"") }
+    }
 
     let event = try XCTUnwrap(transport.sentMessages.first { $0.contains("\"type\":\"event\"") })
     XCTAssertTrue(event.contains("greeting"))
@@ -528,21 +573,23 @@ final class AppductClientTests: XCTestCase {
   func testHandleUrlReturnsTrueAndConnectsForValidLink() async throws {
     let (client, transport) = makeClient()
     XCTAssertTrue(client.handleUrl(bootstrapUrl(sessionId: "session-9")))
-    await drainPendingTasks()
+    try await waitUntil("the deep link reached the transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-9")
-    await drainPendingTasks()
+    try await waitUntil("the client went active after the ack") { await client.state == .active }
 
     let state = await client.state
     XCTAssertEqual(state, .active)
   }
 
-  func testHandleUrlEmitsBootstrapErrorForMalformedPayload() async {
+  func testHandleUrlEmitsBootstrapErrorForMalformedPayload() async throws {
     let (client, _) = makeClient()
     let errors = EventCollector<AppductUnifiedErrorEvent>()
     _ = await client.onError { errors.append($0) }
 
     XCTAssertTrue(client.handleUrl("myapp://open?appduct=not-valid-base64url!!"))
-    await drainPendingTasks()
+    try await waitUntil("the bootstrap parse failure was reported to the error listener") {
+      errors.first != nil
+    }
 
     XCTAssertEqual(errors.first?.phase, "bootstrap")
   }
@@ -551,14 +598,22 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput(sessionId: "session-1")
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
     XCTAssertTrue(client.handleUrl(bootstrapUrl(sessionId: "session-2")))
-    await drainPendingTasks()
+    try await waitUntil("the superseding link started a second transport handshake") {
+      transport.isWired && transport.connectCallCount >= 2
+    }
     transport.simulateAck(sessionId: "session-2")
-    await drainPendingTasks()
+    // `sessionId` alone would be satisfied by `connectingSessionId` the moment the superseding
+    // connect starts, so this waits for the ack to have actually been applied.
+    try await waitUntil("the client holds the superseding session") {
+      let state = await client.state
+      let sessionId = await client.sessionId
+      return state == .active && sessionId == "session-2"
+    }
 
     let sessionId = await client.sessionId
     XCTAssertEqual(sessionId, "session-2")
@@ -568,13 +623,16 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient()
     let connectTaskInput = connectInput(sessionId: "session-1")
     let connectTask = Task { try await client.connect(connectTaskInput) }
-    await drainPendingTasks()
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1")
     try await connectTask.value
 
     let countBefore = transport.connectCallCount
     XCTAssertTrue(client.handleUrl(bootstrapUrl(sessionId: "session-1")))
-    await drainPendingTasks()
+    // Negative assertion: a re-delivered link for the session already held must *not* reconnect,
+    // so there is no condition to wait for -- a deliberate bounded pause gives the deep-link task
+    // every chance to (wrongly) reach `transport.connect` before the count is re-read.
+    await allowQueuedWorkToRun()
 
     XCTAssertEqual(transport.connectCallCount, countBefore)
   }
@@ -587,7 +645,7 @@ final class AppductClientTests: XCTestCase {
     XCTAssertFalse(restored)
   }
 
-  func testRestoreSessionStartsResumeFromAValidLease() async {
+  func testRestoreSessionStartsResumeFromAValidLease() async throws {
     let ownerGeneration = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
     AppductProcessResumeLeaseStore.shared.replace(
       ownerGeneration: ownerGeneration,
@@ -606,9 +664,9 @@ final class AppductClientTests: XCTestCase {
     let (client, transport) = makeClient(timers: timers)
     let restored = await client.restoreSession()
     XCTAssertTrue(restored)
-    await drainPendingTasks()
+    try await waitUntil("the resume attempt started a transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-restored", resumeToken: "resume-token-2")
-    await drainPendingTasks()
+    try await waitUntil("the client went active after the resume ack") { await client.state == .active }
 
     let state = await client.state
     XCTAssertEqual(state, .active)

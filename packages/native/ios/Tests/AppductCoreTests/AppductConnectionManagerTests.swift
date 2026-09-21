@@ -379,7 +379,9 @@ final class AppductConnectionManagerTests: XCTestCase {
       didCloseWith: .normalClosure,
       reason: nil
     )
-    try? await Task.sleep(nanoseconds: 10_000_000)
+    // Negative assertion: nothing to wait for, so a bounded pause gives any queued (wrong) lease
+    // clear every chance to land first.
+    await allowQueuedWorkToRun()
 
     XCTAssertEqual(AppductProcessResumeLeaseStore.shared.get()?.resumeToken, "resume-token-new")
     XCTAssertNil(AppductProcessResumeLeaseStore.shared.get()?.disconnectedAtMs)
@@ -445,7 +447,7 @@ final class AppductConnectionManagerTests: XCTestCase {
     XCTAssertEqual(manager.currentStateSnapshot(), "closed")
   }
 
-  func testCloseFromIdleEmitsExactlyOneCloseEventAndReportsClosed() async {
+  func testCloseFromIdleEmitsExactlyOneCloseEventAndReportsClosed() async throws {
     let manager = AppductConnectionManager()
     let closeEvents = ClosedEventCounter()
     manager.emitClose = { _ in
@@ -454,8 +456,10 @@ final class AppductConnectionManagerTests: XCTestCase {
 
     await manager.close()
 
-    // Give the fire-and-forget increment a turn to run.
-    await Task.yield()
+    // The increment is fire-and-forget: wait for the first one, then give a (wrong) second one a
+    // bounded chance to land before asserting "exactly one".
+    try await waitUntil("the close event reached the listener") { await closeEvents.count >= 1 }
+    await allowQueuedWorkToRun()
     let count = await closeEvents.count
     XCTAssertEqual(count, 1)
     XCTAssertEqual(manager.currentStateSnapshot(), "closed")

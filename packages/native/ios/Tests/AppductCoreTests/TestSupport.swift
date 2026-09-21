@@ -5,15 +5,47 @@
 // front of.
 
 import Foundation
+import XCTest
 @testable import AppductCore
 
 /// Scripted fake standing in for `AppductConnectionManager` in `AppductClient` tests, so the
 /// reconnect/registry/tool-invocation state machine is testable without a real TLS/WebSocket stack.
 final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
-  var emitStateChange: (@Sendable (String) -> Void)?
-  var emitMessageRaw: (@Sendable (String) -> Void)?
-  var emitError: (@Sendable (AppductErrorDetails) -> Void)?
-  var emitClose: (@Sendable (NSDictionary) -> Void)?
+  // The client assigns these from its own actor (in a `Task` its initializer queues) while tests
+  // read them from the test's thread, so they sit behind the same lock as the counters below.
+  private var _emitStateChange: (@Sendable (String) -> Void)?
+  private var _emitMessageRaw: (@Sendable (String) -> Void)?
+  private var _emitError: (@Sendable (AppductErrorDetails) -> Void)?
+  private var _emitClose: (@Sendable (NSDictionary) -> Void)?
+
+  var emitStateChange: (@Sendable (String) -> Void)? {
+    get { withLock { _emitStateChange } }
+    set { withLock { _emitStateChange = newValue } }
+  }
+
+  var emitMessageRaw: (@Sendable (String) -> Void)? {
+    get { withLock { _emitMessageRaw } }
+    set { withLock { _emitMessageRaw = newValue } }
+  }
+
+  var emitError: (@Sendable (AppductErrorDetails) -> Void)? {
+    get { withLock { _emitError } }
+    set { withLock { _emitError = newValue } }
+  }
+
+  var emitClose: (@Sendable (NSDictionary) -> Void)? {
+    get { withLock { _emitClose } }
+    set { withLock { _emitClose = newValue } }
+  }
+
+  /// Whether the client has installed its transport callbacks yet. `AppductClient.init` defers
+  /// that wiring to a `Task`, which is not ordered against a `connect` the test starts right
+  /// after construction: `transport.connect` can be reached before the callbacks exist, and a
+  /// `simulateAck` sent then goes nowhere. Handshake waits therefore check this *and*
+  /// `connectCallCount`.
+  var isWired: Bool {
+    withLock { _emitMessageRaw != nil && _emitClose != nil }
+  }
 
   private let lock = NSLock()
   private var _stateSnapshot = "idle"
@@ -85,8 +117,12 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
 
   // MARK: Test-side simulation helpers
 
-  func simulateIncoming(_ text: String) {
-    emitMessageRaw?(text)
+  func simulateIncoming(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
+    guard let emitMessageRaw else {
+      XCTFail("simulated a frame before the client wired its transport callbacks; it was dropped", file: file, line: line)
+      return
+    }
+    emitMessageRaw(text)
   }
 
   func simulateAck(
@@ -115,7 +151,11 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
     let dict = NSMutableDictionary()
     if let code { dict["code"] = code }
     if let reason { dict["reason"] = reason }
-    emitClose?(dict)
+    guard let emitClose else {
+      XCTFail("simulated a close before the client wired its transport callbacks; it was dropped")
+      return
+    }
+    emitClose(dict)
   }
 }
 
@@ -160,8 +200,9 @@ final class FakeClientTimers: AppductClientTimers, @unchecked Sendable {
   }
 
   /// Advances the virtual clock by `deltaMs` and fires every timer now due. Handlers themselves
-  /// typically just kick off a `Task` to hop back onto the actor -- call `Probe.drain()`
-  /// afterwards to let that queued work actually run.
+  /// typically just kick off a `Task` to hop back onto the actor, so a test must `waitUntil` the
+  /// observable effect of that queued work (a new `connectCallCount`, a state change, a frame on
+  /// the wire) rather than assert immediately after this returns.
   func advance(byMs deltaMs: Double) {
     lock.lock()
     currentTimeMs += deltaMs
@@ -177,30 +218,70 @@ final class FakeClientTimers: AppductClientTimers, @unchecked Sendable {
   }
 }
 
-/// Test-only helper: yields repeatedly so `Task { await ... }` work queued by a fake timer firing
-/// (or by any other fire-and-forget hop onto the `AppductClient` actor) has a chance to run
-/// before the test asserts on the result.
-func drainPendingTasks(iterations: Int = 20) async {
-  for _ in 0..<iterations {
-    await Task.yield()
-  }
-  try? await Task.sleep(nanoseconds: 5_000_000)
-  for _ in 0..<iterations {
-    await Task.yield()
-  }
+/// Thrown by `waitUntil` (right after it records an `XCTFail`) when its condition never held.
+struct WaitTimedOutError: Error, CustomStringConvertible {
+  let description: String
+}
+
+/// Polls `condition` until it holds, or fails the test and throws once `timeout` elapses.
+///
+/// This replaces the fixed `Task.yield()` draining these tests used to do (issue #61):
+/// `Task.yield()` is a scheduling hint, not a wait, so a fixed number of yields guarantees
+/// neither that the `AppductClient` actor has reached the point a simulated event needs (a
+/// handshake actually in flight, say -- a `session_ack` that arrives before `transport.connect`
+/// has been called is dropped as stray) nor that it has already applied an event a test is about
+/// to assert on. Every wait is therefore expressed as an *observable* condition -- a transport
+/// counter, a frame on the wire, an actor state snapshot, a collected listener event -- and is
+/// bounded, so a genuinely broken expectation fails with a readable message instead of hanging.
+///
+/// `condition` may be sync or async (a sync closure literal converts implicitly).
+func waitUntil(
+  _ what: String,
+  timeout: TimeInterval = 5,
+  pollIntervalMs: UInt64 = 2,
+  file: StaticString = #filePath,
+  line: UInt = #line,
+  _ condition: () async -> Bool
+) async throws {
+  let deadline = Date().addingTimeInterval(timeout)
+  repeat {
+    if await condition() { return }
+    try? await Task.sleep(nanoseconds: pollIntervalMs * 1_000_000)
+  } while Date() < deadline
+  if await condition() { return }
+
+  let message = "Timed out after \(timeout)s waiting for: \(what)"
+  XCTFail(message, file: file, line: line)
+  throw WaitTimedOutError(description: message)
+}
+
+/// Bounded wait used *only* for negative assertions ("and then nothing else happens"), where
+/// there is by definition no condition to poll for: gives whatever work is queued on the client
+/// actor a real chance to run, so the follow-up assertion is meaningful rather than merely early.
+func allowQueuedWorkToRun(ms: UInt64 = 150) async {
+  try? await Task.sleep(nanoseconds: ms * 1_000_000)
 }
 
 /// A one-shot async gate a test can hold open until it is ready for a handler to proceed --
 /// `withCheckedContinuation` (the non-throwing variant) deliberately ignores `Task` cancellation, so
 /// a handler `await`ing one keeps waiting even after its enclosing call has been cancelled/timed
 /// out, letting a test simulate "the handler resolves late, after the timeout already answered".
+///
+/// Latching: `open()` before `wait()` is remembered, so a handler that signals "started" and only
+/// then reaches `wait()` cannot miss an `open()` the test issued in between.
 final class Gate: @unchecked Sendable {
   private let lock = NSLock()
   private var continuation: CheckedContinuation<Void, Never>?
+  private var isOpen = false
 
   func wait() async {
     await withCheckedContinuation { continuation in
       lock.lock()
+      if isOpen {
+        lock.unlock()
+        continuation.resume()
+        return
+      }
       self.continuation = continuation
       lock.unlock()
     }
@@ -208,6 +289,7 @@ final class Gate: @unchecked Sendable {
 
   func open() {
     lock.lock()
+    isOpen = true
     let continuation = self.continuation
     self.continuation = nil
     lock.unlock()
