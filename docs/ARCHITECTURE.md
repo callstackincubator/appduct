@@ -461,11 +461,22 @@ belong here:
 `appduct mcp` starts a **stdio** MCP server (SDK: `@modelcontextprotocol/sdk`) that
 proxies daemon RPC (auto-spawning the daemon like any client):
 
-- `tools/list` mirrors the live registry. One session → tools under their own names;
-  several → namespaced `<alias>__<name>`. Registry and session changes emit
-  `notifications/tools/list_changed`, so an agent's tool list tracks the device.
-- Tool calls, progress frames, errors (with their `type` preserved), and descriptor
-  annotations all map through verbatim. Two semantics the MCP surface does add:
+- `tools/list` is a fixed set of built-in tools. The app's tools are never listed as MCP
+  tools of their own; an agent reaches them through three built-ins that mirror the CLI (§10):
+  `appduct_list_tools` (`appduct tools`: one-line signatures from `renderToolSignature`, each
+  tool's effective policy, with `filter`/`limit`/`offset` passed through to `tools.list`),
+  `appduct_describe_tool` (`appduct tools <name>`: the whole descriptor), and
+  `appduct_call_tool` (`appduct invoke`: `{ selector?, name, args?, timeoutMs? }`). Each takes
+  the same `selector` as the CLI and resolves it with `sessions.describe` first, so results name
+  the session by alias and a call's progress subscription targets the same session as the call.
+  A registry of hundreds of tools therefore costs a client three tool definitions, and nothing
+  about the registry or the session set changes `tools/list`: the server advertises no
+  `listChanged` capability and never sends `notifications/tools/list_changed`. Schemas travel as
+  data inside a tool result rather than as MCP `Tool.inputSchema`/`outputSchema`, so MCP's
+  object-rooted rule for those fields no longer applies to app schemas.
+- Tool call results, progress frames and errors (with their `type` preserved) map through
+  verbatim: a JSON object result is returned as `structuredContent` as well as text, any other
+  value as text only. Two semantics the MCP surface does add:
   `"prompt"`-policy consent (§12) — one channel, elicitation (issue #10), used whenever the
   client declared the `elicitation` capability at `initialize`: a `"prompt"`-policy call sends one `elicitation/create` request naming the
   tool, the session alias, and the call's arguments, and an `action: "accept"` reply becomes
@@ -768,7 +779,7 @@ deviations):
   list of everything that changes the registry entry — `name`, `description`,
   `timeoutMs` (app-side only, but part of the entry), stringified `annotations`, the
   exported input/output JSON Schemas, and `enabled` — so a re-render never emits a
-  `tool_registry_delta` pair or an agent-side `notifications/tools/list_changed`. Schemas
+  `tool_registry_delta` pair. Schemas
   are compared by identity first and re-exported only when the identity changed
   (hoisted/memoized schemas never re-export; an inline `z.object({…})` re-exports once per
   render and still matches by shape). A schema that exports no JSON Schema (zod 3, plain
@@ -977,6 +988,6 @@ named-pipe path `\\.\pipe\appduct-<user>` behind the same client API.
   pin sets; the anchor-CA design is a future option).
 - Web/browser client (safe no-op stub only).
 - Multiple endpoint candidates in the bootstrap payload.
-- A tool whose `input_schema` is not object-rooted is listed but not usefully callable over MCP,
-  because MCP tool arguments are always an object (§9). Wrapping such arguments so the tool stays
+- A tool whose `input_schema` is not object-rooted is listed but not usefully callable, because
+  `tools.call`'s `args` are always a JSON object (§5). Wrapping such arguments so the tool stays
   callable is tracked in [issue #34](https://github.com/callstackincubator/appduct/issues/34).

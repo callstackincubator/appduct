@@ -83,7 +83,7 @@ Mount it near app startup, or register from a module that loads then. The host c
 
 The hook registers once per mount and re-registers only when the registration itself changes, routing every call through the latest render's handler — so `deps` is an optional override, not something each call site has to get right. See [Registration is per mount, not per render](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#registration-is-per-mount-not-per-render).
 
-Keep both schemas object-rooted: MCP requires it, and a schema that isn't degrades gracefully rather than taking your whole tool list down — see [Keep both schemas object-rooted](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#keep-both-schemas-object-rooted). A call gets 10 seconds unless the registration declares `timeoutMs` — see [Long-running tools](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#long-running-tools).
+Keep `inputSchema` object-rooted: a call's arguments are always a JSON object, so any other input schema can't be satisfied — see [Keep input schemas object-rooted](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#keep-input-schemas-object-rooted). A call gets 10 seconds unless the registration declares `timeoutMs` — see [Long-running tools](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#long-running-tools).
 
 To keep a destructive tool out of some build variants, pass `{ enabled }` rather than wrapping the hook in an `if` — see [Gating a tool by build variant](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#gating-a-tool-by-build-variant).
 
@@ -142,7 +142,7 @@ Omit the session selector when only one session is active; pass an alias or sess
 ## Going further
 
 - [Trust modes](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#trust-modes) and [Configuring trust](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#configuring-trust) — pins, plugin options, bare-RN native keys.
-- [Registering tools](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md) — schema forms, what re-registers, MCP's object-rooted requirement, `timeoutMs`.
+- [Registering tools](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md) — schema forms, what re-registers, object-rooted input schemas, `timeoutMs`.
 - [Gating a tool by build variant](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#gating-a-tool-by-build-variant) — `enabled`, and why `__DEV__` is wrong here.
 - [Build variants](https://github.com/callstackincubator/appduct/blob/main/docs/BUILD-VARIANTS.md) — `APPDUCT_ENABLED`, autolinking exclusion, compiling Appduct out of production builds.
 - [What a build without the native module does](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#what-a-build-without-the-native-module-does).

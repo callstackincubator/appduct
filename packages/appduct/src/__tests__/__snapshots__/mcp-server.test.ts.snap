@@ -1,9 +1,34 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`mcp: tools/list and tools/call > the generated MCP tool list (built-ins + one proxied tool) matches the locked mapping 1`] = `
+exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`] = `
 [
   {
-    "annotations": undefined,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "type": "object",
+        },
+        "name": {
+          "type": "string",
+        },
+        "selector": {
+          "description": "Session alias or id. Omit to target the sole active/suspended session.",
+          "type": "string",
+        },
+        "timeoutMs": {
+          "exclusiveMinimum": 0,
+          "type": "number",
+        },
+      },
+      "required": [
+        "name",
+      ],
+      "type": "object",
+    },
+    "name": "appduct_call_tool",
+  },
+  {
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -33,10 +58,27 @@ exports[`mcp: tools/list and tools/call > the generated MCP tool list (built-ins
       "type": "object",
     },
     "name": "appduct_connect",
-    "outputSchema": undefined,
   },
   {
-    "annotations": undefined,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+        },
+        "selector": {
+          "description": "Session alias or id. Omit to target the sole active/suspended session.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "name",
+      ],
+      "type": "object",
+    },
+    "name": "appduct_describe_tool",
+  },
+  {
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -76,10 +118,32 @@ exports[`mcp: tools/list and tools/call > the generated MCP tool list (built-ins
       "type": "object",
     },
     "name": "appduct_events",
-    "outputSchema": undefined,
   },
   {
-    "annotations": undefined,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "type": "string",
+        },
+        "limit": {
+          "exclusiveMinimum": 0,
+          "type": "integer",
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer",
+        },
+        "selector": {
+          "description": "Session alias or id. Omit to target the sole active/suspended session.",
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "name": "appduct_list_tools",
+  },
+  {
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -115,10 +179,8 @@ exports[`mcp: tools/list and tools/call > the generated MCP tool list (built-ins
       "type": "object",
     },
     "name": "appduct_wait_for_event",
-    "outputSchema": undefined,
   },
   {
-    "annotations": undefined,
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -136,20 +198,6 @@ exports[`mcp: tools/list and tools/call > the generated MCP tool list (built-ins
       "type": "object",
     },
     "name": "appduct_wait_for_session",
-    "outputSchema": undefined,
-  },
-  {
-    "annotations": undefined,
-    "inputSchema": {
-      "properties": {
-        "text": {
-          "type": "string",
-        },
-      },
-      "type": "object",
-    },
-    "name": "echo",
-    "outputSchema": undefined,
   },
 ]
 `;

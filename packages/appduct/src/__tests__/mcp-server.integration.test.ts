@@ -8,9 +8,9 @@
  * Only what genuinely needs the real transport lives here: a declared `timeout_ms` surviving the
  * whole round trip, progress correlation over the second daemon stream, cancellation reaching the
  * app as `tool_cancel`, the `appduct_connect`/`appduct_wait_for_session` delivery paths, the
- * events tools, the `appduct://sessions` resource, stdout purity, and version drift. The server's
- * own mapping decisions — tool names, output-schema degradation, namespacing, `list_changed` —
- * moved to `mcp-server.test.ts`, which runs them against an in-memory daemon.
+ * events tools, the `appduct://sessions` resource, stdout purity, and version drift. The
+ * list/describe/call built-ins' own behaviour lives in `mcp-server.test.ts`, which runs them
+ * against an in-memory daemon.
  */
 
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
@@ -222,20 +222,6 @@ const snapshotTools = async (
   await toolsChanged;
 };
 
-const BUILTIN_TOOL_NAMES = new Set([
-  "appduct_connect",
-  "appduct_wait_for_session",
-  "appduct_events",
-  "appduct_wait_for_event",
-]);
-
-/** Every `tools/list` response always includes the two built-in management tools alongside
- * whatever proxied device tools are live; tests that care only about the proxied tools filter
- * them out here rather than repeating the same two names everywhere. */
-const withoutBuiltinTools = <T extends { name: string }>(tools: T[]): T[] => {
-  return tools.filter((tool) => !BUILTIN_TOOL_NAMES.has(tool.name));
-};
-
 /** `xcrun`/`adb` stub reporting an empty machine. `appduct_connect` auto-detects a delivery
  * target when none is given, so without an injected `exec` these tests would shell out to the real
  * toolchain and behave differently depending on whether the developer running them happens to have
@@ -276,7 +262,7 @@ const connectInMemoryClient = async (handle: McpServerHandle): Promise<Client> =
   return client;
 };
 
-describe("mcp: tools/list and tools/call", () => {
+describe("mcp: calling app tools", () => {
   test("a tool declaring a timeoutMs above the daemon default gets it, over MCP, end to end (issue #25)", async () => {
     const { daemon, stateDir, port } = await startTestDaemon();
     const app = await claimApp(daemon, port);
@@ -291,15 +277,16 @@ describe("mcp: tools/list and tools/call", () => {
     const handle = await createMcpHandle(stateDir);
     const client = await connectInMemoryClient(handle);
 
-    // The deadline is a daemon-side scheduling hint, never part of the MCP tool contract.
-    const listed = await client.request(
-      { method: "tools/list", params: {} },
-      ListToolsResultSchema,
+    // The app tool is not an MCP tool of its own; its declared deadline is visible to an agent
+    // through appduct_describe_tool, and is what appduct_call_tool runs it under.
+    const listed = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
+    expect(listed.tools.map((tool) => tool.name)).not.toContain("slow-login");
+
+    const described = await client.request(
+      { method: "tools/call", params: { name: "appduct_describe_tool", arguments: { name: "slow-login" } } },
+      CallToolResultSchema,
     );
-    const proxied = withoutBuiltinTools(listed.tools)[0]!;
-    expect(proxied.name).toBe("slow-login");
-    expect("timeout_ms" in proxied).toBe(false);
-    expect("timeoutMs" in proxied).toBe(false);
+    expect(described.structuredContent).toMatchObject({ name: "slow-login", timeout_ms: 20_000 });
 
     app.socket.on("message", (data) => {
       const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
@@ -319,7 +306,7 @@ describe("mcp: tools/list and tools/call", () => {
     });
 
     const called = await client.request(
-      { method: "tools/call", params: { name: "slow-login", arguments: {} } },
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "slow-login", args: {} } } },
       CallToolResultSchema,
       // Above the MCP server's own derived transport timeout (20 s + 5 s slack) so this client's
       // watchdog can never be what the assertion actually measures.
@@ -358,7 +345,7 @@ describe("mcp: tools/list and tools/call", () => {
     const progressUpdates: Array<{ progress: number; message?: string }> = [];
 
     const called = await client.request(
-      { method: "tools/call", params: { name: "slow", arguments: {} } },
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "slow", args: {} } } },
       CallToolResultSchema,
       {
         onprogress: (progress) => {
@@ -397,7 +384,7 @@ describe("mcp: tools/list and tools/call", () => {
     const controller = new AbortController();
     const callPromise = client
       .request(
-        { method: "tools/call", params: { name: "slow", arguments: {} } },
+        { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "slow", args: {} } } },
         CallToolResultSchema,
         // `onprogress` is what makes the SDK attach a progressToken — required for the server's
         // progress-correlation path (mcp/server.ts's callProxiedTool) to ever learn `callId`.

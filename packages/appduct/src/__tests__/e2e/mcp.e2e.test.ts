@@ -1,7 +1,7 @@
 /**
  * E2E scenario: MCP. An MCP client over stdio against a real `appduct mcp` *subprocess*
  * (consolidating `mcp-server.integration.test.ts`'s in-process coverage at the subprocess level):
- * list/call/list_changed with the fake app.
+ * listing, describing and calling the fake app's tools through the built-ins.
  */
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -26,20 +26,9 @@ import {
 
 afterEach(cleanupAfterEach);
 
-const BUILTIN_TOOL_NAMES = new Set([
-  "appduct_connect",
-  "appduct_wait_for_session",
-  "appduct_events",
-  "appduct_wait_for_event",
-]);
-
-const withoutBuiltinTools = <T extends { name: string }>(tools: T[]): T[] => {
-  return tools.filter((tool) => !BUILTIN_TOOL_NAMES.has(tool.name));
-};
-
 describe("e2e: mcp (real stdio subprocess)", () => {
   test(
-    "tools/list, tools/call, and list_changed against a real `appduct mcp` subprocess",
+    "list, describe and call app tools through the built-ins against a real `appduct mcp` subprocess",
     async () => {
       const { stateDir } = await makeTempStateDir({ scheme: "appduct-mcp-e2e" });
       // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
@@ -80,42 +69,77 @@ describe("e2e: mcp (real stdio subprocess)", () => {
       await client.connect(transport);
 
       const listed = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
-      const proxiedTools = withoutBuiltinTools(listed.tools);
-      expect(proxiedTools).toHaveLength(1);
-      expect(proxiedTools[0]!.name).toBe("echo");
-      expect(proxiedTools[0]!.inputSchema).toEqual({ type: "object", properties: { text: { type: "string" } } });
+      const listedNames = listed.tools.map((tool) => tool.name);
+      expect(listedNames).toContain("appduct_list_tools");
+      expect(listedNames).not.toContain("echo");
+
+      const appTools = await client.request(
+        { method: "tools/call", params: { name: "appduct_list_tools", arguments: {} } },
+        CallToolResultSchema,
+      );
+      expect(appTools.structuredContent).toEqual({
+        session: alias,
+        total: 1,
+        tools: [{ name: "echo", signature: "echo(text?: string)", summary: "Echoes its input.", policy: "allow" }],
+      });
+
+      const described = await client.request(
+        { method: "tools/call", params: { name: "appduct_describe_tool", arguments: { name: "echo" } } },
+        CallToolResultSchema,
+      );
+      expect(described.structuredContent).toMatchObject({
+        name: "echo",
+        input_schema: { type: "object", properties: { text: { type: "string" } } },
+      });
 
       app.answerCalls((call) => ({ result: { echoed: (call.args as Record<string, unknown>).text } }));
 
       const called = await client.request(
-        { method: "tools/call", params: { name: "echo", arguments: { text: "hello-mcp" } } },
+        {
+          method: "tools/call",
+          params: { name: "appduct_call_tool", arguments: { name: "echo", args: { text: "hello-mcp" } } },
+        },
         CallToolResultSchema,
       );
       expect(called.isError).not.toBe(true);
       expect(called.structuredContent).toEqual({ echoed: "hello-mcp" });
 
-      // A second device connecting flips namespacing and fires list_changed.
+      // A second device connecting changes nothing in tools/list; its tools are reached with a
+      // selector instead.
       let listChangedCount = 0;
       client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
         listChangedCount += 1;
       });
 
+      const secondEvents = await subscribeToEvents(stateDir);
+      const secondToolsChanged = secondEvents.waitFor("tools_changed");
       const secondLink = await mintLink(stateDir);
       const secondApp = new FakeAppClient(port, pinnedKeys);
       const secondAck = await secondApp.claim(secondLink, { model: "iPhone 15" });
-      secondApp.registerTools([{ name: "echo" }]);
+      secondApp.registerTools([{ name: "whoami", description: "Names the device." }]);
+      await secondToolsChanged;
+      secondEvents.close();
+      secondApp.answerCalls(() => ({ result: { device: "iphone" } }));
 
-      const deadline = Date.now() + 5000;
-      while (listChangedCount === 0 && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-      expect(listChangedCount).toBeGreaterThan(0);
+      const relisted = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
+      expect(relisted.tools.map((tool) => tool.name)).toEqual(listedNames);
+      expect(listChangedCount).toBe(0);
 
-      const namespacedListing = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
-      const namespacedNames = withoutBuiltinTools(namespacedListing.tools)
-        .map((tool) => tool.name)
-        .sort();
-      expect(namespacedNames).toEqual([`${alias}__echo`, `${secondAck.alias}__echo`].sort());
+      const ambiguous = await client.request(
+        { method: "tools/call", params: { name: "appduct_list_tools", arguments: {} } },
+        CallToolResultSchema,
+      );
+      expect(ambiguous.isError).toBe(true);
+      expect((ambiguous.content[0] as { text: string }).text).toContain("ambiguous_session");
+
+      const secondCall = await client.request(
+        {
+          method: "tools/call",
+          params: { name: "appduct_call_tool", arguments: { selector: secondAck.alias, name: "whoami" } },
+        },
+        CallToolResultSchema,
+      );
+      expect(secondCall.structuredContent).toEqual({ device: "iphone" });
 
       app.close();
       secondApp.close();

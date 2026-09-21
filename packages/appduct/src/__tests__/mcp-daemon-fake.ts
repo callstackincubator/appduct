@@ -87,6 +87,33 @@ export const createFakeDaemon = (): FakeDaemon => {
     }
   };
 
+  /** The daemon's selector rules (`daemon/sessions.ts`'s `resolveSession`): an alias or session
+   * id, or with none given, the sole live session. */
+  const resolveSession = (selector: string | undefined): SessionSummary => {
+    if (selector !== undefined) {
+      const match = sessions.find((session) => session.sessionId === selector || session.alias === selector);
+
+      if (!match) {
+        throw toolError("unknown_session", `No session matches "${selector}".`);
+      }
+
+      return match;
+    }
+
+    if (sessions.length === 0) {
+      throw toolError("no_session", "No active or suspended session, and none was specified.");
+    }
+
+    if (sessions.length > 1) {
+      throw toolError(
+        "ambiguous_session",
+        `Multiple sessions are live (${sessions.map((session) => session.alias).join(", ")}); specify a selector.`,
+      );
+    }
+
+    return sessions[0]!;
+  };
+
   const addSession = (options: FakeSessionOptions): FakeSession => {
     const sessionId = options.sessionId ?? `session-${options.alias}`;
     const summary: SessionSummary = {
@@ -148,21 +175,36 @@ export const createFakeDaemon = (): FakeDaemon => {
         return sessions.map((session) => ({ ...session })) as TResult;
       }
 
-      if (method === RPC_METHODS.toolsList) {
+      if (method === RPC_METHODS.sessionsDescribe) {
         const selector = (params as { selector?: string } | undefined)?.selector;
-        const entries = selector === undefined ? undefined : toolsByAlias.get(selector);
+        return { ...resolveSession(selector) } as TResult;
+      }
 
-        if (!entries) {
-          throw toolError("unknown_session", `No session matches "${selector}".`);
-        }
+      if (method === RPC_METHODS.toolsList) {
+        const { selector, filter, limit, offset } = (params ?? {}) as {
+          selector?: string;
+          filter?: string;
+          limit?: number;
+          offset?: number;
+        };
+        const entries = toolsByAlias.get(resolveSession(selector).alias)!;
 
-        // The daemon's `{ tools, total }` shape, sorted by name as the daemon sorts its registry.
-        // The server asks for the unpaged, unfiltered listing, so `total` is the whole registry.
-        const tools = entries
+        // The daemon's `{ tools, total }` shape: sorted by name as the daemon sorts its registry,
+        // `filter`ed on name and description, `total` counted before paging.
+        const lowerFilter = filter?.toLowerCase();
+        const matching = entries
           .map((entry) => ({ ...entry }))
-          .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+          .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+          .filter(
+            (entry) =>
+              lowerFilter === undefined ||
+              entry.name.toLowerCase().includes(lowerFilter) ||
+              entry.description.toLowerCase().includes(lowerFilter),
+          );
+        const start = offset ?? 0;
+        const tools = matching.slice(start, limit === undefined ? undefined : start + limit);
 
-        return { tools, total: tools.length } as TResult;
+        return { tools, total: matching.length } as TResult;
       }
 
       if (method === RPC_METHODS.toolsCall) {

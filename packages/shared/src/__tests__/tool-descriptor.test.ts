@@ -133,9 +133,8 @@ describe("isToolDescriptor", () => {
 });
 
 /**
- * The root-type gate behind the app-side dev warning for issue #26. Deliberately *not* the whole
- * MCP rule — the server re-checks with the SDK's own `ToolSchema` (`mcp/tool-mapping.ts`), which
- * this package cannot import — so the last case below pins that narrowness as intended, not a bug.
+ * The root-type gate behind the app-side dev warning for a non-object input schema. It checks the
+ * root type only, so the last case below pins that narrowness as intended, not a bug.
  */
 describe("isObjectRootedSchema", () => {
   test('accepts a schema rooted at the literal type "object"', () => {

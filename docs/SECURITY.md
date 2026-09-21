@@ -284,9 +284,10 @@ tool with no purpose outside a local dev loop, say. It just shouldn't be the exa
 app copies for hardening.
 
 **Consequence for agents and E2E flows:** because registration is the app-side allowlist,
-`tools/list` legitimately differs per build artifact. A CI testing build may expose a
+the tool set legitimately differs per build artifact. A CI testing build may expose a
 different tool set than a local dev build or a hardened production build. Automated flows
-should discover tools via `tools/list` rather than assume a fixed set is always present.
+should discover tools (`appduct tools`, or `appduct_list_tools` over MCP) rather than assume
+a fixed set is always present.
 
 ## Key handling rules
 

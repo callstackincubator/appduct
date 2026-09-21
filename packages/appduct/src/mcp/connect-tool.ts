@@ -115,7 +115,7 @@ export const WAIT_FOR_SESSION_TOOL_DESCRIPTOR = {
     "as the device connects (or immediately if it already has); rejects with tool_timeout if " +
     "timeoutMs elapses first. If appduct_connect returned a QR instead of delivering the link, " +
     "show that QR to the user and ask them to scan it before calling this — it produces no output " +
-    "while it waits.",
+    "while it waits. Once it resolves, find the app's tools with appduct_list_tools.",
   inputSchema: {
     type: "object",
     properties: {
@@ -132,7 +132,7 @@ export const WAIT_FOR_SESSION_TOOL_DESCRIPTOR = {
  * mapping (see `server.ts`) handles them the same way it handles a proxied device tool's error. */
 export class McpBuiltinToolError extends Error {
   constructor(
-    readonly type: "invalid_request" | "tool_timeout" | "tool_execution_error",
+    readonly type: "invalid_request" | "tool_not_found" | "tool_timeout" | "tool_execution_error",
     message: string,
   ) {
     super(message);

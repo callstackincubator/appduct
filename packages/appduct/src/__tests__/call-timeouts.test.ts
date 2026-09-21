@@ -16,8 +16,6 @@ import {
   MAX_CALL_TIMEOUT_MS,
   MIN_CALL_TIMEOUT_MS,
 } from "../daemon/calls.js";
-import { createMcpToolMapper } from "../mcp/tool-mapping.js";
-import { namespacedToolsSnapshotKey } from "../mcp/tool-namespace.js";
 
 describe("clampTimeout", () => {
   test("falls back to the daemon default when unset or not finite", () => {
@@ -83,54 +81,5 @@ describe("callers that do not know the effective deadline", () => {
     expect(transportTimeoutForToolCall(Number.NaN)).toBe(MAX_CALL_TIMEOUT_MS + CALL_TRANSPORT_TIMEOUT_SLACK_MS);
     expect(transportTimeoutForToolCall(60_000)).toBe(60_000 + CALL_TRANSPORT_TIMEOUT_SLACK_MS);
     expect(transportTimeoutForToolCall(500)).toBe(MIN_CALL_TIMEOUT_MS + CALL_TRANSPORT_TIMEOUT_SLACK_MS);
-  });
-});
-
-const namespacedTool = (timeoutMs?: number) => ({
-  mcpName: "slow-login",
-  selector: "pixel-8",
-  descriptor: {
-    name: "slow-login",
-    description: "Signs in.",
-    ...(timeoutMs ? { timeout_ms: timeoutMs } : {}),
-  },
-  policy: "allow" as const,
-});
-
-describe("toMcpTool", () => {
-  const toMcpTool = createMcpToolMapper(() => {});
-
-  test("never emits a timeout on the MCP tool, even for a tool that declares one", () => {
-    const mapped = toMcpTool(namespacedTool(60_000));
-
-    // The deadline is a daemon-side scheduling hint, not part of the MCP `Tool` contract. This
-    // guards against a future refactor swapping the explicit field mapping for a spread — under
-    // either spelling.
-    expect("timeout_ms" in mapped).toBe(false);
-    expect("timeoutMs" in mapped).toBe(false);
-    expect(Object.keys(mapped).sort()).toEqual(["description", "inputSchema", "name"]);
-  });
-
-  test("maps a tool that declares one identically to a tool that does not", () => {
-    expect(toMcpTool(namespacedTool(60_000))).toEqual(toMcpTool(namespacedTool()));
-  });
-});
-
-describe("namespacedToolsSnapshotKey", () => {
-  test("ignores the timeout, so a timeout-only re-registration fires no list_changed", () => {
-    // The key exists to decide whether to tell an MCP client its tool list moved. Since the
-    // deadline never reaches the `Tool` JSON, changing only that leaves the client's view
-    // identical — firing `list_changed` would just make it re-fetch the same list.
-    expect(namespacedToolsSnapshotKey([namespacedTool(60_000)])).toBe(
-      namespacedToolsSnapshotKey([namespacedTool(20_000)]),
-    );
-    expect(namespacedToolsSnapshotKey([namespacedTool(60_000)])).toBe(
-      namespacedToolsSnapshotKey([namespacedTool()]),
-    );
-  });
-
-  test("still reacts to a change a client can actually see", () => {
-    const renamed = { ...namespacedTool(60_000), mcpName: "slow-login-2" };
-    expect(namespacedToolsSnapshotKey([namespacedTool(60_000)])).not.toBe(namespacedToolsSnapshotKey([renamed]));
   });
 });

@@ -10,6 +10,26 @@ package versions for a release.
 
 ## Unreleased
 
+- **Breaking (MCP): the app's tools are no longer listed as MCP tools.** An agent reaches them
+  through three built-ins that mirror the CLI: `appduct_list_tools` (one-line signatures and
+  each tool's policy, with `filter`/`limit`/`offset`, like `appduct tools`),
+  `appduct_describe_tool` (one tool's full schema, like `appduct tools <name>`) and
+  `appduct_call_tool` (`{ selector?, name, args?, timeoutMs? }`, like `appduct invoke`).
+  `tools/list` is now a fixed set of built-ins, so an app with hundreds of tools adds three
+  definitions to an agent's context, not hundreds. What goes away:
+  - Calling an app tool by its own name through `tools/call`. It now returns `tool_not_found`,
+    pointing at `appduct_list_tools` and `appduct_call_tool`.
+  - `<alias>__<name>` namespacing. With several devices connected, pass `selector` (the
+    session alias) instead.
+  - `notifications/tools/list_changed`, and the `listChanged` capability.
+  - MCP-level `outputSchema` enforcement and schema degradation: schemas reach the agent as
+    data through `appduct_describe_tool`, exactly as registered, whatever their root type. The
+    React Native SDK no longer warns about non-object output schemas; it still warns about a
+    non-object input schema, since a call's args are always a JSON object.
+  - MCP client permission rules that named individual app tools (for example
+    `mcp__appduct__seed_cart`) no longer match anything; they now apply to `appduct_call_tool`
+    as a whole. `"prompt"`-policy consent is unchanged: it is asked per call, via elicitation.
+
 - **Breaking (MCP): `"prompt"`-policy consent is elicitation-only.** The Claude Code-specific
   fallback is gone: `tools/list` no longer emits `_meta["anthropic/requiresUserInteraction"]`, and
   the MCP server no longer sends `consent: "client"`. A `"prompt"` tool called from an MCP client

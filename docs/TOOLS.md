@@ -87,7 +87,7 @@ All of these throw a `TypeError` at registration naming what to fix.
 
 ## Registration is per mount, not per render
 
-The hook registers once when the component mounts and re-registers only when something that changes the registration itself changed: `name`, `description`, the exported input/output JSON Schemas, `annotations`, `timeoutMs`, or `enabled`. Re-rendering the component — including on every keystroke of some unrelated state — sends nothing over the wire and does not make agents re-fetch `tools/list`.
+The hook registers once when the component mounts and re-registers only when something that changes the registration itself changed: `name`, `description`, the exported input/output JSON Schemas, `annotations`, `timeoutMs`, or `enabled`. Re-rendering the component — including on every keystroke of some unrelated state — sends nothing over the wire.
 
 **Your handler is always fresh.** The hook registers a stable wrapper that forwards to the handler from the latest render, so a handler that closes over component state sees the current value on the next call without being re-registered and without `useRef` workarounds:
 
@@ -113,9 +113,9 @@ Because exportable schemas are compared by their *exported* JSON Schema, the reg
 
 **`deps` is an optional, advanced override.** Passing it replaces the derived key entirely with `useEffect`'s own semantics (`enabled` is still appended), which is occasionally useful — for example, forcing a re-registration on something the descriptor doesn't capture. Most call sites should simply omit it. Pass it consistently if you pass it at all: alternating between passing `deps` and omitting it changes the dependency-array length between renders, which React warns about, exactly as it does for a hand-written `useEffect`.
 
-## Keep both schemas object-rooted
+## Keep input schemas object-rooted
 
-MCP's tool wire shape requires `inputSchema.type` and `outputSchema.type` to be the literal `"object"`, so `z.object({ ... })` (also `.passthrough()`/`z.looseObject(...)` and `z.record(...)`) is the only shape that survives to an agent intact. Anything else cannot be represented:
+A tool call always passes its arguments as a JSON object, so an `inputSchema` has to be an object at its root. `z.object({ ... })`, `.passthrough()`, `z.looseObject(...)` and `z.record(...)` all qualify. Anything else registers, but no call can ever satisfy it:
 
 | Construct | Exports as | Object-rooted? |
 | --- | --- | --- |
@@ -126,16 +126,9 @@ MCP's tool wire shape requires `inputSchema.type` and `outputSchema.type` to be 
 | `z.discriminatedUnion(...)` | `oneOf` | no, even when every branch is an object |
 | `z.intersection(a, b)` | `allOf` | no, even when both sides are objects |
 
-A client validates the *whole* `tools/list` result, so one such schema would otherwise leave the agent with zero tools from your app. Appduct degrades it instead:
+Registering such an input schema logs a dev warning naming the tool. Wrap the value instead: `inputSchema: z.object({ sku: z.string() })` rather than `z.string()`.
 
-| Schema | What Appduct does |
-| --- | --- |
-| `outputSchema` MCP cannot accept | Drops it from `tools/list`. The tool stays listed and callable; its result arrives as JSON text, with no schema describing it (agents still get `structuredContent` when the result happens to be a JSON object, they just have nothing to validate it against). |
-| `inputSchema` MCP cannot accept | Replaces it with a permissive empty object schema, so agents cannot see the tool's real arguments. MCP arguments are always an object, so the tool is not usefully callable this way. |
-
-Both log a dev warning naming the tool when it registers. That warning is a best-effort hint covering the root type only, which is everything zod itself can produce; MCP rejects a little more than that (a `properties` entry that is not an object subschema, such as the `{ a: true }` shorthand, or a `required` that is not an array), and those slip past it. **The authoritative signal is the `appduct mcp:` notice on the MCP server's stderr** — it names the tool and quotes the SDK's own reason for rejecting the schema.
-
-Wrap the value instead — `outputSchema: z.object({ todos: z.array(z.string()) })` rather than `z.array(z.string())` — and agents get the full shape, described and validated. `appduct invoke`, `--json` output, and the JS client are unaffected either way: they carry the real schema and the raw result.
+`outputSchema` has no such limit. A result can be any JSON value, and agents see the schema exactly as you wrote it, whether they read it with `appduct tools <name>` or `appduct_describe_tool` over MCP.
 
 ## Long-running tools
 
