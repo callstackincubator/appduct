@@ -266,13 +266,22 @@ func allowQueuedWorkToRun(ms: UInt64 = 150) async {
 /// `withCheckedContinuation` (the non-throwing variant) deliberately ignores `Task` cancellation, so
 /// a handler `await`ing one keeps waiting even after its enclosing call has been cancelled/timed
 /// out, letting a test simulate "the handler resolves late, after the timeout already answered".
+///
+/// Latching: `open()` before `wait()` is remembered, so a handler that signals "started" and only
+/// then reaches `wait()` cannot miss an `open()` the test issued in between.
 final class Gate: @unchecked Sendable {
   private let lock = NSLock()
   private var continuation: CheckedContinuation<Void, Never>?
+  private var isOpen = false
 
   func wait() async {
     await withCheckedContinuation { continuation in
       lock.lock()
+      if isOpen {
+        lock.unlock()
+        continuation.resume()
+        return
+      }
       self.continuation = continuation
       lock.unlock()
     }
@@ -280,6 +289,7 @@ final class Gate: @unchecked Sendable {
 
   func open() {
     lock.lock()
+    isOpen = true
     let continuation = self.continuation
     self.continuation = nil
     lock.unlock()
