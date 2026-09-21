@@ -7,9 +7,6 @@
  * `tool-invocation.integration.test.ts`, just through the CLI instead of raw UDS RPC.
  */
 
-import { createServer as createNetServer } from "node:net";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { text } from "node:stream/consumers";
 
@@ -18,7 +15,12 @@ import WebSocket from "ws";
 
 import { decodeBootstrap } from "@appduct/shared";
 
-import { spawnCliBinary, waitForExit, writeTestHostKey } from "./fixtures.js";
+import {
+  makeTempStateDir as makeSharedStateDir,
+  removeStateDir,
+  spawnCliBinary,
+  waitForExit,
+} from "./fixtures.js";
 
 // The fake app client below skips pinning (that is the app SDK's job, exercised in
 // session-engine.integration.test.ts); the leaf-cert check is disabled process-wide for this
@@ -50,30 +52,14 @@ afterEach(async () => {
   }
 
   while (stateDirs.length > 0) {
-    await rm(stateDirs.pop()!, { force: true, recursive: true });
+    await removeStateDir(stateDirs.pop()!);
   }
 });
 
-const pickFreePort = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const server = createNetServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = address && typeof address !== "string" ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-};
-
 const makeTempStateDir = async (configOverrides: Record<string, unknown> = {}): Promise<string> => {
-  const directory = await mkdtemp(path.join(tmpdir(), "appduct-cli-v2-"));
-  await writeTestHostKey(path.join(directory, "key.pem"));
-
-  const port = await pickFreePort();
-  await writeFile(
-    path.join(directory, "config.json"),
-    JSON.stringify({ wssPort: port, advertisedIp: "127.0.0.1", scheme: "appduct-e2e", ...configOverrides }),
+  const directory = await makeSharedStateDir(
+    { scheme: "appduct-e2e", ...configOverrides },
+    { prefix: "appduct-cli-v2-" },
   );
 
   stateDirs.push(directory);
@@ -132,7 +118,6 @@ describe("appduct CLI v2: end-to-end command table", () => {
     "keygen -> ls auto-spawns -> link -> claim -> ls ACTIVE -> tools/invoke round-trip -> revoke",
     async () => {
       const stateDir = await makeTempStateDir();
-      const port = JSON.parse(await readFile(path.join(stateDir, "config.json"), "utf8")).wssPort as number;
 
       // keygen: fully non-interactive, refuses to overwrite without --force.
       const keygenPath = path.join(stateDir, "operator-key.pem");
@@ -152,6 +137,10 @@ describe("appduct CLI v2: end-to-end command table", () => {
       const status = await runCliJson(["daemon", "status"], stateDir);
       expect(status.ok).toBe(true);
       daemonPids.push((status.data as { daemon: { pid: number } }).daemon.pid);
+      // The state dir asks for an OS-assigned wss port (`wssPort: 0`), so the number is only
+      // knowable from the running daemon — which is also what a link must end up advertising.
+      const port = (status.data as { daemon: { wss_port: number } }).daemon.wss_port;
+      expect(port).toBeGreaterThan(0);
 
       // link: mint a pending session and decode its deep link.
       const linkResult = await runCliJson(["link", "--ttl", "60"], stateDir);
@@ -274,7 +263,8 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(status.ok).toBe(true);
       daemonPids.push((status.data as { daemon: { pid: number } }).daemon.pid);
 
-      const port = JSON.parse(await readFile(path.join(stateDir, "config.json"), "utf8")).wssPort as number;
+      const port = (status.data as { daemon: { wss_port: number } }).daemon.wss_port;
+      expect(port).toBeGreaterThan(0);
 
       const claimOne = async (deviceModel: string): Promise<{ socket: WebSocket; alias: string }> => {
         const linkResult = await runCliJson(["link", "--ttl", "60"], stateDir);

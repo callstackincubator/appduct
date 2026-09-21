@@ -12,6 +12,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { getStateDirPaths } from "../../daemon/state-dir.js";
 import { FakeAppClient } from "./app-client.js";
 import {
+  daemonWssPort,
   cleanupAfterEach,
   ensureDaemon,
   fetchPinnedKeys,
@@ -19,6 +20,7 @@ import {
   mintLink,
   runCliJson,
   subscribeToEvents,
+  waitForAuditRecords,
 } from "./harness.js";
 
 afterEach(cleanupAfterEach);
@@ -35,24 +37,24 @@ type AuditRecord = {
   caller: "cli" | "mcp";
 };
 
-const readTodaysAuditRecords = async (stateDir: string): Promise<AuditRecord[]> => {
-  const paths = getStateDirPaths(stateDir);
-  const dateStamp = new Date().toISOString().slice(0, 10);
-  const raw = await readFile(path.join(paths.auditDir, `${dateStamp}.jsonl`), "utf8");
-
-  return raw
-    .trim()
-    .split("\n")
-    .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as AuditRecord);
+/** The two `invoke`s below (the allowed one and the denied one) each land a line in today's audit
+ * file. The daemon is a separate process and answers a call before its line is necessarily on disk
+ * (`daemon/audit.ts`'s write queue), so this waits for both rather than reading once. */
+const waitForBothAuditRecords = async (stateDir: string): Promise<AuditRecord[]> => {
+  return waitForAuditRecords<AuditRecord>(stateDir, (records) => records.length >= 2, {
+    description: "the allowed and the denied invoke, both audited",
+  });
 };
 
 describe("e2e: policy and audit", () => {
   test(
     "a destructive-hinted tool is denied by policy via `appduct invoke`, and every attempt is audited without raw args",
     async () => {
-      const { stateDir, port } = await makeTempStateDir({ policy: { destructive: "deny" } });
+      const { stateDir } = await makeTempStateDir({ policy: { destructive: "deny" } });
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);
@@ -84,7 +86,7 @@ describe("e2e: policy and audit", () => {
       // The hint names the config file the operator would edit to change this (ARCHITECTURE.md §12).
       expect(deniedInvoke.error?.details).toMatchObject({ hint: expect.stringContaining("config.json") });
 
-      const records = await readTodaysAuditRecords(stateDir);
+      const records = await waitForBothAuditRecords(stateDir);
       expect(records.length).toBeGreaterThanOrEqual(2);
 
       const rawAuditContents = await readFile(

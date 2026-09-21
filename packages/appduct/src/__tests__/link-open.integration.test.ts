@@ -11,10 +11,7 @@
  *    *not* get the override — a physical iPhone reaches the daemon only over the LAN (issue #31).
  */
 
-import { createServer as createNetServer } from "node:net";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { writeFile } from "node:fs/promises";
 
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -23,7 +20,7 @@ import { decodeBootstrap } from "@appduct/shared";
 import { handleLinkCommand } from "../commands/link.js";
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import type { ExecFn } from "../cli/open-target.js";
-import { writeTestHostKey } from "./fixtures.js";
+import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
 const runningDaemons: RunningDaemon[] = [];
 const stateDirs: string[] = [];
@@ -34,39 +31,26 @@ afterEach(async () => {
   }
 
   while (stateDirs.length > 0) {
-    await rm(stateDirs.pop()!, { force: true, recursive: true });
+    await removeStateDir(stateDirs.pop()!);
   }
 });
-
-const pickFreePort = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const server = createNetServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = address && typeof address !== "string" ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-};
 
 const startTestDaemon = async (
   extraConfig: Record<string, unknown> = {},
 ): Promise<{ daemon: RunningDaemon; stateDir: string; port: number }> => {
-  const stateDir = await mkdtemp(path.join(tmpdir(), "appduct-link-open-"));
-  stateDirs.push(stateDir);
-  await writeTestHostKey(path.join(stateDir, "key.pem"));
-
-  const port = await pickFreePort();
-  await writeFile(
-    path.join(stateDir, "config.json"),
-    JSON.stringify({ wssPort: port, advertisedIp: "203.0.113.9", scheme: "playground", ...extraConfig }),
+  const stateDir = await makeTempStateDir(
+    { advertisedIp: "203.0.113.9", scheme: "playground", ...extraConfig },
+    { prefix: "appduct-link-open-" },
   );
+  stateDirs.push(stateDir);
 
   const daemon = await startDaemon({ stateDir });
   runningDaemons.push(daemon);
 
-  return { daemon, stateDir, port };
+  // The daemon's `config.json` asks for an OS-assigned port (`wssPort: 0`), so the real port is
+  // only knowable from the listener that bound it — never pre-picked, which is what used to race
+  // another vitest process for the same number.
+  return { daemon, stateDir, port: daemon.listener.port()! };
 };
 
 /** Stub `exec` for the `ios-device` path: `devicectl list devices --json-output <file>` writes its

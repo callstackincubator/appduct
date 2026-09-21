@@ -4,15 +4,20 @@
  * call — entirely through `connect()`/`AppClient`, never through a CLI subprocess, and asserts the
  * audit trail attributes these calls to `caller: "client"`.
  */
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { connect, AppductError } from "../../client/index.js";
-import { getStateDirPaths } from "../../daemon/state-dir.js";
 import { FakeAppClient } from "./app-client.js";
-import { cleanupAfterEach, ensureDaemon, fetchPinnedKeys, makeTempStateDir, mintLink, subscribeToEvents } from "./harness.js";
+import {
+  cleanupAfterEach,
+  daemonWssPort,
+  ensureDaemon,
+  fetchPinnedKeys,
+  makeTempStateDir,
+  mintLink,
+  subscribeToEvents,
+  waitForAuditRecords,
+} from "./harness.js";
 
 afterEach(cleanupAfterEach);
 
@@ -24,16 +29,20 @@ type AuditRecord = {
   caller: "cli" | "mcp" | "client";
 };
 
-const readTodaysAuditRecords = async (stateDir: string): Promise<AuditRecord[]> => {
-  const paths = getStateDirPaths(stateDir);
-  const dateStamp = new Date().toISOString().slice(0, 10);
-  const raw = await readFile(path.join(paths.auditDir, `${dateStamp}.jsonl`), "utf8");
+/** The three calls this scenario makes, each on its own line of today's audit file. The daemon
+ * runs in a separate process and answers a call before its audit line is necessarily on disk
+ * (`daemon/audit.ts`'s write queue), so this waits for all three rather than reading once. */
+const waitForSessionAuditRecords = async (stateDir: string, alias: string): Promise<AuditRecord[]> => {
+  const forThisSession = (records: AuditRecord[]): AuditRecord[] =>
+    records.filter((record) => record.alias === alias);
 
-  return raw
-    .trim()
-    .split("\n")
-    .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as AuditRecord);
+  return forThisSession(
+    await waitForAuditRecords<AuditRecord>(
+      stateDir,
+      (records) => forThisSession(records).length >= 3,
+      { description: `three audited calls for alias "${alias}"` },
+    ),
+  );
 };
 
 /** A caller-declared tool map, `interface`-style (not a `type` alias) — regression coverage for
@@ -49,8 +58,11 @@ describe("e2e: appduct/client", () => {
   test(
     "connect() -> tools() -> call() -> waitForEvent() round-trips against a real daemon and app, audited as caller \"client\"",
     async () => {
-      const { stateDir, port } = await makeTempStateDir({ policy: { destructive: "deny" } });
+      const { stateDir } = await makeTempStateDir({ policy: { destructive: "deny" } });
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);
@@ -94,7 +106,7 @@ describe("e2e: appduct/client", () => {
       await expect(app.call("no_such_tool" as never, {})).rejects.toMatchObject({ type: "tool_not_found" });
       await expect(app.call("deleteAll", {})).rejects.toMatchObject({ type: "policy_denied" });
 
-      const records = (await readTodaysAuditRecords(stateDir)).filter((record) => record.alias === ack.alias);
+      const records = await waitForSessionAuditRecords(stateDir, ack.alias);
 
       expect(records).toContainEqual(
         expect.objectContaining({ tool: "sum", outcome: "ok", caller: "client" }),
@@ -115,8 +127,11 @@ describe("e2e: appduct/client", () => {
   test(
     "call()'s transport timeout never fires before the daemon's own tool_timeout, even for a timeoutMs above the transport default",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);
@@ -147,8 +162,11 @@ describe("e2e: appduct/client", () => {
   );
 
   test("waitForEvent() rejects (rather than crashing the connection) when its match predicate throws", async () => {
-    const { stateDir, port } = await makeTempStateDir();
+    const { stateDir } = await makeTempStateDir();
     await ensureDaemon(stateDir);
+    // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+    // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+    const port = await daemonWssPort(stateDir);
     const pinnedKeys = await fetchPinnedKeys(stateDir);
 
     const events = await subscribeToEvents(stateDir);
@@ -186,8 +204,11 @@ describe("e2e: appduct/client", () => {
   test(
     "waitForEvent() resolves from the retained buffer for an event emitted before it was called (no live-subscribe race)",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);
@@ -221,8 +242,11 @@ describe("e2e: appduct/client", () => {
   test(
     "events() drains the retained buffer, and waitForEvent()'s since skips events already seen",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);

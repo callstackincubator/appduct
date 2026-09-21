@@ -1,11 +1,16 @@
-import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+/**
+ * `rpc/client.ts`'s decision logic, with **no real daemon anywhere**: the auto-spawn guard, the
+ * spawn-lock, and the whole of issue #30's version-drift check, which runs against the hand-rolled
+ * `FakeDaemon` below because a real `startDaemon` can only ever report this build's own version.
+ *
+ * The cases that genuinely need a real daemon on the other end of the socket live in
+ * `rpc-client.integration.test.ts`.
+ */
+import { rm, utimes, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
-import { tmpdir } from "node:os";
-import path from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import { getStateDirPaths } from "../daemon/state-dir.js";
 import {
   callDaemon,
@@ -17,9 +22,8 @@ import {
   resetDaemonVersionChecks,
   type SpawnFn,
 } from "../rpc/client.js";
-import { writeTestHostKey } from "./fixtures.js";
+import { makeTempStateDir as makeSharedStateDir, removeStateDir } from "./fixtures.js";
 
-const runningDaemons: RunningDaemon[] = [];
 const fakeDaemons: FakeDaemon[] = [];
 
 afterEach(async () => {
@@ -27,17 +31,21 @@ afterEach(async () => {
     await fakeDaemons.pop()?.stop();
   }
 
-  while (runningDaemons.length > 0) {
-    const daemon = runningDaemons.pop();
-    await daemon?.shutdown();
-  }
-
   resetDaemonVersionChecks();
+
+  while (stateDirs.length > 0) {
+    await removeStateDir(stateDirs.pop()!);
+  }
 });
 
+const stateDirs: string[] = [];
+
+/** A temp state dir for the fake daemons below. Nothing here binds a wss port — the fakes speak
+ * only the control socket — but it carries the shared fixture's `wssPort: 0` anyway, so that a
+ * case which ever does let a real daemon start cannot collide with another process's. */
 const makeTempStateDir = async (): Promise<string> => {
-  const stateDir = await mkdtemp(path.join(tmpdir(), "appduct-rpc-client-test-"));
-  await writeTestHostKey(path.join(stateDir, "key.pem"));
+  const stateDir = await makeSharedStateDir({}, { prefix: "appduct-rpc-client-test-" });
+  stateDirs.push(stateDir);
   return stateDir;
 };
 
@@ -185,96 +193,10 @@ const startFakeDaemon = async (
 };
 
 describe("callDaemon", () => {
-  test("connects directly when a daemon is already listening", async () => {
-    const stateDir = await makeTempStateDir();
-    const daemon = await startDaemon({ stateDir });
-    runningDaemons.push(daemon);
-
-    const status = await callDaemon<{ pid: number }>(
-      "daemon.status",
-      {},
-      { stateDir, autoSpawn: false },
-    );
-
-    expect(status.pid).toBe(process.pid);
-
-    await rm(stateDir, { force: true, recursive: true });
-  });
-
-  test("propagates a JSON-RPC error for an unknown method", async () => {
-    const stateDir = await makeTempStateDir();
-    const daemon = await startDaemon({ stateDir });
-    runningDaemons.push(daemon);
-
-    await expect(
-      callDaemon("nonexistent.method", {}, { stateDir, autoSpawn: false }),
-    ).rejects.toThrow(/Method not found/u);
-
-    await rm(stateDir, { force: true, recursive: true });
-  });
-
   test("without autoSpawn, a missing daemon fails fast instead of spawning", async () => {
     const stateDir = await makeTempStateDir();
 
     await expect(callDaemon("daemon.status", {}, { stateDir, autoSpawn: false })).rejects.toThrow();
-
-    await rm(stateDir, { force: true, recursive: true });
-  });
-
-  test("auto-spawns an in-process daemon via the injected spawn fn and retries the request", async () => {
-    const stateDir = await makeTempStateDir();
-    let spawnCalls = 0;
-
-    const spawn: SpawnFn = async (args, context) => {
-      spawnCalls += 1;
-      expect(args).toEqual(["daemon", "run"]);
-      expect(context.stateDir).toBe(stateDir);
-
-      const daemon = await startDaemon({ stateDir: context.stateDir });
-      runningDaemons.push(daemon);
-    };
-
-    const status = await callDaemon<{ pid: number }>(
-      "daemon.status",
-      {},
-      { stateDir, autoSpawn: true, spawn, spawnPollIntervalMs: 20, spawnWaitTimeoutMs: 2000 },
-    );
-
-    expect(spawnCalls).toBe(1);
-    expect(status.pid).toBe(process.pid);
-
-    await rm(stateDir, { force: true, recursive: true });
-  });
-
-  test("concurrent auto-spawn race results in exactly one spawn (spawn-lock)", async () => {
-    const stateDir = await makeTempStateDir();
-    let spawnCalls = 0;
-
-    const spawn: SpawnFn = async (_args, context) => {
-      spawnCalls += 1;
-      // Simulate real spawn latency so both callers are genuinely racing.
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      const daemon = await startDaemon({ stateDir: context.stateDir });
-      runningDaemons.push(daemon);
-    };
-
-    const options = {
-      stateDir,
-      autoSpawn: true,
-      spawn,
-      spawnPollIntervalMs: 20,
-      spawnWaitTimeoutMs: 3000,
-    } as const;
-
-    const [first, second] = await Promise.all([
-      callDaemon<{ pid: number }>("daemon.status", {}, options),
-      callDaemon<{ pid: number }>("daemon.status", {}, options),
-    ]);
-
-    expect(spawnCalls).toBe(1);
-    expect(first.pid).toBe(process.pid);
-    expect(second.pid).toBe(process.pid);
-    expect(runningDaemons).toHaveLength(1);
 
     await rm(stateDir, { force: true, recursive: true });
   });
@@ -297,38 +219,6 @@ describe("callDaemon", () => {
   });
 });
 
-describe("openDaemonStream", () => {
-  test("supports calls and delivers server-pushed notifications", async () => {
-    const stateDir = await makeTempStateDir();
-    const daemon = await startDaemon({ stateDir });
-    runningDaemons.push(daemon);
-
-    const stream = await openDaemonStream({ stateDir, autoSpawn: false });
-
-    try {
-      const status = await stream.call<{ pid: number }>("daemon.status");
-      expect(status.pid).toBe(process.pid);
-
-      const received: unknown[] = [];
-      const unsubscribe = stream.onNotification((payload) => {
-        received.push(payload);
-      });
-
-      const [connection] = daemon.server.connections();
-      expect(connection).toBeDefined();
-      daemon.server.notify(connection!, { kind: "daemon_started", ts: 123, data: null });
-
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(received).toEqual([{ kind: "daemon_started", ts: 123, data: null }]);
-
-      unsubscribe();
-    } finally {
-      stream.close();
-    }
-
-    await rm(stateDir, { force: true, recursive: true });
-  });
-});
 
 describe("daemon version check (issue #30)", () => {
   const CLIENT_VERSION = "9.9.9";
@@ -889,3 +779,4 @@ describe("daemon version check: a contended lock is not an ineffective restart (
     await rm(stateDir, { force: true, recursive: true });
   });
 });
+

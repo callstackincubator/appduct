@@ -1,17 +1,24 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { runCliBinary, spawnCliBinary, waitForExit, writeTestHostKey } from "./fixtures.js";
+import {
+  makeTempStateDir as makeSharedStateDir,
+  removeStateDir,
+  runCliBinary,
+  spawnCliBinary,
+  waitForExit,
+} from "./fixtures.js";
 
 const stateDirs: string[] = [];
 const daemonPids: number[] = [];
 
+/** The shared fixture's `wssPort: 0` matters here: every case below auto-spawns or runs a real
+ * daemon, and this file used to write no `config.json` at all, so each one bound the default 8443
+ * and collided with any other daemon on the machine. */
 const makeTempStateDir = async (): Promise<string> => {
-  const directory = await mkdtemp(path.join(tmpdir(), "appduct-daemon-cli-"));
-  await writeTestHostKey(path.join(directory, "key.pem"));
+  const directory = await makeSharedStateDir({}, { prefix: "appduct-daemon-cli-" });
   stateDirs.push(directory);
   return directory;
 };
@@ -38,8 +45,7 @@ afterEach(async () => {
   }
 
   while (stateDirs.length > 0) {
-    const directory = stateDirs.pop()!;
-    await rm(directory, { force: true, recursive: true });
+    await removeStateDir(stateDirs.pop()!);
   }
 });
 

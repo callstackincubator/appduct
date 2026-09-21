@@ -5,8 +5,8 @@
  * (same pattern as `mcp-server.integration.test.ts`) for the `caller` attribution case.
  */
 
-import { connect as connectUds, createServer as createNetServer, type Socket } from "node:net";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { connect as connectUds, type Socket } from "node:net";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -23,7 +23,7 @@ import { loadConfig } from "../daemon/config.js";
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import { getStateDirPaths } from "../daemon/state-dir.js";
 import { createMcpServer, type McpServerHandle } from "../mcp/server.js";
-import { writeTestHostKey } from "./fixtures.js";
+import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
@@ -41,21 +41,9 @@ afterEach(async () => {
   }
 
   while (stateDirs.length > 0) {
-    await rm(stateDirs.pop()!, { force: true, recursive: true });
+    await removeStateDir(stateDirs.pop()!);
   }
 });
-
-const pickFreePort = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const server = createNetServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = address && typeof address !== "string" ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-};
 
 type TestDaemon = {
   daemon: RunningDaemon;
@@ -64,20 +52,16 @@ type TestDaemon = {
 };
 
 const startTestDaemon = async (configOverrides: Record<string, unknown> = {}): Promise<TestDaemon> => {
-  const stateDir = await mkdtemp(path.join(tmpdir(), "appduct-policy-audit-"));
+  const stateDir = await makeTempStateDir(configOverrides, { prefix: "appduct-policy-audit-" });
   stateDirs.push(stateDir);
-  await writeTestHostKey(path.join(stateDir, "key.pem"));
-
-  const port = await pickFreePort();
-  await writeFile(
-    path.join(stateDir, "config.json"),
-    JSON.stringify({ wssPort: port, advertisedIp: "127.0.0.1", ...configOverrides }),
-  );
 
   const daemon = await startDaemon({ stateDir });
   runningDaemons.push(daemon);
 
-  return { daemon, stateDir, port };
+  // The daemon's `config.json` asks for an OS-assigned port (`wssPort: 0`), so the real port is
+  // only knowable from the listener that bound it — never pre-picked, which is what used to race
+  // another vitest process for the same number.
+  return { daemon, stateDir, port: daemon.listener.port()! };
 };
 
 /** Removes `daemon` from the tracked list and shuts it down immediately — used mid-test so a

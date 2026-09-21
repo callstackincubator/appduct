@@ -187,12 +187,15 @@ describe("e2e: daemon/CLI version drift", () => {
   test(
     "a stale daemon with a live session is reported, not restarted",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       const stalePid = await startStaleDaemon(stateDir);
 
       const pinnedKeys = await fetchPinnedKeys(stateDir);
       const link = await mintLinkWithoutCli(stateDir);
-      const app = new FakeAppClient(port, pinnedKeys);
+      // The port comes off the decoded bootstrap payload: reading it over the CLI first would
+      // auto-spawn a current-version daemon and defeat the staging above, and this is the number
+      // a real app dials anyway.
+      const app = new FakeAppClient(link.port, pinnedKeys);
       await app.claim(link, { model: "Pixel 8" });
 
       try {
@@ -228,12 +231,15 @@ describe("e2e: daemon/CLI version drift", () => {
   test(
     "--daemon-restart replaces a stale daemon even with a live session",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       const stalePid = await startStaleDaemon(stateDir);
 
       const pinnedKeys = await fetchPinnedKeys(stateDir);
       const link = await mintLinkWithoutCli(stateDir);
-      const app = new FakeAppClient(port, pinnedKeys);
+      // The port comes off the decoded bootstrap payload: reading it over the CLI first would
+      // auto-spawn a current-version daemon and defeat the staging above, and this is the number
+      // a real app dials anyway.
+      const app = new FakeAppClient(link.port, pinnedKeys);
       await app.claim(link, { model: "Pixel 8" });
       const socketClosed = app.waitForClose();
 
@@ -289,12 +295,15 @@ describe("e2e: forcing a version-drift restart", () => {
   test(
     "APPDUCT_DAEMON_RESTART=1 forces the restart with no flag on the command line",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       const stalePid = await startStaleDaemon(stateDir);
 
       const pinnedKeys = await fetchPinnedKeys(stateDir);
       const link = await mintLinkWithoutCli(stateDir);
-      const app = new FakeAppClient(port, pinnedKeys);
+      // The port comes off the decoded bootstrap payload: reading it over the CLI first would
+      // auto-spawn a current-version daemon and defeat the staging above, and this is the number
+      // a real app dials anyway.
+      const app = new FakeAppClient(link.port, pinnedKeys);
       await app.claim(link, { model: "Pixel 8" });
 
       // The env form exists for exactly this: an MCP launch config passes no CLI flags.
@@ -320,12 +329,15 @@ describe("e2e: forcing a version-drift restart", () => {
   test(
     "--no-daemon-restart overrules restartDaemonOnVersionMismatch for one command",
     async () => {
-      const { stateDir, port } = await makeTempStateDir({ restartDaemonOnVersionMismatch: true });
+      const { stateDir } = await makeTempStateDir({ restartDaemonOnVersionMismatch: true });
       const stalePid = await startStaleDaemon(stateDir);
 
       const pinnedKeys = await fetchPinnedKeys(stateDir);
       const link = await mintLinkWithoutCli(stateDir);
-      const app = new FakeAppClient(port, pinnedKeys);
+      // The port comes off the decoded bootstrap payload: reading it over the CLI first would
+      // auto-spawn a current-version daemon and defeat the staging above, and this is the number
+      // a real app dials anyway.
+      const app = new FakeAppClient(link.port, pinnedKeys);
       await app.claim(link, { model: "Pixel 8" });
 
       try {

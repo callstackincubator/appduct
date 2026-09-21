@@ -4,9 +4,6 @@
  * real daemon, asserting both the exit code and the JSON error's `type`.
  */
 
-import { createServer as createNetServer } from "node:net";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -14,7 +11,7 @@ import WebSocket from "ws";
 
 import { decodeBootstrap } from "@appduct/shared";
 
-import { runCliBinary, writeTestHostKey } from "./fixtures.js";
+import { makeTempStateDir as makeSharedStateDir, removeStateDir, runCliBinary } from "./fixtures.js";
 
 // The fake app client below skips pinning (that is the app SDK's job), so the leaf-cert check is
 // disabled process-wide for this file's throwaway self-signed daemon key.
@@ -45,33 +42,15 @@ afterEach(async () => {
   }
 
   while (stateDirs.length > 0) {
-    await rm(stateDirs.pop()!, { force: true, recursive: true });
+    await removeStateDir(stateDirs.pop()!);
   }
 });
 
-const pickFreePort = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const server = createNetServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = address && typeof address !== "string" ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-};
-
-/** Always pins a free port: several cases below auto-spawn a real daemon, and the shared default
- * (8443) collides with the other test files' daemons when test files run concurrently. */
+/** Always an OS-assigned wss port (the shared fixture's `wssPort: 0`): several cases below
+ * auto-spawn a real daemon, and the default 8443 collides with every other daemon on the machine,
+ * including the ones another concurrent vitest process is running. */
 const makeTempStateDir = async (configOverrides: Record<string, unknown> = {}): Promise<string> => {
-  const directory = await mkdtemp(path.join(tmpdir(), "appduct-exit-codes-"));
-  await writeTestHostKey(path.join(directory, "key.pem"));
-
-  const port = await pickFreePort();
-  await writeFile(
-    path.join(directory, "config.json"),
-    JSON.stringify({ wssPort: port, advertisedIp: "127.0.0.1", ...configOverrides }),
-  );
+  const directory = await makeSharedStateDir(configOverrides, { prefix: "appduct-exit-codes-" });
 
   stateDirs.push(directory);
   return directory;
@@ -157,11 +136,14 @@ describe("exit codes: v2 command surface", () => {
   });
 
   test("tool_error (72): invoke a name not registered on a real, claimed session", async () => {
-    const port = await pickFreePort();
-    const stateDir = await makeTempStateDir({ wssPort: port, advertisedIp: "127.0.0.1" });
+    const stateDir = await makeTempStateDir();
 
     const status = runCli(["daemon", "status"], stateDir);
     daemonPids.push(status.payload.data.daemon.pid);
+    // The state dir asks for an OS-assigned port, so the daemon it just auto-spawned is the only
+    // source of the real one.
+    const port = status.payload.data.daemon.wss_port as number;
+    expect(port).toBeGreaterThan(0);
 
     const linkResult = runCli(["link", "--scheme", "appduct-exit-codes"], stateDir);
     expect(linkResult.exitCode).toBe(0);

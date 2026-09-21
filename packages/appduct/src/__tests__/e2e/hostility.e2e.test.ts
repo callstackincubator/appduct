@@ -13,6 +13,7 @@ import WebSocket from "ws";
 
 import { FakeAppClient } from "./app-client.js";
 import {
+  daemonWssPort,
   cleanupAfterEach,
   ensureDaemon,
   fetchPinnedKeys,
@@ -42,8 +43,11 @@ describe("e2e: hostility", () => {
   test(
     "the daemon survives a raw TLS flap, an oversized frame, a binary frame, garbage JSON, and a bad claim — ACTIVE session keeps invoking",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
       const daemonPid = await ensureDaemon(stateDir);
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
       const events = await subscribeToEvents(stateDir);

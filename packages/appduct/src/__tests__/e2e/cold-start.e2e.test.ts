@@ -16,6 +16,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { FakeAppClient } from "./app-client.js";
 import {
+  daemonWssPort,
   cleanupAfterEach,
   decodeDeepLink,
   fetchPinnedKeys,
@@ -32,7 +33,10 @@ describe("e2e: cold start", () => {
   test(
     "keygen -> link auto-spawns -> claim (pin-verified) -> ls ACTIVE -> tools/invoke -> revoke -> daemon stop leaves no socket/pidfile",
     async () => {
-      const { stateDir, port } = await makeTempStateDir();
+      const { stateDir } = await makeTempStateDir();
+      // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+      // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+      const port = await daemonWssPort(stateDir);
 
       // keygen: fully non-interactive, refuses to overwrite without --force.
       const keygenPath = path.join(stateDir, "operator-key.pem");

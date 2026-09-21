@@ -101,6 +101,13 @@ The daemon refuses to load a key file that is group/world-readable.
 }
 ```
 
+`wssPort` is the pinned-wss listener's TCP port. **`0` binds an OS-assigned port**: the listener
+takes whatever ephemeral port the OS hands it, and everything that reports or advertises the port
+afterwards — `daemon.status`'s `wssPort` (§5) and a minted link's `endpoint.port` (§5, §8) — carries
+the *bound* port, never the configured `0`. That is how several daemons coexist on one machine
+without an operator hand-picking a port for each (the test suite's daemons all run this way).
+Any other value must be a port number in `1..65535`.
+
 `advertisedIp` overrides auto-detection of the address advertised in minted bootstrap
 payloads. `scheme` is the deep-link URI scheme composed into `appduct link`'s output
 when `--scheme` is not passed (§10) — set it once here instead of on every invocation.
@@ -153,7 +160,19 @@ only-when-no-sessions-are-live (§4, "Version drift").
   (3) polls the socket until ready (timeout 5 s), (4) retries the original request.
   A stale socket file with a dead pid is unlinked before spawning.
 - Single instance is enforced via the pidfile (write with `O_EXCL`; on conflict, check
-  liveness with `process.kill(pid, 0)` and take over only if dead).
+  liveness and take over only if dead). Liveness is `process.kill(pid, 0)` — with `EPERM` counted
+  as alive — plus, on Linux, a `/proc/<pid>/status` read that treats `State: Z` (zombie) as **dead**.
+  A zombie is an exited process nobody has reaped: it still holds a pid table entry, so
+  `process.kill(pid, 0)` succeeds for it, but the daemon it names is gone and its socket is closed.
+  Normally that window is invisible because PID 1 reaps orphans immediately; in a container whose
+  PID 1 is a plain command rather than an init, nothing reaps, and a daemon killed after its parent
+  CLI exited stays a zombie for the life of the container — without this check the pidfile would
+  never look stale and every later command would report a daemon that is already dead. The procfs
+  read only ever adds a "dead" verdict on positive evidence: where `/proc` is absent or unreadable
+  (macOS, a hardened container, a pid we lack permission on) `process.kill(pid, 0)`'s answer stands,
+  because wrongly declaring a *live* daemon dead would clobber its state. The same probe
+  (`isProcessAlive`, `daemon/pidfile.ts`) answers every other "is a daemon still there?" question —
+  the auto-spawn path's stale-socket unlink and `daemon.log` rotation — so all three agree.
 - SIGINT/SIGTERM: close all device sockets with code 1001, remove `daemon.sock` and
   `daemon.pid`, flush audit, exit 0.
 - **Version drift:** the daemon outlives the CLI that spawned it, so `npm i -g appduct@<newer>`

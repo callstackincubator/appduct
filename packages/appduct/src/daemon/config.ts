@@ -29,6 +29,15 @@ export type AppductPolicyConfig = {
 };
 
 export type AppductConfig = {
+  /**
+   * TCP port for the pinned-wss listener (ARCHITECTURE.md §3). `0` is special and means
+   * "let the OS assign a free ephemeral port": the listener binds `0`, and everything that
+   * reports or advertises the port afterwards (`daemon.status`'s `wssPort`, a minted link's
+   * `endpoint.port`) reports the *bound* port instead. That is the only way several daemons can
+   * coexist on one machine without the operator hand-picking ports for each — which is exactly
+   * what the test suite needs when several vitest processes run concurrently. Every other value
+   * must be a positive integer.
+   */
   wssPort: number;
   keyPath: string;
   graceSeconds: number;
@@ -106,6 +115,19 @@ export class AppductConfigError extends Error {
 
 const configError = (key: string, message: string): AppductConfigError => {
   return new AppductConfigError(key, `Invalid Appduct config value for "${key}": ${message}`);
+};
+
+/**
+ * `wssPort` alone accepts `0` on top of the positive integers — it is not a degenerate port but a
+ * documented request for an OS-assigned one (see {@link AppductConfig.wssPort}). Kept separate
+ * from {@link requirePositiveInteger} so no *other* key silently gains a meaningless zero.
+ */
+const requireWssPort = (value: unknown, key: string): number => {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 65_535) {
+    throw configError(key, "must be a port number between 0 and 65535 (0 binds an OS-assigned port).");
+  }
+
+  return value;
 };
 
 const requirePositiveInteger = (value: unknown, key: string): number => {
@@ -193,7 +215,7 @@ export const loadConfig = async (
   }
 
   if (parsed.wssPort !== undefined) {
-    config.wssPort = requirePositiveInteger(parsed.wssPort, "wssPort");
+    config.wssPort = requireWssPort(parsed.wssPort, "wssPort");
   }
 
   if (parsed.keyPath !== undefined) {

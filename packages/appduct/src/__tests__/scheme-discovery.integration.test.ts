@@ -7,7 +7,6 @@
  * free port and a key, but it never holds a `scheme`: that is the value under test.
  */
 
-import { createServer as createNetServer } from "node:net";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16,7 +15,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { handleLinkCommand } from "../commands/link.js";
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
-import { writeTestHostKey } from "./fixtures.js";
+import { makeTempStateDir } from "./fixtures.js";
 
 const runningDaemons: RunningDaemon[] = [];
 const directories: string[] = [];
@@ -31,28 +30,10 @@ afterEach(async () => {
   }
 });
 
-const pickFreePort = async (): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const server = createNetServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = address && typeof address !== "string" ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
-};
-
 /** A daemon whose `config.json` deliberately carries no `scheme`. */
 const startSchemelessDaemon = async (): Promise<string> => {
-  const stateDir = await mkdtemp(path.join(tmpdir(), "appduct-discovery-state-"));
+  const stateDir = await makeTempStateDir({}, { prefix: "appduct-discovery-state-" });
   directories.push(stateDir);
-  await writeTestHostKey(path.join(stateDir, "key.pem"));
-
-  await writeFile(
-    path.join(stateDir, "config.json"),
-    JSON.stringify({ wssPort: await pickFreePort(), advertisedIp: "127.0.0.1" }),
-  );
 
   runningDaemons.push(await startDaemon({ stateDir }));
 
