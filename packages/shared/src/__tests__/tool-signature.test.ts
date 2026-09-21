@@ -332,6 +332,38 @@ const cases: Case[] = [
     },
     "deep(a?: { b?: {...} })",
   ],
+  [
+    "hostile: arrays nested past the depth cap stop at ...[]",
+    {
+      name: "grid",
+      input_schema: {
+        type: "object",
+        properties: {
+          a: {
+            type: "array",
+            items: {
+              type: "array",
+              items: {
+                type: "array",
+                items: { type: "array", items: { type: "array", items: { type: "array", items: { type: "string" } } } },
+              },
+            },
+          },
+        },
+      },
+    },
+    "grid(a?: ...[][][][][])",
+  ],
+  [
+    "hostile: a huge enum value is cut, not printed whole",
+    { name: "e", input_schema: { type: "object", properties: { a: { enum: ["x".repeat(5000)] } } } },
+    `e(a?: "${"x".repeat(39)}…)`,
+  ],
+  [
+    "hostile: a property name with a line break or escape is quoted, never raw",
+    { name: "n", input_schema: { type: "object", properties: { "a\nb[31m": { type: "string" } } } },
+    'n("a\\nb\\u001b[31m"?: string)',
+  ],
 ];
 
 describe("renderToolSignature", () => {
@@ -341,5 +373,29 @@ describe("renderToolSignature", () => {
 
   test("never throws on a completely empty object", () => {
     expect(() => renderToolSignature({ name: "x" })).not.toThrow();
+  });
+
+  // In-process inputs JSON can't carry, but "pure and total" is the contract.
+  test("never throws on a cyclic items, a BigInt const/default, or a throwing getter", () => {
+    const cyclic: Record<string, unknown> = { type: "array" };
+    cyclic.items = cyclic;
+    expect(renderToolSignature({ name: "c", input_schema: { type: "object", properties: { a: cyclic } } })).toBe(
+      "c(a?: ...[][][][][])",
+    );
+
+    expect(
+      renderToolSignature({
+        name: "b",
+        input_schema: { type: "object", properties: { a: { const: 1n }, b: { type: "integer", default: 1n } } },
+      }),
+    ).toBe("b(a?: ..., b?: int)");
+
+    const throwing = {
+      type: "object",
+      get properties(): never {
+        throw new Error("boom");
+      },
+    };
+    expect(renderToolSignature({ name: "t", input_schema: throwing })).toBe("t(...)");
   });
 });

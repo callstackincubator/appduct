@@ -39,8 +39,43 @@ const MAX_ENUM_VALUES = 5;
  * default belongs in the full schema (`tools <name>`), not a one-line signature. */
 const MAX_DEFAULT_LENGTH = 20;
 
+/** An `enum`/`const` value longer than this (as JSON) is cut with `…` — one 5 KB enum string must
+ * not turn a one-line signature into a page. */
+const MAX_LITERAL_LENGTH = 40;
+/** Nested `type: "array"` `items` deeper than this render as `...[]`. Objects already stop after
+ * one level; without this cap, arrays of arrays (or a cyclic `items`, possible for an in-process
+ * caller) would recurse until the stack overflows. */
+const MAX_ARRAY_DEPTH = 4;
+
+/** `JSON.stringify` that never throws (a `BigInt`, a cycle) — `undefined` when it can't render. */
+const tryStringify = (value: unknown): string | undefined => {
+  try {
+    const json = JSON.stringify(value);
+    return typeof json === "string" ? json : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const renderLiteral = (value: unknown): string => {
+  const json = tryStringify(value);
+
+  if (json === undefined) {
+    return "...";
+  }
+
+  const codePoints = Array.from(json);
+  return codePoints.length > MAX_LITERAL_LENGTH ? `${codePoints.slice(0, MAX_LITERAL_LENGTH).join("")}…` : json;
+};
+
+/** A property name as written in the signature: bare when it is identifier-like, else quoted as
+ * JSON, so a hostile key (a newline, an escape sequence) can never break the line it sits on. */
+const renderPropertyName = (name: string): string => {
+  return /^[\p{L}\p{N}_$-]+$/u.test(name) ? name : JSON.stringify(name);
+};
+
 const renderEnumValues = (values: unknown[]): string => {
-  const shown = values.slice(0, MAX_ENUM_VALUES).map((value) => JSON.stringify(value));
+  const shown = values.slice(0, MAX_ENUM_VALUES).map(renderLiteral);
   const suffix = values.length > MAX_ENUM_VALUES ? " | …" : "";
   return `${shown.join(" | ")}${suffix}`;
 };
@@ -112,10 +147,20 @@ const renderObjectType = (schema: JsonSchema): string => {
   return renderPropertyGroup(schema, false, "{}", (joined) => `{ ${joined} }`, "{...}");
 };
 
-const renderScalarType = (typeValue: unknown, schema: JsonSchema, expandObject: boolean): string => {
+const renderScalarType = (
+  typeValue: unknown,
+  schema: JsonSchema,
+  expandObject: boolean,
+  arrayDepth: number,
+): string => {
   if (typeValue === "array") {
     const items = schema.items;
-    return isSchemaObject(items) ? `${renderType(items, expandObject)}[]` : "unknown[]";
+
+    if (!isSchemaObject(items)) {
+      return "unknown[]";
+    }
+
+    return arrayDepth >= MAX_ARRAY_DEPTH ? "...[]" : `${renderType(items, expandObject, arrayDepth + 1)}[]`;
   }
 
   if (typeValue === "object") {
@@ -139,7 +184,7 @@ const renderScalarType = (typeValue: unknown, schema: JsonSchema, expandObject: 
  * `type: "object"` expansion (`renderObjectType` always passes `false` back down, so nothing
  * expands twice).
  */
-const renderType = (schema: unknown, expandObject: boolean): string => {
+const renderType = (schema: unknown, expandObject: boolean, arrayDepth = 0): string => {
   if (!isSchemaObject(schema)) {
     return "...";
   }
@@ -149,8 +194,7 @@ const renderType = (schema: unknown, expandObject: boolean): string => {
   }
 
   if ("const" in schema) {
-    const rendered = JSON.stringify(schema.const);
-    return typeof rendered === "string" ? rendered : "...";
+    return renderLiteral(schema.const);
   }
 
   if (Array.isArray(schema.enum)) {
@@ -160,10 +204,10 @@ const renderType = (schema: unknown, expandObject: boolean): string => {
   const type = schema.type;
 
   if (Array.isArray(type)) {
-    return type.map((entry) => renderScalarType(entry, schema, expandObject)).join(" | ");
+    return type.map((entry) => renderScalarType(entry, schema, expandObject, arrayDepth)).join(" | ");
   }
 
-  return renderScalarType(type, schema, expandObject);
+  return renderScalarType(type, schema, expandObject, arrayDepth);
 };
 
 const renderParamEntry = (
@@ -172,12 +216,12 @@ const renderParamEntry = (
   required: boolean,
   expandObject: boolean,
 ): string => {
-  let entry = `${name}${required ? "" : "?"}: ${renderType(propSchema, expandObject)}`;
+  let entry = `${renderPropertyName(name)}${required ? "" : "?"}: ${renderType(propSchema, expandObject)}`;
 
   if (isSchemaObject(propSchema) && "default" in propSchema) {
-    const json = JSON.stringify(propSchema.default);
+    const json = tryStringify(propSchema.default);
 
-    if (typeof json === "string" && json.length <= MAX_DEFAULT_LENGTH) {
+    if (json !== undefined && json.length <= MAX_DEFAULT_LENGTH) {
       entry += ` = ${json}`;
     }
   }
@@ -217,5 +261,12 @@ export const renderToolSignature = (
   tool: Pick<ToolDescriptor, "name" | "input_schema" | "output_schema">,
 ): string => {
   const name = typeof tool?.name === "string" ? tool.name : "";
-  return `${name}${renderParams(tool?.input_schema)}${renderResult(tool?.output_schema)}`;
+
+  try {
+    return `${name}${renderParams(tool?.input_schema)}${renderResult(tool?.output_schema)}`;
+  } catch {
+    // Unreachable for JSON off the wire; an in-process caller can still hand over an object whose
+    // getters throw. The listing that calls this must not die for one tool.
+    return `${name}(...)`;
+  }
 };
