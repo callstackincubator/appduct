@@ -52,8 +52,10 @@ export const LIST_TOOLS_TOOL_DESCRIPTOR = {
     "(`name(param: type, optional?: type) -> result`) with the first line of each description, " +
     "the tool's group and its effective policy. Start here: the app's tools are not MCP tools of " +
     "their own. Every result also carries groups: the app's tool groups with counts, over all its " +
-    "tools. On a large app, list one area with group (\"checkout\" includes \"checkout/payment\"). " +
-    "filter is a case-insensitive substring match on name and description; limit (default " +
+    "tools. On a large app, list one area with group, copying the exact name from groups, parent " +
+    "path included (\"diagnostics/progress\", not \"progress\"); \"checkout\" includes " +
+    "\"checkout/payment\". filter is a case-insensitive substring match on name and description " +
+    "only, never on group names; limit (default " +
     `${DEFAULT_LIST_TOOLS_LIMIT}) and offset page the name-sorted list, and total counts every ` +
     "match before paging, so page on with offset when total is larger. Use appduct_describe_tool for " +
     "one tool's full input/output schema, then appduct_call_tool to run it. A tool with policy " +
