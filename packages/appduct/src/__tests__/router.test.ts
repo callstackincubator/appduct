@@ -18,9 +18,9 @@ const makeContext = (args: string[]): { context: RouteContext; stdout: () => str
     path: [],
     args,
     options: {},
-    io: {
-      json: true,
-      color: false,
+    argv: [],
+    env: {
+      flags: { json: true, pretty: false, verbose: true, color: false },
       clock: fixedClock,
       stdout: {
         isTTY: false,

@@ -8,11 +8,11 @@ import { executeCommand } from "../../runner.js";
 import { guarded } from "../../version-guard.js";
 
 export const route: Route = async (context) => {
-  const { stateDir, io } = context;
+  const { stateDir, env } = context;
 
   return executeCommand(
     commandName(context),
-    guarded(context)(() => handleDaemonStartCommand({ stateDir, clock: io.clock })),
-    io,
+    guarded(context)(() => handleDaemonStartCommand({ stateDir, clock: env.clock })),
+    env,
   );
 };

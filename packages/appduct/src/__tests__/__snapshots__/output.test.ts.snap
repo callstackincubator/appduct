@@ -18,11 +18,6 @@ Policy
 Audit
   Path           /tmp/state/audit
   Failed writes  3
-
-Meta
-  Command: daemon status
-  Timestamp: 2026-03-17T10:00:00.000Z
-  Duration: 4 ms
 "
 `;
 
@@ -48,11 +43,6 @@ Audit
   Size           1.5 MiB
   Failed writes  0
   Failed prunes  2
-
-Meta
-  Command: daemon status
-  Timestamp: 2026-03-17T10:00:00.000Z
-  Duration: 4 ms
 "
 `;
 
@@ -61,14 +51,7 @@ exports[`output rendering > human errors render on stderr 1`] = `
 Error
   Type     tool_execution_error
   Message  The tool handler threw.
-  Details  {
-  "hint": "test"
-}
-
-Meta
-  Command: invoke
-  Timestamp: 2026-03-17T10:00:00.000Z
-  Duration: 2 ms
+  Details  {"hint":"test"}
 "
 `;
 
@@ -96,24 +79,12 @@ MCP server entry
 
 Next
   1. Add \`import "@appduct/react-native/auto";\` to your app entry.
-
-Meta
-  Command: init
-  Timestamp: 2026-03-17T10:00:00.000Z
-  Duration: 3 ms
 "
 `;
 
 exports[`output rendering > invoke human output prints the raw tool result 1`] = `
 "Result
-{
-  "echoed": "hello"
-}
-
-Meta
-  Command: invoke
-  Timestamp: 2026-03-17T10:00:00.000Z
-  Duration: 6 ms
+{"echoed":"hello"}
 "
 `;
 
@@ -122,11 +93,6 @@ exports[`output rendering > keygen success output includes the key path and fing
 Key
   Path         /tmp/appduct-key.pem
   Fingerprint  sha256/example
-
-Meta
-  Command: keygen
-  Timestamp: 2026-03-17T10:00:00.000Z
-  Duration: 3 ms
 "
 `;
 
@@ -138,22 +104,12 @@ Link
   Endpoint   wss://192.168.1.10:8443
   Pin        sha256/example
   Expires    2026-03-17T10:00:30.000Z
-
-Meta
-  Command: link
-  Timestamp: 2026-03-17T10:00:00.000Z
-  Duration: 5 ms
 "
 `;
 
 exports[`output rendering > ls human output handles an empty session list 1`] = `
 "Sessions
   No Appduct sessions are registered.
-
-Meta
-  Command: ls
-  Timestamp: 2026-03-17T10:00:00.000Z
-  Duration: 1 ms
 "
 `;
 
@@ -161,39 +117,23 @@ exports[`output rendering > ls human output includes alias, state, device, tools
 "Sessions
   Alias    State   Device                       Tools  Age
   pixel-8  active  Google Pixel 8 (Android 14)  3      1m 
-
-Meta
-  Command: ls
-  Timestamp: 2026-03-17T10:00:00.000Z
-  Duration: 2 ms
 "
 `;
 
 exports[`output rendering > tools detail output renders full schema/annotations 1`] = `
 "Tool: echo
+  Signature     echo(...)
   Description   Echo a payload on the connected device.
-  Input schema  {
-  "type": "object"
-}
-  Annotations   {
-  "readOnlyHint": true
-}
-
-Meta
-  Command: tools
-  Timestamp: 2026-03-17T10:00:00.000Z
-  Duration: 4 ms
+  Input schema  {"type":"object"}
+  Annotations   {"readOnlyHint":true}
 "
 `;
 
 exports[`output rendering > tools list output stays structured 1`] = `
 "Tools
-  Name  Description
-  echo  Echo a payload on the connected device.
+  echo(...) -> ...
+    Echo a payload on the connected device.
 
-Meta
-  Command: tools
-  Timestamp: 2026-03-17T10:00:00.000Z
-  Duration: 4 ms
+Run \`appduct tools <name>\` for a tool's full schema.
 "
 `;

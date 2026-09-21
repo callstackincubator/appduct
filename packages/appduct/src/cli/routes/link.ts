@@ -36,9 +36,7 @@ export const route: Route = async (context) => {
         { stateDir },
       ),
     ),
-    {
-      ...context.io,
-      qr: Boolean(options.qr),
-    },
+    context.env,
+    { qr: Boolean(options.qr) },
   );
 };

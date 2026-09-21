@@ -13,7 +13,10 @@ export const parsePositiveIntegerOption = (value: unknown, flagName: string): nu
     return undefined;
   }
 
-  const parsed = typeof value === "number" ? value : Number(value);
+  // Only a number or a string is a value: `cac` (run with `run: false`) never enforces a `<n>`
+  // placeholder, so a flag with no value, or followed by a flag-like token (`--limit -1`),
+  // arrives as `true`, which `Number()` would otherwise silently turn into `1`.
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
 
   if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
     throw usageError(`"${flagName}" must be a positive integer.`);
@@ -30,13 +33,56 @@ export const parseNonNegativeIntegerOption = (value: unknown, flagName: string):
     return undefined;
   }
 
-  const parsed = typeof value === "number" ? value : Number(value);
+  // Only a number or a string is a value: `cac` (run with `run: false`) never enforces a `<n>`
+  // placeholder, so a flag with no value, or followed by a flag-like token (`--limit -1`),
+  // arrives as `true`, which `Number()` would otherwise silently turn into `1`.
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
 
   if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
     throw usageError(`"${flagName}" must be a non-negative integer.`);
   }
 
   return parsed;
+};
+
+/**
+ * Reads a free-text flag's value exactly as typed. `cac` coerces any numeric-looking value to a
+ * number (`--filter 404` arrives as `404`, `--filter 007` as `7`), so the verbatim string is
+ * recovered from `argv` (`--flag value` or `--flag=value`, the last occurrence wins, nothing after
+ * `--`), falling back to the parsed value if argv somehow does not carry it. A flag given with no
+ * value (`cac` reports `true`) is a usage error rather than silently ignored.
+ */
+export const readTextOption = (
+  argv: readonly string[],
+  value: unknown,
+  flagName: string,
+): string | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === "boolean") {
+    throw usageError(`"${flagName}" requires a value.`);
+  }
+
+  let raw: string | undefined;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index]!;
+
+    if (token === "--") {
+      break;
+    }
+
+    if (token === flagName && index + 1 < argv.length) {
+      raw = argv[index + 1];
+      index += 1;
+    } else if (token.startsWith(`${flagName}=`)) {
+      raw = token.slice(flagName.length + 1);
+    }
+  }
+
+  return raw ?? String(Array.isArray(value) ? value.at(-1) : value);
 };
 
 /**

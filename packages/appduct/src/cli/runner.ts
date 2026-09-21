@@ -1,8 +1,10 @@
 import type { CliResult } from "./result-types.js";
 
 import { getExitCodeForError, toCliError } from "../errors.js";
+import { formatJson } from "./global-flags.js";
 import { renderResult, type RenderOptions } from "../output.js";
-import { createCommandMeta, type Clock, type CliIoWriters } from "./types.js";
+import { finalizeResult } from "./envelope.js";
+import type { CliEnv, CliIoWriters } from "./types.js";
 
 /**
  * Long-lived command result shape shared by any CLI command that keeps a process alive
@@ -43,42 +45,40 @@ const writeRenderedOutput = (
 export const executeCommand = async (
   command: string,
   handler: () => CliResult<unknown> | Promise<CliResult<unknown>>,
-  options: CliIoWriters &
-    Pick<RenderOptions, "json" | "color"> &
-    Partial<Pick<RenderOptions, "qr" | "full">> & {
-      clock: Clock;
-    },
+  env: CliEnv,
+  render: Partial<Pick<RenderOptions, "qr" | "full">> = {},
 ): Promise<number> => {
-  const startedAt = options.clock.now();
-  const renderOptions: RenderOptions = {
-    command,
-    json: options.json,
-    color: options.color,
-    qr: options.qr,
-    full: options.full,
-  };
+  const startedAt = env.clock.now();
 
   try {
     const result = await handler();
-    const finishedAt = options.clock.now();
-    const withMeta: CliResult<unknown> = {
-      ...result,
-      meta: createCommandMeta(command, startedAt, finishedAt),
+    const finishedAt = env.clock.now();
+    const finalized = finalizeResult(result, { command, startedAt, finishedAt }, env.flags);
+    const renderOptions: RenderOptions = {
+      command,
+      flags: env.flags,
+      now: finishedAt,
+      qr: render.qr,
+      full: render.full,
     };
 
-    writeRenderedOutput(renderResult(withMeta, renderOptions), options);
+    writeRenderedOutput(renderResult(finalized, renderOptions), env);
 
     return 0;
   } catch (error) {
-    const finishedAt = options.clock.now();
+    const finishedAt = env.clock.now();
     const cliError = toCliError(error);
-    const result: CliResult<never> = {
-      ok: false,
-      error: cliError,
-      meta: createCommandMeta(command, startedAt, finishedAt),
+    const result: CliResult<never> = { ok: false, error: cliError };
+    const finalized = finalizeResult(result, { command, startedAt, finishedAt }, env.flags);
+    const renderOptions: RenderOptions = {
+      command,
+      flags: env.flags,
+      now: finishedAt,
+      qr: render.qr,
+      full: render.full,
     };
 
-    writeRenderedOutput(renderResult(result, renderOptions), options);
+    writeRenderedOutput(renderResult(finalized, renderOptions), env);
 
     return getExitCodeForError(error);
   }
@@ -87,38 +87,26 @@ export const executeCommand = async (
 export const executeHostedCommand = async (
   command: string,
   handler: () => Promise<HostedCommandResult>,
-  options: CliIoWriters & {
-    json: boolean;
-    color: boolean;
-    clock: Clock;
-    reporter?: HostedCommandReporter;
-  },
+  env: CliEnv,
+  reporter?: HostedCommandReporter,
 ): Promise<number> => {
-  const startedAt = options.clock.now();
+  const startedAt = env.clock.now();
   let renderedSuccess = false;
 
   try {
     const hosted = await handler();
-    const finishedAt = options.clock.now();
-    const withMeta: CliResult<unknown> = {
-      ...hosted.result,
-      meta: createCommandMeta(command, startedAt, finishedAt),
-    };
+    const finishedAt = env.clock.now();
+    const finalized = finalizeResult(hosted.result, { command, startedAt, finishedAt }, env.flags);
 
     // A live reporter (e.g. `events`'s streaming NDJSON/human lines) renders its own output as it
     // goes; only the absence of a reporter (or an explicit "plain" one) falls back to the default
     // one-shot `renderResult` bootstrap rendering.
-    const liveReporter = options.reporter;
-    const shouldRenderBootstrap = !liveReporter || liveReporter.kind === "plain";
+    const shouldRenderBootstrap = !reporter || reporter.kind === "plain";
 
     if (shouldRenderBootstrap) {
       writeRenderedOutput(
-        renderResult(withMeta, {
-          command,
-          json: options.json,
-          color: options.color,
-        }),
-        options,
+        renderResult(finalized, { command, flags: env.flags, now: finishedAt }),
+        env,
       );
       renderedSuccess = true;
     }
@@ -142,37 +130,30 @@ export const executeHostedCommand = async (
       resolved = true;
       process.off("SIGINT", stop);
       process.off("SIGTERM", stop);
-      options.reporter?.dispose();
+      reporter?.dispose();
     }
 
     return 0;
   } catch (error) {
-    options.reporter?.dispose();
+    reporter?.dispose();
 
-    const finishedAt = options.clock.now();
+    const finishedAt = env.clock.now();
     const cliError = toCliError(error);
-    const result: CliResult<never> = {
-      ok: false,
-      error: cliError,
-      meta: createCommandMeta(command, startedAt, finishedAt),
-    };
+    const result: CliResult<never> = { ok: false, error: cliError };
+    const finalized = finalizeResult(result, { command, startedAt, finishedAt }, env.flags);
 
-    if (renderedSuccess && options.json) {
-      // The single-JSON-object-on-stdout contract was already fulfilled by the bootstrap render
+    if (renderedSuccess && env.flags.json) {
+      // The single-JSON-document-on-stdout contract was already fulfilled by the bootstrap render
       // above; a failure that happens later (e.g. during a long-running `completion`) must still
-      // be a JSON object, just on stderr instead — bare text here was v1's defect (leaked
-      // unparseable output onto stderr in `--json` mode).
-      options.stderr.write(`${JSON.stringify(result)}\n`);
+      // be a JSON document, just on stderr instead — bare text here was v1's defect (leaked
+      // unparseable output onto stderr in `--json` mode). One document, so `--pretty` may apply.
+      env.stderr.write(`${formatJson(finalized, env.flags)}\n`);
       return getExitCodeForError(error);
     }
 
     writeRenderedOutput(
-      renderResult(result, {
-        command,
-        json: options.json,
-        color: options.color,
-      }),
-      options,
+      renderResult(finalized, { command, flags: env.flags, now: finishedAt }),
+      env,
     );
 
     return getExitCodeForError(error);

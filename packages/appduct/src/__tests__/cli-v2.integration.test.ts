@@ -93,6 +93,18 @@ const runCliJson = async (args: string[], stateDir: string): Promise<CliJsonResu
   }
 };
 
+/** Runs the CLI as a subprocess and returns its raw stdout/stderr, human-rendered (no `--json`) —
+ * used only where a test asserts on the human text itself (`--filter`/`--limit`/`--offset`'s
+ * "Showing" line, the per-tool signature line), everything else goes through {@link runCliJson}. */
+const runCliHuman = async (args: string[], stateDir: string): Promise<{ stdout: string; stderr: string }> => {
+  const proc = spawnCliBinary(args, { stateDir });
+
+  const [stdout, stderr] = await Promise.all([text(proc.stdout), text(proc.stderr)]);
+  await waitForExit(proc);
+
+  return { stdout, stderr };
+};
+
 const connectFakeApp = (port: number): Promise<WebSocket> => {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(`wss://127.0.0.1:${port}`, { rejectUnauthorized: false });
@@ -201,7 +213,9 @@ describe("appduct CLI v2: end-to-end command table", () => {
       // tools: list, then detail by name.
       const toolsList = await runCliJson(["tools", alias], stateDir);
       expect(toolsList.ok).toBe(true);
-      expect((toolsList.data as Array<{ name: string }>).map((tool) => tool.name)).toEqual(["echo"]);
+      const toolsListData = toolsList.data as { tools: Array<{ name: string }>; total: number };
+      expect(toolsListData.tools.map((tool) => tool.name)).toEqual(["echo"]);
+      expect(toolsListData.total).toBe(1);
 
       const toolsDetail = await runCliJson(["tools", alias, "echo"], stateDir);
       expect(toolsDetail.ok).toBe(true);
@@ -304,5 +318,115 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(stopResult.ok).toBe(true);
     },
     15_000,
+  );
+
+  test(
+    "tools --filter/--limit/--offset page a large registry, a name lookup still resolves under paging, and human output is a signature listing",
+    async () => {
+      const stateDir = await makeTempStateDir();
+
+      const status = await runCliJson(["daemon", "status"], stateDir);
+      expect(status.ok).toBe(true);
+      daemonPids.push((status.data as { daemon: { pid: number } }).daemon.pid);
+      // `wssPort: 0` in the state dir, so the bound port is only known from the daemon itself.
+      const port = (status.data as { daemon: { wss_port: number } }).daemon.wss_port;
+      expect(port).toBeGreaterThan(0);
+
+      const linkResult = await runCliJson(["link", "--ttl", "60"], stateDir);
+      const linkData = linkResult.data as { deepLink: string };
+      const linkPayload = linkData.deepLink
+        .slice(linkData.deepLink.indexOf("appduct=") + "appduct=".length)
+        .split("&")[0]!;
+      const decoded = decodeBootstrap(linkPayload)!;
+
+      const socket = await connectFakeApp(port);
+      socket.send(
+        JSON.stringify({
+          type: "session_claim",
+          protocol_version: 2,
+          session_id: decoded.sessionId,
+          token: decoded.token,
+          device_model: "Pixel 8",
+        }),
+      );
+      const ack = await nextMessage(socket);
+      const alias = ack.alias as string;
+
+      // ~30 tools, `tool_00`..`tool_29`, already sorted so the ordering assertions below double as
+      // a smoke check that the daemon's own sort doesn't re-scramble an already-sorted registry.
+      const toolNames = Array.from({ length: 30 }, (_, index) => `tool_${String(index).padStart(2, "0")}`);
+      socket.send(
+        JSON.stringify({
+          type: "tool_registry_snapshot",
+          session_id: decoded.sessionId,
+          tools: toolNames.map((name) => ({
+            name,
+            description: `Does something with ${name}.`,
+            input_schema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+          })),
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Unpaged: `{ tools, total }`, total tools registered.
+      const unpaged = await runCliJson(["tools", alias], stateDir);
+      expect(unpaged.ok).toBe(true);
+      const unpagedData = unpaged.data as { tools: Array<{ name: string }>; total: number };
+      expect(unpagedData.tools).toHaveLength(30);
+      expect(unpagedData.total).toBe(30);
+
+      // --filter narrows both the page and `total`.
+      const filtered = await runCliJson(["tools", alias, "--filter", "tool_1"], stateDir);
+      expect(filtered.ok).toBe(true);
+      const filteredData = filtered.data as { tools: Array<{ name: string }>; total: number };
+      // tool_10..tool_19 (substring match on the name), still name-sorted.
+      expect(filteredData.total).toBe(10);
+      expect(filteredData.tools.map((tool) => tool.name)).toEqual(toolNames.slice(10, 20));
+
+      // --limit/--offset returns the right slice of the sorted, unfiltered registry.
+      const paged = await runCliJson(["tools", alias, "--limit", "5", "--offset", "5"], stateDir);
+      expect(paged.ok).toBe(true);
+      const pagedData = paged.data as { tools: Array<{ name: string }>; total: number };
+      expect(pagedData.tools.map((tool) => tool.name)).toEqual(toolNames.slice(5, 10));
+      expect(pagedData.total).toBe(30);
+
+      // A name lookup still resolves even though it would fall outside a small page.
+      const detailUnderPaging = await runCliJson(["tools", alias, "tool_29", "--limit", "1"], stateDir);
+      expect(detailUnderPaging.ok).toBe(false);
+      expect(detailUnderPaging.error?.type).toBe("usage_error");
+
+      const detail = await runCliJson(["tools", alias, "tool_29"], stateDir);
+      expect(detail.ok).toBe(true);
+      expect((detail.data as { name: string }).name).toBe("tool_29");
+
+      // The single-arg form that resolves to a tool name follows the same rule as `<sel> <name>`.
+      const probeUnderPaging = await runCliJson(["tools", "tool_29", "--limit", "1"], stateDir);
+      expect(probeUnderPaging.ok).toBe(false);
+      expect(probeUnderPaging.error?.type).toBe("usage_error");
+
+      // A numeric-looking filter is matched as text, verbatim (cac alone would turn "07" into 7).
+      const numericFilter = await runCliJson(["tools", alias, "--filter", "07"], stateDir);
+      expect(numericFilter.ok).toBe(true);
+      const numericFilterData = numericFilter.data as { tools: Array<{ name: string }>; total: number; filter: string };
+      expect(numericFilterData.tools.map((tool) => tool.name)).toEqual(["tool_07"]);
+      expect(numericFilterData.filter).toBe("07");
+
+      // An offset past the end is an empty page of a non-empty registry, not "No tools registered".
+      const pastEnd = await runCliHuman(["tools", alias, "--offset", "100"], stateDir);
+      expect(pastEnd.stdout).toContain("No tools at offset 100; 30 matching tools in total.");
+      expect(pastEnd.stdout).not.toContain("No tools registered");
+
+      // Human output: a signature line per tool, and the "Showing" line once the page truncates.
+      const human = await runCliHuman(["tools", alias, "--limit", "5"], stateDir);
+      expect(human.stdout).toContain("tool_00(value: string)");
+      expect(human.stdout).toContain("Showing 5 of 30 tools (offset 0).");
+      expect(human.stdout).toContain("Run `appduct tools <name>` for a tool's full schema.");
+
+      socket.close();
+
+      const stopResult = await runCliJson(["daemon", "stop"], stateDir);
+      expect(stopResult.ok).toBe(true);
+    },
+    20_000,
   );
 });

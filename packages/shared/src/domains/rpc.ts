@@ -139,7 +139,14 @@ export type SessionsRevokeResult = { ok: true };
 
 // --- tools.list / tools.call ---
 
-export type ToolsListParams = SessionSelectorParams;
+export type ToolsListParams = SessionSelectorParams & {
+  /** Case-insensitive substring match against name and description. */
+  filter?: string;
+  /** Page size; omitted means everything from `offset` on. */
+  limit?: number;
+  /** Zero-based start index into the sorted, filtered list. */
+  offset?: number;
+};
 
 /** A `tools.list` entry: the tool's descriptor plus the policy decision (ARCHITECTURE.md §12)
  * that would apply to it right now — resolved daemon-side (it needs `session.alias` and
@@ -149,7 +156,17 @@ export type ToolsListEntry = ToolDescriptor & {
   policy: EffectivePolicyDecision;
 };
 
-export type ToolsListResult = ToolsListEntry[];
+/**
+ * `tools.list`'s result: the registry sorted by `name` (plain code-point order, so it is
+ * deterministic across locales), `filter`ed, then paged with `limit`/`offset` — `total` is the
+ * count *after* filtering but *before* paging, so a caller (the CLI) can say how many tools were
+ * left out of the page it got back.
+ */
+export type ToolsListResult = {
+  tools: ToolsListEntry[];
+  /** Matching tools before `limit`/`offset` were applied. */
+  total: number;
+};
 
 export type ToolsCallParams = SessionSelectorParams & {
   name: string;

@@ -14,10 +14,6 @@ import { guarded } from "../version-guard.js";
 
 export const route: Route = async (context) => {
   const { options, stateDir } = context;
-  const { selector, target: tool } = splitSelectorAndRequiredTarget(
-    context.args,
-    "invoke [selector] <tool> --input '<json>'",
-  );
 
   // SIGINT cancels the in-flight tools.call rather than leaving it running unowned in the app
   // (issue #9) — the listener is torn down once the command settles either way.
@@ -28,19 +24,28 @@ export const route: Route = async (context) => {
   try {
     return await executeCommand(
       commandName(context),
-      guarded(context)(() =>
-        handleInvokeCommand(
-          {
-            selector,
-            tool,
-            args: parseJsonInputOption(typeof options.input === "string" ? options.input : undefined),
-            timeoutMs: parsePositiveIntegerOption(options.timeout, "--timeout"),
-          },
-          { stateDir },
-          cancelController.signal,
-        ),
-      ),
-      context.io,
+      // Positionals are split inside the handler so a missing `<tool>` renders through the runner
+      // as a usage error instead of escaping the route as an uncaught rejection.
+      () => {
+        const { selector, target: tool } = splitSelectorAndRequiredTarget(
+          context.args,
+          "invoke [selector] <tool> --input '<json>'",
+        );
+
+        return guarded(context)(() =>
+          handleInvokeCommand(
+            {
+              selector,
+              tool,
+              args: parseJsonInputOption(typeof options.input === "string" ? options.input : undefined),
+              timeoutMs: parsePositiveIntegerOption(options.timeout, "--timeout"),
+            },
+            { stateDir },
+            cancelController.signal,
+          ),
+        )();
+      },
+      context.env,
     );
   } finally {
     process.off("SIGINT", onSigint);

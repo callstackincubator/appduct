@@ -4,6 +4,7 @@ import {
   parseJsonInputOption,
   parseNonNegativeIntegerOption,
   parsePositiveIntegerOption,
+  readTextOption,
   splitOptionalSelector,
   splitOptionalSelectorAndTarget,
   splitSelectorAndRequiredTarget,
@@ -39,6 +40,40 @@ describe("parseNonNegativeIntegerOption", () => {
     expect(() => parseNonNegativeIntegerOption("-1", "--since")).toThrow(/non-negative integer/u);
     expect(() => parseNonNegativeIntegerOption("1.5", "--since")).toThrow(/non-negative integer/u);
     expect(() => parseNonNegativeIntegerOption("abc", "--since")).toThrow(/non-negative integer/u);
+  });
+});
+
+describe("integer options given without a value", () => {
+  // `cac` reports `--limit` with no value, or `--limit -1` (it reads `-1` as a flag), as `true`.
+  test("a boolean is rejected rather than coerced to 1", () => {
+    expect(() => parsePositiveIntegerOption(true, "--limit")).toThrow(/positive integer/u);
+    expect(() => parseNonNegativeIntegerOption(true, "--offset")).toThrow(/non-negative integer/u);
+  });
+
+  test("a repeated flag (an array) is rejected", () => {
+    expect(() => parsePositiveIntegerOption([1, 2], "--limit")).toThrow(/positive integer/u);
+  });
+});
+
+describe("readTextOption", () => {
+  test("passes through undefined", () => {
+    expect(readTextOption([], undefined, "--filter")).toBeUndefined();
+  });
+
+  test("recovers the verbatim string cac coerced to a number", () => {
+    expect(readTextOption(["tools", "--filter", "007"], 7, "--filter")).toBe("007");
+    expect(readTextOption(["tools", "--filter=1e3"], 1000, "--filter")).toBe("1e3");
+    expect(readTextOption(["tools", "--filter", "404"], 404, "--filter")).toBe("404");
+  });
+
+  test("the last occurrence wins and nothing after -- counts", () => {
+    expect(readTextOption(["--filter", "a", "--filter", "b", "--", "--filter", "c"], ["a", "b"], "--filter")).toBe(
+      "b",
+    );
+  });
+
+  test("a flag with no value is a usage error", () => {
+    expect(() => readTextOption(["tools", "--filter"], true, "--filter")).toThrow(/requires a value/u);
   });
 });
 

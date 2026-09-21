@@ -8,11 +8,11 @@ import { commandName } from "../../router.js";
 import { executeCommand } from "../../runner.js";
 
 export const route: Route = async (context) => {
-  const { stateDir, io } = context;
+  const { stateDir, env } = context;
 
   return executeCommand(
     commandName(context),
-    () => handleDaemonStatusCommand({ stateDir, clock: io.clock }),
-    io,
+    () => handleDaemonStatusCommand({ stateDir, clock: env.clock }),
+    env,
   );
 };

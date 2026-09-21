@@ -13,6 +13,6 @@ export const route: Route = async (context) => {
   return executeCommand(
     commandName(context),
     guarded(context)(() => handleLsCommand({ stateDir })),
-    context.io,
+    context.env,
   );
 };

@@ -25,6 +25,33 @@ package versions for a release.
   liveness probe now also reads `/proc/<pid>/status` on Linux and treats `State: Z` as dead;
   everywhere `/proc` is absent or unreadable the previous behaviour is unchanged.
 
+- **Breaking (CLI): `--json` output is compact by default.** Every `appduct <command> --json`
+  invocation used to pretty-print its JSON with 2-space indentation; it now prints it on a single
+  line (`JSON.stringify`, no whitespace). Any JSON parser is unaffected. A script that greps or
+  diffs the indented text directly is not — pass the new `--pretty` flag to restore the old
+  indentation.
+- **Breaking (CLI): the `meta` block (`command`, `timestamp`, `duration_ms`) is no longer emitted
+  by default**, in either human or `--json` output. Pass the new `--verbose` flag to restore it —
+  the trailing `Meta` lines in human mode, the `meta` field on the `--json` envelope.
+- **New: `--pretty` and `--verbose` global flags**, alongside `--json` and `--no-color`. See the
+  [`appduct` README](packages/appduct/README.md) for the full description of each.
+- **Breaking (CLI): `appduct tools --json` for a listing now returns `{ tools, total }`** instead
+  of a bare array. The single-tool form (`appduct tools <selector> <name>`) is unchanged — it still
+  returns the bare tool descriptor.
+- **New: a signature-based `tools` listing, with `--filter`/`--limit`/`--offset`.** The human
+  listing now shows one call signature (`name(params) -> result`) plus a one-line description per
+  tool instead of a bare name/description table, and `appduct tools` gains `--filter <text>` to
+  narrow by name/description, and `--limit <n>`/`--offset <n>` to page through a large registry —
+  making it cheap to read `appduct tools` against an app that registers hundreds of tools. See the
+  [`appduct` README](packages/appduct/README.md)'s "`appduct tools`: a signature per tool" section
+  for details.
+- The `appduct` agent skill now defaults its example commands to plain-text output, adding
+  `--json` only where a script (not the agent itself) will parse the result.
+- **Fixed:** a bad argument to `tools`, `invoke`, `revoke` or `events` (a missing `<tool>`, too
+  many positionals, `--limit 0`) crashed the CLI with a stack trace instead of printing a usage
+  error with exit code 64. A numeric flag given without a value (`--limit`, `--limit -1`,
+  `--since`, `--ttl`, `--timeout`) is now a usage error; it used to be read as `1`.
+
 ## 0.10.0 (2026-09-16)
 
 - **New: native SDKs for apps without React Native.** The same Appduct core the React Native

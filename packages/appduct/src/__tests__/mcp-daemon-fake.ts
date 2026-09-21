@@ -156,7 +156,13 @@ export const createFakeDaemon = (): FakeDaemon => {
           throw toolError("unknown_session", `No session matches "${selector}".`);
         }
 
-        return entries.map((entry) => ({ ...entry })) as TResult;
+        // The daemon's `{ tools, total }` shape, sorted by name as the daemon sorts its registry.
+        // The server asks for the unpaged, unfiltered listing, so `total` is the whole registry.
+        const tools = entries
+          .map((entry) => ({ ...entry }))
+          .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+
+        return { tools, total: tools.length } as TResult;
       }
 
       if (method === RPC_METHODS.toolsCall) {

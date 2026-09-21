@@ -7,11 +7,11 @@ import { commandName } from "../../router.js";
 import { executeHostedCommand } from "../../runner.js";
 
 export const route: Route = async (context) => {
-  const { stateDir, io } = context;
+  const { stateDir, env } = context;
 
   return executeHostedCommand(
     commandName(context),
-    () => handleDaemonRunCommand({ stateDir, clock: io.clock }),
-    io,
+    () => handleDaemonRunCommand({ stateDir, clock: env.clock }),
+    env,
   );
 };

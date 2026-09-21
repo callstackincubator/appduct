@@ -90,9 +90,10 @@ describe("e2e: cold start", () => {
       expect(lsResult.data![0]!.toolCount).toBe(1);
 
       // tools: list, then detail by name.
-      const toolsList = await runCliJson<Array<{ name: string }>>(["tools", alias], stateDir);
+      const toolsList = await runCliJson<{ tools: Array<{ name: string }>; total: number }>(["tools", alias], stateDir);
       expect(toolsList.ok).toBe(true);
-      expect(toolsList.data!.map((tool) => tool.name)).toEqual(["echo"]);
+      expect(toolsList.data!.tools.map((tool) => tool.name)).toEqual(["echo"]);
+      expect(toolsList.data!.total).toBe(1);
 
       // invoke: round-trip through the fake app.
       app.answerCalls((call) => ({ result: { echoed: (call.args as Record<string, unknown>).text } }));

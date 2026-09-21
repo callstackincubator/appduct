@@ -279,10 +279,11 @@ describe("tools.list / tools.call: round trip", () => {
       },
     ]);
 
-    const listed = (await rpcCall(daemon.paths.socketPath, "tools.list", {
+    const { tools: listed, total } = (await rpcCall(daemon.paths.socketPath, "tools.list", {
       selector: app.alias,
-    })) as Array<{ name: string; input_schema?: unknown }>;
+    })) as { tools: Array<{ name: string; input_schema?: unknown }>; total: number };
     expect(listed).toHaveLength(1);
+    expect(total).toBe(1);
     expect(listed[0]!.name).toBe("echo");
     expect(listed[0]!.input_schema).toEqual({ type: "object", properties: { text: { type: "string" } } });
 
@@ -316,7 +317,9 @@ describe("tools.list / tools.call: round trip", () => {
     app.socket.close();
     await suspended;
 
-    const listed = (await rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias })) as unknown[];
+    const { tools: listed } = (await rpcCall(daemon.paths.socketPath, "tools.list", {
+      selector: app.alias,
+    })) as { tools: unknown[] };
     expect(listed).toHaveLength(1);
   });
 
@@ -348,6 +351,81 @@ describe("tools.list / tools.call: round trip", () => {
 
     await expect(
       rpcCall(daemon.paths.socketPath, "tools.call", { selector: app.alias, name: "echo", args: "not-an-object" }),
+    ).rejects.toMatchObject({ data: { type: "invalid_request" } });
+
+    app.socket.close();
+  });
+
+  test("tools.list sorts by name, filters on name/description, reports total before paging, and slices with limit/offset", async () => {
+    const { daemon, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+
+    // Registered out of alphabetical order on purpose.
+    await snapshotTools(daemon, app, [
+      { name: "zebra", description: "Stripes." },
+      { name: "apple", description: "A red fruit." },
+      { name: "mango", description: "A tropical fruit." },
+      { name: "kiwi", description: "A furry fruit." },
+    ]);
+
+    const listAll = (await rpcCall(daemon.paths.socketPath, "tools.list", {
+      selector: app.alias,
+    })) as { tools: Array<{ name: string }>; total: number };
+    expect(listAll.tools.map((tool) => tool.name)).toEqual(["apple", "kiwi", "mango", "zebra"]);
+    expect(listAll.total).toBe(4);
+
+    // Filter matches on description, not just name, case-insensitively.
+    const filtered = (await rpcCall(daemon.paths.socketPath, "tools.list", {
+      selector: app.alias,
+      filter: "FRUIT",
+    })) as { tools: Array<{ name: string }>; total: number };
+    expect(filtered.tools.map((tool) => tool.name)).toEqual(["apple", "kiwi", "mango"]);
+    expect(filtered.total).toBe(3);
+
+    // total reflects the filtered count *before* paging is applied.
+    const paged = (await rpcCall(daemon.paths.socketPath, "tools.list", {
+      selector: app.alias,
+      filter: "fruit",
+      limit: 1,
+      offset: 1,
+    })) as { tools: Array<{ name: string }>; total: number };
+    expect(paged.tools.map((tool) => tool.name)).toEqual(["kiwi"]);
+    expect(paged.total).toBe(3);
+
+    // offset with no limit returns everything from offset on.
+    const fromOffset = (await rpcCall(daemon.paths.socketPath, "tools.list", {
+      selector: app.alias,
+      offset: 2,
+    })) as { tools: Array<{ name: string }>; total: number };
+    expect(fromOffset.tools.map((tool) => tool.name)).toEqual(["mango", "zebra"]);
+    expect(fromOffset.total).toBe(4);
+
+    app.socket.close();
+  });
+
+  test("tools.list rejects a bad limit/offset/filter as invalid_request", async () => {
+    const { daemon, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+    await snapshotTools(daemon, app, [{ name: "echo" }]);
+
+    await expect(
+      rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias, limit: 0 }),
+    ).rejects.toMatchObject({ data: { type: "invalid_request" } });
+
+    await expect(
+      rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias, limit: -1 }),
+    ).rejects.toMatchObject({ data: { type: "invalid_request" } });
+
+    await expect(
+      rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias, offset: -1 }),
+    ).rejects.toMatchObject({ data: { type: "invalid_request" } });
+
+    await expect(
+      rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias, filter: 42 }),
+    ).rejects.toMatchObject({ data: { type: "invalid_request" } });
+
+    await expect(
+      rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias, filter: "x".repeat(257) }),
     ).rejects.toMatchObject({ data: { type: "invalid_request" } });
 
     app.socket.close();
