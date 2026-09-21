@@ -10,6 +10,15 @@ package versions for a release.
 
 ## Unreleased
 
+- **Breaking (MCP): `"prompt"`-policy consent is elicitation-only.** The Claude Code-specific
+  fallback is gone: `tools/list` no longer emits `_meta["anthropic/requiresUserInteraction"]`, and
+  the MCP server no longer sends `consent: "client"`. A `"prompt"` tool called from an MCP client
+  that doesn't declare the `elicitation` capability — including Claude Code versions that relied on
+  the flag — is now denied with `policy_denied` (reason `no_consent_channel`), the same as the CLI.
+  To keep such a tool callable from that client, set its policy to `"allow"` in `config.json`. The
+  daemon rejects `consent: "client"` on `tools.call` as an invalid request, and new audit records
+  only ever carry `consent: "elicitation"`; existing audit files may still contain `"client"`.
+
 - **`config.json`'s `wssPort` accepts `0`, meaning "bind an OS-assigned port".** The pinned-wss
   listener takes whatever ephemeral port the OS hands it, and everything that reports or advertises
   the port — `daemon.status`'s `wssPort`, a minted link's `endpoint.port`, and so the deep link and

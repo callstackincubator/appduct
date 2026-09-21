@@ -23,9 +23,8 @@ export type NamespacedTool = {
   selector: string;
   descriptor: ToolDescriptor;
   /** The effective policy decision for this tool right now (ARCHITECTURE.md §12), as resolved by
-   * the daemon's `tools.list` — carried through so the MCP server can emit
-   * `_meta["anthropic/requiresUserInteraction"]` and set `consent` on `tools.call` without a
-   * second round trip (issue #14). */
+   * the daemon's `tools.list` — carried through so the MCP server knows whether to ask for
+   * consent via elicitation before `tools.call`, without a second round trip. */
   policy: EffectivePolicyDecision;
 };
 

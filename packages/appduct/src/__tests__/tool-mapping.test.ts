@@ -86,7 +86,7 @@ const mapperWithNotices = (): { map: McpToolMapper; notices: string[] } => {
   return { map: createMcpToolMapper((message) => notices.push(message)), notices };
 };
 
-const map = (descriptor: Partial<ToolDescriptor>) => mapperWithNotices().map(namespacedTool(descriptor), false);
+const map = (descriptor: Partial<ToolDescriptor>) => mapperWithNotices().map(namespacedTool(descriptor));
 
 describe("the fixtures match what the pinned MCP SDK accepts", () => {
   test.each(ACCEPTED)("ToolSchema accepts a %s schema in both slots", (_label, schema) => {
@@ -159,9 +159,9 @@ describe("degradation notices", () => {
     const { map: mapper, notices } = mapperWithNotices();
     const tool = namespacedTool({ name: "list-todos", output_schema: ARRAY_SCHEMA });
 
-    mapper(tool, false);
-    mapper(tool, false);
-    mapper(tool, false);
+    mapper(tool);
+    mapper(tool);
+    mapper(tool);
 
     expect(notices).toHaveLength(1);
     expect(notices[0]).toContain("list-todos");
@@ -171,15 +171,12 @@ describe("degradation notices", () => {
   test("names the tool as the agent sees it, and says why MCP rejected the schema", () => {
     const { map: mapper, notices } = mapperWithNotices();
 
-    mapper(
-      {
-        mcpName: "pixel-8__lies",
-        selector: "pixel-8",
-        descriptor: { name: "lies", description: "d", output_schema: SCALAR_REQUIRED },
-        policy: "allow",
-      },
-      false,
-    );
+    mapper({
+      mcpName: "pixel-8__lies",
+      selector: "pixel-8",
+      descriptor: { name: "lies", description: "d", output_schema: SCALAR_REQUIRED },
+      policy: "allow",
+    });
 
     expect(notices[0]).toContain("pixel-8__lies");
     expect(notices[0]).toContain("required");
@@ -188,8 +185,8 @@ describe("degradation notices", () => {
   test("two sessions exposing the same broken tool each get a notice", () => {
     const { map: mapper, notices } = mapperWithNotices();
 
-    mapper(namespacedTool({ name: "list-todos", output_schema: ARRAY_SCHEMA }, "pixel-8"), false);
-    mapper(namespacedTool({ name: "list-todos", output_schema: ARRAY_SCHEMA }, "iphone-16"), false);
+    mapper(namespacedTool({ name: "list-todos", output_schema: ARRAY_SCHEMA }, "pixel-8"));
+    mapper(namespacedTool({ name: "list-todos", output_schema: ARRAY_SCHEMA }, "iphone-16"));
 
     expect(notices).toHaveLength(2);
   });
@@ -197,8 +194,8 @@ describe("degradation notices", () => {
   test("re-registering the same tool with a differently broken schema warns again", () => {
     const { map: mapper, notices } = mapperWithNotices();
 
-    mapper(namespacedTool({ name: "list-todos", output_schema: ARRAY_SCHEMA }), false);
-    mapper(namespacedTool({ name: "list-todos", output_schema: STRING_SCHEMA }), false);
+    mapper(namespacedTool({ name: "list-todos", output_schema: ARRAY_SCHEMA }));
+    mapper(namespacedTool({ name: "list-todos", output_schema: STRING_SCHEMA }));
 
     expect(notices).toHaveLength(2);
   });
@@ -207,8 +204,8 @@ describe("degradation notices", () => {
     const { map: mapper, notices } = mapperWithNotices();
     const descriptor = { name: "list-todos", description: "d", output_schema: ARRAY_SCHEMA };
 
-    mapper({ mcpName: "list-todos", selector: "pixel-8", descriptor, policy: "allow" }, false);
-    mapper({ mcpName: "pixel-8__list-todos", selector: "pixel-8", descriptor, policy: "allow" }, false);
+    mapper({ mcpName: "list-todos", selector: "pixel-8", descriptor, policy: "allow" });
+    mapper({ mcpName: "pixel-8__list-todos", selector: "pixel-8", descriptor, policy: "allow" });
 
     expect(notices).toHaveLength(1);
   });
@@ -216,7 +213,7 @@ describe("degradation notices", () => {
   test("warns separately for the input and the output side of one tool", () => {
     const { map: mapper, notices } = mapperWithNotices();
 
-    mapper(namespacedTool({ name: "a", input_schema: STRING_SCHEMA, output_schema: ARRAY_SCHEMA }), false);
+    mapper(namespacedTool({ name: "a", input_schema: STRING_SCHEMA, output_schema: ARRAY_SCHEMA }));
 
     expect(notices).toHaveLength(2);
     expect(notices.filter((notice) => notice.includes("input schema"))).toHaveLength(1);
@@ -229,17 +226,17 @@ describe("degradation notices", () => {
     // Each iteration is a *distinct* broken schema for the same tool, which is what an app
     // building a schema from fetched rows would produce. Far past the 256-key cap.
     for (let index = 0; index < 400; index += 1) {
-      mapper(namespacedTool({ name: "from-live-data", output_schema: { type: "string", const: `v${index}` } }), false);
+      mapper(namespacedTool({ name: "from-live-data", output_schema: { type: "string", const: `v${index}` } }));
     }
 
     expect(notices).toHaveLength(400);
 
     // The oldest keys have been evicted, so the very first schema warns again...
-    mapper(namespacedTool({ name: "from-live-data", output_schema: { type: "string", const: "v0" } }), false);
+    mapper(namespacedTool({ name: "from-live-data", output_schema: { type: "string", const: "v0" } }));
     expect(notices).toHaveLength(401);
 
     // ...while a recent one is still remembered and stays quiet.
-    mapper(namespacedTool({ name: "from-live-data", output_schema: { type: "string", const: "v399" } }), false);
+    mapper(namespacedTool({ name: "from-live-data", output_schema: { type: "string", const: "v399" } }));
     expect(notices).toHaveLength(401);
   });
 
@@ -247,7 +244,7 @@ describe("degradation notices", () => {
     const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
 
     try {
-      createMcpToolMapper()(namespacedTool({ name: "list-todos", output_schema: ARRAY_SCHEMA }), false);
+      createMcpToolMapper()(namespacedTool({ name: "list-todos", output_schema: ARRAY_SCHEMA }));
 
       expect(stderr).toHaveBeenCalledTimes(1);
       expect(String(stderr.mock.calls[0]![0])).toMatch(/^appduct mcp: /);
@@ -259,67 +256,31 @@ describe("degradation notices", () => {
   test("stays silent for accepted and absent schemas", () => {
     const { map: mapper, notices } = mapperWithNotices();
 
-    mapper(namespacedTool({ name: "quiet", input_schema: OBJECT_SCHEMA, output_schema: RECORD_SCHEMA }), false);
-    mapper(namespacedTool({ name: "also-quiet" }), false);
+    mapper(namespacedTool({ name: "quiet", input_schema: OBJECT_SCHEMA, output_schema: RECORD_SCHEMA }));
+    mapper(namespacedTool({ name: "also-quiet" }));
 
     expect(notices).toEqual([]);
   });
 });
 
 describe("unrelated mapping is unchanged", () => {
-  test("annotations and the requiresUserInteraction meta still map alongside a dropped output schema", () => {
+  test('annotations still map alongside a dropped output schema, and a "prompt" tool carries no _meta', () => {
     const { map: mapper } = mapperWithNotices();
-    const mapped = mapper(
-      {
-        mcpName: "pixel-8__list-todos",
-        selector: "pixel-8",
-        descriptor: {
-          name: "list-todos",
-          description: "Lists todos.",
-          output_schema: ARRAY_SCHEMA,
-          annotations: { readOnlyHint: true },
-        },
-        policy: "prompt",
+    const mapped = mapper({
+      mcpName: "pixel-8__list-todos",
+      selector: "pixel-8",
+      descriptor: {
+        name: "list-todos",
+        description: "Lists todos.",
+        output_schema: ARRAY_SCHEMA,
+        annotations: { readOnlyHint: true },
       },
-      true,
-    );
+      policy: "prompt",
+    });
 
     expect(mapped.name).toBe("pixel-8__list-todos");
     expect(mapped.annotations).toEqual({ readOnlyHint: true });
-    expect(mapped._meta).toEqual({ "anthropic/requiresUserInteraction": true });
+    expect(mapped).not.toHaveProperty("_meta");
     expect(mapped.outputSchema).toBeUndefined();
-  });
-});
-
-describe("the requiresUserInteraction flag", () => {
-  /**
-   * `mcp/server.ts` folds the elicitation-channel preference into the mapper's boolean before
-   * calling it (never emit the flag once elicitation is preferred, so a "prompt" tool cannot arm
-   * both consent channels for one call — ARCHITECTURE.md §12 / issues #10 & #14). This exercises
-   * the mapper's side of that contract, without a daemon or an MCP client.
-   */
-  const promptTool = (policy: NamespacedTool["policy"]): NamespacedTool => ({
-    mcpName: "deleteAll",
-    selector: "pixel-8",
-    descriptor: { name: "deleteAll", description: "Deletes everything." },
-    policy,
-  });
-
-  test('a "prompt" tool gets the flag when the caller says to emit it', () => {
-    expect(mapperWithNotices().map(promptTool("prompt"), true)._meta).toEqual({
-      "anthropic/requiresUserInteraction": true,
-    });
-  });
-
-  test('a "prompt" tool gets no flag when the caller says not to — e.g. elicitation was preferred for this connection (issue #10)', () => {
-    expect(mapperWithNotices().map(promptTool("prompt"), false)._meta).toBeUndefined();
-  });
-
-  test('an "allow" tool never gets the flag, even when the caller would otherwise emit it', () => {
-    expect(mapperWithNotices().map(promptTool("allow"), true)._meta).toBeUndefined();
-  });
-
-  test('a "deny" tool never gets the flag either', () => {
-    expect(mapperWithNotices().map(promptTool("deny"), true)._meta).toBeUndefined();
   });
 });

@@ -353,23 +353,21 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   `appduct/client` alike — is evaluated against this before it ever reaches the app;
   a denial returns `policy_denied` and never sends a `tool_call` frame. `"prompt"` requires a human gate
   and fails closed everywhere one can't be guaranteed: today the only implemented gate
-  is an MCP client that enforces `_meta["anthropic/requiresUserInteraction"]` (Claude
-  Code ≥ v2.1.199); the CLI and every other client are denied outright
+  is an MCP client that declares the `elicitation` capability, which asks a human before
+  each call; the CLI and every other client are denied outright
   (`policy_denied`, reason `no_consent_channel`) rather than silently treated as
   `"allow"`. That gate is *not* a defense within this feature's own trust boundary: the
-  daemon trusts the MCP server's `consent: "client"` param verbatim rather than
+  daemon trusts the MCP server's `consent: "elicitation"` param verbatim rather than
   re-deriving it, so any local process that can reach `daemon.sock` — including the CLI,
   or an agent with shell access, which is the typical Claude Code setup this feature
   targets — could send that param directly, the same way it could send any other RPC
   call. This is consistent with, not an exception to, the trust boundary above: anything
   that can reach the socket already has full daemon control. `"prompt"` guards against a
   compliant MCP client silently auto-approving on the caller's behalf, not against a
-  hostile process on the operator's own machine. `clientInfo` is also self-reported, so
-  it's not a defense against a hostile client claiming to be a compliant one either —
-  only against a compliant client's own auto-approval. Two behaviors worth knowing about
-  rather than filing as bugs: non-interactive Claude Code (`--permission-prompt-tool`)
-  converts an `allow` result for a flagged tool into a denial — that conversion is the
-  client's, not the daemon's; and `"prompt"` denies unconditionally in CI or any other
+  hostile process on the operator's own machine. A client's declared capabilities are
+  also self-reported, so it's not a defense against a hostile client that answers the
+  prompt itself either — only against a compliant client's own auto-approval. Worth
+  knowing rather than filing as a bug: `"prompt"` denies unconditionally in CI or any other
   unattended pipeline (there is no consent channel there at all), so a pipeline that
   needs a tool to run unattended must set `allow`/`deny` for it explicitly. Until a
   non-MCP consent channel ships, `"deny"` remains the only way to hard-block a tool for
@@ -377,7 +375,8 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
 - **Audit.** Every `tools.call` attempt — regardless of outcome — appends one line to
   `audit/<YYYY-MM-DD>.jsonl`: timestamp, session, alias, tool name, a sha256 of the
   canonicalized args (never the raw args), outcome, error type if any, duration, caller
-  (`cli`/`mcp`/`client`), and — only for a `"prompt"` call that proceeded — `consent: "client"`.
+  (`cli`/`mcp`/`client`), and — only for a `"prompt"` call that proceeded — `consent: "elicitation"`
+  (files written by older versions may also contain `consent: "client"`).
   That marker is the weakest form of evidence recorded here: the daemon never observes
   the actual consent decision, only that the call arrived already gated, so it's kept
   distinct from a plain `"ok"` rather than folded into it. This is on unconditionally;

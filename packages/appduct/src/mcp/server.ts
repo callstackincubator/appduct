@@ -9,11 +9,10 @@
  * `tools.call`s, which get their own short-lived connection (see `callProxiedTool` below) so the
  * `tool_call_started` event that reveals the call's `callId` is unambiguous.
  *
- * This is also where both `"prompt"`-policy consent channels live (ARCHITECTURE.md §12):
- * `resolveToolCallConsent` prefers `elicitation/create` (issue #10, any client that declares the
- * `elicitation` capability) over the `_meta["anthropic/requiresUserInteraction"]` flag (issue #14,
- * Claude Code ≥ v2.1.199 only), and the two never arm for the same call — see
- * `clientSupportsElicitation` and the `tools/list` handler below.
+ * This is also where the `"prompt"`-policy consent channel lives (ARCHITECTURE.md §12):
+ * `resolveToolCallConsent` asks the human via `elicitation/create` (issue #10) when the client
+ * declared the `elicitation` capability. A client that didn't gets no consent marker, so the
+ * daemon's `"prompt"` gate denies the call (`policy_denied`, reason `no_consent_channel`).
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -102,63 +101,11 @@ const describeJsonValue = (value: unknown): string => {
   return `a ${typeof value}`;
 };
 
-/** The minimum Claude Code version documented (ARCHITECTURE.md §12 / issue #14) to enforce
- * `_meta["anthropic/requiresUserInteraction"]` on every call, in every permission mode, with no
- * "don't ask again" option. Older Claude Code and every other client ignore the flag silently. */
-const REQUIRES_USER_INTERACTION_MIN_VERSION = [2, 1, 199] as const;
-
-/** Strict `\d+` per dot-separated part — rejects a pre-release/build suffix (`"2.1.199-beta.1"`,
- * `"2.1.199rc"`) rather than letting `Number.parseInt`'s leading-digits-only parsing treat it as
- * `2.1.199` and wrongly report a pre-release as version-compliant. */
-const parseVersionParts = (version: string): number[] | undefined => {
-  const rawParts = version.split(".");
-
-  if (!rawParts.every((part) => /^\d+$/u.test(part))) {
-    return undefined;
-  }
-
-  return rawParts.map((part) => Number.parseInt(part, 10));
-};
-
-const isVersionAtLeast = (version: string, min: readonly number[]): boolean => {
-  const parts = parseVersionParts(version);
-
-  if (!parts) {
-    return false;
-  }
-
-  for (let i = 0; i < min.length; i++) {
-    const part = parts[i] ?? 0;
-
-    if (part > min[i]!) {
-      return true;
-    }
-
-    if (part < min[i]!) {
-      return false;
-    }
-  }
-
-  return true;
-};
-
-/**
- * Whether the connected MCP client is known to enforce `_meta["anthropic/requiresUserInteraction"]`
- * (ARCHITECTURE.md §12 / issue #14). `clientInfo` is self-reported at `initialize` — a hostile
- * client could claim to be Claude Code, but that is outside this feature's threat model
- * (unattended automation, not a malicious client); it is documented as a known limitation.
- */
-const clientHonorsRequiresUserInteraction = (server: Server): boolean => {
-  const clientInfo = server.getClientVersion();
-  return clientInfo?.name === "claude-code" && isVersionAtLeast(clientInfo.version, REQUIRES_USER_INTERACTION_MIN_VERSION);
-};
-
 /**
  * Whether the connected MCP client declared the `elicitation` capability at `initialize`
- * (ARCHITECTURE.md §12 / issue #10) — the preferred `"prompt"`-policy consent channel, checked
- * fresh on every call rather than cached (same principle as `clientHonorsRequiresUserInteraction`
- * above: nothing about consent is trusted from a stale snapshot). A bare `elicitation: {}` from the
- * client normalizes to `{ form: {} }` in the SDK's parsed capabilities (backwards-compat default),
+ * (ARCHITECTURE.md §12 / issue #10) — the only `"prompt"`-policy consent channel, checked fresh on
+ * every call rather than cached: nothing about consent is trusted from a stale snapshot. A bare
+ * `elicitation: {}` from the client normalizes to `{ form: {} }` in the SDK's parsed capabilities (backwards-compat default),
  * which is what `server.elicitInput`'s own form-mode request actually requires — this check only
  * needs to know the key is present at all, and lets `elicitInput` itself fail (caught below, and
  * treated as "no channel", never as approval) if the specific mode turns out unsupported.
@@ -416,25 +363,14 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
     { capabilities: { tools: { listChanged: true }, resources: {} } },
   );
 
-  // The `mcpName`s this connection's *most recent* `tools/list` response actually emitted
-  // `_meta["anthropic/requiresUserInteraction"]` for — repopulated on every `tools/list` request,
-  // never on the internal `list_changed` refresh below (which doesn't answer a client request, so
-  // nothing was shown to a human). `resolveToolCallConsent` requires membership here in addition to
-  // recomputing the tool's live policy and the client check, so `consent: "client"` reflects an
-  // MCP `Tool` the client actually listed with the flag set on *this* connection, not merely a
-  // client that happens to qualify version-wise (ARCHITECTURE.md §12 / issue #14). Stays empty for
-  // any connection where elicitation is preferred (issue #10) — see the `tools/list` handler below.
-  const emittedRequiresUserInteraction = new Set<string>();
-
   /**
    * Resolves the `consent` param for one `"prompt"`-policy `tools.call` (ARCHITECTURE.md §12),
-   * shared by both call paths below so the two channels' logic exists exactly once. Recomputes the
-   * tool's live policy's implications at call time — never trusts anything cached from a prior
-   * `tools/list` snapshot except membership in `emittedRequiresUserInteraction` above, which by
-   * construction can only be true for *this* connection's most recent listing.
+   * shared by both call paths below so the logic exists exactly once. Recomputes the tool's live
+   * policy's implications at call time — never trusts anything cached from a prior `tools/list`
+   * snapshot.
    *
-   * Channel preference (never both armed for one call): elicitation (issue #10) whenever the
-   * client declared the capability, else the flag-based gate (issue #14) as a fallback. An
+   * Elicitation (issue #10) is the only channel. A client that didn't declare the capability gets
+   * no consent marker, so the daemon denies the call with reason `no_consent_channel`. An
    * elicitation decline/cancel/timeout throws `ElicitationDeclinedError` — the caller must not
    * catch it, since it belongs in the outer `tools/call` handler's result path, not lumped in with
    * "no consent obtained".
@@ -442,36 +378,30 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
   const resolveToolCallConsent = async (
     tool: NamespacedTool,
     args: Record<string, unknown>,
-  ): Promise<"client" | "elicitation" | undefined> => {
-    if (tool.policy !== "prompt") {
+  ): Promise<"elicitation" | undefined> => {
+    if (tool.policy !== "prompt" || !clientSupportsElicitation(server)) {
       return undefined;
     }
 
-    if (clientSupportsElicitation(server)) {
-      const outcome = await requestElicitationConsent(
-        server,
-        tool,
-        args,
-        options.elicitationTimeoutMs ?? ELICITATION_TIMEOUT_MS,
-      );
+    const outcome = await requestElicitationConsent(
+      server,
+      tool,
+      args,
+      options.elicitationTimeoutMs ?? ELICITATION_TIMEOUT_MS,
+    );
 
-      if (outcome.type === "accepted") {
-        return "elicitation";
-      }
-
-      if (outcome.type === "declined") {
-        throw new ElicitationDeclinedError(outcome.message);
-      }
-
-      // "no-channel": never fabricate approval from a failed request — fall through with no
-      // consent so the daemon's own "prompt" gate denies the call exactly as it would for any
-      // other ungated caller (ARCHITECTURE.md §12).
-      return undefined;
+    if (outcome.type === "accepted") {
+      return "elicitation";
     }
 
-    return clientHonorsRequiresUserInteraction(server) && emittedRequiresUserInteraction.has(tool.mcpName)
-      ? "client"
-      : undefined;
+    if (outcome.type === "declined") {
+      throw new ElicitationDeclinedError(outcome.message);
+    }
+
+    // "no-channel": never fabricate approval from a failed request — fall through with no
+    // consent so the daemon's own "prompt" gate denies the call exactly as it would for any
+    // other ungated caller (ARCHITECTURE.md §12).
+    return undefined;
   };
 
   // One mapper per server: it owns the dedup for the "this schema had to be degraded" stderr
@@ -606,20 +536,6 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools = await fetchEffectiveTools(stream.call);
-    // Channel preference (ARCHITECTURE.md §12 / issues #10 & #14): elicitation always wins over the
-    // flag-based gate when the client declared it, so a "prompt" tool never arms two consent UIs
-    // for one call. When elicitation is preferred, the flag is suppressed entirely — this listing
-    // never sets `_meta["anthropic/requiresUserInteraction"]`, `emittedRequiresUserInteraction`
-    // stays empty, and `resolveToolCallConsent` above takes the elicitation branch at call time
-    // instead.
-    const emitRequiresUserInteractionFlag = !clientSupportsElicitation(server) && clientHonorsRequiresUserInteraction(server);
-
-    emittedRequiresUserInteraction.clear();
-    for (const tool of tools) {
-      if (tool.policy === "prompt" && emitRequiresUserInteractionFlag) {
-        emittedRequiresUserInteraction.add(tool.mcpName);
-      }
-    }
 
     return {
       tools: [
@@ -627,7 +543,7 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
         WAIT_FOR_SESSION_TOOL_DESCRIPTOR,
         EVENTS_TOOL_DESCRIPTOR,
         WAIT_FOR_EVENT_TOOL_DESCRIPTOR,
-        ...tools.map((tool) => mapToMcpTool(tool, emitRequiresUserInteractionFlag)),
+        ...tools.map(mapToMcpTool),
       ],
     };
   });
