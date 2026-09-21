@@ -1,0 +1,196 @@
+---
+title: Security
+description: What Appduct protects against, how to pin a build to your key, rotate keys, limit which tools callers can run, and keep tools out of some builds.
+sidebar:
+  order: 5
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+With the defaults, Appduct is only in debug builds, so a release build has no Appduct code for anyone to attack. This page is for when you do ship it in a build that leaves your machine, such as an internal or QA build, and for anyone deciding whether that's safe.
+
+## What Appduct protects against
+
+- **Someone on the same Wi-Fi.** The connection is encrypted.
+- **Someone who controls DNS or network routing.** The app checks the identity of your computer by its key, not its address. Answering on the right IP isn't enough to impersonate it.
+- **Someone who intercepts a connection link.** A link is good for one connection, for 5 minutes, and stops working after 5 failed attempts. It's not a password.
+- **Other users on your computer.** Appduct's local control socket is readable only by your user.
+
+## What it doesn't protect against
+
+- **A compromised computer.** Anything that can read your Appduct key or reach its control socket, including any process running as your user, can connect devices and call any tool. Your computer is the trust boundary.
+- **Your own tools.** Appduct controls who can call a tool, not what the tool does. A destructive tool does whatever its handler does.
+- **A leaked key.** If your key leaks, someone on the network can impersonate your computer to builds that trust it, until those builds are retired. [Rotate keys](#rotate-keys) to limit the damage.
+- **Exposing Appduct to the internet.** Whether to do that is your decision. If you do, set up [policy](#limit-what-callers-can-run).
+
+## Choose what a build trusts
+
+Each build trusts your computer in one of two ways.
+
+**Link trust (`"link"`)** is the default when a build has no pins configured, in any build type. The connection link carries your computer's key fingerprint, and the app trusts it for that one session. It needs no setup, which is why the quick start works right away. It's weaker than pinned trust: someone on your local network who gets you to open their link or scan their QR code can stand in for your computer for that session. Links still expire and work once.
+
+**Pinned trust (`"pin"`)** embeds your key's fingerprint in the build. The app then refuses any other computer, whatever the link says. Use it for every build that goes to anyone outside your own machine.
+
+Once a build has pins, they always win, and the link's fingerprint is ignored. Configuration can only make trust stricter, never looser. A `trust` value other than `"link"` or `"pin"`, such as a typo, is an error, never treated as the default.
+
+:::caution
+A new link also replaces a session the app already has. Under link trust, someone who can get a malicious link opened can interrupt your session as well as take its place.
+:::
+
+## Pin a build to your key
+
+<Steps>
+
+1. Generate a key and note the fingerprint it prints:
+
+   ```bash
+   appduct keygen
+   ```
+
+   This writes `~/.appduct/key.pem` and prints a `sha256/...` value. Appduct's background service uses this key. If it already created one on first start, pass `--force` to replace it, or `--out <path>` to write elsewhere. It runs without prompts, so it works in CI.
+
+2. Add the fingerprint to your app:
+
+   <Tabs syncKey="trust-platform">
+     <TabItem label="Expo">
+       Add the config plugin to `app.json`:
+
+       ```json title="app.json"
+       {
+         "expo": {
+           "scheme": "myapp",
+           "plugins": [
+             [
+               "@appduct/react-native",
+               {
+                 "cliPins": ["sha256/REPLACE_WITH_KEYGEN_OUTPUT"]
+               }
+             ]
+           ]
+         }
+       }
+       ```
+
+       Setting `cliPins` switches the build to `"pin"` trust. See [Config plugin options](/appduct/reference/react-native-api/#expo-config-plugin).
+     </TabItem>
+     <TabItem label="Bare React Native and iOS">
+       Set these keys in `Info.plist`:
+
+       | Key | Value |
+       | --- | --- |
+       | `AppductCliPins` | Array of `sha256/...` strings |
+       | `AppductTrust` | `"link"` or `"pin"` |
+       | `AppductAllowPrivateLanOnly` | Boolean, defaults to `true` |
+     </TabItem>
+     <TabItem label="Bare React Native and Android">
+       Add `<meta-data>` to your `<application>` in `AndroidManifest.xml`:
+
+       | Name | Value |
+       | --- | --- |
+       | `com.callstack.appduct.CLI_PINS` | JSON array string of `sha256/...` pins |
+       | `com.callstack.appduct.TRUST` | `"link"` or `"pin"` |
+       | `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean, defaults to `true` |
+     </TabItem>
+   </Tabs>
+
+3. Rebuild the app. For Expo, run prebuild again. These are native settings, so a reload isn't enough.
+
+4. Check what the build uses. In React Native, `getAppductBuildConfig()` returns `{ trust, hasEmbeddedPins, allowPrivateLanOnly }`; on iOS and Android, read `Appduct.shared.buildConfig` or `Appduct.buildConfig`. It never shows the pins themselves.
+
+</Steps>
+
+`"pin"` trust with no pins is refused: the plugin fails at prebuild, and the app refuses to connect.
+
+### Local network only
+
+`allowPrivateLanOnly` defaults to `true`: the app only follows links that point to a local IPv4 address (private ranges like `192.168.x.x`, or `127.0.0.1`). It's a safety default for development, not a statement that Appduct works only on a LAN. Only native build settings can change it.
+
+## Rotate keys
+
+Builds accept a set of pins, so you can switch keys without breaking builds that are already out:
+
+<Steps>
+
+1. Generate a new key: `appduct keygen --out new-key.pem`. Note its fingerprint.
+2. Add the new fingerprint to `cliPins` **next to** the old one:
+
+   ```json
+   "cliPins": ["sha256/OLD...", "sha256/NEW..."]
+   ```
+
+3. Ship that build. It trusts either key.
+4. Switch your computers to the new key, with `keyPath` in `~/.appduct/config.json` or by replacing `~/.appduct/key.pem`, then run `appduct daemon stop` so the next command picks it up.
+5. Once every build in use has the new pin, ship a build without the old one, and delete the old key.
+
+</Steps>
+
+Rotate on a schedule, not only after a suspected leak. It keeps the process practiced and limits how long any one key is exposed.
+
+## Handle keys safely
+
+- **Never commit a private key.** `git ls-files "*.pem"` should print nothing.
+- **Keep `key.pem` at mode `0600`.** Appduct refuses to load a key that other users can read. Don't loosen the permissions to work around it.
+- **Use one key per developer or environment.** Don't share one key across a team.
+- **Keep the fingerprint.** It's what you ship in `cliPins`. Losing the key file just means generating a new one and shipping a new build, which is the rotation path anyway.
+- **Never point `--state-dir` at a committed directory**, such as your project's `.appduct/`. The state directory holds the private key.
+- **On shared machines**, such as CI runners, give each user their own `APPDUCT_STATE_DIR`. Anyone who can reach another user's control socket has that user's access.
+
+## Limit what callers can run
+
+Appduct can allow, deny, or ask about each tool call before it reaches your app. Set a policy in `~/.appduct/config.json`:
+
+```json title="~/.appduct/config.json"
+{
+  "policy": {
+    "default": "allow",
+    "destructive": "prompt",
+    "tools": {
+      "pixel-8/wipe_local_data": "deny"
+    }
+  }
+}
+```
+
+| Key | Applies to |
+| --- | --- |
+| `default` | Every tool not covered below |
+| `destructive` | Tools annotated `destructiveHint: true` |
+| `tools["<alias>/<name>"]` | One tool on one device, by session alias |
+
+Each value is `"allow"`, `"deny"`, or `"prompt"`:
+
+- `"deny"` refuses the call with `policy_denied`, and it never reaches the app.
+- `"prompt"` asks a person to approve each call, through an MCP client that supports elicitation. Everywhere else, including the CLI and CI, the call is refused. See [Require approval for risky tools](/appduct/guides/agents/#require-approval-for-risky-tools).
+
+The background service reads this file when it starts. After changing it, run `appduct daemon stop`; this disconnects every device.
+
+Every call attempt is also recorded in `~/.appduct/audit/`, one file per day: time, device, tool, a hash of the arguments (never the arguments themselves), outcome, and who called (`cli`, `mcp`, or `client`). Files older than 30 days are deleted; change that with `auditRetentionDays`.
+
+:::note
+Policy and the audit log run on your computer, so they help a trusted person working across many tools. They don't stop someone who already controls your computer. The protection that lives inside your app is which tools it registers at all, below.
+:::
+
+## Keep a tool out of some builds
+
+Registering a tool is what makes it reachable, so the strongest control is not registering it. In React Native, pass `enabled` to `useAppductTool`:
+
+```ts
+useAppductTool(
+  {
+    name: "wipe_local_db",
+    description: "Destructive: clear the local database.",
+    annotations: { destructiveHint: true },
+    handler: async () => wipeLocalDb(),
+  },
+  [],
+  { enabled: process.env.EXPO_PUBLIC_APPDUCT_TOOLS === "full" },
+);
+```
+
+Use a build flag your release pipeline sets, like an `EXPO_PUBLIC_*` variable. **Don't use `__DEV__` for this**: it's `false` in every release bundle, including the internal release builds agents drive in CI, so it removes the tool exactly where you need it. `__DEV__` is fine for tools that only make sense in local development.
+
+Because tools can differ between builds, automated flows should list tools rather than assume a fixed set.
+
+## Shipping to app store review
+
+A release build doesn't include Appduct by default. If you include it with `APPDUCT_ENABLED=1` in a build that goes to app store review, be ready to explain the trust model in your review notes, or [leave Appduct out](/appduct/guides/build-variants/) of that build. Check with `appduct doctor --assert-absent`.

@@ -1,0 +1,239 @@
+/*
+ * Callstack theme for Starlight: black, white and one electric purple; light, tightly tracked
+ * grotesk headlines; uppercase mono metadata; square corners; 1px hairlines; no shadows.
+ *
+ * This file is unlayered, so it wins over Starlight's layered defaults. That also means every
+ * token overridden for dark mode (:root) must be overridden again for light mode, or the dark
+ * value would leak into light mode.
+ */
+
+:root {
+	--cs-font-display: 'Switzer', Arial, sans-serif;
+	--cs-font-mono: 'Geist Mono', ui-monospace, monospace;
+	--cs-purple: #8232ff;
+	--cs-purple-muted: #e0ceff;
+
+	--sl-font: var(--cs-font-display);
+	--sl-font-mono: var(--cs-font-mono);
+	--sl-line-height-headings: 1.1;
+
+	--sl-shadow-sm: none;
+	--sl-shadow-md: none;
+	--sl-shadow-lg: none;
+}
+
+/* ---------- Dark (default) ---------- */
+:root {
+	--cs-bg: #000000;
+	--cs-fg: #ffffff;
+	--cs-accent: #b789ff;
+	--cs-muted: #bcbac2;
+	--cs-line: #ffffff29;
+	--cs-line-soft: #ffffff17;
+	--cs-wash: #ffffff0a;
+	--cs-code-bg: #131116;
+	--cs-code-fg: #efedf5;
+	--cs-code-border: #ffffff26;
+
+	--sl-color-white: #ffffff;
+	--sl-color-gray-1: #efedf5;
+	--sl-color-gray-2: #d6d4dc;
+	--sl-color-gray-3: #9d9aa5;
+	--sl-color-gray-4: #6b6873;
+	--sl-color-gray-5: #2c2a31;
+	--sl-color-gray-6: #121115;
+	--sl-color-gray-7: #0a090c;
+	--sl-color-black: #000000;
+
+	--sl-color-accent-low: #25124a;
+	--sl-color-accent: #8232ff;
+	--sl-color-accent-high: #b789ff;
+	--sl-color-purple-low: #25124a;
+	--sl-color-purple: #8232ff;
+	--sl-color-purple-high: #d7bfff;
+
+	--sl-color-text: #d6d4dc;
+	--sl-color-text-accent: #b789ff;
+	--sl-color-text-invert: #ffffff;
+	--sl-color-bg: #000000;
+	--sl-color-bg-nav: #000000;
+	--sl-color-bg-sidebar: #000000;
+	--sl-color-bg-inline-code: #17151b;
+	--sl-color-bg-accent: #8232ff;
+	--sl-color-hairline-light: #ffffff29;
+	--sl-color-hairline: #ffffff1f;
+	--sl-color-hairline-shade: #ffffff1f;
+	--sl-color-backdrop-overlay: #000000b3;
+}
+
+/* ---------- Light ---------- */
+:root[data-theme='light'] {
+	--cs-bg: #ffffff;
+	--cs-fg: #000000;
+	--cs-accent: #8232ff;
+	--cs-muted: #646369;
+	--cs-line: #00000024;
+	--cs-line-soft: #00000014;
+	--cs-wash: #00000004;
+	--cs-code-bg: #f7f5fb;
+	--cs-code-fg: #29232f;
+	--cs-code-border: #ded7e8;
+
+	--sl-color-white: #000000;
+	--sl-color-gray-1: #111014;
+	--sl-color-gray-2: #2b2a2f;
+	--sl-color-gray-3: #646369;
+	--sl-color-gray-4: #8e8c94;
+	--sl-color-gray-5: #d9d7de;
+	--sl-color-gray-6: #f1eff5;
+	--sl-color-gray-7: #f9f8fd;
+	--sl-color-black: #ffffff;
+
+	--sl-color-accent-low: #ece2ff;
+	--sl-color-accent: #8232ff;
+	--sl-color-accent-high: #5b16d0;
+	--sl-color-purple-low: #ece2ff;
+	--sl-color-purple: #8232ff;
+	--sl-color-purple-high: #5b16d0;
+
+	--sl-color-text: #2b2a2f;
+	--sl-color-text-accent: #8232ff;
+	--sl-color-text-invert: #ffffff;
+	--sl-color-bg: #ffffff;
+	--sl-color-bg-nav: #ffffff;
+	--sl-color-bg-sidebar: #ffffff;
+	--sl-color-bg-inline-code: #f3f0f8;
+	--sl-color-bg-accent: #8232ff;
+	--sl-color-hairline-light: #00000024;
+	--sl-color-hairline: #0000001a;
+	--sl-color-hairline-shade: #0000001a;
+	--sl-color-backdrop-overlay: #ffffffb3;
+}
+
+/* ---------- Global ---------- */
+
+/* Square corners everywhere — Starlight has no radius token, so this is the one blunt rule. */
+*,
+*::before,
+*::after {
+	border-radius: 0 !important;
+}
+
+html {
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+body {
+	background-color: var(--cs-bg);
+}
+
+::selection {
+	background: var(--cs-purple);
+	color: #ffffff;
+}
+
+:focus-visible {
+	outline: 2px solid var(--cs-accent);
+	outline-offset: 2px;
+}
+
+/* Header chrome: black bar, hairline under it, mono links on the right. */
+.header {
+	gap: 1.5rem;
+}
+.social-icons {
+	gap: 1.75rem !important;
+}
+.social-icons::after {
+	border-inline-end-color: var(--cs-line) !important;
+	height: 1rem !important;
+}
+
+/* Theme select and search: mono, hairline, square. */
+starlight-theme-select label {
+	--sl-select-width: 7em !important;
+}
+starlight-theme-select select,
+starlight-lang-select select {
+	font-family: var(--cs-font-mono);
+	font-size: 0.75rem;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+site-search button[data-open-modal] {
+	border: 1px solid var(--cs-line) !important;
+	background: transparent !important;
+	font-family: var(--cs-font-mono);
+	font-size: 0.75rem;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--cs-muted) !important;
+}
+site-search button[data-open-modal]:hover {
+	border-color: var(--cs-accent) !important;
+	color: var(--sl-color-white) !important;
+}
+site-search button[data-open-modal] kbd {
+	background: transparent !important;
+	border: 1px solid var(--cs-line);
+	font-family: var(--cs-font-mono);
+}
+site-search dialog {
+	border: 1px solid var(--cs-line) !important;
+	background: var(--cs-bg) !important;
+}
+
+/* Buttons shared by the landing hero and CTAs. */
+.cs-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.625rem;
+	padding: 0.875rem 1.375rem;
+	border: 1px solid var(--cs-line);
+	font-family: var(--cs-font-mono);
+	font-size: 0.8125rem;
+	letter-spacing: 0.055em;
+	text-transform: uppercase;
+	text-decoration: none;
+	color: var(--sl-color-white);
+	background: transparent;
+	transition:
+		background-color 0.15s ease,
+		border-color 0.15s ease,
+		color 0.15s ease;
+}
+.cs-button:hover {
+	border-color: var(--sl-color-white);
+}
+.cs-button--primary {
+	background: var(--cs-purple);
+	border-color: var(--cs-purple);
+	color: #ffffff;
+}
+.cs-button--primary:hover {
+	background: #6d1ff0;
+	border-color: #6d1ff0;
+	color: #ffffff;
+}
+
+.cs-eyebrow {
+	margin: 0;
+	font-family: var(--cs-font-mono);
+	font-size: 0.8125rem;
+	line-height: 1.4;
+	letter-spacing: 0.055em;
+	text-transform: uppercase;
+	color: var(--cs-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		transition: none !important;
+		animation: none !important;
+		scroll-behavior: auto !important;
+	}
+}

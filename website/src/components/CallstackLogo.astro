@@ -1,0 +1,22 @@
+---
+import logo from '../assets/callstack-logo.svg?raw';
+
+interface Props {
+	class?: string;
+}
+const { class: className } = Astro.props;
+---
+
+<span class:list={['callstack-logo', className]} role="img" aria-label="Callstack" set:html={logo} />
+
+<style>
+	.callstack-logo {
+		display: inline-block;
+		color: inherit;
+		line-height: 0;
+	}
+	.callstack-logo :global(svg) {
+		width: 100%;
+		height: auto;
+	}
+</style>

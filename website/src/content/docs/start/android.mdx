@@ -1,0 +1,194 @@
+---
+title: Android setup
+description: Add Appduct to a Kotlin or Java Android app without React Native, register tools, and connect it to the CLI.
+sidebar:
+  order: 5
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+This page adds Appduct to a plain Android app, with no React Native. You register tools in Kotlin, and the CLI or an agent calls them the same way as in a React Native app. Building with React Native instead? See [React Native setup](/appduct/start/react-native/).
+
+**Requirements**
+
+- Android 7.0 (API 24) or newer.
+- The `appduct` CLI on your computer: `npm install -g appduct` (Node 20 or newer), and `adb` on your `PATH` to connect emulators and USB devices automatically.
+
+## Set up the app
+
+<Steps>
+
+1. Add the two Appduct artifacts from Maven Central:
+
+   ```kotlin title="app/build.gradle.kts"
+   dependencies {
+     debugImplementation("com.callstack.appduct:core:<version>")
+     releaseImplementation("com.callstack.appduct:core-noop:<version>")
+   }
+   ```
+
+   `core` is the real library. `core-noop` has the same API with every method doing nothing, and no network code. This pairing keeps Appduct out of your release build.
+
+2. Name the scheme Appduct opens your app with:
+
+   ```kotlin title="app/build.gradle.kts"
+   android {
+     defaultConfig {
+       manifestPlaceholders["appductScheme"] = "myapp"
+     }
+   }
+   ```
+
+   If you forget this, the build fails with a manifest-merger error naming `appductScheme`. The scheme can differ from the one your app uses for its own deep links; see [Deep links](#deep-links).
+
+3. Make sure your app has the internet permission, in `AndroidManifest.xml`:
+
+   ```xml
+   <uses-permission android:name="android.permission.INTERNET" />
+   ```
+
+   Appduct doesn't add permissions for you. Without this one, the app opens the link but never connects.
+
+4. Register tools in `Application.onCreate()`:
+
+   ```kotlin
+   import com.callstack.appduct.Appduct
+   import org.json.JSONObject
+
+   class ShopApp : Application() {
+     override fun onCreate() {
+       super.onCreate()
+
+       Appduct.register(
+         name = "seed_cart",
+         description = "Fill the cart with test items.",
+         inputSchema = JSONObject(
+           """{"type":"object","properties":{"items":{"type":"number"}},"required":["items"]}""",
+         ),
+       ) { args ->
+         JSONObject().put("added", args.optInt("items"))
+       }
+     }
+   }
+   ```
+
+   There's no `init` call: Appduct starts itself before `onCreate()` runs.
+
+5. In your project directory, record your package name so the CLI can open links on a device:
+
+   ```bash
+   appduct init --android-app-id com.example.shop
+   ```
+
+   This writes `.appduct/config.json`, which you commit, and prints an MCP config entry for this app. Use the `applicationId` of the variant you install, including any `applicationIdSuffix`.
+
+</Steps>
+
+## Connect and check it works
+
+Install the debug build on an emulator or a USB-connected device, then, from your project directory:
+
+```bash
+appduct link --open android
+appduct tools
+appduct invoke seed_cart --input '{"items":3}'
+```
+
+`--open android` forwards the connection through `adb`, so it works over USB without the device being on your network. To connect by QR code instead, run `appduct link --qr` and scan it with the device's camera; the device must then be on the same local network as your computer.
+
+The app restores its session on its own after a short network drop. If the app process is killed, connect again with a new link.
+
+## Register tools in Kotlin
+
+- **Schemas are plain JSON Schema**, as `org.json.JSONObject`. Appduct doesn't validate arguments against them: they tell agents what to send. Your handler receives the arguments as a `JSONObject`.
+- **Return** `org.json` values, or plain `Map`, `List`, `String`, `Number`, `Boolean`, or `null`. Anything else fails the call with `tool_serialization_error`.
+- **Handlers run on a background dispatcher**, never the main thread. Switch for UI work:
+
+  ```kotlin
+  Appduct.register(name = "flash_screen", description = "Flash the screen once.") { _ ->
+    withContext(Dispatchers.Main) {
+      // touch a View or Compose state here
+    }
+    JSONObject()
+  }
+  ```
+
+- **Progress:** use the overload whose handler also takes a `context`:
+
+  ```kotlin
+  Appduct.register(name = "sync_catalog", description = "Download the product catalog.") { args, context ->
+    context.reportProgress(0.5, "halfway")
+    JSONObject().put("done", true)
+  }
+  ```
+
+- **Cancellation:** when a caller cancels or the connection drops, the handler's coroutine is cancelled. Suspending calls then throw `CancellationException`.
+- **Optional arguments:** `outputSchema`, `annotations` (`ToolAnnotations(readOnlyHint, destructiveHint, idempotentHint)`), `timeoutMs` (default 10 seconds), and `group`. See [Writing tools](/appduct/guides/writing-tools/) for what each one does. A malformed name or group throws `IllegalArgumentException`.
+- **Unregistering:** `register` returns a `ToolRegistration`; call `.remove()`.
+
+To watch the connection, use `Appduct.addListener { event -> … }`, which reports state changes, session changes, and errors, and returns a subscription you can `remove()`. `Appduct.state` and `Appduct.sessionId` give the current values. To tell a test or agent that something happened, call `Appduct.postEvent(name, payload)` from a coroutine. The event is dropped if no session is connected. Read events with `appduct events`, or [wait for one from a test](/appduct/guides/cli/#watch-events).
+
+## Deep links
+
+Appduct includes an invisible activity that receives links with your `appductScheme` and hands them to Appduct. You don't need any code for this.
+
+If your app already handles its own links **on the same scheme**, that activity can't tell your links from Appduct's. Pick one:
+
+- Give Appduct its own scheme in `manifestPlaceholders["appductScheme"]`, or
+- Remove Appduct's activity (below) and call `Appduct.handle(intent)` from your own activity's `onCreate` and `onNewIntent`. It returns `true` when the link was for Appduct, so you can handle the rest yourself. `Appduct.handle(uri)` also works.
+
+### Remove Appduct's activity or startup provider
+
+To handle links or startup yourself, remove the components in your app's manifest:
+
+```xml
+<manifest xmlns:tools="http://schemas.android.com/tools">
+  <application>
+    <provider
+        android:name="com.callstack.appduct.AppductInitProvider"
+        tools:node="remove" />
+    <activity
+        android:name="com.callstack.appduct.AppductLinkActivity"
+        tools:node="remove" />
+  </application>
+</manifest>
+```
+
+:::caution
+If you remove `AppductInitProvider`, every `Appduct` call throws `IllegalStateException`, because nothing gives Appduct your app's `Context`. Remove it only if you know you need to.
+:::
+
+## Ship Appduct in a release build
+
+For an internal or QA build that needs Appduct, depend on `core` instead of `core-noop` for that variant.
+
+Pin that build to your key before it leaves your team. Add these `<meta-data>` entries to your `<application>`:
+
+| Name | Value |
+| --- | --- |
+| `com.callstack.appduct.CLI_PINS` | JSON array string of `sha256/...` pins, printed by `appduct keygen` |
+| `com.callstack.appduct.TRUST` | `"link"` or `"pin"`. Any other value fails every connection attempt. |
+| `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean. Defaults to `true`: links must point to a local network address. |
+
+See [Security](/appduct/guides/security/) for what each mode protects against. `Appduct.buildConfig` reports what a running build actually uses.
+
+Always check the built APK, not the Gradle config:
+
+```bash
+appduct doctor app/build/outputs/apk/release/app-release.apk --assert-absent
+appduct doctor app/build/outputs/apk/debug/app-debug.apk --assert-present
+```
+
+## Troubleshooting
+
+**Manifest-merger error naming `appductScheme`.** Set `manifestPlaceholders["appductScheme"]` in `build.gradle`.
+
+**`appduct link --open android` reports "unable to resolve Intent".** Either the app id isn't the installed build's `applicationId` (check for an `applicationIdSuffix`), or the scheme doesn't match `appductScheme` in the installed build. Placeholders are fixed at build time, so rebuild and reinstall after changing one.
+
+**The link opens the app, but it never connects, with a permission-style error.** Add the `INTERNET` permission to your manifest.
+
+**`IllegalStateException`: "Appduct is not initialized".** `AppductInitProvider` was removed from the manifest.
+
+**A handler crashes when it touches the UI.** Handlers run off the main thread. Use `withContext(Dispatchers.Main)`.
+
+For a complete example app, see the [native Android playground](/appduct/start/playground/#native-android-playground).

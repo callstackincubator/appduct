@@ -1,0 +1,180 @@
+---
+title: React Native setup
+description: Add Appduct to an Expo or bare React Native app, register tools, and connect it to the CLI.
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+This page sets up `@appduct/react-native` in an Expo or bare React Native app. When you're done, the CLI and your agents can call the tools your app registers. For the shortest version, see the [Quick start](/appduct/start/quick-start/).
+
+**Requirements**
+
+- React Native with the New Architecture, on iOS 15.1+ and Android.
+- A development build (Expo) or a bare React Native app. Expo Go can't load native code, so Appduct is inactive there.
+- The `appduct` CLI on your computer: `npm install -g appduct` (Node 20 or newer).
+
+You don't need keys, certificates, or a config plugin for a first run, in any build type.
+
+## Set up the app
+
+<Steps>
+
+1. Install the library and a schema library:
+
+   <Tabs syncKey="pkg">
+     <TabItem label="npm">
+       ```bash
+       npm install @appduct/react-native zod
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```bash
+       pnpm add @appduct/react-native zod
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```bash
+       yarn add @appduct/react-native zod
+       ```
+     </TabItem>
+   </Tabs>
+
+   Any schema library works. Zod 4 needs no extra setup; for others, see [Choose a schema form](/appduct/guides/writing-tools/#choose-a-schema-form).
+
+2. Give the app a deep-link scheme. Appduct connects by opening a link like `myapp:///?appduct=…` in your app.
+
+   <Tabs syncKey="rn-flavor">
+     <TabItem label="Expo">
+       Set `expo.scheme` in `app.json`:
+
+       ```json title="app.json"
+       {
+         "expo": {
+           "scheme": "myapp"
+         }
+       }
+       ```
+
+       If you use a dynamic `app.config.js` or `app.config.ts`, the CLI can't read it (it never runs project code). Record the scheme with `appduct init --scheme myapp` in step 5.
+     </TabItem>
+     <TabItem label="Bare React Native">
+       Declare the scheme on both platforms, and set up React Native's [Linking](https://reactnative.dev/docs/linking) so the app receives incoming URLs:
+
+       - **iOS:** add the scheme under `CFBundleURLTypes` in `Info.plist` (Xcode: target → Info → URL Types).
+       - **Android:** add an intent filter with `android.intent.action.VIEW` and `<data android:scheme="myapp" />` to your main activity in `AndroidManifest.xml`.
+
+       The CLI finds the scheme in these files automatically when you run it from the project root.
+     </TabItem>
+   </Tabs>
+
+3. Import Appduct once, at the top of your app's entry file:
+
+   ```ts
+   import "@appduct/react-native/auto";
+   ```
+
+   This import listens for the connection link and restores the session after a reload. It's the only part of the library that does anything on import.
+
+   To control when it runs, for example only in development builds, `require()` it instead:
+
+   ```ts
+   if (__DEV__) {
+     require("@appduct/react-native/auto");
+   }
+   ```
+
+4. Register a tool:
+
+   ```tsx
+   import { useAppductTool } from "@appduct/react-native";
+   import { z } from "zod";
+
+   export function AppductTools() {
+     useAppductTool({
+       name: "sum",
+       description: "Add two numbers.",
+       inputSchema: z.object({ a: z.number(), b: z.number() }),
+       outputSchema: z.object({ total: z.number() }),
+       handler: async ({ a, b }) => ({ total: a + b }),
+     });
+
+     return null;
+   }
+   ```
+
+   Mount it near the root of your app. A tool can be called only while its component is mounted. To register outside React, use [`registerTool`](/appduct/reference/react-native-api/#registertool). [Writing tools](/appduct/guides/writing-tools/) covers schemas, timeouts, and groups.
+
+5. In your app's root directory, record the scheme and app ids:
+
+   ```bash
+   appduct init --ios-app-id com.example.shop --android-app-id com.example.shop
+   ```
+
+   This writes `.appduct/config.json`, which you commit, and prints an MCP config entry for this app. The app ids are your iOS bundle id and Android package name; the CLI needs them to open links on Android and on physical iPhones. Add `--scheme myapp` if the CLI can't find your scheme.
+
+6. Rebuild the app, so the native module is included:
+
+   <Tabs syncKey="rn-flavor">
+     <TabItem label="Expo">
+       ```bash
+       npx expo run:ios
+       # or
+       npx expo run:android
+       ```
+     </TabItem>
+     <TabItem label="Bare React Native">
+       Install pods (`cd ios && pod install`), then build and run the app as usual.
+     </TabItem>
+   </Tabs>
+
+</Steps>
+
+## Connect and check it works
+
+Run these from your app's root directory:
+
+```bash
+appduct link --open ios-sim     # a booted iOS Simulator
+appduct link --open android     # an Android emulator or USB device
+appduct link --qr               # a physical device: scan the QR code with its camera
+```
+
+Then:
+
+```bash
+appduct tools
+appduct invoke sum --input '{"a":2,"b":3}'
+```
+
+A physical device must be on the same local network as your computer. For every way to connect, see [Connect a device](/appduct/guides/cli/#connect-a-device).
+
+Once connected, the session survives Metro reloads, backgrounding, and short network drops. If the app process is killed, connect again with a new link.
+
+## What's in each build
+
+By default, Appduct's native code is in **debug** builds only. In a release build the library is inactive: every function still exists, but does nothing and never throws. To ship Appduct in an internal release build, or to strip its JavaScript too, see [Build variants](/appduct/guides/build-variants/).
+
+With no configuration, a build trusts the computer whose link it opened, for that session. Before you give a build to anyone outside your team, [pin it to your key](/appduct/guides/security/#pin-a-build-to-your-key).
+
+## Handle links yourself
+
+If your app handles incoming links itself (custom routing, an in-app QR scanner), you can skip `/auto` and connect manually with [`parseBootstrapUrl` and `connect`](/appduct/reference/react-native-api/#connect). Call `restoreSession()` once at startup, before your own link handling. Without it, every Metro reload drops the session.
+
+## Troubleshooting
+
+**`appduct tools` fails with `no_session`.** No device has connected yet. Run `appduct ls` to see sessions, then connect with `appduct link`.
+
+**The link opens the app, but it never connects.**
+- Check that the app imports `@appduct/react-native/auto`, or calls `connect()` itself.
+- You're in Expo Go or a release build, where Appduct is inactive. Use a development build.
+- On a physical device, the phone must reach your computer on the local network. By default, Appduct accepts only local network addresses.
+
+**Android shows an "Open with" chooser, or nothing happens.** More than one installed app declares your scheme. Pass `--app-id` with your package name, or record it with `appduct init --android-app-id`.
+
+**`appduct link` reports conflicting schemes.** Your `ios/` and `android/` projects declare different schemes. Pass `--scheme`, or record one with `appduct init --scheme`.
+
+**`registerTool` throws in development.** The schema can't describe itself to agents (for example, Zod 3 or plain Valibot on its own), or the tool name or group is malformed. The error says what to fix. See [Writing tools](/appduct/guides/writing-tools/).
+
+**`connect()` rejects with `appduct_disabled`.** The build has no Appduct native code: it's a release build, Expo Go, or Appduct was excluded. See [Build variants](/appduct/guides/build-variants/).

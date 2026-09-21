@@ -13,7 +13,8 @@
   },
   "workspaces": [
     "packages/*",
-    "playground"
+    "playground",
+    "website"
   ],
   "devDependencies": {
     "turbo": "^2.8.20",

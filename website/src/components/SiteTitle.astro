@@ -1,0 +1,42 @@
+---
+const { siteTitleHref } = Astro.locals.starlightRoute;
+---
+
+<a href={siteTitleHref} class="site-title">
+	<span class="wordmark" translate="no">appduct</span>
+	<span class="by">by Callstack</span>
+</a>
+
+<style>
+	.site-title {
+		display: flex;
+		align-items: baseline;
+		gap: 0.875rem;
+		text-decoration: none;
+		color: var(--sl-color-white);
+		white-space: nowrap;
+		min-width: 0;
+	}
+	.wordmark {
+		font-family: var(--cs-font-display);
+		font-weight: 400;
+		font-size: 1.5rem;
+		letter-spacing: -0.05em;
+		line-height: 1;
+	}
+	.by {
+		font-family: var(--cs-font-mono);
+		font-size: 0.6875rem;
+		letter-spacing: 0.055em;
+		text-transform: uppercase;
+		color: var(--cs-muted);
+	}
+	.site-title:hover .wordmark {
+		color: var(--cs-accent);
+	}
+	@media (max-width: 30rem) {
+		.by {
+			display: none;
+		}
+	}
+</style>

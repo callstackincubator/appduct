@@ -48,6 +48,13 @@ const IGNORED_DIRS = new Set([
   "ios",
 ]);
 
+/**
+ * Starlight content, as repo-relative paths. Its links are site URLs (`/appduct/start/…`), not
+ * file paths, so this checker cannot resolve them; starlight-links-validator checks them during
+ * the website build instead.
+ */
+const IGNORED_PATHS = new Set([join("website", "src", "content")]);
+
 /** Schemes that are out of scope for an offline checker. */
 const EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
@@ -77,7 +84,7 @@ function collectMarkdown(dir, out = []) {
     if (entry.name.startsWith(".") && entry.name !== ".github") continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (IGNORED_DIRS.has(entry.name)) continue;
+      if (IGNORED_DIRS.has(entry.name) || IGNORED_PATHS.has(relative(ROOT, full))) continue;
       collectMarkdown(full, out);
     } else if (entry.isFile() && entry.name.endsWith(".md")) {
       out.push(full);
