@@ -193,6 +193,13 @@ const renderEmptyToolsLine = (data: ToolsListing): string => {
     return `  No tools at offset ${data.offset ?? 0}; ${data.total} matching tool${data.total === 1 ? "" : "s"} in total.`;
   }
 
+  if (data.group !== undefined) {
+    // Never "No tools registered" for an empty group: the registry may well have tools, just not
+    // in this group (a typo, or the wrong case — matching is case-sensitive).
+    const match = data.filter === undefined ? "" : ` match ${JSON.stringify(data.filter)}`;
+    return `  No tools in group ${JSON.stringify(data.group)}${match}. Run \`appduct tools --groups\` to see the session's groups.`;
+  }
+
   return data.filter === undefined ? "  No tools registered." : `  No tools match ${JSON.stringify(data.filter)}.`;
 };
 
@@ -302,9 +309,14 @@ const renderGroupedToolLines = (colors: ColorPalette, tools: readonly ToolsListE
   return lines;
 };
 
+/** The listing's title line: `Tools`, or `Tools in group <name>` under `--group`. */
+const renderToolsTitle = (colors: ColorPalette, data: ToolsListing): string => {
+  return colors.green(data.group === undefined ? "Tools" : `Tools in group ${data.group}`);
+};
+
 const renderToolSummaryTable = (colors: ColorPalette, data: ToolsListing): string[] => {
   if (data.tools.length === 0) {
-    return [colors.green("Tools"), renderEmptyToolsLine(data)];
+    return [renderToolsTitle(colors, data), renderEmptyToolsLine(data)];
   }
 
   // Headings only when the registry has groups and the listing was not already narrowed to one —
@@ -312,7 +324,7 @@ const renderToolSummaryTable = (colors: ColorPalette, data: ToolsListing): strin
   const grouped = data.group === undefined && hasAnyGroup(data.groups);
 
   return [
-    colors.green(data.group === undefined ? "Tools" : `Tools in group ${data.group}`),
+    renderToolsTitle(colors, data),
     ...(grouped
       ? renderGroupedToolLines(colors, data.tools)
       : data.tools.flatMap((tool) => renderToolSummaryLines(tool, "  "))),
@@ -343,7 +355,7 @@ const renderToolDetail = (colors: ColorPalette, tool: ToolDescriptor, flags: Glo
 
 const renderToolsFullListing = (colors: ColorPalette, data: ToolsListing, flags: GlobalFlags): string[] => {
   if (data.tools.length === 0) {
-    return [colors.green("Tools"), renderEmptyToolsLine(data)];
+    return [renderToolsTitle(colors, data), renderEmptyToolsLine(data)];
   }
 
   return [

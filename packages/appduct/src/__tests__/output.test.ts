@@ -120,6 +120,31 @@ describe("output rendering", () => {
     );
   });
 
+  test("the truncation footer names at most 10 top-level groups (no subgroups), then points at --groups", () => {
+    const topLevel = Array.from({ length: 12 }, (_, index) => ({
+      group: `g${String(index).padStart(2, "0")}`,
+      total: 2,
+    }));
+    const rendered = renderResult(
+      {
+        ok: true,
+        data: {
+          tools: [{ name: "echo", description: "Echoes input.", policy: "allow", group: "g00" }],
+          total: 24,
+          limit: 1,
+          groups: [topLevel[0], { group: "g00/sub", total: 1 }, ...topLevel.slice(1)],
+        },
+      },
+      { command: "tools", flags: flags() },
+    ).stdout ?? "";
+
+    expect(rendered).toContain(
+      "Showing 1 of 24 tools (offset 0). Narrow with --group <name> (groups: g00 2, g01 2, g02 2, g03 2, " +
+        "g04 2, g05 2, g06 2, g07 2, g08 2, g09 2, ... 2 more; see --groups) or --filter <text>, or page with --offset <n>.",
+    );
+    expect(rendered).not.toContain("g00/sub 1");
+  });
+
   test("tools list output with a filter and no matches says so", () => {
     const rendered = renderResult(
       { ok: true, data: { tools: [], total: 0, filter: "nope" } },

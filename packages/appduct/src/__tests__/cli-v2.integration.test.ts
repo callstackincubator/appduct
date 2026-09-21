@@ -545,6 +545,12 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(sub.stdout).not.toContain("checkout_0");
       expect(sub.stdout).not.toContain("(ungrouped)");
 
+      // An empty group (matching is case-sensitive) is not an empty registry.
+      const unknownGroup = await runCliHuman(["tools", alias, "--group", "Cart"], stateDir);
+      expect(stripAnsi(unknownGroup.stdout)).toContain(
+        'Tools in group Cart\n  No tools in group "Cart". Run `appduct tools --groups` to see the session\'s groups.',
+      );
+
       // --group combines with --filter and paging; the footer drops the group hint once narrowed.
       const combined = await runCliHuman(["tools", alias, "--group", "cart", "--filter", "cart_1", "--limit", "1"], stateDir);
       expect(combined.stdout).toContain("Showing 1 of 2 tools (offset 0). Narrow with --filter <text> or page with --offset <n>.");
@@ -564,6 +570,11 @@ describe("appduct CLI v2: end-to-end command table", () => {
         ["tools", alias, "cart_00", "--groups"],
         ["tools", alias, "--groups", "--group", "cart"],
         ["tools", alias, "--groups", "--filter", "x"],
+        ["tools", alias, "--groups", "--full"],
+        ["tools", alias, "--groups", "--limit", "2"],
+        ["tools", alias, "--groups", "--offset", "1"],
+        // The single-arg probe: `cart_00` resolves to a tool, so `--groups` is a listing flag on a lookup.
+        ["tools", "cart_00", "--groups"],
         ["tools", alias, "--group", "a/b/c"],
         ["tools", alias, "--group", "checkout/"],
       ]) {
@@ -571,6 +582,13 @@ describe("appduct CLI v2: end-to-end command table", () => {
         expect(result.ok, args.join(" ")).toBe(false);
         expect(result.error?.type, args.join(" ")).toBe("usage_error");
       }
+
+      // `--groups checkout` (a value on a boolean flag) points at `--group` instead of failing as
+      // an unknown session.
+      const groupsWithValue = await runCliJson(["tools", "--groups", "checkout"], stateDir);
+      expect(groupsWithValue.ok).toBe(false);
+      expect(groupsWithValue.error?.type).toBe("usage_error");
+      expect(groupsWithValue.error?.message).toContain('use "--group checkout"');
 
       socket.close();
 

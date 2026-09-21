@@ -19,7 +19,7 @@
 import { RPC_METHODS, type ToolDescriptor, type ToolsListResult } from "@appduct/shared";
 
 import type { CliResult, ToolGroupsListing, ToolsCommandData, ToolsListing } from "../cli/result-types.js";
-import { usageError } from "../errors.js";
+import { connectionError, usageError } from "../errors.js";
 import { callDaemon, DaemonRpcError, type SpawnFn } from "../rpc/client.js";
 
 export type ToolsCommandOptions = {
@@ -106,7 +106,24 @@ const listGroups = async (
   context: ToolsCommandContext,
 ): Promise<ToolGroupsListing> => {
   const result = await listTools(selector, context, { limit: 1 });
-  return { groups: result.groups ?? [], total: result.total };
+  return { groups: requireGroupSupport(result), total: result.total };
+};
+
+/**
+ * A daemon that predates tool groups answers `tools.list` with no `groups` and ignores the
+ * `group` param outright, so `--group cart` would print the whole registry as if it were the
+ * group, and `--groups` would print nothing. The version guard normally restarts such a daemon
+ * before it is asked; when it could not (a daemon with live sessions, run without
+ * `--daemon-restart`), say so rather than render a wrong answer.
+ */
+const requireGroupSupport = (result: ToolsListResult) => {
+  if (!Array.isArray(result.groups)) {
+    throw connectionError(
+      'The running Appduct daemon does not support tool groups ("--group"/"--groups"). Restart it with a newer version: `appduct daemon stop`, or pass `--daemon-restart`.',
+    );
+  }
+
+  return result.groups;
 };
 
 const listOrGroups = async (
@@ -115,11 +132,33 @@ const listOrGroups = async (
   context: ToolsCommandContext,
 ): Promise<ToolsCommandData> => {
   if (options.groups === true) {
-    return listGroups(selector, context);
+    try {
+      return await listGroups(selector, context);
+    } catch (error) {
+      // `--groups` takes no value, so `tools --groups checkout` reads `checkout` as a session
+      // selector. When no such session exists, the likelier intent is `--group checkout`.
+      if (
+        selector !== undefined &&
+        error instanceof DaemonRpcError &&
+        error.data?.type === "unknown_session"
+      ) {
+        throw usageError(
+          `No session matches "${selector}". "--groups" takes no value; to list one group's tools, use "--group ${selector}".`,
+        );
+      }
+
+      throw error;
+    }
   }
 
   const params = toListParams(options);
-  return toListing(await listTools(selector, context, params), params);
+  const result = await listTools(selector, context, params);
+
+  if (params.group !== undefined) {
+    requireGroupSupport(result);
+  }
+
+  return toListing(result, params);
 };
 
 export const handleToolsCommand = async (
