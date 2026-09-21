@@ -15,25 +15,10 @@ import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { handleDaemonStatusCommand } from "../commands/daemon/status.js";
-import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
+import { startDaemon } from "../daemon/daemon.js";
 import { startRpcServer } from "../daemon/rpc-server.js";
 import { getStateDirPaths } from "../daemon/state-dir.js";
 import { makeTempStateDir as makeSharedStateDir, removeStateDir } from "./fixtures.js";
-
-const runningDaemons: RunningDaemon[] = [];
-
-const startTrackedDaemon = async (stateDir: string): Promise<RunningDaemon> => {
-  const daemon = await startDaemon({ stateDir });
-  runningDaemons.push(daemon);
-  return daemon;
-};
-
-afterEach(async () => {
-  while (runningDaemons.length > 0) {
-    const daemon = runningDaemons.pop();
-    await daemon?.shutdown();
-  }
-});
 
 /**
  * The shared fixture writes `wssPort: 0` ("bind an OS-assigned port", ARCHITECTURE.md §3). This
