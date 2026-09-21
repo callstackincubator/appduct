@@ -12,15 +12,6 @@
  * (the JSON Schema shorthand `properties: { a: true }` is rejected) and `required` must be an
  * array. Any of those makes a client reject the entire `tools/list` result, so the only safe
  * predicate is the one the client will actually apply.
- *
- * A tool whose effective policy is `"prompt"` (ARCHITECTURE.md §12) gets
- * `_meta["anthropic/requiresUserInteraction"] = true` — but only when the caller says to
- * (`emitRequiresUserInteractionFlag`), which `mcp/server.ts` decides is true only when the
- * connected client is known to enforce the flag (issue #14) *and* it hasn't already preferred the
- * elicitation channel instead (issue #10). Emitting the flag for a client that ignores it would
- * create a false sense of security; emitting it *and* using elicitation for the same tool would
- * arm two consent prompts for one call — so this function never decides that itself, only renders
- * the decision it's handed.
  */
 
 import { ToolSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -39,7 +30,6 @@ export type McpToolSchema = {
   inputSchema: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
   annotations?: Record<string, unknown>;
-  _meta?: Record<string, unknown>;
 };
 
 type SchemaSlot = "input" | "output";
@@ -96,7 +86,7 @@ const defaultWarn = (message: string): void => {
  */
 const MAX_REMEMBERED_NOTICES = 256;
 
-export type McpToolMapper = (tool: NamespacedTool, emitRequiresUserInteractionFlag: boolean) => McpToolSchema;
+export type McpToolMapper = (tool: NamespacedTool) => McpToolSchema;
 
 /**
  * Builds a mapper with its own degradation-notice dedup, so nothing here is module state and no
@@ -185,9 +175,8 @@ export const createMcpToolMapper = (warn: (message: string) => void = defaultWar
     return undefined;
   };
 
-  return (tool, emitRequiresUserInteractionFlag) => {
+  return (tool) => {
     const { descriptor } = tool;
-    const requiresUserInteraction = tool.policy === "prompt" && emitRequiresUserInteractionFlag;
     const outputSchema = mapOutputSchema(tool);
 
     return {
@@ -196,8 +185,6 @@ export const createMcpToolMapper = (warn: (message: string) => void = defaultWar
       inputSchema: mapInputSchema(tool),
       ...(outputSchema ? { outputSchema } : {}),
       ...(descriptor.annotations ? { annotations: { ...descriptor.annotations } } : {}),
-      // Must be the JSON boolean `true` literal — any other value is ignored by the client.
-      ...(requiresUserInteraction ? { _meta: { "anthropic/requiresUserInteraction": true } } : {}),
     };
   };
 };

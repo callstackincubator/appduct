@@ -235,8 +235,12 @@ const asToolsCallParams = (params: unknown): ToolsCallParams => {
 
   const consent = record.consent;
 
-  if (consent !== undefined && consent !== "client" && consent !== "elicitation") {
-    throw new RpcApplicationError("invalid_request", '"consent" must be "client" or "elicitation".');
+  // `"client"` was the removed flag-based channel's marker. An MCP server older than this daemon
+  // can still send it (a newer daemon serves older clients, ARCHITECTURE.md §4), so it is accepted
+  // and ignored rather than rejected: the call then lands on the audited `no_consent_channel`
+  // denial like any other ungated `"prompt"` call, instead of an unaudited `invalid_request`.
+  if (consent !== undefined && consent !== "elicitation" && consent !== "client") {
+    throw new RpcApplicationError("invalid_request", '"consent" must be "elicitation".');
   }
 
   return {
@@ -245,7 +249,7 @@ const asToolsCallParams = (params: unknown): ToolsCallParams => {
     args: args as Record<string, unknown>,
     timeoutMs: timeoutMs as number | undefined,
     caller: caller as "cli" | "mcp" | "client" | undefined,
-    consent: consent as "client" | "elicitation" | undefined,
+    consent: consent === "elicitation" ? "elicitation" : undefined,
   };
 };
 
@@ -585,8 +589,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           const resolved = activeSessionManager.resolveForTools(selector);
 
           // Each entry carries its effective policy decision (ARCHITECTURE.md §12) so the MCP
-          // server can emit `_meta["anthropic/requiresUserInteraction"]` for "prompt" tools
-          // without a second round trip (issue #14).
+          // server knows which calls need an elicitation prompt without a second round trip.
           const entries: ToolsListEntry[] = resolved.registry.list().map((descriptor) => ({
             ...descriptor,
             policy: evaluatePolicy(descriptor, { alias: resolved.alias }, config.policy),
@@ -626,7 +629,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           const writeAudit = (
             outcome: "ok" | "error" | "denied" | "cancelled",
             errorType?: ErrorType,
-            grantedConsent?: "client" | "elicitation",
+            grantedConsent?: "elicitation",
             deniedReason?: "policy" | "no_consent_channel",
           ): void => {
             auditLogger.record({
@@ -659,24 +662,20 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
 
           const policyDecision = evaluatePolicy(tool, { alias: resolved.alias }, config.policy);
           // "prompt" fails closed (ARCHITECTURE.md §12): it proceeds only when the caller carried
-          // `consent: "client"` (issue #14) or `consent: "elicitation"` (issue #10). Either value is
-          // trusted verbatim once present — the daemon does not and cannot re-derive whether an MCP
-          // client's `_meta` flag was actually honored or its elicitation reply actually came from a
+          // `consent: "elicitation"` (issue #10). The value is trusted verbatim once present — the
+          // daemon does not and cannot re-derive whether an elicitation reply actually came from a
           // human, the same way it doesn't re-verify any other RPC param. `consent` is only ever
-          // justified when set by this codebase's own MCP server (mcp/server.ts), which sets
-          // `"client"` solely after confirming both that it emitted
-          // `_meta["anthropic/requiresUserInteraction"]` for this exact tool on this connection's
-          // most recent listing and that the connected client is known to enforce it, and sets
-          // `"elicitation"` solely after sending an `elicitation/create` request over this
-          // connection and receiving `action: "accept"` back. Any other local process with access to
+          // justified when set by this codebase's own MCP server (mcp/server.ts), which sets it
+          // solely after sending an `elicitation/create` request over this connection and
+          // receiving `action: "accept"` back. Any other local process with access to
           // `daemon.sock` — including the CLI, or an agent with shell access, which is the typical
-          // setup this feature targets — could send either value directly; that is not a bypass of
+          // setup this feature targets — could send it directly; that is not a bypass of
           // this feature so much as a restatement of this codebase's existing trust boundary
           // (docs/SECURITY.md: anything that can reach the socket already has full daemon control).
           // "prompt" guards against a compliant MCP client silently auto-approving on the caller's
           // behalf, not against a hostile process on the operator's own machine.
-          const grantedConsent: "client" | "elicitation" | undefined =
-            policyDecision === "prompt" && (consent === "client" || consent === "elicitation") ? consent : undefined;
+          const grantedConsent: "elicitation" | undefined =
+            policyDecision === "prompt" && consent === "elicitation" ? consent : undefined;
 
           if (policyDecision === "deny" || (policyDecision === "prompt" && grantedConsent === undefined)) {
             // Denied → no frame reaches the app, and the call never starts.
@@ -696,7 +695,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
                 -32000,
                 {
                   reason: "no_consent_channel",
-                  hint: `This caller did not confirm human consent for "${name}". An MCP client that declares the "elicitation" capability confirms it via an elicitation/create prompt, and Claude Code ≥ v2.1.199 confirms it via the requiresUserInteraction flag, automatically over MCP; every other caller (including the CLI) is denied by design. To change this tool's policy, edit "policy.tools[\"${resolved.alias}/${name}\"]" (or policy.default/policy.destructive) in ${paths.configPath}.`,
+                  hint: `This caller did not confirm human consent for "${name}". Only an MCP client that declares the "elicitation" capability can confirm it, via an elicitation/create prompt; every other caller (including the CLI and MCP clients without elicitation) is denied by design. To change this tool's policy, edit "policy.tools[\"${resolved.alias}/${name}\"]" (or policy.default/policy.destructive) in ${paths.configPath}.`,
                 },
               );
             }

@@ -101,7 +101,7 @@ describe("toMcpTool", () => {
   const toMcpTool = createMcpToolMapper(() => {});
 
   test("never emits a timeout on the MCP tool, even for a tool that declares one", () => {
-    const mapped = toMcpTool(namespacedTool(60_000), false);
+    const mapped = toMcpTool(namespacedTool(60_000));
 
     // The deadline is a daemon-side scheduling hint, not part of the MCP `Tool` contract. This
     // guards against a future refactor swapping the explicit field mapping for a spread — under
@@ -112,7 +112,7 @@ describe("toMcpTool", () => {
   });
 
   test("maps a tool that declares one identically to a tool that does not", () => {
-    expect(toMcpTool(namespacedTool(60_000), false)).toEqual(toMcpTool(namespacedTool(), false));
+    expect(toMcpTool(namespacedTool(60_000))).toEqual(toMcpTool(namespacedTool()));
   });
 });
 
