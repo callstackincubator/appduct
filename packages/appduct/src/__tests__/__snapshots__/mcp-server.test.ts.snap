@@ -10,10 +10,12 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
           "type": "object",
         },
         "name": {
+          "minLength": 1,
           "type": "string",
         },
         "selector": {
           "description": "Session alias or id. Omit to target the sole active/suspended session.",
+          "minLength": 1,
           "type": "string",
         },
         "timeoutMs": {
@@ -65,10 +67,12 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
       "additionalProperties": false,
       "properties": {
         "name": {
+          "minLength": 1,
           "type": "string",
         },
         "selector": {
           "description": "Session alias or id. Omit to target the sole active/suspended session.",
+          "minLength": 1,
           "type": "string",
         },
       },
@@ -125,6 +129,7 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
       "additionalProperties": false,
       "properties": {
         "filter": {
+          "maxLength": 256,
           "type": "string",
         },
         "limit": {
@@ -137,6 +142,7 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
         },
         "selector": {
           "description": "Session alias or id. Omit to target the sole active/suspended session.",
+          "minLength": 1,
           "type": "string",
         },
       },

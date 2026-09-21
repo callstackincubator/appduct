@@ -2,6 +2,7 @@ import pc from "picocolors";
 import {
   formatAgentWebSocketUrl,
   renderToolSignature,
+  summarizeToolDescription,
   type EventNotification,
   type SessionSummary,
   type ToolDescriptor,
@@ -155,25 +156,6 @@ const isToolsListing = (data: ToolsCommandData): data is ToolsListing => {
   return typeof data === "object" && data !== null && Array.isArray((data as ToolsListing).tools);
 };
 
-/** First line of a tool's description, trimmed and capped — the summary listing shows only this,
- * not the full (possibly multi-line, up to `MAX_TOOL_DESCRIPTION_LENGTH`) text; `tools <name>`/
- * `--full` still show it in full. */
-const MAX_LISTED_DESCRIPTION_LENGTH = 120;
-
-const summarizeDescription = (description: string): string => {
-  // Any line break ends the first line (`\r` alone included), and remaining control characters
-  // are dropped: the description is app-supplied text printed straight to a terminal.
-  const firstLine = (description.split(/\r\n|[\n\r\u2028\u2029]/u)[0] ?? "")
-    .replace(/\p{Cc}/gu, "")
-    .trim();
-  // Cut by code point, never through the middle of a surrogate pair.
-  const codePoints = Array.from(firstLine);
-
-  return codePoints.length > MAX_LISTED_DESCRIPTION_LENGTH
-    ? `${codePoints.slice(0, MAX_LISTED_DESCRIPTION_LENGTH).join("")}…`
-    : firstLine;
-};
-
 /** "No tools registered"/"No tools match" for an empty listing (compact or `--full` — both share
  * this line, only the header differs). */
 const renderEmptyToolsLine = (data: ToolsListing): string => {
@@ -210,7 +192,7 @@ const renderToolSummaryTable = (colors: ColorPalette, data: ToolsListing): strin
     colors.green("Tools"),
     ...data.tools.flatMap((tool) => {
       const tag = tool.policy === "allow" ? "" : `  [${tool.policy}]`;
-      return [`  ${renderToolSignature(tool)}${tag}`, `    ${summarizeDescription(tool.description)}`];
+      return [`  ${renderToolSignature(tool)}${tag}`, `    ${summarizeToolDescription(tool.description)}`];
     }),
     ...renderTruncationLine(data),
     "",

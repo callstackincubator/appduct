@@ -20,6 +20,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   CallToolResultSchema,
+  ElicitRequestSchema,
   ListToolsResultSchema,
   ToolListChangedNotificationSchema,
   type CallToolResult,
@@ -234,6 +235,18 @@ describe("mcp: appduct_list_tools", () => {
     expect(listing.tools).toHaveLength(50);
   });
 
+  test("caps each summary at the CLI's 120 characters, so a long one-line description can't flood a page", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setTools([{ name: "verbose", description: "x".repeat(4000) }]);
+
+    const client = await startServerWithClient(daemon);
+    const result = await callBuiltin(client, "appduct_list_tools", {});
+    const [tool] = (result.structuredContent as { tools: Array<{ summary: string }> }).tools;
+
+    expect(Array.from(tool!.summary)).toHaveLength(121);
+    expect(tool!.summary.endsWith("…")).toBe(true);
+  });
+
   test("with no session at all, says so", async () => {
     const client = await startServerWithClient(createFakeDaemon());
     expect(errorText(await callBuiltin(client, "appduct_list_tools", {}))).toContain("no_session");
@@ -406,11 +419,12 @@ describe("mcp: appduct_call_tool", () => {
     expect(result.structuredContent).toEqual({ platform: "ios" });
   });
 
-  test("runs under the tool's declared deadline, or the caller's timeoutMs when given", async () => {
+  test("runs under the tool's own deadline; timeoutMs can shorten it but never extend it", async () => {
     const daemon = createFakeDaemon();
     const app = daemon.addSession({ alias: "pixel-8" });
-    app.setTools([{ name: "slow", timeout_ms: 30_000 }]);
+    app.setTools([{ name: "slow", timeout_ms: 30_000 }, { name: "undeclared" }]);
     app.onCall("slow", () => ({ ok: true }));
+    app.onCall("undeclared", () => ({ ok: true }));
 
     const client = await startServerWithClient(daemon);
     const sentTimeouts = () =>
@@ -420,18 +434,82 @@ describe("mcp: appduct_call_tool", () => {
         .map((call) => (call.params as { timeoutMs?: number }).timeoutMs);
 
     await callBuiltin(client, "appduct_call_tool", { name: "slow" });
-    await callBuiltin(client, "appduct_call_tool", { name: "slow", timeoutMs: 45_000 });
+    await callBuiltin(client, "appduct_call_tool", { name: "slow", timeoutMs: 5_000 });
+    await callBuiltin(client, "appduct_call_tool", { name: "undeclared" });
+    expect(sentTimeouts()).toEqual([30_000, 5_000, 10_000]);
 
-    expect(sentTimeouts()).toEqual([30_000, 45_000]);
+    // The app stops the tool at its own deadline, so a longer one is refused up front instead of
+    // timing out at the same point anyway.
+    const longer = errorText(await callBuiltin(client, "appduct_call_tool", { name: "slow", timeoutMs: 45_000 }));
+    expect(longer).toContain("invalid_request");
+    expect(longer).toContain("30000");
+    const longerThanDefault = errorText(
+      await callBuiltin(client, "appduct_call_tool", { name: "undeclared", timeoutMs: 20_000 }),
+    );
+    expect(longerThanDefault).toContain("10000");
 
     // Out of range, or not whole milliseconds, is rejected rather than silently clamped.
     for (const timeoutMs of [999, 600_001, 1_500.5]) {
       const invalid = errorText(await callBuiltin(client, "appduct_call_tool", { name: "slow", timeoutMs }));
       expect(invalid).toContain("invalid_request");
-      expect(invalid).toContain("1000");
-      expect(invalid).toContain("600000");
     }
-    expect(sentTimeouts()).toEqual([30_000, 45_000]);
+    expect(sentTimeouts()).toEqual([30_000, 5_000, 10_000]);
+  });
+
+  test("a call the client cancels while its consent prompt is open never reaches the app, even if the user then accepts", async () => {
+    const daemon = createFakeDaemon();
+    const app = daemon.addSession({ alias: "pixel-8" });
+    app.setTools([{ name: "wipe", policy: "prompt" }]);
+    let ran = 0;
+    app.onCall("wipe", () => {
+      ran += 1;
+      return { wiped: true };
+    });
+
+    const handle = await createMcpServer({
+      stateDir: "/nonexistent-state-dir",
+      openStream: daemon.openStream,
+      scheme: "appduct",
+      env: {},
+    });
+    mcpHandles.push(handle);
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    await handle.connect(serverTransport);
+
+    let promptShown!: () => void;
+    const prompted = new Promise<void>((resolve) => {
+      promptShown = resolve;
+    });
+    let answerPrompt!: (answer: { action: "accept" }) => void;
+    const answer = new Promise<{ action: "accept" }>((resolve) => {
+      answerPrompt = resolve;
+    });
+
+    const client = new Client({ name: "test-client", version: "0.0.0" }, { capabilities: { elicitation: {} } });
+    client.setRequestHandler(ElicitRequestSchema, async () => {
+      promptShown();
+      return answer;
+    });
+    await client.connect(clientTransport);
+
+    const controller = new AbortController();
+    const call = client.request(
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "wipe" } } },
+      CallToolResultSchema,
+      { signal: controller.signal },
+    );
+    call.catch(() => {});
+
+    await prompted;
+    controller.abort();
+    // Let the cancel notification reach the server before the user answers the stale prompt.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    answerPrompt({ action: "accept" });
+    await expect(call).rejects.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(ran).toBe(0);
+    expect(daemon.calls().some((entry) => entry.method === RPC_METHODS.toolsCall)).toBe(false);
   });
 
   test("a misspelled parameter is rejected instead of running the tool without it", async () => {

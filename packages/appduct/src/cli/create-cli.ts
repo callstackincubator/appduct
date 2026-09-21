@@ -88,7 +88,7 @@ export const createCli = () => {
   cli.command("revoke [selector]", "Revoke a session.");
 
   cli
-    .command("mcp", "Start a stdio MCP server that proxies connected apps' tools to MCP clients.")
+    .command("mcp", "Start a stdio MCP server that gives MCP clients access to connected apps' tools.")
     .option(
       "--scheme <scheme>",
       "Deep-link URI scheme for appduct_connect (also: APPDUCT_SCHEME).",

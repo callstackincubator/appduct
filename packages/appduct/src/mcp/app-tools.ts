@@ -11,10 +11,12 @@
  */
 
 import {
+  MAX_TOOLS_FILTER_LENGTH,
   MAX_TOOL_TIMEOUT_MS,
   MIN_TOOL_TIMEOUT_MS,
   RPC_METHODS,
   renderToolSignature,
+  summarizeToolDescription,
   type EffectivePolicyDecision,
   type SessionsDescribeResult,
   type ToolDescriptor,
@@ -22,6 +24,7 @@ import {
   type ToolsListResult,
 } from "@appduct/shared";
 
+import { clampTimeout } from "../daemon/calls.js";
 import { McpBuiltinToolError } from "./connect-tool.js";
 import type { DaemonCall } from "./daemon-tools.js";
 
@@ -35,8 +38,11 @@ export const DEFAULT_LIST_TOOLS_LIMIT = 50;
 
 const SELECTOR_PROPERTY = {
   type: "string",
+  minLength: 1,
   description: "Session alias or id. Omit to target the sole active/suspended session.",
 } as const;
+
+const NAME_PROPERTY = { type: "string", minLength: 1 } as const;
 
 export const LIST_TOOLS_TOOL_DESCRIPTOR = {
   name: LIST_TOOLS_TOOL_NAME,
@@ -53,7 +59,7 @@ export const LIST_TOOLS_TOOL_DESCRIPTOR = {
     type: "object",
     properties: {
       selector: SELECTOR_PROPERTY,
-      filter: { type: "string" },
+      filter: { type: "string", maxLength: MAX_TOOLS_FILTER_LENGTH },
       limit: { type: "integer", exclusiveMinimum: 0 },
       offset: { type: "integer", minimum: 0 },
     },
@@ -71,7 +77,7 @@ export const DESCRIBE_TOOL_TOOL_DESCRIPTOR = {
     type: "object",
     properties: {
       selector: SELECTOR_PROPERTY,
-      name: { type: "string" },
+      name: NAME_PROPERTY,
     },
     required: ["name"],
     additionalProperties: false,
@@ -82,15 +88,16 @@ export const CALL_TOOL_TOOL_DESCRIPTOR = {
   name: CALL_TOOL_TOOL_NAME,
   description:
     "Call one of the connected app's tools by name. args must match the tool's input_schema " +
-    "(see appduct_describe_tool); omit it for a tool that takes no input. timeoutMs overrides the " +
-    `tool's declared deadline (timeout_ms), in milliseconds from ${MIN_TOOL_TIMEOUT_MS} to ` +
-    `${MAX_TOOL_TIMEOUT_MS}. Returns the tool's result as JSON. A tool with policy \"prompt\" ` +
+    "(see appduct_describe_tool); omit it for a tool that takes no input. The call runs under the " +
+    "tool's own deadline (timeout_ms in appduct_describe_tool, 10000 ms if it declares none); " +
+    "timeoutMs can only shorten it, since the app stops the tool at its own deadline. Returns " +
+    'the tool\'s result as JSON. A tool with policy "prompt" ' +
     "asks the user to approve the call first, and fails if they decline or this client cannot ask.",
   inputSchema: {
     type: "object",
     properties: {
       selector: SELECTOR_PROPERTY,
-      name: { type: "string" },
+      name: NAME_PROPERTY,
       args: { type: "object" },
       timeoutMs: { type: "integer", minimum: MIN_TOOL_TIMEOUT_MS, maximum: MAX_TOOL_TIMEOUT_MS },
     },
@@ -178,10 +185,6 @@ const toDescriptor = (entry: ToolsListEntry): ToolDescriptor => {
   };
 };
 
-const firstLine = (description: string): string => {
-  return description.split(/\r\n|[\n\r\u2028\u2029]/u)[0] ?? "";
-};
-
 /** Resolves `selector` (an alias, a session id, or nothing) to one concrete session first, with
  * the daemon's own rules and errors (`no_session`, `ambiguous_session`, `unknown_session`).
  * Everything after that is routed by the **session id**, never the alias: the daemon frees an
@@ -232,7 +235,7 @@ export const handleListToolsTool = async (rawArgs: unknown, call: DaemonCall) =>
     tools: result.tools.map((entry) => ({
       name: entry.name,
       signature: renderToolSignature(entry),
-      summary: firstLine(entry.description),
+      summary: summarizeToolDescription(entry.description),
       policy: entry.policy,
       ...(entry.annotations ? { annotations: entry.annotations } : {}),
     })),
@@ -288,6 +291,26 @@ export const parseCallToolArgs = (rawArgs: unknown): CallToolArgs => {
     args: toolArgs as Record<string, unknown>,
     timeoutMs: timeoutMs as number | undefined,
   };
+};
+
+/**
+ * The deadline a call runs under: the tool's own (`clampTimeout` folds in the 10 s default for a
+ * tool that declares none), or a shorter one the caller asked for. Never longer: the `tool_call`
+ * frame carries no deadline, so the app stops the handler at the tool's own deadline whatever the
+ * daemon waits for (docs/PROTOCOL.md), and a longer caller deadline would only turn a clear
+ * `tool_timeout` into the same timeout after a retry that ran the tool again.
+ */
+export const resolveCallDeadline = (tool: ResolvedAppTool, requestedTimeoutMs: number | undefined): number => {
+  const toolDeadline = clampTimeout(tool.descriptor.timeout_ms);
+
+  if (requestedTimeoutMs !== undefined && requestedTimeoutMs > toolDeadline) {
+    throw new McpBuiltinToolError(
+      "invalid_request",
+      `"timeoutMs" can only shorten "${tool.descriptor.name}"'s own deadline of ${toolDeadline} ms: the app stops the tool at that deadline. Raising it takes a larger timeoutMs in the tool's registration.`,
+    );
+  }
+
+  return requestedTimeoutMs ?? toolDeadline;
 };
 
 export const resolveAppTool = async (

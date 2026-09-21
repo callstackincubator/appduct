@@ -466,8 +466,11 @@ proxies daemon RPC (auto-spawning the daemon like any client):
   `appduct_list_tools` (`appduct tools`: one-line signatures from `renderToolSignature`, each
   tool's effective policy, with `filter`/`limit`/`offset` passed through to `tools.list` and
   `limit` defaulting to 50), `appduct_describe_tool` (`appduct tools <name>`: the whole
-  descriptor), and `appduct_call_tool` (`appduct invoke`: `{ selector?, name, args?, timeoutMs? }`,
-  with `timeoutMs` rejected outside the daemon's 1000–600000 ms range rather than clamped). Each
+  descriptor), and `appduct_call_tool` (`appduct invoke`: `{ selector?, name, args?, timeoutMs? }`).
+  `timeoutMs` can only shorten the tool's own deadline, since the `tool_call` frame carries no
+  deadline and the app stops the handler at its declared one (`docs/PROTOCOL.md` §5); a longer value, or one outside
+  1000–600000 ms, is rejected rather than clamped. A client cancel that arrives while the consent
+  prompt is open stops the call before `tools.call`, even if the prompt is then accepted. Each
   takes the same `selector` as the CLI (alias or session id) and resolves it with
   `sessions.describe` first; every later daemon call for that request — `tools.list`,
   `tools.call`, the progress subscription, a cancel — names the session by **id**. The daemon
@@ -838,9 +841,11 @@ deviations):
   plain-object rule. The `jsonSchema` half of a pair and every converter result are held to
   that same rule, so the forms cannot diverge in what they will publish.
 
-  Separately from all of this, an **input schema should be object-typed at its root** to be
-  usable over MCP — a root `enum`/`const`/`$ref`/`anyOf` is legal JSON Schema but leaves the
-  agent with no named arguments (issue #34). This is documented, not enforced.
+  Separately from all of this, an **input schema has to accept a JSON object**, because
+  `tools.call`'s `args` always are one: a root `type` that rules an object out can never be
+  satisfied (issue #34), and the React Native SDK dev-warns about it. A root `anyOf`/`oneOf`/
+  `allOf` of objects is callable, though its signature renders as `(...)`. This is warned about,
+  not enforced.
 
   Every way a slot can end up with no shape — a missing exporter, an exporter that throws or
   returns a non-object, a paired converter that does either — takes the same route: throw in

@@ -20,7 +20,7 @@ An agent can only use a tool it can see the shape of, so every form below except
 
 A Standard Schema does not have to be a plain object: arktype's `Type` is callable, and is detected the same way (anything carrying `~standard.validate`).
 
-Whatever form you use, an **input schema must be object-typed at its root** to be callable over MCP — a root `enum`, `const`, `$ref`, or `anyOf` is legal JSON Schema but leaves the agent with no named arguments to pass.
+Whatever form you use, the **input schema must accept a JSON object**, because a call's arguments always are one — see [Make the input schema accept an object](#make-the-input-schema-accept-an-object).
 
 Appduct has no third-party runtime dependencies and does not bundle a JSON Schema validator, so a raw JSON Schema describes the tool for the agent but never enforces anything. Use a pair when you want both a real shape *and* real validation.
 

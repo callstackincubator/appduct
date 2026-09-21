@@ -278,7 +278,8 @@ is snake_case here like every other protocol-defined descriptor field, while the
 layers. A camelCase key on this descriptor is an unknown extra, not a deadline. It is the app's *explicit* per-tool value only —
 never an app-wide default such as `defaultToolTimeoutMs`. Older apps omit the field
 entirely and keep the daemon's 10 s default, so it is safe to add in either direction. It
-is a daemon-side scheduling hint and is never emitted on the MCP `Tool` JSON.
+is a daemon-side scheduling hint; agents see it through `appduct tools <name>` and
+`appduct_describe_tool`.
 
 ## 6. Session state machine
 
@@ -356,7 +357,7 @@ types also establish these details:
 - `link.create` also accepts `addressOverride` (forces the bootstrap payload's advertised
   address — used by the emulator/simulator fast path to force `127.0.0.1`).
 - `tools.call`'s result carries a `callId` alongside `result`, so a caller juggling
-  several in-flight calls (the MCP server proxying concurrent `tools/call` requests) can
+  several in-flight calls (the MCP server running concurrent `appduct_call_tool` requests) can
   match `tool_call_progress`/`tool_call_finished` events back to the call that produced
   them without guessing from data shape.
 - `tools.cancel({ selector?, callId, reason? })` sends `tool_cancel` (above) to the

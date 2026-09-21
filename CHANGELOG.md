@@ -19,12 +19,13 @@ package versions for a release.
   definitions to an agent's context, not hundreds. `appduct_list_tools` returns 50 tools at a time
   unless given `limit`. `selector` takes a session alias or id; a call is routed by session id, so
   it fails with `unknown_session` rather than reaching a new device that took over a departed
-  device's alias. Unknown parameters are rejected (`invalid_request`), and `timeoutMs` outside
-  1000–600000 is rejected rather than clamped. What goes away:
+  device's alias. Unknown parameters are rejected (`invalid_request`). `timeoutMs` can only
+  shorten the tool's own deadline, since the app stops a tool at its declared timeout; a longer
+  one, or one outside 1000–600000, is rejected rather than clamped. What goes away:
   - Calling an app tool by its own name through `tools/call`. It now returns `tool_not_found`,
     pointing at `appduct_list_tools` and `appduct_call_tool`.
   - `<alias>__<name>` namespacing. With several devices connected, pass `selector` (the
-    session alias) instead.
+    session alias or id) instead.
   - `notifications/tools/list_changed`, and the `listChanged` capability.
   - MCP-level `outputSchema` enforcement and schema degradation: schemas reach the agent as
     data through `appduct_describe_tool`, exactly as registered, whatever their root type. The
@@ -32,7 +33,8 @@ package versions for a release.
   - MCP client permission rules that named individual app tools (for example
     `mcp__appduct__seed_cart`) no longer match anything; the client's permission now covers
     `appduct_call_tool` as a whole, so "always allow" there approves every app tool. To keep a
-    person approving destructive calls, set `policy.destructive` to `"prompt"`. `"prompt"`-policy
+    person approving destructive calls, set `policy.destructive` to `"prompt"` (it covers tools
+    annotated `destructiveHint: true`). `"prompt"`-policy
     consent itself is unchanged: it is asked per call, via elicitation.
   - The React Native SDK's input-schema warning now fires only for a root `type` that rules out
     an object (`z.string()`, `z.array(...)`), not for unions or intersections of objects.
@@ -46,8 +48,9 @@ package versions for a release.
   the elicitation prompt instead; only a client that relied on the flag without supporting
   elicitation loses access. To fix that, use a client that supports elicitation, or set the tool's
   policy to `"allow"` in `config.json` — which removes the gate for every caller, including the
-  CLI — and restart the daemon (`appduct daemon stop`; the next command starts it again), since
-  `config.json` is read once at daemon start.
+  CLI — and restart the daemon (`appduct daemon stop`), since `config.json` is read once at daemon
+  start. The restart disconnects every device, which then has to link again, and a running
+  `appduct mcp` loses its daemon connection, so restart the MCP server in your client too.
   - A daemon with this change that receives `consent: "client"` from an older MCP server treats it
     as no consent, so the call is denied and audited as `no_consent_channel`.
   - `@appduct/shared`: `ToolsCallParams.consent` and the audit record's `consent` narrow to

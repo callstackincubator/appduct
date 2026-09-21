@@ -139,6 +139,10 @@ export type SessionsRevokeResult = { ok: true };
 
 // --- tools.list / tools.call ---
 
+/** `tools.list`'s `filter` string cap (ARCHITECTURE.md §5) — generous for a name/description
+ * substring search, small enough that a malicious/buggy caller can't use it to bloat a request. */
+export const MAX_TOOLS_FILTER_LENGTH = 256;
+
 export type ToolsListParams = SessionSelectorParams & {
   /** Case-insensitive substring match against name and description. */
   filter?: string;
@@ -197,7 +201,7 @@ export type ToolsCallResult = {
   result: unknown;
   /** The `tool_call`/`tool_call_progress`/`tool_call_finished` correlation id (ARCHITECTURE.md
    * §7's `call_…` id), exposed so a caller with several in-flight `tools.call`s (e.g. the MCP
-   * server proxying concurrent `tools/call` requests) can match its own call to the progress events
+   * server running concurrent `appduct_call_tool` requests) can match its own call to the progress events
    * it sees on `events.subscribe` without guessing from data shape. */
   callId: string;
 };

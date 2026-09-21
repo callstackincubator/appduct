@@ -274,3 +274,22 @@ export const renderToolSignature = (
     return `${name}(...)`;
   }
 };
+
+/** The listing's per-tool summary length, in code points. The full description (up to
+ * `MAX_TOOL_DESCRIPTION_LENGTH`) stays available from a single-tool lookup. */
+export const MAX_TOOL_SUMMARY_LENGTH = 120;
+
+/**
+ * A tool description's first line, for a listing (`appduct tools`, `appduct_list_tools`): any line
+ * break ends it (`\r` alone included), remaining control characters are dropped since the text is
+ * app-supplied and may be printed straight to a terminal, and it is capped at
+ * {@link MAX_TOOL_SUMMARY_LENGTH} code points, never cut through a surrogate pair.
+ */
+export const summarizeToolDescription = (description: string): string => {
+  const firstLine = (description.split(/\r\n|[\n\r\u2028\u2029]/u)[0] ?? "").replace(/\p{Cc}/gu, "").trim();
+  const codePoints = Array.from(firstLine);
+
+  return codePoints.length > MAX_TOOL_SUMMARY_LENGTH
+    ? `${codePoints.slice(0, MAX_TOOL_SUMMARY_LENGTH).join("")}…`
+    : firstLine;
+};

@@ -32,7 +32,7 @@ import {
 import { RPC_METHODS, type EventNotification, type SessionsListResult, type ToolsCallResult } from "@appduct/shared";
 
 import type { ExecFn } from "../cli/open-target.js";
-import { clampTimeout, deriveCallTransportTimeoutMs } from "../daemon/calls.js";
+import { deriveCallTransportTimeoutMs } from "../daemon/calls.js";
 import { getPackageVersion } from "../package-version.js";
 import {
   DaemonRpcError,
@@ -53,6 +53,7 @@ import {
   LIST_TOOLS_TOOL_NAME,
   parseCallToolArgs,
   resolveAppTool,
+  resolveCallDeadline,
   type ResolvedAppTool,
 } from "./app-tools.js";
 import {
@@ -372,17 +373,24 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
     // `callId` to cancel by until it has already resolved.
     signal: AbortSignal,
   ): Promise<unknown> => {
+    // The deadline this call runs under, resolved once (from the `tools.list` snapshot the tool was
+    // matched against, or a shorter one the caller asked for) and sent explicitly rather than left
+    // to the daemon's `?? tool.timeout_ms` fallback, so the watchdog below can never be sized off a
+    // different read: the daemon consults its live registry, which a re-registration between that
+    // snapshot and this call could have moved, and a watchdog built for the older value would fire
+    // first and mask the daemon's real `tool_timeout` (issue #25). Checked before consent, so a
+    // bad `timeoutMs` never costs the user a prompt.
+    const timeoutMs = resolveCallDeadline(tool, requestedTimeoutMs);
+    const transportTimeoutMs = deriveCallTransportTimeoutMs(timeoutMs);
+
     const consent = await resolveToolCallConsent(tool, args);
 
-    // The deadline this call runs under, resolved once (the caller's override, else the deadline
-    // from the `tools.list` snapshot the tool was matched against) and sent explicitly rather than
-    // left to the daemon's `?? tool.timeout_ms` fallback. `clampTimeout` folds in the 10 s default
-    // for a tool that declares nothing, so there is exactly one number here and the watchdog below
-    // can never be sized off a different read: the daemon consults its live registry, which a
-    // re-registration between that snapshot and this call could have moved, and a watchdog built
-    // for the older value would fire first and mask the daemon's real `tool_timeout` (issue #25).
-    const timeoutMs = clampTimeout(requestedTimeoutMs ?? tool.descriptor.timeout_ms);
-    const transportTimeoutMs = deriveCallTransportTimeoutMs(timeoutMs);
+    // The consent prompt can stay open for minutes, and the client may cancel the request while it
+    // does. Nothing has reached the app yet, so a cancel that arrived in the meantime must stop the
+    // call here — otherwise a user accepting a stale prompt would run a call its client gave up on.
+    if (signal.aborted) {
+      throw new McpBuiltinToolError("tool_cancelled", `The call to "${tool.descriptor.name}" was cancelled before it started.`);
+    }
 
     if (progressToken === undefined) {
       const result = await stream.call<ToolsCallResult>(
@@ -401,10 +409,13 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
       return result.result;
     }
 
-    // A dedicated connection carries only this one in-flight `tools.call`, so the first
-    // `tool_call_started` it sees for this tool name is unambiguously this call — the daemon only
-    // reveals `callId` once the call is already in flight (ARCHITECTURE.md §5's `ToolsCallResult`
-    // doc comment), so this is the only way to correlate it before the call finishes.
+    // A dedicated connection carries only this one in-flight `tools.call`, and the first
+    // `tool_call_started` it sees for this tool name on this session is taken to be this call — the
+    // daemon only reveals `callId` once the call is already in flight (ARCHITECTURE.md §5's
+    // `ToolsCallResult` doc comment), so this is the only way to correlate it before the call
+    // finishes. It is not airtight: two concurrent calls of the same tool on the same session (two
+    // agents, or MCP and the CLI) can each take the other's `callId`, and then progress and a cancel
+    // go to the wrong call.
     const progressStream = await openStream({ stateDir: options.stateDir, spawn: options.spawn });
 
     try {
@@ -414,7 +425,8 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
       });
 
       let callId: string | undefined;
-      let cancelRequested = signal.aborted;
+      // Re-read: the signal can abort while the progress stream above was opening.
+      let cancelRequested: boolean = signal.aborted;
 
       const maybeCancel = (): void => {
         if (callId === undefined || !cancelRequested) {
