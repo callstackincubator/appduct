@@ -16,7 +16,11 @@ package versions for a release.
   `appduct_describe_tool` (one tool's full schema, like `appduct tools <name>`) and
   `appduct_call_tool` (`{ selector?, name, args?, timeoutMs? }`, like `appduct invoke`).
   `tools/list` is now a fixed set of built-ins, so an app with hundreds of tools adds three
-  definitions to an agent's context, not hundreds. What goes away:
+  definitions to an agent's context, not hundreds. `appduct_list_tools` returns 50 tools at a time
+  unless given `limit`. `selector` takes a session alias or id; a call is routed by session id, so
+  it fails with `unknown_session` rather than reaching a new device that took over a departed
+  device's alias. Unknown parameters are rejected (`invalid_request`), and `timeoutMs` outside
+  1000–600000 is rejected rather than clamped. What goes away:
   - Calling an app tool by its own name through `tools/call`. It now returns `tool_not_found`,
     pointing at `appduct_list_tools` and `appduct_call_tool`.
   - `<alias>__<name>` namespacing. With several devices connected, pass `selector` (the
@@ -24,11 +28,15 @@ package versions for a release.
   - `notifications/tools/list_changed`, and the `listChanged` capability.
   - MCP-level `outputSchema` enforcement and schema degradation: schemas reach the agent as
     data through `appduct_describe_tool`, exactly as registered, whatever their root type. The
-    React Native SDK no longer warns about non-object output schemas; it still warns about a
-    non-object input schema, since a call's args are always a JSON object.
+    React Native SDK no longer warns about non-object output schemas.
   - MCP client permission rules that named individual app tools (for example
-    `mcp__appduct__seed_cart`) no longer match anything; they now apply to `appduct_call_tool`
-    as a whole. `"prompt"`-policy consent is unchanged: it is asked per call, via elicitation.
+    `mcp__appduct__seed_cart`) no longer match anything; the client's permission now covers
+    `appduct_call_tool` as a whole, so "always allow" there approves every app tool. To keep a
+    person approving destructive calls, set `policy.destructive` to `"prompt"`. `"prompt"`-policy
+    consent itself is unchanged: it is asked per call, via elicitation.
+  - The React Native SDK's input-schema warning now fires only for a root `type` that rules out
+    an object (`z.string()`, `z.array(...)`), not for unions or intersections of objects.
+  - `@appduct/shared` no longer exports `isObjectRootedSchema`.
 
 - **Breaking (MCP): `"prompt"`-policy consent is elicitation-only.** The Claude Code-specific
   fallback is gone: `tools/list` no longer emits `_meta["anthropic/requiresUserInteraction"]`, and

@@ -319,6 +319,32 @@ describe("mcp: calling app tools", () => {
     app.socket.close();
   }, 45_000);
 
+  test("appduct_list_tools passes filter/limit/offset to the real daemon, which rejects bad values as it does for the CLI", async () => {
+    const { daemon, stateDir, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+    await snapshotTools(daemon, app, [{ name: "cart_add" }, { name: "cart_clear" }, { name: "login" }]);
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const page = await client.request(
+      { method: "tools/call", params: { name: "appduct_list_tools", arguments: { filter: "cart", limit: 1 } } },
+      CallToolResultSchema,
+    );
+    expect(page.structuredContent).toMatchObject({ total: 2, limit: 1, tools: [{ name: "cart_add" }] });
+
+    for (const bad of [{ limit: 0 }, { offset: -1 }, { limit: 1.5 }]) {
+      const rejected = await client.request(
+        { method: "tools/call", params: { name: "appduct_list_tools", arguments: bad } },
+        CallToolResultSchema,
+      );
+      expect(rejected.isError).toBe(true);
+      expect((rejected.content[0] as { text: string }).text).toContain("invalid_request");
+    }
+
+    app.socket.close();
+  });
+
   test("tool_call_progress frames map to MCP progress notifications when the client sends a progressToken", async () => {
     const { daemon, stateDir, port } = await startTestDaemon();
     const app = await claimApp(daemon, port);
@@ -387,7 +413,7 @@ describe("mcp: calling app tools", () => {
         { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "slow", args: {} } } },
         CallToolResultSchema,
         // `onprogress` is what makes the SDK attach a progressToken — required for the server's
-        // progress-correlation path (mcp/server.ts's callProxiedTool) to ever learn `callId`.
+        // progress-correlation path (mcp/server.ts's callAppTool) to ever learn `callId`.
         { onprogress: () => {}, signal: controller.signal },
       )
       .catch(() => {

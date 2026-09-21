@@ -11,6 +11,8 @@
  */
 
 import {
+  MAX_TOOL_TIMEOUT_MS,
+  MIN_TOOL_TIMEOUT_MS,
   RPC_METHODS,
   renderToolSignature,
   type EffectivePolicyDecision,
@@ -27,6 +29,10 @@ export const LIST_TOOLS_TOOL_NAME = "appduct_list_tools";
 export const DESCRIBE_TOOL_TOOL_NAME = "appduct_describe_tool";
 export const CALL_TOOL_TOOL_NAME = "appduct_call_tool";
 
+/** Applied when `appduct_list_tools` gets no `limit`, so the first call on a large app returns a
+ * page, not the whole registry; `total` tells the agent how much it left out. */
+export const DEFAULT_LIST_TOOLS_LIMIT = 50;
+
 const SELECTOR_PROPERTY = {
   type: "string",
   description: "Session alias or id. Omit to target the sole active/suspended session.",
@@ -38,8 +44,9 @@ export const LIST_TOOLS_TOOL_DESCRIPTOR = {
     "List the tools the connected app registered, as one-line signatures " +
     "(`name(param: type, optional?: type) -> result`) with the first line of each description " +
     "and the tool's effective policy. Start here: the app's tools are not MCP tools of their own. " +
-    "filter is a case-insensitive substring match on name and description; limit/offset page the " +
-    "name-sorted list, and total counts every match before paging. Use appduct_describe_tool for " +
+    "filter is a case-insensitive substring match on name and description; limit (default " +
+    `${DEFAULT_LIST_TOOLS_LIMIT}) and offset page the name-sorted list, and total counts every ` +
+    "match before paging, so page on with offset when total is larger. Use appduct_describe_tool for " +
     "one tool's full input/output schema, then appduct_call_tool to run it. A tool with policy " +
     '"prompt" asks the user to approve each call; one with policy "deny" cannot be called.',
   inputSchema: {
@@ -76,7 +83,8 @@ export const CALL_TOOL_TOOL_DESCRIPTOR = {
   description:
     "Call one of the connected app's tools by name. args must match the tool's input_schema " +
     "(see appduct_describe_tool); omit it for a tool that takes no input. timeoutMs overrides the " +
-    "tool's declared deadline. Returns the tool's result as JSON. A tool with policy \"prompt\" " +
+    `tool's declared deadline (timeout_ms), in milliseconds from ${MIN_TOOL_TIMEOUT_MS} to ` +
+    `${MAX_TOOL_TIMEOUT_MS}. Returns the tool's result as JSON. A tool with policy \"prompt\" ` +
     "asks the user to approve the call first, and fails if they decline or this client cannot ask.",
   inputSchema: {
     type: "object",
@@ -84,7 +92,7 @@ export const CALL_TOOL_TOOL_DESCRIPTOR = {
       selector: SELECTOR_PROPERTY,
       name: { type: "string" },
       args: { type: "object" },
-      timeoutMs: { type: "number", exclusiveMinimum: 0 },
+      timeoutMs: { type: "integer", minimum: MIN_TOOL_TIMEOUT_MS, maximum: MAX_TOOL_TIMEOUT_MS },
     },
     required: ["name"],
     additionalProperties: false,
@@ -92,13 +100,17 @@ export const CALL_TOOL_TOOL_DESCRIPTOR = {
 } as const;
 
 /** One app tool resolved against a live session, with everything `appduct_call_tool` needs to
- * run it: the session alias the call and its progress subscription target, the descriptor (for its
- * name and declared deadline), and the effective policy (for whether to ask for consent). */
+ * run it: the session id the call, its progress subscription and any cancel are routed by, the
+ * alias shown to people, the descriptor (for its name and declared deadline), and the effective
+ * policy (for whether to ask for consent). */
 export type ResolvedAppTool = {
-  selector: string;
+  sessionId: string;
+  alias: string;
   descriptor: ToolDescriptor;
   policy: EffectivePolicyDecision;
 };
+
+type ResolvedSession = { sessionId: string; alias: string };
 
 export type CallToolArgs = {
   selector?: string;
@@ -115,8 +127,24 @@ const asRecord = (value: unknown): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 
+/** Every key an agent sends must be one the tool declares. A misspelled key (`arguments` for
+ * `args`, `timeout_ms` for `timeoutMs`) would otherwise be dropped silently, and the tool would run
+ * without what the agent meant to pass. */
+const rejectUnknownKeys = (args: Record<string, unknown>, tool: string, allowed: readonly string[]): void => {
+  const unknown = Object.keys(args).filter((key) => !allowed.includes(key));
+
+  if (unknown.length > 0) {
+    throw new McpBuiltinToolError(
+      "invalid_request",
+      `${tool} does not take ${unknown.map((key) => `"${key}"`).join(", ")}. It takes: ${allowed.join(", ")}.`,
+    );
+  }
+};
+
+/** `null` counts as absent for every optional field: some clients fill unset optional
+ * parameters with `null` rather than leaving them out. */
 const asOptionalString = (value: unknown, field: string): string | undefined => {
-  if (value === undefined) {
+  if (value === undefined || value === null) {
     return undefined;
   }
 
@@ -154,47 +182,51 @@ const firstLine = (description: string): string => {
   return description.split(/\r\n|[\n\r\u2028\u2029]/u)[0] ?? "";
 };
 
-/** Resolves `selector` to a concrete session alias first, so every result names the session it
- * came from and a call's progress subscription targets the same session as the call itself. The
- * daemon's own errors (`no_session`, `ambiguous_session`, `unknown_session`) pass through as-is. */
-const resolveSessionAlias = async (call: DaemonCall, selector: string | undefined): Promise<string> => {
+/** Resolves `selector` (an alias, a session id, or nothing) to one concrete session first, with
+ * the daemon's own rules and errors (`no_session`, `ambiguous_session`, `unknown_session`).
+ * Everything after that is routed by the **session id**, never the alias: the daemon frees an
+ * alias when a session ends and gives it to the next device of the same model, so routing by alias
+ * could land a call — one the user may already have approved — on a different device. If the
+ * session goes away mid-call, the next daemon call fails with `unknown_session` instead. */
+const resolveSession = async (call: DaemonCall, selector: string | undefined): Promise<ResolvedSession> => {
   const session = await call<SessionsDescribeResult>(RPC_METHODS.sessionsDescribe, { selector });
-  return session.alias;
+  return { sessionId: session.sessionId, alias: session.alias };
 };
 
 const findTool = async (call: DaemonCall, selector: string | undefined, name: string) => {
-  const alias = await resolveSessionAlias(call, selector);
+  const session = await resolveSession(call, selector);
   // The whole registry, never a filtered page, so a name lookup cannot miss a tool that paging
   // would have left out.
-  const { tools } = await call<ToolsListResult>(RPC_METHODS.toolsList, { selector: alias });
+  const { tools } = await call<ToolsListResult>(RPC_METHODS.toolsList, { selector: session.sessionId });
   const entry = tools.find((tool) => tool.name === name);
 
   if (!entry) {
     throw new McpBuiltinToolError(
       "tool_not_found",
-      `Tool "${name}" is not registered on session "${alias}". Use ${LIST_TOOLS_TOOL_NAME} (optionally with filter) to find it.`,
+      `Tool "${name}" is not registered on session "${session.alias}". Use ${LIST_TOOLS_TOOL_NAME} (optionally with filter) to find it.`,
     );
   }
 
-  return { alias, entry };
+  return { session, entry };
 };
 
 export const handleListToolsTool = async (rawArgs: unknown, call: DaemonCall) => {
   const args = asRecord(rawArgs);
+  rejectUnknownKeys(args, LIST_TOOLS_TOOL_NAME, ["selector", "filter", "limit", "offset"]);
   const selector = asOptionalString(args.selector, "selector");
-  const alias = await resolveSessionAlias(call, selector);
+  const session = await resolveSession(call, selector);
 
   // `filter`/`limit`/`offset` are validated by the daemon, which rejects a bad value with
   // `invalid_request` exactly as it does for the CLI.
   const params = {
-    ...(args.filter !== undefined ? { filter: args.filter } : {}),
-    ...(args.limit !== undefined ? { limit: args.limit } : {}),
-    ...(args.offset !== undefined ? { offset: args.offset } : {}),
+    ...(args.filter !== undefined && args.filter !== null ? { filter: args.filter } : {}),
+    limit: args.limit ?? DEFAULT_LIST_TOOLS_LIMIT,
+    ...(args.offset !== undefined && args.offset !== null ? { offset: args.offset } : {}),
   };
-  const result = await call<ToolsListResult>(RPC_METHODS.toolsList, { selector: alias, ...params });
+  const result = await call<ToolsListResult>(RPC_METHODS.toolsList, { selector: session.sessionId, ...params });
 
   return {
-    session: alias,
+    session: session.alias,
     total: result.total,
     ...params,
     tools: result.tools.map((entry) => ({
@@ -209,12 +241,13 @@ export const handleListToolsTool = async (rawArgs: unknown, call: DaemonCall) =>
 
 export const handleDescribeToolTool = async (rawArgs: unknown, call: DaemonCall) => {
   const args = asRecord(rawArgs);
+  rejectUnknownKeys(args, DESCRIBE_TOOL_TOOL_NAME, ["selector", "name"]);
   const selector = asOptionalString(args.selector, "selector");
   const name = asRequiredString(args.name, "name");
-  const { alias, entry } = await findTool(call, selector, name);
+  const { session, entry } = await findTool(call, selector, name);
 
   return {
-    session: alias,
+    session: session.alias,
     signature: renderToolSignature(entry),
     policy: entry.policy,
     ...toDescriptor(entry),
@@ -223,18 +256,30 @@ export const handleDescribeToolTool = async (rawArgs: unknown, call: DaemonCall)
 
 export const parseCallToolArgs = (rawArgs: unknown): CallToolArgs => {
   const args = asRecord(rawArgs);
+  rejectUnknownKeys(args, CALL_TOOL_TOOL_NAME, ["selector", "name", "args", "timeoutMs"]);
   const selector = asOptionalString(args.selector, "selector");
   const name = asRequiredString(args.name, "name");
   const toolArgs = args.args ?? {};
 
-  if (typeof toolArgs !== "object" || toolArgs === null || Array.isArray(toolArgs)) {
+  if (typeof toolArgs !== "object" || Array.isArray(toolArgs)) {
     throw new McpBuiltinToolError("invalid_request", '"args" must be an object.');
   }
 
-  const timeoutMs = args.timeoutMs;
+  const timeoutMs = args.timeoutMs ?? undefined;
 
-  if (timeoutMs !== undefined && (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
-    throw new McpBuiltinToolError("invalid_request", '"timeoutMs" must be a positive number.');
+  // Rejected rather than clamped: the daemon would silently clamp an out-of-range deadline, and
+  // an agent that asked for an hour should learn it gets ten minutes before the call starts.
+  if (
+    timeoutMs !== undefined &&
+    (typeof timeoutMs !== "number" ||
+      !Number.isInteger(timeoutMs) ||
+      timeoutMs < MIN_TOOL_TIMEOUT_MS ||
+      timeoutMs > MAX_TOOL_TIMEOUT_MS)
+  ) {
+    throw new McpBuiltinToolError(
+      "invalid_request",
+      `"timeoutMs" must be an integer number of milliseconds from ${MIN_TOOL_TIMEOUT_MS} to ${MAX_TOOL_TIMEOUT_MS}.`,
+    );
   }
 
   return {
@@ -250,6 +295,6 @@ export const resolveAppTool = async (
   selector: string | undefined,
   name: string,
 ): Promise<ResolvedAppTool> => {
-  const { alias, entry } = await findTool(call, selector, name);
-  return { selector: alias, descriptor: toDescriptor(entry), policy: entry.policy };
+  const { session, entry } = await findTool(call, selector, name);
+  return { ...session, descriptor: toDescriptor(entry), policy: entry.policy };
 };

@@ -135,7 +135,7 @@ mirror the CLI:
    `appduct tools <name>`).
 3. `appduct_call_tool({ name, args })` runs it (like `appduct invoke`).
 
-With more than one device connected, pass `selector` (the session alias) to each of them. A
+With more than one device connected, pass `selector` (the session alias or id) to each of them. A
 tool with policy `"prompt"` asks the user to approve every call; if the user declines, don't
 retry it on your own.
 
@@ -205,9 +205,10 @@ A bare Zod 3 / plain valibot schema (Standard Schema, no exporter) **throws in `
 it would otherwise register a shapeless tool that `appduct tools` reports as taking any
 object. Pair it, or pass raw JSON Schema.
 
-An input schema must be **object-typed at its root** to be callable, since a call's args
-are always a JSON object: a root `enum`, `const`, `$ref` or `anyOf` is legal JSON Schema
-but gives the agent no named arguments to pass (issue #34).
+An input schema must **accept a JSON object**, since a call's args always are one: a root
+`type` of string, number or array can never be satisfied (issue #34). A root `anyOf`/`oneOf`
+of objects works, but its signature shows as `(...)`, so read the full schema
+(`appduct tools <name>`) before calling it.
 
 ## Notes
 

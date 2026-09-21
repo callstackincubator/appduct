@@ -3,19 +3,18 @@
  * are about the MCP server and nothing else.
  *
  * `createMcpServer` talks to the daemon only through `DaemonStream` (`rpc/client.ts`), which is
- * four functions: `call`, `onNotification`, `onClose`, `close`. Name mapping, output-schema
- * degradation, `<alias>__<name>` namespacing and `list_changed` are decided entirely from what
- * comes back over those four — a real daemon adds a pidfile, a self-signed certificate, a wss
- * listener and a scripted app on a WebSocket, none of which any of those behaviours depends on,
- * and all of which can fail on their own. The cases that genuinely exercise the real transport
- * (progress correlation over a second stream, cancellation, real policy denial) still run against
- * a real daemon in `mcp-server.integration.test.ts`.
+ * four functions: `call`, `onNotification`, `onClose`, `close`. The built-in tools' behaviour is
+ * decided entirely from what comes back over those four — a real daemon adds a pidfile, a
+ * self-signed certificate, a wss listener and a scripted app on a WebSocket, none of which that
+ * behaviour depends on, and all of which can fail on their own. The cases that genuinely exercise
+ * the real transport (progress correlation over a second stream, cancellation, real policy denial)
+ * still run against a real daemon in `mcp-server.integration.test.ts`.
  *
- * This fake answers the four methods the server actually calls — `sessions.list`, `tools.list`,
- * `tools.call`, `events.subscribe` — and can push `event` notifications, which is how
- * `list_changed` is driven. Anything else throws, loudly, rather than returning a plausible
- * nothing: a silently-answered method the server did not expect would make a test pass for the
- * wrong reason.
+ * This fake answers the methods the server actually calls — `sessions.list`, `sessions.describe`,
+ * `tools.list`, `tools.call`, `events.subscribe` — resolving selectors by alias or session id with
+ * the daemon's own rules, and can push `event` notifications. It does not validate params the way
+ * the daemon does. Anything else throws, loudly, rather than returning a plausible nothing: a
+ * silently-answered method the server did not expect would make a test pass for the wrong reason.
  */
 
 import {
@@ -213,7 +212,7 @@ export const createFakeDaemon = (): FakeDaemon => {
           name: string;
           args: Record<string, unknown>;
         };
-        const handler = selector === undefined ? undefined : handlersByAlias.get(selector)?.get(name);
+        const handler = handlersByAlias.get(resolveSession(selector).alias)?.get(name);
 
         if (!handler) {
           throw toolError("tool_not_found", `Tool "${name}" is not registered.`);

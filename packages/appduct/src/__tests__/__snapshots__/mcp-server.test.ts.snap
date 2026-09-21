@@ -17,8 +17,9 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
           "type": "string",
         },
         "timeoutMs": {
-          "exclusiveMinimum": 0,
-          "type": "number",
+          "maximum": 600000,
+          "minimum": 1000,
+          "type": "integer",
         },
       },
       "required": [

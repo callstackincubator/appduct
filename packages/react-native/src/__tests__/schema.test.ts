@@ -837,7 +837,7 @@ describe("toToolDescriptor: non-object-rooted schemas", () => {
     ["discriminated-union-input", "oneOf"],
     ["intersection-input", "allOf"],
   ])(
-    "a %s export (%s, no root type) warns even though every branch is an object",
+    "a %s export (%s, no root type) stays silent: its branches can be objects",
     (toolName, keyword) => {
       const warnings = withWarningsCaptured(() => {
         toToolDescriptor({
@@ -848,6 +848,28 @@ describe("toToolDescriptor: non-object-rooted schemas", () => {
               { [keyword]: [{ type: "object" }, { type: "object" }] },
               objectShape,
             ),
+            "l",
+          ),
+        });
+      });
+
+      expect(warningsMentioning(warnings, toolName)).toEqual([]);
+    },
+  );
+
+  test.each([
+    ["array-input", { type: "array", items: { type: "string" } }],
+    ["number-input", { type: "number" }],
+    ["nullable-string-input", { type: ["string", "null"] }],
+  ])(
+    "a %s root that rules out an object warns",
+    (toolName, schema) => {
+      const warnings = withWarningsCaptured(() => {
+        toToolDescriptor({
+          name: toolName,
+          description: "d",
+          inputSchema: normalizeToolSchema(
+            withExportedShape(schema, objectShape),
             "l",
           ),
         });

@@ -231,9 +231,8 @@ const renderParamEntry = (
 
 /** The `(...)` params group. An absent `input_schema` is `()`: the SDKs omit it for a tool that
  * takes no input. Unlike {@link renderObjectType}, a present `input_schema` not rooted at
- * `type: "object"` is always `(...)` — a call's args are always a JSON object
- * (`tool-descriptor.ts`'s `isObjectRootedSchema`), so anything else means this renderer cannot
- * describe the call's arguments, not that there are none. */
+ * `type: "object"` is always `(...)` — a call's args are always a JSON object, so anything else
+ * means this renderer cannot describe the call's arguments, not that there are none. */
 const renderParams = (inputSchema: ToolSchemaDescriptor | undefined): string => {
   if (inputSchema === undefined) {
     return "()";

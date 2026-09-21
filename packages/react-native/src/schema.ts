@@ -1,6 +1,5 @@
 import {
   clampToolTimeoutMs,
-  isObjectRootedSchema,
   MAX_TOOL_TIMEOUT_MS,
   MIN_TOOL_TIMEOUT_MS,
   type StandardSchemaV1,
@@ -77,13 +76,26 @@ const nonObjectInputWarningsSeen = new Set<string>();
 
 /**
  * A tool call always carries its `args` as a JSON object (the daemon rejects anything else), so an
- * input schema rooted at anything other than `type: "object"` (`z.string`, `z.array`, a
- * `z.union`'s `anyOf`, a `z.discriminatedUnion`'s `oneOf` or a `z.intersection`'s `allOf` — the
- * last two even when every branch is an object) can never be satisfied by a call. Warn at
- * registration time so an app author learns it here rather than from an agent. The tool is still
- * registered, and the descriptor still carries the schema as exported. An output schema has no such
- * constraint: a result can be any JSON value.
+ * input schema whose root `type` rules an object out (`z.string`, `z.number`, `z.array`, ...) can
+ * never be satisfied by a call. Warn at registration time so an app author learns it here rather
+ * than from an agent. The tool is still registered, and the descriptor still carries the schema as
+ * exported.
+ *
+ * A schema with no root `type` — a `z.union`'s `anyOf`, a `z.discriminatedUnion`'s `oneOf`, a
+ * `z.intersection`'s `allOf` — is left alone: its branches can be objects, and args are validated
+ * app-side by the schema itself. An output schema has no constraint at all: a result can be any
+ * JSON value.
  */
+const rulesOutObjectArgs = (schema: ToolSchemaDescriptor): boolean => {
+  const { type } = schema;
+
+  if (typeof type === "string") {
+    return type !== "object";
+  }
+
+  return Array.isArray(type) && !type.includes("object");
+};
+
 const warnNonObjectRootedInputSchema = (
   toolName: string,
   schema: ToolSchemaDescriptor,
@@ -545,7 +557,7 @@ export const toToolDescriptor = (
     definition.name,
   );
 
-  if (inputSchema !== undefined && !isObjectRootedSchema(inputSchema)) {
+  if (inputSchema !== undefined && rulesOutObjectArgs(inputSchema)) {
     warnNonObjectRootedInputSchema(definition.name, inputSchema);
   }
 

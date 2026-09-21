@@ -464,11 +464,17 @@ proxies daemon RPC (auto-spawning the daemon like any client):
 - `tools/list` is a fixed set of built-in tools. The app's tools are never listed as MCP
   tools of their own; an agent reaches them through three built-ins that mirror the CLI (§10):
   `appduct_list_tools` (`appduct tools`: one-line signatures from `renderToolSignature`, each
-  tool's effective policy, with `filter`/`limit`/`offset` passed through to `tools.list`),
-  `appduct_describe_tool` (`appduct tools <name>`: the whole descriptor), and
-  `appduct_call_tool` (`appduct invoke`: `{ selector?, name, args?, timeoutMs? }`). Each takes
-  the same `selector` as the CLI and resolves it with `sessions.describe` first, so results name
-  the session by alias and a call's progress subscription targets the same session as the call.
+  tool's effective policy, with `filter`/`limit`/`offset` passed through to `tools.list` and
+  `limit` defaulting to 50), `appduct_describe_tool` (`appduct tools <name>`: the whole
+  descriptor), and `appduct_call_tool` (`appduct invoke`: `{ selector?, name, args?, timeoutMs? }`,
+  with `timeoutMs` rejected outside the daemon's 1000–600000 ms range rather than clamped). Each
+  takes the same `selector` as the CLI (alias or session id) and resolves it with
+  `sessions.describe` first; every later daemon call for that request — `tools.list`,
+  `tools.call`, the progress subscription, a cancel — names the session by **id**. The daemon
+  gives a departed session's alias to the next device of the same model, so routing by alias
+  could run a call, one the user may already have approved, on a different device; by id it fails
+  with `unknown_session` instead. Results name the session by alias. Unknown parameters are
+  rejected with `invalid_request` rather than dropped, and `null` counts as absent.
   A registry of hundreds of tools therefore costs a client three tool definitions, and nothing
   about the registry or the session set changes `tools/list`: the server advertises no
   `listChanged` capability and never sends `notifications/tools/list_changed`. Schemas travel as
@@ -988,6 +994,7 @@ named-pipe path `\\.\pipe\appduct-<user>` behind the same client API.
   pin sets; the anchor-CA design is a future option).
 - Web/browser client (safe no-op stub only).
 - Multiple endpoint candidates in the bootstrap payload.
-- A tool whose `input_schema` is not object-rooted is listed but not usefully callable, because
-  `tools.call`'s `args` are always a JSON object (§5). Wrapping such arguments so the tool stays
-  callable is tracked in [issue #34](https://github.com/callstackincubator/appduct/issues/34).
+- A tool whose `input_schema` root `type` rules out an object (`"string"`, `"array"`, ...) is
+  listed but not callable, because `tools.call`'s `args` are always a JSON object (§5). Wrapping
+  such arguments so the tool stays callable is tracked in
+  [issue #34](https://github.com/callstackincubator/appduct/issues/34).

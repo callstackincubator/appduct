@@ -352,7 +352,10 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   `policy.tools["<alias>/<name>"]` overrides) to `"deny"` for anything you don't want an
   arbitrary caller invoking against a production build. Every `tools.call` — CLI, MCP, and
   `appduct/client` alike — is evaluated against this before it ever reaches the app;
-  a denial returns `policy_denied` and never sends a `tool_call` frame. `"prompt"` requires a human gate
+  a denial returns `policy_denied` and never sends a `tool_call` frame. Over MCP, the client's own
+  permission prompt covers `appduct_call_tool` as a whole rather than each app tool, so an operator
+  who "always allows" it has approved every app tool; `policy.destructive: "prompt"` is how to keep
+  a human approving each destructive call. `"prompt"` requires a human gate
   and fails closed everywhere one can't be guaranteed: today the only implemented gate
   is an MCP client that declares the `elicitation` capability, which receives an
   `elicitation/create` prompt for each call; the CLI and every other client are denied outright

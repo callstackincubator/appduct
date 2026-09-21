@@ -160,6 +160,7 @@ describe("mcp: appduct_list_tools", () => {
     expect(result.structuredContent).toEqual({
       session: "pixel-8",
       total: 2,
+      limit: 50,
       tools: [
         { name: "echo", signature: "echo()", summary: "Echoes its input.", policy: "allow" },
         {
@@ -191,7 +192,7 @@ describe("mcp: appduct_list_tools", () => {
       tools: [{ name: "cart_clear" }],
     });
     expect(daemon.calls().filter((call) => call.method === RPC_METHODS.toolsList).at(-1)?.params).toEqual({
-      selector: "pixel-8",
+      selector: "session-pixel-8",
       filter: "CART",
       limit: 1,
       offset: 1,
@@ -218,17 +219,39 @@ describe("mcp: appduct_list_tools", () => {
     expect(byId.structuredContent).toMatchObject({ session: "iphone-15", tools: [{ name: "ios_only" }] });
   });
 
+  test("without a limit, returns the first 50 and a total that says how many more there are", async () => {
+    const daemon = createFakeDaemon();
+    daemon
+      .addSession({ alias: "pixel-8" })
+      .setTools(Array.from({ length: 60 }, (_, index) => ({ name: `tool_${String(index).padStart(2, "0")}` })));
+
+    const client = await startServerWithClient(daemon);
+    const result = await callBuiltin(client, "appduct_list_tools", {});
+    const listing = result.structuredContent as { total: number; limit: number; tools: unknown[] };
+
+    expect(listing.total).toBe(60);
+    expect(listing.limit).toBe(50);
+    expect(listing.tools).toHaveLength(50);
+  });
+
   test("with no session at all, says so", async () => {
     const client = await startServerWithClient(createFakeDaemon());
     expect(errorText(await callBuiltin(client, "appduct_list_tools", {}))).toContain("no_session");
   });
 
-  test("an empty selector is an invalid request", async () => {
+  test("an empty selector or an unknown key is an invalid request; null optional fields count as absent", async () => {
     const daemon = createFakeDaemon();
-    daemon.addSession({ alias: "pixel-8" });
+    daemon.addSession({ alias: "pixel-8" }).setTools([{ name: "echo" }]);
 
     const client = await startServerWithClient(daemon);
     expect(errorText(await callBuiltin(client, "appduct_list_tools", { selector: "" }))).toContain("invalid_request");
+
+    const unknownKey = errorText(await callBuiltin(client, "appduct_list_tools", { search: "echo" }));
+    expect(unknownKey).toContain("invalid_request");
+    expect(unknownKey).toContain('"search"');
+
+    const nulls = await callBuiltin(client, "appduct_list_tools", { selector: null, filter: null, limit: null, offset: null });
+    expect(nulls.structuredContent).toMatchObject({ session: "pixel-8", tools: [{ name: "echo" }] });
   });
 });
 
@@ -401,7 +424,60 @@ describe("mcp: appduct_call_tool", () => {
 
     expect(sentTimeouts()).toEqual([30_000, 45_000]);
 
-    const invalid = errorText(await callBuiltin(client, "appduct_call_tool", { name: "slow", timeoutMs: -1 }));
-    expect(invalid).toContain("invalid_request");
+    // Out of range, or not whole milliseconds, is rejected rather than silently clamped.
+    for (const timeoutMs of [999, 600_001, 1_500.5]) {
+      const invalid = errorText(await callBuiltin(client, "appduct_call_tool", { name: "slow", timeoutMs }));
+      expect(invalid).toContain("invalid_request");
+      expect(invalid).toContain("1000");
+      expect(invalid).toContain("600000");
+    }
+    expect(sentTimeouts()).toEqual([30_000, 45_000]);
+  });
+
+  test("a misspelled parameter is rejected instead of running the tool without it", async () => {
+    const daemon = createFakeDaemon();
+    const app = daemon.addSession({ alias: "pixel-8" });
+    app.setTools([{ name: "echo" }]);
+    app.onCall("echo", (args) => ({ received: args }));
+
+    const client = await startServerWithClient(daemon);
+
+    for (const misspelled of [{ arguments: { text: "hi" } }, { text: "hi" }, { timeout_ms: 30_000 }]) {
+      const text = errorText(await callBuiltin(client, "appduct_call_tool", { name: "echo", ...misspelled }));
+      expect(text).toContain("invalid_request");
+      expect(text).toContain("selector, name, args, timeoutMs");
+    }
+    expect(daemon.calls().some((call) => call.method === RPC_METHODS.toolsCall)).toBe(false);
+
+    // null for an optional field is not a misspelling.
+    const nulls = await callBuiltin(client, "appduct_call_tool", { selector: null, name: "echo", args: null, timeoutMs: null });
+    expect(nulls.structuredContent).toEqual({ received: {} });
+  });
+
+  test("a call is routed by session id, so it never lands on a new device that inherited the alias", async () => {
+    const daemon = createFakeDaemon();
+    const original = daemon.addSession({ alias: "pixel-8", sessionId: "sess-old" });
+    original.setTools([{ name: "whoami" }]);
+    original.onCall("whoami", () => ({ ranOn: "sess-old" }));
+
+    const client = await startServerWithClient(daemon);
+    await callBuiltin(client, "appduct_call_tool", { selector: "pixel-8", name: "whoami" });
+
+    // Every daemon call after resolving the selector names the session by id.
+    const routed = daemon
+      .calls()
+      .filter((call) => call.method === RPC_METHODS.toolsList || call.method === RPC_METHODS.toolsCall)
+      .map((call) => (call.params as { selector?: string }).selector);
+    expect(new Set(routed)).toEqual(new Set(["sess-old"]));
+
+    // The device goes away and a new one of the same model takes over its alias.
+    daemon.removeSession("pixel-8");
+    const replacement = daemon.addSession({ alias: "pixel-8", sessionId: "sess-new" });
+    replacement.setTools([{ name: "whoami" }]);
+    replacement.onCall("whoami", () => ({ ranOn: "sess-new" }));
+
+    // Naming the old session by id fails, instead of reaching the replacement.
+    const stale = errorText(await callBuiltin(client, "appduct_call_tool", { selector: "sess-old", name: "whoami" }));
+    expect(stale).toContain("unknown_session");
   });
 });

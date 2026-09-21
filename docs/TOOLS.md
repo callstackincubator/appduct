@@ -113,22 +113,13 @@ Because exportable schemas are compared by their *exported* JSON Schema, the reg
 
 **`deps` is an optional, advanced override.** Passing it replaces the derived key entirely with `useEffect`'s own semantics (`enabled` is still appended), which is occasionally useful — for example, forcing a re-registration on something the descriptor doesn't capture. Most call sites should simply omit it. Pass it consistently if you pass it at all: alternating between passing `deps` and omitting it changes the dependency-array length between renders, which React warns about, exactly as it does for a hand-written `useEffect`.
 
-## Keep input schemas object-rooted
+## Make the input schema accept an object
 
-A tool call always passes its arguments as a JSON object, so an `inputSchema` has to be an object at its root. `z.object({ ... })`, `.passthrough()`, `z.looseObject(...)` and `z.record(...)` all qualify. Anything else registers, but no call can ever satisfy it:
+A tool call always passes its arguments as a JSON object. An `inputSchema` whose root type is something else — `z.string()`, `z.number()`, `z.array(...)` — can never be satisfied, and registering one logs a dev warning naming the tool. Wrap the value instead: `inputSchema: z.object({ sku: z.string() })` rather than `z.string()`.
 
-| Construct | Exports as | Object-rooted? |
-| --- | --- | --- |
-| `z.object({ ... })`, `.passthrough()`, `z.record(...)` | `type: "object"` | yes |
-| `z.array(...)` | `type: "array"` | no |
-| `z.string()`, `z.number()`, `z.boolean()`, `z.null()` | `type: "string"` etc. | no |
-| `z.union([...])`, `z.object(...).nullable()` | `anyOf` | no — no root `type` at all |
-| `z.discriminatedUnion(...)` | `oneOf` | no, even when every branch is an object |
-| `z.intersection(a, b)` | `allOf` | no, even when both sides are objects |
+Unions and intersections of objects work: `z.union([...])`, `z.discriminatedUnion(...)` and `z.intersection(a, b)` export with no root `type`, and an object argument can still match one of their branches. The one-line signature in `appduct tools` shows their arguments as `(...)`, though, so an agent has to read the full schema (`appduct tools <name>`, or `appduct_describe_tool` over MCP) before it can call them. A single `z.object(...)` gives agents named arguments straight from the listing.
 
-Registering such an input schema logs a dev warning naming the tool. Wrap the value instead: `inputSchema: z.object({ sku: z.string() })` rather than `z.string()`.
-
-`outputSchema` has no such limit. A result can be any JSON value, and agents see the schema exactly as you wrote it, whether they read it with `appduct tools <name>` or `appduct_describe_tool` over MCP.
+`outputSchema` has no such limit. A result can be any JSON value, and agents see the schema exactly as you wrote it.
 
 ## Long-running tools
 

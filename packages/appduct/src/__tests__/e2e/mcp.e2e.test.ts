@@ -80,6 +80,7 @@ describe("e2e: mcp (real stdio subprocess)", () => {
       expect(appTools.structuredContent).toEqual({
         session: alias,
         total: 1,
+        limit: 50,
         tools: [{ name: "echo", signature: "echo(text?: string)", summary: "Echoes its input.", policy: "allow" }],
       });
 

@@ -124,16 +124,3 @@ export const isToolDescriptor = (value: unknown): value is ToolDescriptor => {
 
   return true;
 };
-
-/**
- * Whether an exported JSON Schema is rooted at the literal `type: "object"`.
- *
- * A tool call always carries its `args` as a JSON object, so an input schema rooted at anything
- * else (`z.array`, `z.string`, a `z.union`'s `anyOf`, a `z.discriminatedUnion`'s `oneOf` or a
- * `z.intersection`'s `allOf` — the last two even when every branch is an object) can never be
- * satisfied. This is the gate behind the app-side dev warning in `@appduct/react-native`, and
- * behind the signature renderer's `(...)` for a params group it cannot describe.
- */
-export const isObjectRootedSchema = (schema: ToolSchemaDescriptor | undefined): boolean => {
-  return schema !== undefined && schema.type === "object";
-};

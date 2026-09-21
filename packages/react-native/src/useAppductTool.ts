@@ -126,7 +126,7 @@ export function createUseAppductTool(
    * only when something that changes the registry entry changed — `name`, `description`, the
    * exported input/output JSON Schemas, `annotations`, `timeoutMs`, or `options.enabled`. Omitting
    * `deps` is therefore the correct, cheap default: re-rendering the hosting component does not
-   * produce `tool_registry_delta` traffic or agent-side `tools/list_changed` notifications.
+   * produce `tool_registry_delta` traffic.
    * (`timeoutMs` is app-side only — the daemon never sees it — but it is part of the entry, so a
    * change to it has to reach the registry.)
    *

@@ -118,7 +118,7 @@ const formatElicitationArgsPreview = (args: Record<string, unknown>): string => 
  * has nothing else to go on (ARCHITECTURE.md §12 / issue #10). */
 const buildElicitationMessage = (tool: ResolvedAppTool, args: Record<string, unknown>): string => {
   return (
-    `Appduct: allow the app tool "${tool.descriptor.name}" to run on session "${tool.selector}"? ` +
+    `Appduct: allow the app tool "${tool.descriptor.name}" to run on session "${tool.alias}" (${tool.sessionId})? ` +
     `Arguments: ${formatElicitationArgsPreview(args)}`
   );
 };
@@ -174,13 +174,13 @@ const requestElicitationConsent = async (
 
     return {
       type: "declined",
-      message: `The user ${result.action === "cancel" ? "cancelled" : "declined"} the request to call "${tool.descriptor.name}" on session "${tool.selector}".`,
+      message: `The user ${result.action === "cancel" ? "cancelled" : "declined"} the request to call "${tool.descriptor.name}" on session "${tool.alias}".`,
     };
   } catch (error) {
     if (error instanceof McpError && error.code === ErrorCode.RequestTimeout) {
       return {
         type: "declined",
-        message: `Timed out after ${timeoutMs / 1000}s waiting for a human to respond to the consent prompt for "${tool.descriptor.name}" on session "${tool.selector}".`,
+        message: `Timed out after ${timeoutMs / 1000}s waiting for a human to respond to the consent prompt for "${tool.descriptor.name}" on session "${tool.alias}".`,
       };
     }
 
@@ -201,7 +201,7 @@ const toolSuccessContent = (result: unknown): CallToolResult => {
   return { content };
 };
 
-/** Errors from a tool call — proxied device tool or built-in management tool alike — become MCP
+/** Errors from a tool call — an app tool run through `appduct_call_tool` or a built-in alike — become MCP
  * tool-error *content*, never a thrown protocol-level error: the preserved
  * `type` and `message` are put in the text so an agent reading the result can branch on them. */
 const toolErrorContent = (type: string, message: string, details?: unknown): CallToolResult => {
@@ -388,7 +388,7 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
       const result = await stream.call<ToolsCallResult>(
         RPC_METHODS.toolsCall,
         {
-          selector: tool.selector,
+          selector: tool.sessionId,
           name: tool.descriptor.name,
           args,
           caller: "mcp",
@@ -409,7 +409,7 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
 
     try {
       await progressStream.call(RPC_METHODS.eventsSubscribe, {
-        sessionSelector: tool.selector,
+        sessionSelector: tool.sessionId,
         kinds: ["tool_call_started", "tool_call_progress"],
       });
 
@@ -422,9 +422,9 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
         }
 
         progressStream
-          .call(RPC_METHODS.toolsCancel, { selector: tool.selector, callId, reason: "mcp_client_cancelled" })
+          .call(RPC_METHODS.toolsCancel, { selector: tool.sessionId, callId, reason: "mcp_client_cancelled" })
           .catch((error: unknown) => {
-            console.error("appduct mcp: failed to cancel a proxied tool call:", error);
+            console.error("appduct mcp: failed to cancel an app tool call:", error);
           });
       };
 
@@ -467,7 +467,7 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
         const result = await progressStream.call<ToolsCallResult>(
           RPC_METHODS.toolsCall,
           {
-            selector: tool.selector,
+            selector: tool.sessionId,
             name: tool.descriptor.name,
             args,
             caller: "mcp",

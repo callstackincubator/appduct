@@ -129,7 +129,7 @@ export const WAIT_FOR_SESSION_TOOL_DESCRIPTOR = {
 
 /** Errors from the built-in management tools reuse the daemon's wire `ErrorType` union
  * (`RpcApplicationError`-style: `{ type, message }`) so the MCP server's generic error-content
- * mapping (see `server.ts`) handles them the same way it handles a proxied device tool's error. */
+ * mapping (see `server.ts`) handles them the same way it handles an app tool's error. */
 export class McpBuiltinToolError extends Error {
   constructor(
     readonly type: "invalid_request" | "tool_not_found" | "tool_timeout" | "tool_execution_error",

@@ -170,11 +170,13 @@ Once configured, an agent reaches the connected app's tools through three built-
 
 | Tool | Does what | CLI equivalent |
 | --- | --- | --- |
-| `appduct_list_tools` | Lists the app's tools as one-line signatures, with each tool's policy. Takes `filter`, `limit` and `offset`. | `appduct tools` |
+| `appduct_list_tools` | Lists the app's tools as one-line signatures, with each tool's policy. Returns 50 at a time unless given `limit`; takes `filter` and `offset`. | `appduct tools` |
 | `appduct_describe_tool` | Shows one tool's full input and output schema. | `appduct tools <name>` |
 | `appduct_call_tool` | Calls a tool by `name` with `args`, with progress and errors preserved. | `appduct invoke` |
 
-The app's tools don't show up as MCP tools of their own. An app with hundreds of tools still adds only these three to the agent's tool list, and that list doesn't change when tools register or a device connects. With more than one device connected, each of the three needs `selector`, the session alias from `appduct ls`.
+The app's tools don't show up as MCP tools of their own. An app with hundreds of tools still adds only these three to the agent's tool list, and that list doesn't change when tools register or a device connects. With more than one device connected, each of the three needs `selector`: the session alias or id from `appduct ls`.
+
+Your MCP client asks permission for `appduct_call_tool` as a single tool, so choosing "always allow" there approves every tool the app registers, destructive ones included. To keep a person approving those calls, set `policy.destructive` to `"prompt"` in the state directory's `config.json` and restart the daemon (`appduct daemon stop`). Each call to a tool marked `destructiveHint` then shows an approval prompt in clients that support it, and is denied in clients that don't.
 
 Four more built-in tools cover what the app's own tools can't. `appduct_connect` mints a link and, by default, delivers it to whichever `android`/`ios-sim` device it detects — pass `target`/`device` to choose, or `target: "none"` to force the human flow — falling back to a QR code, plus instructions to show it, only when there's nothing to deliver to. Delivering to `android` (chosen or detected) needs `appId`, resolved the same way as `--app-id` (see [Delivering the link to a device](#delivering-the-link-to-a-device)); passing it with `target: "ios-sim"` or `"none"` is an error. `appduct_wait_for_session` then waits for that session to be claimed. `target: "ios-device"` reaches a paired physical iPhone or iPad, with `appId` and the [prerequisites above](#--open-ios-device-experimental) — it's experimental and never auto-detected, so an agent has to ask for it by name.
 

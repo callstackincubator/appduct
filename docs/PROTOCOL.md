@@ -260,7 +260,8 @@ the tool, without `input_schema`/`output_schema`, so agents see a shapeless (`{}
 the app-side SDK throws on that in development rather than letting it ship silently. The
 daemon never inspects a schema's internals — only that it is a JSON object.
 
-`annotations` map 1:1 to MCP tool annotations and drive the daemon's policy engine
+`annotations` are shown to agents as-is (`appduct tools <name>`, `appduct_describe_tool` over
+MCP) and drive the daemon's policy engine
 (`docs/ARCHITECTURE.md` §12):
 `destructiveHint: true` routes a call through `policy.destructive` instead of
 `policy.default`.
