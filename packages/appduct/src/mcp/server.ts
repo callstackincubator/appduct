@@ -285,8 +285,8 @@ const proxiedToolResultContent = (tool: NamespacedTool, result: unknown): CallTo
  * How this server opens a daemon connection. Both the startup stream and each short-lived
  * progress stream go through it, so a caller can put something other than a real daemon on the
  * other end. The only production implementation is {@link openDaemonStream}; the seam exists so
- * the behaviour that is purely this module's own — name mapping, schema degradation, consent
- * flags, namespacing, `list_changed` — can be tested without a TLS listener, a pidfile and a
+ * the behaviour that is purely this module's own — name mapping, schema degradation, consent,
+ * namespacing, `list_changed` — can be tested without a TLS listener, a pidfile and a
  * subprocess, none of which those behaviours depend on.
  */
 export type OpenDaemonStreamFn = (options: {

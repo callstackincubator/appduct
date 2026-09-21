@@ -235,7 +235,11 @@ const asToolsCallParams = (params: unknown): ToolsCallParams => {
 
   const consent = record.consent;
 
-  if (consent !== undefined && consent !== "elicitation") {
+  // `"client"` was the removed flag-based channel's marker. An MCP server older than this daemon
+  // can still send it (a newer daemon serves older clients, ARCHITECTURE.md §4), so it is accepted
+  // and ignored rather than rejected: the call then lands on the audited `no_consent_channel`
+  // denial like any other ungated `"prompt"` call, instead of an unaudited `invalid_request`.
+  if (consent !== undefined && consent !== "elicitation" && consent !== "client") {
     throw new RpcApplicationError("invalid_request", '"consent" must be "elicitation".');
   }
 
@@ -245,7 +249,7 @@ const asToolsCallParams = (params: unknown): ToolsCallParams => {
     args: args as Record<string, unknown>,
     timeoutMs: timeoutMs as number | undefined,
     caller: caller as "cli" | "mcp" | "client" | undefined,
-    consent: consent as "elicitation" | undefined,
+    consent: consent === "elicitation" ? "elicitation" : undefined,
   };
 };
 

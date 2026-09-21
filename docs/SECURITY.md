@@ -353,8 +353,8 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   `appduct/client` alike — is evaluated against this before it ever reaches the app;
   a denial returns `policy_denied` and never sends a `tool_call` frame. `"prompt"` requires a human gate
   and fails closed everywhere one can't be guaranteed: today the only implemented gate
-  is an MCP client that declares the `elicitation` capability, which asks a human before
-  each call; the CLI and every other client are denied outright
+  is an MCP client that declares the `elicitation` capability, which receives an
+  `elicitation/create` prompt for each call; the CLI and every other client are denied outright
   (`policy_denied`, reason `no_consent_channel`) rather than silently treated as
   `"allow"`. That gate is *not* a defense within this feature's own trust boundary: the
   daemon trusts the MCP server's `consent: "elicitation"` param verbatim rather than
@@ -364,7 +364,10 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   call. This is consistent with, not an exception to, the trust boundary above: anything
   that can reach the socket already has full daemon control. `"prompt"` guards against a
   compliant MCP client silently auto-approving on the caller's behalf, not against a
-  hostile process on the operator's own machine. A client's declared capabilities are
+  hostile process on the operator's own machine. The prompt reaches whatever the client
+  does with elicitations: a client configured to answer them automatically (Claude Code's
+  `Elicitation` hook, for example) approves without showing anything, and the daemon cannot
+  tell that apart from a person accepting. A client's declared capabilities are
   also self-reported, so it's not a defense against a hostile client that answers the
   prompt itself either — only against a compliant client's own auto-approval. Worth
   knowing rather than filing as a bug: `"prompt"` denies unconditionally in CI or any other

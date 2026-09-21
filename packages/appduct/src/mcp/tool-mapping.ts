@@ -12,7 +12,6 @@
  * (the JSON Schema shorthand `properties: { a: true }` is rejected) and `required` must be an
  * array. Any of those makes a client reject the entire `tools/list` result, so the only safe
  * predicate is the one the client will actually apply.
-
  */
 
 import { ToolSchema } from "@modelcontextprotocol/sdk/types.js";

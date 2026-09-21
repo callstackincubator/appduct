@@ -404,8 +404,8 @@ describe("policy: prompt without elicitation", () => {
     expect(record?.consent).toBeUndefined();
   });
 
-  test('the daemon rejects the removed consent: "client" value as an invalid request', async () => {
-    const { daemon, port } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+  test('a legacy consent: "client" from an older MCP server is ignored: the call is denied and audited as no_consent_channel', async () => {
+    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
     const app = await claimApp(daemon, port, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
@@ -416,6 +416,30 @@ describe("policy: prompt without elicitation", () => {
         args: {},
         caller: "mcp",
         consent: "client",
+      }),
+    ).rejects.toMatchObject({ data: { type: "policy_denied", details: { reason: "no_consent_channel" } } });
+
+    app.socket.close();
+    await shutdownNow(daemon);
+    const records = await readAuditRecords(stateDir);
+    const record = records.find((r) => r.tool === "echo" && r.caller === "mcp");
+    expect(record?.outcome).toBe("denied");
+    expect(record?.deniedReason).toBe("no_consent_channel");
+    expect(record?.consent).toBeUndefined();
+  });
+
+  test("an unknown consent value is still rejected as an invalid request", async () => {
+    const { daemon, port } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+    const app = await claimApp(daemon, port, "Pixel 8");
+    await snapshotTools(daemon, app, [{ name: "echo" }]);
+
+    await expect(
+      rpcCall(daemon.paths.socketPath, "tools.call", {
+        selector: app.alias,
+        name: "echo",
+        args: {},
+        caller: "mcp",
+        consent: "yes",
       }),
     ).rejects.toMatchObject({ data: { type: "invalid_request" } });
 
@@ -612,6 +636,43 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
     const records = await readAuditRecords(stateDir);
     const record = records.find((r) => r.tool === "echo" && r.caller === "mcp");
     expect(record?.outcome).toBe("ok");
+    expect(record?.consent).toBe("elicitation");
+  });
+
+  test('a "prompt" call accepted via elicitation that then errors still records consent: "elicitation"', async () => {
+    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/boom": "prompt" } } });
+    const app = await claimApp(daemon, port, "Pixel 8");
+    await snapshotTools(daemon, app, [{ name: "boom" }]);
+
+    app.socket.on("message", (data) => {
+      const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+      if (msg.type === "tool_call") {
+        app.socket.send(
+          JSON.stringify({
+            type: "tool_error",
+            session_id: app.sessionId,
+            id: msg.id,
+            error: { type: "tool_execution_error", message: "boom" },
+          }),
+        );
+      }
+    });
+
+    const mcpHandle = await createMcpServer({ stateDir, spawn: () => { throw new Error("must not auto-spawn"); } });
+    mcpHandles.push(mcpHandle);
+    const client = await connectElicitationClient(mcpHandle, () => ({ action: "accept" }));
+
+    const result = await client.request(
+      { method: "tools/call", params: { name: "boom", arguments: {} } },
+      CallToolResultSchema,
+    );
+    expect(result.isError).toBe(true);
+
+    app.socket.close();
+    await shutdownNow(daemon);
+    const records = await readAuditRecords(stateDir);
+    const record = records.find((r) => r.tool === "boom" && r.caller === "mcp");
+    expect(record?.outcome).toBe("error");
     expect(record?.consent).toBe("elicitation");
   });
 

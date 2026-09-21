@@ -911,7 +911,12 @@ it.
     `"decline"` or `"cancel"` without ever really surfacing the prompt to a human (older Codex
     behavior at the time of writing). This fails closed — the tool is simply never callable
     through that client — which is the acceptable failure mode; it is not distinguishable from
-    a human genuinely saying no.
+    a human genuinely saying no. Non-interactive Claude Code (`claude -p`) behaves this way: it
+    declares elicitation and answers every request with `"cancel"`.
+  - The opposite also exists: a client can be configured to accept elicitations automatically
+    (Claude Code's `Elicitation` hook can answer without showing a dialog). That approval is the
+    user's own client configuration, and the daemon cannot tell it apart from a person
+    accepting.
   - `"prompt"` denies unconditionally in any unattended pipeline (CI has no consent channel at
     all); pipelines that need a tool to run
     unattended must set `allow`/`deny` explicitly for it rather than `"prompt"`.

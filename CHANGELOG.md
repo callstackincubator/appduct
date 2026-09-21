@@ -13,11 +13,17 @@ package versions for a release.
 - **Breaking (MCP): `"prompt"`-policy consent is elicitation-only.** The Claude Code-specific
   fallback is gone: `tools/list` no longer emits `_meta["anthropic/requiresUserInteraction"]`, and
   the MCP server no longer sends `consent: "client"`. A `"prompt"` tool called from an MCP client
-  that doesn't declare the `elicitation` capability — including Claude Code versions that relied on
-  the flag — is now denied with `policy_denied` (reason `no_consent_channel`), the same as the CLI.
-  To keep such a tool callable from that client, set its policy to `"allow"` in `config.json`. The
-  daemon rejects `consent: "client"` on `tools.call` as an invalid request, and new audit records
-  only ever carry `consent: "elicitation"`; existing audit files may still contain `"client"`.
+  that doesn't declare the `elicitation` capability is now denied with `policy_denied` (reason
+  `no_consent_channel`), the same as the CLI. Current Claude Code declares elicitation, so it gets
+  the elicitation prompt instead; only a client that relied on the flag without supporting
+  elicitation loses access. To fix that, use a client that supports elicitation, or set the tool's
+  policy to `"allow"` in `config.json` — which removes the gate for every caller, including the
+  CLI — and restart the daemon (`appduct daemon stop`; the next command starts it again), since
+  `config.json` is read once at daemon start.
+  - A daemon with this change that receives `consent: "client"` from an older MCP server treats it
+    as no consent, so the call is denied and audited as `no_consent_channel`.
+  - `@appduct/shared`: `ToolsCallParams.consent` and the audit record's `consent` narrow to
+    `"elicitation"`. New audit records never carry `"client"`; existing audit files may.
 
 - **`config.json`'s `wssPort` accepts `0`, meaning "bind an OS-assigned port".** The pinned-wss
   listener takes whatever ephemeral port the OS hands it, and everything that reports or advertises
