@@ -1,8 +1,8 @@
 # Registering tools
 
 How the app side of Appduct publishes tools: the schema forms it accepts, what the
-`useAppductTool` hook actually re-registers, the shape MCP requires, and how long a call
-may run. The five-minute version lives in the
+`useAppductTool` hook actually re-registers, the shape a published schema has to take, and
+how long a call may run. The five-minute version lives in the
 [package README](../packages/react-native/README.md#4-define-tools-in-app-startup-code); keeping a
 destructive tool out of a build variant is [its own
 section](./SECURITY.md#gating-a-tool-by-build-variant) of the security model.
@@ -168,4 +168,4 @@ useAppductTool(
 
 That deadline is enforced end to end: the app aborts the handler's `signal` at it, and it also travels to the daemon as the descriptor's `timeout_ms`, so an agent calling the tool over MCP (or `appduct invoke` with no `--timeout`) gets the same budget instead of a `tool_timeout` at 10 seconds.
 
-The SDK clamps the value to `[1_000, 600_000]` ms before either timer is set, so the handler's abort timer and the daemon's call deadline are always the same number (a value outside that range is clamped with a dev warning). A caller that passes its own timeout (`appduct invoke --timeout`, `app.call(name, args, { timeoutMs })`) can only **shorten** the deadline, never extend it past this one — the app aborts the handler at its own timer regardless, so for a tool that declares nothing, a caller asking for 60 seconds still gets the app's 10-second default. `createAppductClient`'s `defaultToolTimeoutMs` changes only that app-side fallback for tools that declare nothing; it is deliberately not sent to the daemon, so declare `timeoutMs` per tool when the host needs to know.
+The SDK clamps the value to `[1_000, 600_000]` ms before either timer is set, so the handler's abort timer and the daemon's call deadline are always the same number (a value outside that range is clamped with a dev warning). A caller that passes its own timeout (`appduct invoke --timeout`, `app.call(name, args, { timeoutMs })`) can only **shorten** the deadline, never extend it past this one — the app aborts the handler at its own timer regardless, so for a tool that declares nothing, a caller asking for 60 seconds still gets the app's 10-second default. That app-side fallback is fixed natively (`AppductClient`'s own `defaultToolTimeoutMs`, `APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`) and JS cannot override it — `createAppductClient`'s options are empty, and the TurboModule spec has no channel for it. Declare `timeoutMs` per tool when a call needs longer than the default.

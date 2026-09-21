@@ -83,7 +83,7 @@ Call Appduct directly from Swift or Kotlin. You get the same tools, deep links, 
 
 There are two ways to connect an agent. Pick whichever fits how your agent works.
 
-**Over MCP.** Add Appduct to your agent's MCP config — Claude Code, Cursor, or any other MCP client. Your app's tools show up next to the agent's own, and the connection tools explain themselves, so there's nothing else to install:
+**Over MCP.** Add Appduct to your agent's MCP config — Claude Code, Cursor, or any other MCP client. Your app's tools aren't registered as MCP tools of their own: the agent reaches them through `appduct_list_tools`, `appduct_describe_tool` and `appduct_call_tool`, so a registry of hundreds costs the client three fixed tool definitions. Those tools and the connection tools explain themselves, so there's nothing else to install:
 
 ```json
 {

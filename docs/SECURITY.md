@@ -392,8 +392,9 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   need to confirm the log is actually landing on disk (e.g. under a read-only or full
   filesystem).
 - **Inclusion defaults to dev builds only — not a compiled-in build-type check.** iOS
-  restricts CocoaPods linking to the `Debug` configuration; Android swaps in a no-op
-  `AppductPackage` for `release`. Both are real per-variant decisions, not a
+  restricts CocoaPods linking to the `Debug` configuration; on Android `AppductPackage`
+  always compiles, and the `release` variant's compile classpath gets the vendored no-op
+  core (`android/core-noop`) in place of the real one. Both are real per-variant decisions, not a
   `debuggable`/`#if DEBUG` gate compiled into every variant, and neither quietly depends on
   a custom build-type/configuration name being spelled `debug`/`Debug`.
 

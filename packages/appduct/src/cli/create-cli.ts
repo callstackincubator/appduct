@@ -21,7 +21,9 @@ export const createCli = () => {
     .command("init", "Set up the current app directory: write .appduct/config.json and print the MCP snippet.")
     .option(
       "--scheme <scheme>",
-      "Deep-link URI scheme to write. Only this flag and <cwd>/app.json are consulted — not " +
+      "Deep-link URI scheme to write. Only this flag and static project files in <cwd> are " +
+        "consulted (app.json's \"expo.scheme\", then Android app/build.gradle(.kts) and " +
+        "app/src/main/AndroidManifest.xml, then iOS Info.plist and project.yml) — not " +
         "APPDUCT_SCHEME, and no walk-up: init decides what to write here, so it never bakes " +
         "an ambient value into a committed file.",
     )
@@ -46,7 +48,8 @@ export const createCli = () => {
     .option("--qr", "Also render the deep link as a terminal QR code.")
     .option(
       "--scheme <scheme>",
-      "Deep-link URI scheme (also: APPDUCT_SCHEME; default: app.json's \"expo.scheme\").",
+      "Deep-link URI scheme (also: APPDUCT_SCHEME; default: .appduct/config.json, then " +
+        "app.json's \"expo.scheme\", then the Android/iOS project files in <cwd>).",
     )
     .option(
       "--open <target>",

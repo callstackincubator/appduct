@@ -37,6 +37,8 @@ one in `~/.appduct`.
 
 ### 2. Build and run the dev client
 
+From the `playground` directory (`expo` is a dependency of this app, not of the monorepo root):
+
 ```sh
 pnpm exec expo run:ios
 # or

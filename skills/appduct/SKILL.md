@@ -46,8 +46,10 @@ There is no `--session-id` flag in v2 — use the positional selector instead.
 ## Establish a session
 
 If no session is active yet, mint a bootstrap link. **Run this from the app's root
-directory and it needs no configuration at all** — the deep-link scheme is read from
-`app.json`'s `expo.scheme`:
+directory and it needs no configuration at all** — the deep-link scheme is read from the
+project's own files: `app.json`'s `expo.scheme`, or, for an app without one, the Android
+`app/build.gradle(.kts)` / `app/src/main/AndroidManifest.xml` and the iOS `Info.plist` /
+`project.yml`:
 
 ```bash
 appduct link --json
@@ -72,8 +74,10 @@ directory, or the project uses a dynamic `app.config.js` (which is never execute
 `APPDUCT_SCHEME=myapp` does the same for a whole shell, and `appduct init` records
 it once in the project (see **Setup** below). Full order: `--scheme` → `APPDUCT_SCHEME`
 → the nearest `.appduct/config.json` walking up from the working directory → the state
-dir's `config.json` → `<cwd>/app.json`. If none of them has one, the error names every
-location it tried.
+dir's `config.json` → the static project files in `<cwd>` (`app.json`, then the Android
+`build.gradle`/`AndroidManifest.xml`, then the iOS `Info.plist`/`project.yml`). If none of
+them has one, the error names every location it tried. Two native probes that disagree are
+an error too, never a guess.
 
 From `link`'s JSON output, use:
 
@@ -231,7 +235,8 @@ when a group itself outgrows a screen. Each part of a group uses tool-name chara
   under `--json` are JSON on stderr, not bare text.
 - `appduct init`, run once in an app root, records the scheme in
   `.appduct/config.json` and prints the MCP server entry to paste. Re-running it is
-  always safe (it keeps the recorded scheme; `--force` re-adopts `app.json`'s), it never
+  always safe (it keeps the recorded scheme; `--force` re-adopts whatever the project files
+  currently declare), it never
   generates keys, and it never touches daemon state.
 - `appduct keygen` is only for **hardening** (rotating the host key, or provisioning
   one in CI ahead of a release build) — the daemon auto-generates a key on first start,
