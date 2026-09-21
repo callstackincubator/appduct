@@ -345,6 +345,68 @@ describe("mcp: calling app tools", () => {
     app.socket.close();
   });
 
+  test("appduct_list_tools narrows to a group on the real daemon, and grouped tools describe and call like any other", async () => {
+    const { daemon, stateDir, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+    await snapshotTools(daemon, app, [
+      { name: "pay", group: "checkout/payment" },
+      { name: "begin", group: "checkout" },
+      { name: "ping" },
+    ]);
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const listed = await client.request(
+      { method: "tools/call", params: { name: "appduct_list_tools", arguments: { group: "checkout" } } },
+      CallToolResultSchema,
+    );
+    expect(listed.structuredContent).toMatchObject({
+      total: 2,
+      tools: [
+        { name: "begin", group: "checkout" },
+        { name: "pay", group: "checkout/payment" },
+      ],
+      groups: [
+        { group: "checkout", total: 2 },
+        { group: "checkout/payment", total: 1 },
+        { group: null, total: 1 },
+      ],
+    });
+
+    const badGroup = await client.request(
+      { method: "tools/call", params: { name: "appduct_list_tools", arguments: { group: "a/b/c" } } },
+      CallToolResultSchema,
+    );
+    expect(badGroup.isError).toBe(true);
+    expect((badGroup.content[0] as { text: string }).text).toContain("invalid_request");
+
+    const described = await client.request(
+      { method: "tools/call", params: { name: "appduct_describe_tool", arguments: { name: "pay" } } },
+      CallToolResultSchema,
+    );
+    expect(described.structuredContent).toMatchObject({ name: "pay", group: "checkout/payment" });
+
+    app.socket.on("message", (data) => {
+      const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+
+      if (msg.type === "tool_call") {
+        app.socket.send(
+          JSON.stringify({ type: "tool_result", session_id: app.sessionId, id: msg.id, result: { paid: true } }),
+        );
+      }
+    });
+
+    const called = await client.request(
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "pay" } } },
+      CallToolResultSchema,
+    );
+    expect(called.isError).not.toBe(true);
+    expect(called.structuredContent).toEqual({ paid: true });
+
+    app.socket.close();
+  });
+
   test("tool_call_progress frames map to MCP progress notifications when the client sends a progressToken", async () => {
     const { daemon, stateDir, port } = await startTestDaemon();
     const app = await claimApp(daemon, port);

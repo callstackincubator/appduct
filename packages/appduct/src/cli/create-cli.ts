@@ -67,6 +67,8 @@ export const createCli = () => {
   cli
     .command("tools [selector] [name]", "List a session's tools, or show one tool's full schema.")
     .option("--full", "Render full schemas/annotations for every listed tool.")
+    .option("--group <name>", "Only tools in this group (\"checkout\" includes \"checkout/payment\").")
+    .option("--groups", "List the session's groups with tool counts instead of its tools.")
     .option("--filter <text>", "Only tools whose name or description contains this text (case-insensitive).")
     .option("--limit <n>", "Show at most n tools.")
     .option("--offset <n>", "Skip the first n tools of the sorted list.");

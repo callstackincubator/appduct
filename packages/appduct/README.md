@@ -39,7 +39,8 @@ That's the whole loop. There is no host process to start — `appduct` auto-spaw
 | `appduct keygen [--out <path>] [--force]` | generate a daemon private key, print its app pin |
 | `appduct link [--ttl <s>] [--qr] [--open android\|ios-sim\|ios-device] [--device <id>] [--app-id <id>] [--scheme <s>]` | mint a pending session and print its deep link |
 | `appduct ls` | list sessions: alias, state, device, tool count |
-| `appduct tools [selector] [name] [--full] [--filter <text>] [--limit <n>] [--offset <n>]` | list a session's tools (one call signature + description per line), or show one tool's full schema |
+| `appduct tools [selector] [name] [--full] [--group <name>] [--filter <text>] [--limit <n>] [--offset <n>]` | list a session's tools (one call signature + description per line), or show one tool's full schema |
+| `appduct tools [selector] --groups` | list a session's tool groups with their tool counts |
 | `appduct invoke [selector] <tool> --input '<json>' [--timeout <ms>]` | call a tool |
 | `appduct events [selector] [--follow] [--since <cursor>]` | stream session/tool events (default), or one-shot pull everything retained since `<cursor>` (`--since`); `--json` emits NDJSON |
 | `appduct revoke [selector]` | revoke a session |
@@ -67,7 +68,44 @@ Run `appduct tools <name>` for a tool's full schema.
 
 A signature is derived straight from the tool's JSON Schema: required params are `name: type`, optional ones `name?: type` (with `= <default>` when the schema declares a short one), and `-> type` is the result when the tool declares an `output_schema`. `...` anywhere means the schema shape wasn't one this renderer could summarize — the tool's full schema (`appduct tools <name>`) still has it. A `[prompt]`/`[deny]` tag follows a tool whose effective policy isn't `"allow"`.
 
-Use `--filter <text>` to narrow the listing to tools whose name or description contains `<text>` (case-insensitive), and `--limit <n>`/`--offset <n>` to page through it; a truncated listing prints a trailing `Showing n of total tools (offset o). Narrow with --filter <text> or page with --offset <n>.` line so you know more were left out. `appduct tools --json` returns `{ tools, total }` — `total` is the count after `--filter` but before `--limit`/`--offset`. `appduct tools <name>` (a single tool) is unaffected by any of this and always returns the bare tool descriptor.
+Use `--filter <text>` to narrow the listing to tools whose name or description contains `<text>` (case-insensitive), and `--limit <n>`/`--offset <n>` to page through it; a truncated listing prints a trailing `Showing n of total tools (offset o). Narrow with --filter <text> or page with --offset <n>.` line so you know more were left out. `appduct tools --json` returns `{ tools, total, groups }` — `total` is the count after `--group`/`--filter` but before `--limit`/`--offset`. `appduct tools <name>` (a single tool) is unaffected by any of this and always returns the bare tool descriptor; passing `--group`, `--groups`, `--filter`, `--limit` or `--offset` with a `<name>` is a usage error.
+
+### Tool groups
+
+When the app puts its tools in groups ([`docs/TOOLS.md`](../../docs/TOOLS.md#group-tools-in-a-large-app)), `appduct tools` lists them under group headings, with subgroups indented under their parent and ungrouped tools last:
+
+```
+Tools
+  cart
+    add_item(sku: string, quantity: number)
+      Add a product to the cart
+  checkout
+    begin_checkout()
+      Start checkout with the current cart
+    checkout/payment
+      pay_with_card(card: string)
+        Pay for the order with a test card
+  (ungrouped)
+    reset_app()
+      Clear all local data
+```
+
+On a large app, start with `--groups` to see what there is, then list one group:
+
+```
+$ appduct tools --groups
+Groups
+  cart                12
+  checkout             8
+    checkout/payment   3
+  (ungrouped)          2
+
+22 tools in total. Run `appduct tools --group <name>` to list one group's tools.
+
+$ appduct tools --group checkout
+```
+
+`--group checkout` lists `checkout` and all of its subgroups; `--group checkout/payment` lists only that subgroup. Matching is by whole name and case-sensitive, so `--group checkout` never matches a `checkoutx` group. `--group` combines with `--filter`, `--limit` and `--offset`. When a listing without `--group` is cut short, the footer names the top-level groups to narrow to: `Showing 5 of 22 tools (offset 0). Narrow with --group <name> (groups: cart 12, checkout 8) or --filter <text>, or page with --offset <n>.` A group that is not one or two `/`-separated names of letters, digits, `_` and `-` (for example `checkout/` or `a/b/c`) is a usage error. With `--json`, each tool carries its `group`, and `groups` lists every group with its count, whatever `--group` or `--filter` you passed.
 
 ### The deep-link scheme
 
@@ -170,7 +208,7 @@ Once configured, an agent reaches the connected app's tools through three built-
 
 | Tool | Does what | CLI equivalent |
 | --- | --- | --- |
-| `appduct_list_tools` | Lists the app's tools as one-line signatures, with each tool's policy. Returns 50 at a time unless given `limit`; takes `filter` and `offset`. | `appduct tools` |
+| `appduct_list_tools` | Lists the app's tools as one-line signatures, with each tool's group and policy, plus the app's groups with counts. Returns 50 at a time unless given `limit`; takes `group`, `filter` and `offset`. | `appduct tools` |
 | `appduct_describe_tool` | Shows one tool's full input and output schema. | `appduct tools <name>` |
 | `appduct_call_tool` | Calls a tool by `name` with `args`, with progress and errors preserved. | `appduct invoke` |
 

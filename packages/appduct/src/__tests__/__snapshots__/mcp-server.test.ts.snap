@@ -132,6 +132,10 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
           "maxLength": 256,
           "type": "string",
         },
+        "group": {
+          "pattern": "^[a-zA-Z0-9_-]{1,64}(?:\\/[a-zA-Z0-9_-]{1,64})?$",
+          "type": "string",
+        },
         "limit": {
           "exclusiveMinimum": 0,
           "type": "integer",

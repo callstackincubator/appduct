@@ -17,6 +17,7 @@ import {
   RPC_METHODS,
   renderToolSignature,
   summarizeToolDescription,
+  TOOL_GROUP_PATTERN,
   type EffectivePolicyDecision,
   type SessionsDescribeResult,
   type ToolDescriptor,
@@ -48,9 +49,13 @@ export const LIST_TOOLS_TOOL_DESCRIPTOR = {
   name: LIST_TOOLS_TOOL_NAME,
   description:
     "List the tools the connected app registered, as one-line signatures " +
-    "(`name(param: type, optional?: type) -> result`) with the first line of each description " +
-    "and the tool's effective policy. Start here: the app's tools are not MCP tools of their own. " +
-    "filter is a case-insensitive substring match on name and description; limit (default " +
+    "(`name(param: type, optional?: type) -> result`) with the first line of each description, " +
+    "the tool's group and its effective policy. Start here: the app's tools are not MCP tools of " +
+    "their own. Every result also carries groups: the app's tool groups with counts, over all its " +
+    "tools. On a large app, list one area with group, copying the exact name from groups, parent " +
+    "path included (\"diagnostics/progress\", not \"progress\"); \"checkout\" includes " +
+    "\"checkout/payment\". filter is a case-insensitive substring match on name and description " +
+    "only, never on group names; limit (default " +
     `${DEFAULT_LIST_TOOLS_LIMIT}) and offset page the name-sorted list, and total counts every ` +
     "match before paging, so page on with offset when total is larger. Use appduct_describe_tool for " +
     "one tool's full input/output schema, then appduct_call_tool to run it. A tool with policy " +
@@ -59,6 +64,7 @@ export const LIST_TOOLS_TOOL_DESCRIPTOR = {
     type: "object",
     properties: {
       selector: SELECTOR_PROPERTY,
+      group: { type: "string", pattern: TOOL_GROUP_PATTERN.source },
       filter: { type: "string", maxLength: MAX_TOOLS_FILTER_LENGTH },
       limit: { type: "integer", exclusiveMinimum: 0 },
       offset: { type: "integer", minimum: 0 },
@@ -70,8 +76,8 @@ export const LIST_TOOLS_TOOL_DESCRIPTOR = {
 export const DESCRIBE_TOOL_TOOL_DESCRIPTOR = {
   name: DESCRIBE_TOOL_TOOL_NAME,
   description:
-    "Show one of the connected app's tools in full: description, input_schema (JSON Schema for " +
-    "appduct_call_tool's args), output_schema, annotations, timeout and effective policy. Find " +
+    "Show one of the connected app's tools in full: description, group, input_schema (JSON Schema " +
+    "for appduct_call_tool's args), output_schema, annotations, timeout and effective policy. Find " +
     "names with appduct_list_tools.",
   inputSchema: {
     type: "object",
@@ -182,6 +188,7 @@ const toDescriptor = (entry: ToolsListEntry): ToolDescriptor => {
     output_schema: entry.output_schema,
     annotations: entry.annotations,
     timeout_ms: entry.timeout_ms,
+    group: entry.group,
   };
 };
 
@@ -215,18 +222,29 @@ const findTool = async (call: DaemonCall, selector: string | undefined, name: st
 
 export const handleListToolsTool = async (rawArgs: unknown, call: DaemonCall) => {
   const args = asRecord(rawArgs);
-  rejectUnknownKeys(args, LIST_TOOLS_TOOL_NAME, ["selector", "filter", "limit", "offset"]);
+  rejectUnknownKeys(args, LIST_TOOLS_TOOL_NAME, ["selector", "group", "filter", "limit", "offset"]);
   const selector = asOptionalString(args.selector, "selector");
   const session = await resolveSession(call, selector);
 
-  // `filter`/`limit`/`offset` are validated by the daemon, which rejects a bad value with
+  // `group`/`filter`/`limit`/`offset` are validated by the daemon, which rejects a bad value with
   // `invalid_request` exactly as it does for the CLI.
   const params = {
+    ...(args.group !== undefined && args.group !== null ? { group: args.group } : {}),
     ...(args.filter !== undefined && args.filter !== null ? { filter: args.filter } : {}),
     limit: args.limit ?? DEFAULT_LIST_TOOLS_LIMIT,
     ...(args.offset !== undefined && args.offset !== null ? { offset: args.offset } : {}),
   };
   const result = await call<ToolsListResult>(RPC_METHODS.toolsList, { selector: session.sessionId, ...params });
+
+  // A daemon that predates tool groups returns no `groups` and ignores `group`, so the page it sent
+  // back is the whole registry, not the group. The version check normally restarts such a daemon
+  // first; when it could not, say so rather than hand the agent a wrong listing.
+  if (!Array.isArray(result.groups) && "group" in params) {
+    throw new McpBuiltinToolError(
+      "connection_error",
+      "The running Appduct daemon does not support tool groups. Restart it with a newer version (`appduct daemon stop`), then restart this MCP server.",
+    );
+  }
 
   return {
     session: session.alias,
@@ -236,9 +254,11 @@ export const handleListToolsTool = async (rawArgs: unknown, call: DaemonCall) =>
       name: entry.name,
       signature: renderToolSignature(entry),
       summary: summarizeToolDescription(entry.description),
+      ...(entry.group !== undefined ? { group: entry.group } : {}),
       policy: entry.policy,
       ...(entry.annotations ? { annotations: entry.annotations } : {}),
     })),
+    ...(Array.isArray(result.groups) ? { groups: result.groups } : {}),
   };
 };
 

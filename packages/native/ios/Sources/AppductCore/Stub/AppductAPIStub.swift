@@ -28,6 +28,7 @@ public final class Appduct: Sendable {
     outputSchema: [String: Any]? = nil,
     annotations: ToolAnnotations? = nil,
     timeoutMs: Int? = nil,
+    group: String? = nil,
     handler: @escaping @Sendable ([String: Any], ToolCallContext) async throws -> Any?
   ) throws -> ToolRegistration {
     ToolRegistration {}
@@ -41,6 +42,7 @@ public final class Appduct: Sendable {
     outputSchema: [String: Any]? = nil,
     annotations: ToolAnnotations? = nil,
     timeoutMs: Int? = nil,
+    group: String? = nil,
     handler: @escaping @Sendable ([String: Any]) async throws -> Any?
   ) throws -> ToolRegistration {
     ToolRegistration {}

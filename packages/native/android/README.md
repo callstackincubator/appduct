@@ -89,6 +89,17 @@ schema library — the native SDK does no app-side input/output validation (the 
 either). `annotations` takes a `ToolAnnotations(readOnlyHint?, destructiveHint?, idempotentHint?)`
 matching `PROTOCOL.md` §5.
 
+On an app with many tools, pass `group` so agents can list them one area at a time
+(`appduct tools --group cart`). A group is `"cart"` or one subgroup below it, like
+`"checkout/payment"`; each part uses tool-name characters (letters, digits, `_`, `-`, at most 64).
+A malformed group makes `register` throw `IllegalArgumentException`, like a malformed name:
+
+```kotlin
+Appduct.register(name = "add_item", description = "Add a product to the cart.", group = "cart") { args ->
+  JSONObject().put("added", args.optString("sku"))
+}
+```
+
 A handler's return value is converted to JSON the same way the underlying client always has:
 `org.json` values pass through, and plain Kotlin/Java `Map`/`List`/`String`/`Number`/`Boolean`/
 `null` convert automatically. Anything else fails that one call with `tool_serialization_error`

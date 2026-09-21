@@ -119,7 +119,8 @@ Omit the session selector when only one session is active; pass an alias or sess
 
 | Export | Signature / notes |
 | --- | --- |
-| `registerTool` | `({ name, description, inputSchema?, outputSchema?, annotations?, handler })` → `{ remove() }`. The disposer removes only its own registration. |
+| `registerTool` | `({ name, description, inputSchema?, outputSchema?, annotations?, timeoutMs?, group?, handler })` → `{ remove() }`. The disposer removes only its own registration. `group` (`"cart"`, or a subgroup like `"checkout/payment"`) lets agents list your tools one area at a time — see [Group tools in a large app](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#group-tools-in-a-large-app). |
+| `createToolGroup` | `(group)` → a `registerTool` that puts every tool it registers in `group`. |
 | `useAppductTool` | `(definition, deps?, { enabled? })`. Registers once per mount, re-registering only when the descriptor changes; `deps` overrides that derivation. `enabled` defaults to `true`; `false` never registers, and removes any registration that hook owns. |
 | `handler` | `(args, context)`. `context.signal` is an `AbortSignal`, aborted when the caller cancels or the connection drops mid-call. Forward it (`fetch(url, { signal })`), check `signal.aborted`, or listen for `"abort"` — ignoring it is fine, the handler replies normally. |
 | `postEvent` | `(name, payload?)` — pushes an app event, read by `appduct events` and the MCP event tools. |
@@ -142,7 +143,7 @@ Omit the session selector when only one session is active; pass an alias or sess
 ## Going further
 
 - [Trust modes](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#trust-modes) and [Configuring trust](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#configuring-trust) — pins, plugin options, bare-RN native keys.
-- [Registering tools](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md) — schema forms, what re-registers, input schemas that accept an object, `timeoutMs`.
+- [Registering tools](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md) — schema forms, what re-registers, tool groups, input schemas that accept an object, `timeoutMs`.
 - [Gating a tool by build variant](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#gating-a-tool-by-build-variant) — `enabled`, and why `__DEV__` is wrong here.
 - [Build variants](https://github.com/callstackincubator/appduct/blob/main/docs/BUILD-VARIANTS.md) — `APPDUCT_ENABLED`, autolinking exclusion, compiling Appduct out of production builds.
 - [What a build without the native module does](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#what-a-build-without-the-native-module-does).

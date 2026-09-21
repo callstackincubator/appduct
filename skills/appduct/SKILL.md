@@ -26,9 +26,14 @@ auto-spawn it on first use — there is no separate "start the host" step to man
    call signature (`name(params) -> result`) plus a one-line description, not a full
    schema — cheap to read even for an app with hundreds of tools. `...` anywhere in a
    signature means the CLI could not summarize that part of the schema; fetch the full
-   tool (step 4) to see it. On a large app, narrow first with `--filter <text>` (matches
-   name or description) and page with `--limit <n>`/`--offset <n>` if the listing says
-   tools were left out.
+   tool (step 4) to see it. On a large app, run **`appduct tools --groups`** first: it
+   lists the app's tool groups with counts (subgroups like `checkout/payment` indented
+   under their parent). Then list one with **`--group <name>`** — `--group checkout`
+   includes every `checkout/...` subgroup, `--group checkout/payment` only that one. When
+   the app declares no groups, or you know a word to look for, narrow with
+   `--filter <text>` (matches name or description) instead. Page with
+   `--limit <n>`/`--offset <n>` if the listing says tools were left out; its footer names
+   the groups to narrow to.
 4. **`appduct tools [selector] <tool-name>`** — the tool's full input/output schema
    (`--full` is implied for a single tool, no need to pass it).
 5. **`appduct invoke [selector] <tool-name> --input '{"key":"value"}'`** — invoke the
@@ -129,8 +134,10 @@ which blocks until the device connects (or returns immediately if it already has
 The app's own tools are not MCP tools of their own. Reach them through three built-ins that
 mirror the CLI:
 
-1. `appduct_list_tools` lists them as one-line signatures with each tool's policy (like
-   `appduct tools`). On a large app, narrow with `filter`, or page with `limit`/`offset`.
+1. `appduct_list_tools` lists them as one-line signatures with each tool's group and policy
+   (like `appduct tools`), and every result carries the app's `groups` with counts. On a large
+   app, pick a group from that summary and list it with `group` (`"checkout"` includes
+   `"checkout/payment"`), or narrow with `filter`, or page with `limit`/`offset`.
 2. `appduct_describe_tool({ name })` shows one tool's full input and output schema (like
    `appduct tools <name>`).
 3. `appduct_call_tool({ name, args })` runs it (like `appduct invoke`).
@@ -209,6 +216,12 @@ An input schema must **accept a JSON object**, since a call's args always are on
 `type` of string, number or array can never be satisfied (issue #34). A root `anyOf`/`oneOf`
 of objects works, but its signature shows as `(...)`, so read the full schema
 (`appduct tools <name>`) before calling it.
+
+Put every tool in a `group` once an app has more than a screenful of them
+(`group: "cart"`, or `createToolGroup("cart")` to bind it for a whole feature module);
+use a subgroup (`group: "checkout/payment"`, at most one level below the group) only
+when a group itself outgrows a screen. Each part of a group uses tool-name characters
+(`[a-zA-Z0-9_-]`, at most 64); anything else makes registration throw.
 
 ## Notes
 

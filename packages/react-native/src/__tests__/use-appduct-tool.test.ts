@@ -86,6 +86,7 @@ type Registration = {
   handler: AppductToolHandler;
   /** What tool-invocation's "must not return a result when outputSchema is omitted" rule keys on. */
   hasOutputSchema: boolean;
+  group?: string;
 };
 
 const makeRegisterTool = () => {
@@ -105,6 +106,7 @@ const makeRegisterTool = () => {
       description: registration.description,
       handler: registration.handler as AppductToolHandler,
       hasOutputSchema: registration.outputSchema !== undefined,
+      group: registration.group,
     };
     registrations.push(entry);
     return {
@@ -314,6 +316,43 @@ describe("createUseAppductTool", () => {
       expect(registrations[0]?.removed).toBe(true);
       expect(registrations[1]?.removed).toBe(true);
       expect(registrations[2]?.removed).toBe(false);
+    });
+
+    test("changing group re-registers, an unchanged group does not", async () => {
+      const { registerTool, registrations } = makeRegisterTool();
+      const { createUseAppductTool } = await import("../useAppductTool");
+      const useAppductTool = createUseAppductTool(
+        registerTool,
+        realEntryOptions,
+      );
+
+      const render = (group?: string) =>
+        host.render(() => useAppductTool({ ...toolDefinition(), group }));
+
+      render("checkout");
+      render("checkout");
+      expect(registrations).toHaveLength(1);
+
+      // Parent -> subgroup.
+      render("checkout/payment");
+      expect(registrations).toHaveLength(2);
+      render("checkout/payment");
+      expect(registrations).toHaveLength(2);
+
+      // Grouped -> ungrouped.
+      host.render(() => useAppductTool(toolDefinition()));
+      expect(registrations).toHaveLength(3);
+
+      expect(registrations.map((entry) => entry.removed)).toEqual([
+        true,
+        true,
+        false,
+      ]);
+      expect(registrations.map((entry) => entry.group)).toEqual([
+        "checkout",
+        "checkout/payment",
+        undefined,
+      ]);
     });
 
     test("a handler closing over changed state does not re-register, and the next call sees the new value", async () => {

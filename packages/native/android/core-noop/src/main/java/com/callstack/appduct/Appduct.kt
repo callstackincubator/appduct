@@ -22,6 +22,7 @@ object Appduct {
         outputSchema: JSONObject? = null,
         annotations: ToolAnnotations? = null,
         timeoutMs: Long? = null,
+        group: String? = null,
         handler: suspend (args: JSONObject, context: ToolCallContext) -> Any?,
     ): ToolRegistration = ToolRegistration(name) {}
 
@@ -34,6 +35,7 @@ object Appduct {
         outputSchema: JSONObject? = null,
         annotations: ToolAnnotations? = null,
         timeoutMs: Long? = null,
+        group: String? = null,
         handler: suspend (args: JSONObject) -> Any?,
     ): ToolRegistration = ToolRegistration(name) {}
 

@@ -3,6 +3,9 @@ import { describe, expect, test } from "vitest";
 import {
   clampToolTimeoutMs,
   isToolDescriptor,
+  isValidToolGroup,
+  summarizeToolGroups,
+  toolGroupMatches,
   MAX_TOOL_DESCRIPTION_LENGTH,
   MAX_TOOL_TIMEOUT_MS,
   MIN_TOOL_TIMEOUT_MS,
@@ -155,5 +158,88 @@ describe("clampToolTimeoutMs", () => {
         }),
       ).toBe(true);
     }
+  });
+});
+
+describe("tool groups", () => {
+  test("isValidToolGroup accepts one or two name-pattern segments and nothing else", () => {
+    expect(isValidToolGroup("checkout")).toBe(true);
+    expect(isValidToolGroup("checkout/payment")).toBe(true);
+    expect(isValidToolGroup(`${"a".repeat(64)}/${"b".repeat(64)}`)).toBe(true);
+
+    for (const bad of [
+      "",
+      "/",
+      "checkout/",
+      "/payment",
+      "a//b",
+      "a/b/c",
+      "a".repeat(65),
+      `a/${"b".repeat(65)}`,
+      "a b",
+      "a.b",
+      "a\n",
+      "café",
+    ]) {
+      expect(isValidToolGroup(bad), JSON.stringify(bad)).toBe(false);
+    }
+
+    for (const nonString of [undefined, null, 42, ["a"], { group: "a" }]) {
+      expect(isValidToolGroup(nonString)).toBe(false);
+    }
+  });
+
+  test("isToolDescriptor rejects an invalid group and accepts a valid or omitted one", () => {
+    expect(isToolDescriptor({ ...valid(), group: "checkout/payment" })).toBe(true);
+    expect(isToolDescriptor(valid())).toBe(true);
+    expect(isToolDescriptor({ ...valid(), group: "a/b/c" })).toBe(false);
+    expect(isToolDescriptor({ ...valid(), group: null })).toBe(false);
+  });
+
+  test("toolGroupMatches matches by segment: a parent includes its subgroups, never a longer name", () => {
+    expect(toolGroupMatches("checkout", "checkout")).toBe(true);
+    expect(toolGroupMatches("checkout/payment", "checkout")).toBe(true);
+    expect(toolGroupMatches("checkout/payment", "checkout/payment")).toBe(true);
+    expect(toolGroupMatches("checkoutx", "checkout")).toBe(false);
+    expect(toolGroupMatches("checkoutx/payment", "checkout")).toBe(false);
+    expect(toolGroupMatches("checkout", "checkout/payment")).toBe(false);
+    expect(toolGroupMatches("checkout/paymentx", "checkout/payment")).toBe(false);
+    expect(toolGroupMatches("Checkout", "checkout")).toBe(false);
+    expect(toolGroupMatches(undefined, "checkout")).toBe(false);
+  });
+
+  test("summarizeToolGroups counts parents including subgroups, keeps a parent before its subgroups, null last", () => {
+    const summary = summarizeToolGroups([
+      { group: "checkout/payment" },
+      {},
+      { group: "checkout-x" },
+      { group: "cart" },
+      { group: "checkout" },
+      { group: "checkout/payment" },
+      { group: "checkout/address" },
+      { group: "Zeta" },
+      {},
+    ]);
+
+    expect(summary).toEqual([
+      { group: "Zeta", total: 1 },
+      { group: "cart", total: 1 },
+      // `checkout/*` sorts right after `checkout`, even though "-" < "/" would put "checkout-x"
+      // between them under a whole-path code-point comparison.
+      { group: "checkout", total: 4 },
+      { group: "checkout/address", total: 1 },
+      { group: "checkout/payment", total: 2 },
+      { group: "checkout-x", total: 1 },
+      { group: null, total: 2 },
+    ]);
+  });
+
+  test("summarizeToolGroups lists a parent that only has subgroup tools, and omits null with no ungrouped tools", () => {
+    expect(summarizeToolGroups([{ group: "checkout/payment" }])).toEqual([
+      { group: "checkout", total: 1 },
+      { group: "checkout/payment", total: 1 },
+    ]);
+    expect(summarizeToolGroups([])).toEqual([]);
+    expect(summarizeToolGroups([{}])).toEqual([{ group: null, total: 1 }]);
   });
 });

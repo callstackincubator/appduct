@@ -173,6 +173,16 @@ try Appduct.shared.register(
 
 - `annotations` (`ToolAnnotations(readOnlyHint:destructiveHint:idempotentHint:)`) and `timeoutMs`
   are optional, exactly like the JS API's `registerTool`.
+- `group` is optional too. On an app with many tools, set it so agents can list them one area at a
+  time (`appduct tools --group cart`). A group is `"cart"` or one subgroup below it, like
+  `"checkout/payment"`; each part uses tool-name characters (letters, digits, `_`, `-`, at most 64).
+  A malformed group makes `register` throw, like a malformed name:
+
+  ```swift
+  try Appduct.shared.register(name: "add_item", description: "Add a product to the cart.", group: "cart") { args in
+    ["added": args["sku"] ?? NSNull()]
+  }
+  ```
 
 ### Observing connection state, session, and errors
 

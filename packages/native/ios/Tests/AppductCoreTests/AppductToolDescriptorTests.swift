@@ -85,4 +85,37 @@ final class AppductToolDescriptorTests: XCTestCase {
     ])
     XCTAssertThrowsError(try parseToolDescriptor(wire))
   }
+
+  // MARK: group
+
+  func testGroupMustBeOneOrTwoNameSegments() {
+    for group in ["checkout", "checkout/payment", String(repeating: "g", count: 64)] {
+      XCTAssertNoThrow(try validateToolDescriptor(ToolDescriptor(name: "tool", description: "x", group: group)), group)
+    }
+    for group in ["", "checkout/", "/payment", "a//b", "a/b/c", "a b", "checkout\n", String(repeating: "g", count: 65)] {
+      XCTAssertThrowsError(try validateToolDescriptor(ToolDescriptor(name: "tool", description: "x", group: group)), group)
+    }
+  }
+
+  func testGroupRoundTripsThroughTheWireShape() throws {
+    let wire = JSONValue.object([
+      "name": .string("pay"),
+      "description": .string("Pay."),
+      "group": .string("checkout/payment"),
+    ])
+    let descriptor = try parseToolDescriptor(wire)
+    XCTAssertEqual(descriptor.group, "checkout/payment")
+    XCTAssertEqual(descriptor.wireValue.objectValue?["group"]?.stringValue, "checkout/payment")
+    XCTAssertNil(ToolDescriptor(name: "tool", description: "x").wireValue.objectValue?["group"])
+  }
+
+  func testRegistryStoresTheGroupItSnapshots() throws {
+    let registry = AppductToolRegistryStore()
+    try registry.upsert(
+      ToolDescriptor(name: "pay", description: "Pay.", group: "checkout/payment"),
+      handler: { _, _ in .null },
+      defaultTimeoutMs: 10_000
+    )
+    XCTAssertEqual(registry.snapshot().first?.wireValue.objectValue?["group"]?.stringValue, "checkout/payment")
+  }
 }

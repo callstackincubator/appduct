@@ -33,7 +33,8 @@ function formatToolLine(tool: RegisteredTool): string {
     tool.annotations?.idempotentHint && "idempotent",
   ].filter(Boolean);
   const suffix = flags.length > 0 ? ` [${flags.join(", ")}]` : "";
-  return `${tool.name}${suffix}\n  ${tool.description}`;
+  const group = tool.group ? `${tool.group} / ` : "";
+  return `${group}${tool.name}${suffix}\n  ${tool.description}`;
 }
 
 export default function ToolsScreen() {
@@ -52,6 +53,9 @@ export default function ToolsScreen() {
     setCallCount((count) => count + 1);
   };
 
+  // Groups: `counter` and `diagnostics` (with a `diagnostics/progress` subgroup), plus `sum`
+  // left ungrouped -- so `appduct tools` shows headings, `--groups` has something to list, and
+  // `--group diagnostics` vs `--group diagnostics/progress` differ.
   useAppductTool({
     name: "sum",
     description: "Adds two numbers.",
@@ -71,6 +75,7 @@ export default function ToolsScreen() {
   useAppductTool({
     name: "call_count",
     description: "Reports how many times the playground's counted tools have run.",
+    group: "counter",
     annotations: { readOnlyHint: true },
     outputSchema: z.object({
       count: z.number(),
@@ -83,6 +88,7 @@ export default function ToolsScreen() {
   useAppductTool({
     name: "reset_counter",
     description: "Resets the playground's call counter to zero.",
+    group: "counter",
     annotations: { destructiveHint: true },
     outputSchema: z.object({
       count: z.number(),
@@ -96,6 +102,7 @@ export default function ToolsScreen() {
   useAppductTool({
     name: "slow_task",
     description: "Takes ~1.5s and reports progress along the way.",
+    group: "diagnostics/progress",
     outputSchema: z.object({
       done: z.boolean(),
     }),
@@ -117,6 +124,7 @@ export default function ToolsScreen() {
   useAppductTool({
     name: "throwing_tool",
     description: "Always throws, to exercise tool_execution_error.",
+    group: "diagnostics",
     handler: () => {
       throw new Error("throwing_tool always fails on purpose.");
     },

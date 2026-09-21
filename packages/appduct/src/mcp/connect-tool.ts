@@ -132,7 +132,13 @@ export const WAIT_FOR_SESSION_TOOL_DESCRIPTOR = {
  * mapping (see `server.ts`) handles them the same way it handles an app tool's error. */
 export class McpBuiltinToolError extends Error {
   constructor(
-    readonly type: "invalid_request" | "tool_not_found" | "tool_timeout" | "tool_cancelled" | "tool_execution_error",
+    readonly type:
+      | "invalid_request"
+      | "tool_not_found"
+      | "tool_timeout"
+      | "tool_cancelled"
+      | "tool_execution_error"
+      | "connection_error",
     message: string,
   ) {
     super(message);

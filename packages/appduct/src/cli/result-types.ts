@@ -11,6 +11,7 @@ import type {
   EventNotification,
   SessionSummary,
   ToolDescriptor,
+  ToolGroupSummary,
   ToolsListResult,
 } from "@appduct/shared";
 
@@ -147,18 +148,27 @@ export type LinkCommandData = {
 /** `appduct ls`: `sessions.list` passthrough, verbatim (ARCHITECTURE.md §10: "--json passthrough"). */
 export type LsCommandData = SessionSummary[];
 
-/** `appduct tools`'s listing form: the daemon's `tools.list` result, plus the `--filter`/`--limit`/
- * `--offset` inputs that produced it (only the ones actually given — echoed so `--json` and the
+/** `appduct tools`'s listing form: the daemon's `tools.list` result, plus the `--group`/`--filter`/
+ * `--limit`/`--offset` inputs that produced it (only the ones actually given — echoed so `--json` and the
  * human renderer's "Showing n of total" line can report what was asked for without threading the
  * CLI options through separately). */
 export type ToolsListing = ToolsListResult & {
   offset?: number;
   limit?: number;
+  group?: string;
   filter?: string;
 };
 
-/** `appduct tools`: a listing, or a single descriptor when a tool name resolved to a detail lookup. */
-export type ToolsCommandData = ToolsListing | ToolDescriptor;
+/** `appduct tools --groups`: the daemon's `groups` summary alone, plus the registry's size. */
+export type ToolGroupsListing = {
+  groups: ToolGroupSummary[];
+  /** Every tool in the session, grouped or not. */
+  total: number;
+};
+
+/** `appduct tools`: a listing, a groups summary (`--groups`), or a single descriptor when a tool
+ * name resolved to a detail lookup. */
+export type ToolsCommandData = ToolsListing | ToolGroupsListing | ToolDescriptor;
 
 /** `appduct invoke`: the tool's raw result payload, printed as-is. */
 export type InvokeCommandData = unknown;

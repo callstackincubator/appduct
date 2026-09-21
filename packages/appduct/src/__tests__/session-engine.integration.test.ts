@@ -450,6 +450,32 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     expect(closeInfo.reason).toBe("invalid_registry");
   });
 
+  test("a tool_registry_snapshot with a too-deep group closes 1008 invalid_registry, like a bad timeout_ms", async () => {
+    const { daemon, port } = await startTestDaemon();
+    const link = await createLinkAndDecode(daemon, port);
+
+    const socket = await connectClient(port);
+    socket.send(
+      JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: link.token }),
+    );
+    await nextMessage(socket);
+
+    const closed = nextClose(socket);
+    socket.send(
+      JSON.stringify({
+        type: "tool_registry_snapshot",
+        session_id: link.sessionId,
+        tools: [
+          { name: "ok", description: "Fine.", group: "checkout/payment" },
+          { name: "bad", description: "Too deep.", group: "checkout/payment/card" },
+        ],
+      }),
+    );
+    const closeInfo = await closed;
+    expect(closeInfo.code).toBe(1008);
+    expect(closeInfo.reason).toBe("invalid_registry");
+  });
+
   test("unknown post-claim message type closes 1008 unknown_message_type", async () => {
     const { daemon, port } = await startTestDaemon();
     const link = await createLinkAndDecode(daemon, port);

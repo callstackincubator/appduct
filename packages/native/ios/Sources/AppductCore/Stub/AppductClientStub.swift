@@ -41,6 +41,7 @@ public struct ToolDescriptor: Sendable, Equatable {
   public var outputSchema: JSONObject?
   public var annotations: ToolAnnotations?
   public var timeoutMs: Int?
+  public var group: String?
 
   public init(
     name: String,
@@ -48,7 +49,8 @@ public struct ToolDescriptor: Sendable, Equatable {
     inputSchema: JSONObject? = nil,
     outputSchema: JSONObject? = nil,
     annotations: ToolAnnotations? = nil,
-    timeoutMs: Int? = nil
+    timeoutMs: Int? = nil,
+    group: String? = nil
   ) {
     self.name = name
     self.description = description
@@ -56,6 +58,7 @@ public struct ToolDescriptor: Sendable, Equatable {
     self.outputSchema = outputSchema
     self.annotations = annotations
     self.timeoutMs = timeoutMs
+    self.group = group
   }
 }
 

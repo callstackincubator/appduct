@@ -3,6 +3,13 @@ package com.callstack.appduct
 import org.json.JSONObject
 
 private val TOOL_NAME_PATTERN = Regex("^[a-zA-Z0-9_-]{1,64}$")
+
+/** Mirrors `@appduct/shared`'s `TOOL_GROUP_PATTERN`: one or two `/`-separated tool-name segments.
+ * `Regex.matches` is a whole-string match, like JS's anchored `RegExp.test`. */
+private val TOOL_GROUP_PATTERN = Regex("^[a-zA-Z0-9_-]{1,64}(?:/[a-zA-Z0-9_-]{1,64})?$")
+
+/** Whether [group] is a valid tool group (PROTOCOL.md §5) -- `@appduct/shared`'s `isValidToolGroup`. */
+internal fun isValidAppductToolGroup(group: String): Boolean = TOOL_GROUP_PATTERN.matches(group)
 private const val MAX_TOOL_DESCRIPTION_LENGTH = 4096
 private val TOOL_ANNOTATION_KEYS = setOf("readOnlyHint", "destructiveHint", "idempotentHint")
 
@@ -10,7 +17,8 @@ private val TOOL_ANNOTATION_KEYS = setOf("readOnlyHint", "destructiveHint", "ide
  * Validates a [AppductToolDescriptor] against PROTOCOL.md §5, the same rules
  * `@appduct/shared`'s `isToolDescriptor` applies: `name` matches `^[a-zA-Z0-9_-]{1,64}$`,
  * `description` is 1-4096 chars, `annotations` (if present) is a JSON object of only the three
- * known boolean keys, and `timeoutMs` (if present) is a positive integer. `inputSchema`/
+ * known boolean keys, `timeoutMs` (if present) is a positive integer, and `group` (if present) is
+ * one or two `/`-separated segments each matching the name pattern. `inputSchema`/
  * `outputSchema` are typed as `JSONObject?` already, so "JSON object if present" is guaranteed
  * structurally and needs no runtime check here.
  *
@@ -53,6 +61,13 @@ internal fun validateAppductToolDescriptor(descriptor: AppductToolDescriptor) {
     if (timeoutMs != null && timeoutMs <= 0) {
         throw AppductInvalidToolDescriptorException(
             "Tool \"${descriptor.name}\" timeoutMs must be a positive integer.",
+        )
+    }
+
+    val group = descriptor.group
+    if (group != null && !isValidAppductToolGroup(group)) {
+        throw AppductInvalidToolDescriptorException(
+            "Tool \"${descriptor.name}\" group \"$group\" must be one or two \"/\"-separated segments, each matching ^[a-zA-Z0-9_-]{1,64}$.",
         )
     }
 }

@@ -36,6 +36,9 @@ public struct ToolDescriptor: Sendable, Equatable {
   public var annotations: ToolAnnotations?
   /// Positive integer milliseconds; the app-declared per-call deadline (§5).
   public var timeoutMs: Int?
+  /// The tool's group (§5): `"checkout"` or a subgroup like `"checkout/payment"` -- one or two
+  /// `/`-separated segments, each matching the tool-name pattern. `nil` for an ungrouped tool.
+  public var group: String?
 
   public init(
     name: String,
@@ -43,7 +46,8 @@ public struct ToolDescriptor: Sendable, Equatable {
     inputSchema: JSONObject? = nil,
     outputSchema: JSONObject? = nil,
     annotations: ToolAnnotations? = nil,
-    timeoutMs: Int? = nil
+    timeoutMs: Int? = nil,
+    group: String? = nil
   ) {
     self.name = name
     self.description = description
@@ -51,6 +55,7 @@ public struct ToolDescriptor: Sendable, Equatable {
     self.outputSchema = outputSchema
     self.annotations = annotations
     self.timeoutMs = timeoutMs
+    self.group = group
   }
 
   public var wireValue: JSONValue {
@@ -59,6 +64,7 @@ public struct ToolDescriptor: Sendable, Equatable {
     if let outputSchema { out["output_schema"] = .object(outputSchema) }
     if let annotations { out["annotations"] = annotations.jsonValue }
     if let timeoutMs { out["timeout_ms"] = .number(Double(timeoutMs)) }
+    if let group { out["group"] = .string(group) }
     return .object(out)
   }
 }
@@ -77,9 +83,28 @@ private let toolNamePattern: NSRegularExpression = {
   try! NSRegularExpression(pattern: "^[a-zA-Z0-9_-]{1,64}$")
 }()
 
+private let toolGroupPattern: NSRegularExpression = {
+  // Mirrors `@appduct/shared`'s `TOOL_GROUP_PATTERN`: one or two `/`-separated tool-name segments.
+  // swiftlint:disable:next force_try
+  try! NSRegularExpression(pattern: "^[a-zA-Z0-9_-]{1,64}(?:/[a-zA-Z0-9_-]{1,64})?$")
+}()
+
+/// A whole-string match. ICU's `$` also matches just before a *trailing* line terminator, so a
+/// bare `firstMatch != nil` would accept `"tool\n"` where JS's `RegExp.test` and Kotlin's
+/// `Regex.matches` reject it -- the match has to cover the entire string.
+private func matchesWholeString(_ pattern: NSRegularExpression, _ value: String) -> Bool {
+  let range = NSRange(value.startIndex..<value.endIndex, in: value)
+  guard let match = pattern.firstMatch(in: value, range: range) else { return false }
+  return match.range == range
+}
+
 private func matchesToolNamePattern(_ name: String) -> Bool {
-  let range = NSRange(name.startIndex..<name.endIndex, in: name)
-  return toolNamePattern.firstMatch(in: name, range: range) != nil
+  matchesWholeString(toolNamePattern, name)
+}
+
+/// Whether `group` is a valid tool group (PROTOCOL.md §5) -- `@appduct/shared`'s `isValidToolGroup`.
+public func isValidToolGroup(_ group: String) -> Bool {
+  matchesWholeString(toolGroupPattern, group)
 }
 
 private let toolAnnotationKeys: Set<String> = ["readOnlyHint", "destructiveHint", "idempotentHint"]
@@ -88,7 +113,8 @@ private let maxToolDescriptionLength = 4096
 /// Ports `@appduct/shared`'s `isToolDescriptor` exactly (PROTOCOL.md §5): name pattern,
 /// description length 1...4096, `input_schema`/`output_schema` must be JSON objects if present,
 /// `annotations` must be a JSON object of only the three known boolean keys, and `timeout_ms` must
-/// be a positive integer if present.
+/// be a positive integer if present, and `group` must be one or two `/`-separated segments each
+/// matching the name pattern if present.
 public func validateToolDescriptor(_ descriptor: ToolDescriptor) throws {
   guard matchesToolNamePattern(descriptor.name) else {
     throw ToolDescriptorValidationError(
@@ -113,6 +139,12 @@ public func validateToolDescriptor(_ descriptor: ToolDescriptor) throws {
   if let timeoutMs = descriptor.timeoutMs, timeoutMs <= 0 {
     throw ToolDescriptorValidationError(
       "Tool \"\(descriptor.name)\" timeout_ms must be a positive integer."
+    )
+  }
+
+  if let group = descriptor.group, !isValidToolGroup(group) {
+    throw ToolDescriptorValidationError(
+      "Tool \"\(descriptor.name)\" group \"\(group)\" must be one or two \"/\"-separated segments, each matching ^[a-zA-Z0-9_-]{1,64}$."
     )
   }
 }
@@ -180,13 +212,25 @@ public func parseToolDescriptor(_ value: JSONValue) throws -> ToolDescriptor {
     timeoutMs = Int(doubleValue)
   }
 
+  // Unlike the fields above, an explicit JSON `null` is rejected rather than read as "absent":
+  // `@appduct/shared`'s `isToolDescriptor` only treats a *missing* `group` as ungrouped, and
+  // packages/native/fixtures/tool-descriptors.json's "group-null" case pins all three to that.
+  var group: String?
+  if let raw = object["group"] {
+    guard let groupValue = raw.stringValue else {
+      throw ToolDescriptorValidationError("Tool \"\(name)\" group must be a string.")
+    }
+    group = groupValue
+  }
+
   let descriptor = ToolDescriptor(
     name: name,
     description: description,
     inputSchema: inputSchema,
     outputSchema: outputSchema,
     annotations: annotations,
-    timeoutMs: timeoutMs
+    timeoutMs: timeoutMs,
+    group: group
   )
 
   try validateToolDescriptor(descriptor)

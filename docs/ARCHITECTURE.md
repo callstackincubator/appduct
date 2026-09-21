@@ -261,7 +261,7 @@ Methods:
 | `sessions.list` | — | `SessionSummary[]` |
 | `sessions.describe` | `{ selector? }` | full session detail incl. device metadata, state timestamps, tool count |
 | `sessions.revoke` | `{ selector? }` | `{ ok: true }` — closes socket (code 1000), frees alias |
-| `tools.list` | `{ selector?, filter?, limit?, offset? }` | `{ tools: ToolsListEntry[], total }` — `tools` is the registry sorted by `name` (code-point order), `filter`ed (case-insensitive substring match against name/description) and paged with `limit`/`offset`; each entry is a `ToolDescriptor` (full schema + annotations) plus the tool's effective `policy: "allow" \| "deny" \| "prompt"` (§12), resolved daemon-side. `total` is the filtered count *before* paging, so a caller can tell how much a page left out |
+| `tools.list` | `{ selector?, group?, filter?, limit?, offset? }` | `{ tools: ToolsListEntry[], total, groups }` — `tools` is the registry sorted by `name` (code-point order), narrowed to `group` (PROTOCOL.md §5 syntax, matched by segment: `checkout` includes `checkout/*` and never `checkoutx`; case-sensitive), `filter`ed (case-insensitive substring match against name/description) and paged with `limit`/`offset`; each entry is a `ToolDescriptor` (full schema + annotations + `group`) plus the tool's effective `policy: "allow" \| "deny" \| "prompt"` (§12), resolved daemon-side. `total` is the count matching `group` and `filter` *before* paging, so a caller can tell how much a page left out. `groups: { group: string \| null, total }[]` summarizes the **whole** registry — never narrowed by `group`, `filter` or paging: one entry per top-level group (its `total` includes its subgroups), one per subgroup, and `group: null` for ungrouped tools when there are any; sorted by group path with a parent right before its subgroups, `null` last. A malformed `group` is `invalid_request`, like a bad `limit` |
 | `tools.call` | `{ selector?, name, args, timeoutMs?, caller?: "cli" \| "mcp", consent?: "elicitation" }` | `{ result, callId }` on success — `callId` lets a caller with several in-flight calls match `tool_call_progress`/`tool_call_finished` events back to this call; JSON-RPC error with `data.type` preserving the wire error type on failure. `caller` attributes the audit record (§12); `consent` is the MCP server's evidence of a `"prompt"`-policy human gate (§12) — `"elicitation"` after the client accepted an elicitation prompt, absent otherwise (including for the CLI). |
 | `tools.cancel` | `{ selector?, callId, reason? }` | `{ cancelled: boolean }` — sends `tool_cancel` (§7) to the app for a still-pending call; `false` for an unknown/already-finished `callId` or no active socket (a no-op, not an error) |
 | `events.subscribe` | `{ sessionSelector?, kinds? }` | `{ ok: true }`, then `event` notifications on this connection |
@@ -464,9 +464,10 @@ proxies daemon RPC (auto-spawning the daemon like any client):
 - `tools/list` is a fixed set of built-in tools. The app's tools are never listed as MCP
   tools of their own; an agent reaches them through three built-ins that mirror the CLI (§10):
   `appduct_list_tools` (`appduct tools`: one-line signatures from `renderToolSignature`, each
-  tool's effective policy, with `filter`/`limit`/`offset` passed through to `tools.list` and
-  `limit` defaulting to 50), `appduct_describe_tool` (`appduct tools <name>`: the whole
-  descriptor), and `appduct_call_tool` (`appduct invoke`: `{ selector?, name, args?, timeoutMs? }`).
+  tool's `group` and effective policy, with `group`/`filter`/`limit`/`offset` passed through to
+  `tools.list`, `limit` defaulting to 50, and the daemon's whole-registry `groups` summary on
+  every result), `appduct_describe_tool` (`appduct tools <name>`: the whole descriptor, `group`
+  included), and `appduct_call_tool` (`appduct invoke`: `{ selector?, name, args?, timeoutMs? }`).
   `timeoutMs` can only shorten the tool's own deadline, since the `tool_call` frame carries no
   deadline and the app stops the handler at its declared one (`docs/PROTOCOL.md` §5); a longer value, or one outside
   1000–600000 ms, is rejected rather than clamped. A client cancel that arrives while the consent
@@ -528,7 +529,14 @@ The per-command reference lives in the [`appduct` package README](../packages/ap
 which is where it stays current. `appduct tools`'s human listing renders each tool through
 `@appduct/shared`'s `renderToolSignature` (a one-line call signature derived from the tool's JSON
 Schema) rather than printing the raw schema, so it stays cheap to read against an app that
-registers hundreds of tools. Global flags (`cli/global-flags.ts`'s declarative table): `--json`
+registers hundreds of tools. Once any tool declares a `group` (PROTOCOL.md §5), that listing prints
+the page's signatures under group headings (subgroups as indented sub-headings, ungrouped tools last
+under `(ungrouped)`), and its "Showing n of total" footer names the top-level groups with their
+counts so an agent narrows with `--group <name>` rather than guessing a `--filter`. `--group` is
+`tools.list`'s `group` param, filtered daemon-side like `--filter`; `--groups` prints only the
+`groups` summary (subgroups indented under their parent). Both are listing-only flags, a usage
+error next to a tool `<name>`, and a malformed `--group` is a usage error before the daemon is
+asked. Global flags (`cli/global-flags.ts`'s declarative table): `--json`
 (machine output, NDJSON for streams; compact by default), `--pretty` (indent `--json` output and
 embedded JSON values, never NDJSON lines), `--verbose` (include the `meta` block — omitted by
 default in both human and `--json` output), `--no-color`, `--state-dir`, `--daemon-restart` (force
@@ -773,20 +781,23 @@ deviations):
   install the listener must call the exported `restoreSession()` (equivalently
   `appductClient.restoreSession()`) at startup — it is the only other reader of the
   lease, so skipping it drops a resumable session on every JS runtime replacement.
-- `registerTool({ name, description, inputSchema?, outputSchema?, annotations?, handler })`
+- `registerTool({ name, description, inputSchema?, outputSchema?, annotations?, timeoutMs?, group?, handler })`
   → `{ remove() }`. JS converts/validates the schema and keeps the handler in a local map;
   the wire descriptor is validated again natively (per PROTOCOL.md §5) and throws
   synchronously on an invalid one. The disposer removes only its own registration (compare
   by registration identity, not name). Duplicate name registration logs a dev warning and
   overwrites. Native owns the registry itself and its `tool_registry_snapshot`/
   `tool_registry_delta` sends; `getRegisteredTools()` reads straight from it.
+  `createToolGroup(group)` returns this same `registerTool` with `group` bound, for a feature
+  module that registers several tools in one group; it validates nothing itself (native does,
+  at registration), so the root and `./noop` entries behave identically.
 - `useAppductTool(definition, deps?, { enabled? })` — `useEffect` wrapper around
   `registerTool`/`remove`. It registers **once per mount**: the registered handler is a
   stable wrapper forwarding to the latest render's `definition.handler`, so a handler
   closing over component state is fresh on every call without re-registering. With `deps`
   omitted (the documented default) the effect keys off a derived, fixed-length dependency
   list of everything that changes the registry entry — `name`, `description`,
-  `timeoutMs` (app-side only, but part of the entry), stringified `annotations`, the
+  `timeoutMs` (app-side only, but part of the entry), `group`, stringified `annotations`, the
   exported input/output JSON Schemas, and `enabled` — so a re-render never emits a
   `tool_registry_delta` pair. Schemas
   are compared by identity first and re-exported only when the identity changed

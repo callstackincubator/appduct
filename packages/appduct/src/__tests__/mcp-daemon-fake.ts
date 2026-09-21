@@ -19,6 +19,8 @@
 
 import {
   RPC_METHODS,
+  summarizeToolGroups,
+  toolGroupMatches,
   type ErrorType,
   type EventNotification,
   type SessionSummary,
@@ -180,20 +182,23 @@ export const createFakeDaemon = (): FakeDaemon => {
       }
 
       if (method === RPC_METHODS.toolsList) {
-        const { selector, filter, limit, offset } = (params ?? {}) as {
+        const { selector, group, filter, limit, offset } = (params ?? {}) as {
           selector?: string;
+          group?: string;
           filter?: string;
           limit?: number;
           offset?: number;
         };
         const entries = toolsByAlias.get(resolveSession(selector).alias)!;
 
-        // The daemon's `{ tools, total }` shape: sorted by name as the daemon sorts its registry,
-        // `filter`ed on name and description, `total` counted before paging.
+        // The daemon's `{ tools, total, groups }` shape: sorted by name as the daemon sorts its registry,
+        // narrowed to `group`, `filter`ed on name and description, `total` counted before paging,
+        // and `groups` summarizing the whole registry.
         const lowerFilter = filter?.toLowerCase();
         const matching = entries
           .map((entry) => ({ ...entry }))
           .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+          .filter((entry) => group === undefined || toolGroupMatches(entry.group, group))
           .filter(
             (entry) =>
               lowerFilter === undefined ||
@@ -203,7 +208,7 @@ export const createFakeDaemon = (): FakeDaemon => {
         const start = offset ?? 0;
         const tools = matching.slice(start, limit === undefined ? undefined : start + limit);
 
-        return { tools, total: matching.length } as TResult;
+        return { tools, total: matching.length, groups: summarizeToolGroups(entries) } as TResult;
       }
 
       if (method === RPC_METHODS.toolsCall) {

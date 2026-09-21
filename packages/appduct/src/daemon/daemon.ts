@@ -12,6 +12,9 @@ import { rm } from "node:fs/promises";
 import {
   MAX_TOOLS_FILTER_LENGTH,
   RPC_METHODS,
+  isValidToolGroup,
+  summarizeToolGroups,
+  toolGroupMatches,
   EVENT_KINDS,
   type EventKind,
   type ErrorType,
@@ -159,6 +162,15 @@ const asToolsListParams = (params: unknown): ToolsListParams => {
   const { selector } = asSelectorParams(params);
   const record = asRecordParams(params);
 
+  const group = record.group;
+
+  if (group !== undefined && !isValidToolGroup(group)) {
+    throw new RpcApplicationError(
+      "invalid_request",
+      '"group" must be one or two "/"-separated segments, each matching [a-zA-Z0-9_-]{1,64}.',
+    );
+  }
+
   const filter = record.filter;
 
   if (filter !== undefined && (typeof filter !== "string" || filter.length > MAX_TOOLS_FILTER_LENGTH)) {
@@ -182,6 +194,7 @@ const asToolsListParams = (params: unknown): ToolsListParams => {
 
   return {
     selector,
+    group: group as string | undefined,
     filter: filter as string | undefined,
     limit: limit as number | undefined,
     offset: offset as number | undefined,
@@ -581,7 +594,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           return { ok: true };
         },
         [RPC_METHODS.toolsList]: (params): ToolsListResult => {
-          const { selector, filter, limit, offset } = asToolsListParams(params);
+          const { selector, group, filter, limit, offset } = asToolsListParams(params);
           // ARCHITECTURE.md §5: tools.list works for ACTIVE and SUSPENDED sessions alike (the
           // retained registry survives suspend); only tools.call requires ACTIVE.
           const resolved = activeSessionManager.resolveForTools(selector);
@@ -598,14 +611,23 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           // `--filter`/paging with `--limit`/`--offset` sees the same order every time.
           entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
+          // Computed before any narrowing: the summary describes the whole registry, so an agent that
+          // narrowed to one group (or filtered to nothing) still sees every group it could pick.
+          const groups = summarizeToolGroups(entries);
+
+          // Group first, then the substring filter, both before `total` — so `total` is "in this
+          // group and matching this filter", and paging slices that, never the whole registry.
+          const inGroup =
+            group === undefined ? entries : entries.filter((entry) => toolGroupMatches(entry.group, group));
+
           const lowerFilter = filter?.toLowerCase();
           const matching = lowerFilter
-            ? entries.filter(
+            ? inGroup.filter(
                 (entry) =>
                   entry.name.toLowerCase().includes(lowerFilter) ||
                   entry.description.toLowerCase().includes(lowerFilter),
               )
-            : entries;
+            : inGroup;
 
           const total = matching.length;
           const page =
@@ -613,7 +635,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
               ? matching
               : matching.slice(offset ?? 0, limit === undefined ? undefined : (offset ?? 0) + limit);
 
-          return { tools: page, total };
+          return { tools: page, total, groups };
         },
         // This handler is the single seam every `tools.call` passes through: policy (ARCHITECTURE.md
         // §12) is evaluated once the target tool descriptor is known, and one audit record is

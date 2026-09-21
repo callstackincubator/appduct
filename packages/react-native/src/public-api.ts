@@ -15,6 +15,17 @@ import type { UseAppductToolOptions } from "./useAppductTool";
 
 export type AppductSubscription = { remove(): void };
 
+/** `createToolGroup`'s result: `registerTool` with `group` bound (a registration passed to it
+ * cannot set its own `group`). */
+export type AppductToolGroupRegistrar = <
+  TInputSchema extends AppductRuntimeSchema | undefined,
+  TOutputSchema extends AppductRuntimeSchema | undefined,
+>(
+  registration: AppductToolRegistration<TInputSchema, TOutputSchema> & {
+    group?: undefined;
+  },
+) => AppductSubscription;
+
 /**
  * Public API surface shared by the `.` (real) and `./noop` (inert) entries (ARCHITECTURE.md §11).
  * Both entries are typed against this single interface so they cannot drift — see
@@ -27,6 +38,12 @@ export type CordierePublicApi = {
   >(
     registration: AppductToolRegistration<TInputSchema, TOutputSchema>,
   ): AppductSubscription;
+
+  /**
+   * `registerTool` bound to one group (`"cart"`, or a subgroup like `"checkout/payment"`), so a
+   * feature module registers its tools without repeating the group name on each one.
+   */
+  createToolGroup(group: string): AppductToolGroupRegistrar;
 
   useAppductTool<
     TInputSchema extends AppductRuntimeSchema | undefined,
