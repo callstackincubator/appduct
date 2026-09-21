@@ -18,6 +18,7 @@ const makeContext = (args: string[]): { context: RouteContext; stdout: () => str
     path: [],
     args,
     options: {},
+    argv: [],
     env: {
       flags: { json: true, pretty: false, verbose: true, color: false },
       clock: fixedClock,

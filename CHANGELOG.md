@@ -47,6 +47,10 @@ package versions for a release.
   for details.
 - The `appduct` agent skill now defaults its example commands to plain-text output, adding
   `--json` only where a script (not the agent itself) will parse the result.
+- **Fixed:** a bad argument to `tools`, `invoke`, `revoke` or `events` (a missing `<tool>`, too
+  many positionals, `--limit 0`) crashed the CLI with a stack trace instead of printing a usage
+  error with exit code 64. A numeric flag given without a value (`--limit`, `--limit -1`,
+  `--since`, `--ttl`, `--timeout`) is now a usage error; it used to be read as `1`.
 
 ## 0.10.0 (2026-09-16)
 

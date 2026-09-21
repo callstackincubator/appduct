@@ -157,6 +157,7 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
     // consumes it the same way the nested routers consume theirs.
     args: [matchedCommand, ...parsedArgs],
     options: parsedOptions,
+    argv,
     env,
     stateDir,
     versionCheck: {

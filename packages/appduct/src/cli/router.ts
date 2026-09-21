@@ -51,6 +51,11 @@ export type RouteContext = {
   readonly args: readonly string[];
   /** Every parsed flag (global and per-command), as `cac` reports them (camelCased). */
   readonly options: Readonly<Record<string, unknown>>;
+  /** The raw argv `runCli` received (no `node`/script prefix). For the rare flag whose value must
+   * be read verbatim: `cac` coerces every numeric-looking value to a number (`--filter 007` → `7`),
+   * so a free-text flag recovers its exact string from here (`command-options.ts`'s
+   * `readTextOption`). */
+  readonly argv: readonly string[];
   readonly env: CliEnv;
   /** The resolved state directory (`--state-dir` / `APPDUCT_STATE_DIR` / default). */
   readonly stateDir: string;

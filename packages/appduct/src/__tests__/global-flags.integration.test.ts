@@ -52,3 +52,29 @@ describe("global flags (no daemon required)", () => {
     expect(result.stderr).toContain("Command: cli");
   });
 });
+
+/**
+ * A route's own argument errors (bad `--limit`, missing `<tool>`, too many positionals) must render
+ * through the runner like any other usage error. Parsed in the route body, they escaped as an
+ * uncaught rejection and the built CLI crashed with a stack trace.
+ */
+describe("route argument errors render as usage errors (no daemon required)", () => {
+  test.each([
+    [["tools", "--limit", "0"], /"--limit" must be a positive integer/u],
+    [["tools", "--limit", "-1"], /"--limit" must be a positive integer/u],
+    [["tools", "--offset", "abc"], /"--offset" must be a non-negative integer/u],
+    [["tools", "--filter"], /"--filter" requires a value/u],
+    [["tools", "a", "b", "c"], /Usage/u],
+    [["invoke"], /Usage/u],
+    [["revoke", "a", "b"], /Usage/u],
+    [["events", "a", "b"], /Usage/u],
+    [["events", "--since", "-1"], /"--since" must be a non-negative integer/u],
+  ])("%j", async (argv, message) => {
+    const result = await runCliWithCapture([...argv, "--json", "--state-dir", "/nonexistent-appduct-state"]);
+
+    expect(result.exitCode).toBe(64);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.error.type).toBe("usage_error");
+    expect(parsed.error.message).toMatch(message);
+  });
+});

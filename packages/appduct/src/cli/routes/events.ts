@@ -14,33 +14,37 @@ import { guarded } from "../version-guard.js";
 
 export const route: Route = async (context) => {
   const { options, stateDir, env } = context;
-  const { selector } = splitOptionalSelector(context.args, "events [selector]");
-  const since = parseNonNegativeIntegerOption(options.since, "--since");
   const follow = Boolean(options.follow);
 
   return executeHostedCommand(
     commandName(context),
-    guarded(context)(() => {
-      // Deferred into the wrapped handler (rather than thrown directly in the route body,
-      // matching the codebase's existing lax convention for that) so `executeHostedCommand`'s
-      // own try/catch renders it as a normal usage_error instead of an uncaught rejection.
+    // All argument parsing happens inside the handler (not the route body) so
+    // `executeHostedCommand`'s own try/catch renders a bad argument as a normal usage_error
+    // instead of an uncaught rejection, and before the version check so a typo never waits on
+    // the daemon.
+    () => {
+      const { selector } = splitOptionalSelector(context.args, "events [selector]");
+      const since = parseNonNegativeIntegerOption(options.since, "--since");
+
       if (since !== undefined && follow) {
         throw usageError('"--since" is a one-shot pull and cannot be combined with "--follow".');
       }
 
-      return handleEventsCommand(
-        { selector, since },
-        {
-          stateDir,
-          onEvent: (event: EventNotification) => {
-            env.stdout.write(`${renderEventLine(event, env.flags)}\n`);
+      return guarded(context)(() =>
+        handleEventsCommand(
+          { selector, since },
+          {
+            stateDir,
+            onEvent: (event: EventNotification) => {
+              env.stdout.write(`${renderEventLine(event, env.flags)}\n`);
+            },
+            onCursor: (cursor) => {
+              env.stdout.write(`${renderEventsCursorLine(cursor, env.flags)}\n`);
+            },
           },
-          onCursor: (cursor) => {
-            env.stdout.write(`${renderEventsCursorLine(cursor, env.flags)}\n`);
-          },
-        },
-      );
-    }),
+        ),
+      )();
+    },
     env,
     {
       kind: "interactive",

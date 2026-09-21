@@ -10,11 +10,15 @@ import { guarded } from "../version-guard.js";
 
 export const route: Route = async (context) => {
   const { stateDir } = context;
-  const { selector } = splitOptionalSelector(context.args, "revoke [selector]");
 
   return executeCommand(
     commandName(context),
-    guarded(context)(() => handleRevokeCommand({ selector }, { stateDir })),
+    // Parsed inside the handler so a usage error renders through the runner instead of escaping
+    // the route as an uncaught rejection.
+    () => {
+      const { selector } = splitOptionalSelector(context.args, "revoke [selector]");
+      return guarded(context)(() => handleRevokeCommand({ selector }, { stateDir }))();
+    },
     context.env,
   );
 };
