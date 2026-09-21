@@ -96,7 +96,6 @@ The daemon refuses to load a key file that is group/world-readable.
   "policy": { "default": "allow", "destructive": "allow" },
   "advertisedIp": null,
   "scheme": null,
-  "iosBundleId": null,
   "restartDaemonOnVersionMismatch": false
 }
 ```
@@ -111,8 +110,9 @@ Any other value must be a port number in `1..65535`.
 `advertisedIp` overrides auto-detection of the address advertised in minted bootstrap
 payloads. `scheme` is the deep-link URI scheme composed into `appduct link`'s output
 when `--scheme` is not passed (§10) — set it once here instead of on every invocation.
-`iosBundleId` is the same idea for `--open ios-device` (§8): the app `xcrun devicectl`
-should launch, overridable per invocation by `--bundle-id` / the `bundleId` MCP argument.
+Unlike `scheme`, the app id `--open android`/`--open ios-device` need (issue #63) has no
+home in this file: it lives only in a project `.appduct/config.json`'s `appId.<platform>`
+(§10), never in the state directory's `config.json` — see `resolveAppId` in `scheme.ts`.
 `eventBufferSize` caps the per-session `events.since` retention buffer (§5).
 `restartDaemonOnVersionMismatch` makes version-drift restarts unconditional rather than
 only-when-no-sessions-are-live (§4, "Version drift").
@@ -428,11 +428,29 @@ belong here:
   an entry only when the field is present and disqualifying — the one deliberate departure from
   Expo, which tests `pairingState` positively and would therefore find nothing at all if these
   undocumented keys were ever renamed; here that degrades to a loud launch failure instead.
-- The bundle id is the launch argv's only **trailing positional**, so it is shape-validated
-  (letters, digits, `.`, `-`) at each use site — a value starting with `-` would be read by
-  `devicectl` as an option. It is *not* validated in `daemon/config.ts`, which keeps the plain
-  non-empty-string check `scheme` uses: that loader runs on every daemon start, and a typo in a
-  CLI-side convenience key must not stop the daemon from starting.
+- **Both `android` and `ios-device` require the installed app's id** (issue #63), resolved
+  (`--app-id`/`appId` over MCP, then a project `.appduct/config.json`'s `appId.<platform>`) and
+  validated *before* a link is minted, so a missing or malformed one is a plain usage error rather
+  than a stranded pending session. Naming it matters most for Android: an implicit `am start -a
+  android.intent.action.VIEW -d '<link>'` with no `-p` pops an ambiguous "Open with" chooser the
+  instant more than one installed app declares the same scheme, `am` still exits 0 either way (it
+  does not reliably fail for an unresolvable intent), and `appduct_wait_for_session` then blocks
+  its whole timeout with nothing explaining why. `-p <app-id>` turns that into a hard, immediate
+  failure instead — and because `am` can still exit 0 with an unresolvable `-p`, `deliverAndroid`
+  additionally scans its stdout/stderr for an `Error:` line (or a refused launch's
+  `Exception occurred while executing` / `Security exception:` line) and throws if it finds one,
+  naming the package. The value is shape-validated (letters, digits, `.`, `_`, `-`, starting
+  with a letter or digit) at each use site for two different reasons, not one: on `ios-device` it is the launch argv's
+  only trailing positional, so a leading `-` would be read by `devicectl` as an option; on
+  `android` it ends up inside the string `adb shell` reconstructs and re-parses on the *device's
+  own shell*, so a space or `;` there is command injection on the device — the same reason the URL
+  itself is single-quoted, above. The pattern is deliberately a superset of both platforms' own id
+  grammars (Android forbids `-` in an `applicationId` but allows `_`; iOS is the other way
+  round): it is a safety check on the argv and the device shell, not a spelling check, so a syntactically safe but
+  wrong id for its platform fails loudly at `am start`/`devicectl` instead. It is *not* validated
+  in `daemon/config.ts` — there is nothing to validate there any more: an app id has no home in
+  the state directory's `config.json`, only in a project `.appduct/config.json`'s
+  `appId.<platform>` (§10, `resolveAppId`).
 - `ios-device` also **refuses to deliver a loopback link**. `daemon/address.ts` falls back to
   `127.0.0.1` when it finds no routable interface; delivered to a phone, that link points the
   phone at itself, and the failure is silent — `wait_for_session` simply blocks for its whole
@@ -469,9 +487,11 @@ proxies daemon RPC (auto-spawning the daemon like any client):
   resolved, at which point cancelling it is moot).
 - Two built-in management tools, `appduct_connect` and `appduct_wait_for_session`,
   let an agent mint a bootstrap link, deliver it to an emulator/simulator, and wait for the
-  claim — without shell access. This is what makes the agent path self-service. `target:
-  "ios-device"` extends that to a paired physical iPhone/iPad (§8), but only when the agent
-  names it and supplies `bundleId`; the "nothing detected" note says so, so an agent that
+  claim — without shell access. This is what makes the agent path self-service. Delivering to
+  `android` (explicit or auto-detected) needs `appId`, resolved the same way as `--app-id` (§8,
+  §10); it is rejected outright for `target: "ios-sim"`/`"none"`, which need none. `target:
+  "ios-device"` extends the same path to a paired physical iPhone/iPad (§8), but only when the
+  agent names it and supplies `appId`; the "nothing detected" note says so, so an agent that
   finds no simulator knows the option exists rather than defaulting to a QR nobody scans.
 - Two more built-in tools, `appduct_events` and `appduct_wait_for_event` (issue #6),
   give an agent a pull surface over `postEvent()`-pushed `app_event`s: `appduct_events`
@@ -516,26 +536,51 @@ they cannot drift. First match wins:
    normalization `app.plugin.js` applies; no walk-up)
 6. otherwise an error naming every location above
 
-Only the *client-side* `scheme` is overridable per project. A project `.appduct/config.json`
-is read for that key alone and never redirects daemon-side state (`wssPort`, `keyPath`, `policy`,
-the audit log): `--state-dir` / `APPDUCT_STATE_DIR` remain the only way to move the state
-directory, so a file checked into a repo can never move another developer's private key.
+The project `.appduct/config.json` carries a second key alongside `scheme` since issue #63:
+`appId`, an object with `ios`/`android` string entries. `scheme.ts`'s `resolveAppId` resolves it
+per delivery target (`android` → `appId.android`, `ios-device` → `appId.ios`; `ios-sim` needs
+none — see §8), in a shorter order than `scheme`'s, first match wins:
+
+1. `--app-id` (CLI `link`) / `appId` (MCP `appduct_connect`) / `appId` (`mintLink`,
+   `appduct/client`'s `link()`) — the target is known at the call site, so this is unambiguous
+2. the nearest `.appduct/config.json` declaring `appId.<platform>`, using the *same* walk-up
+   `scheme` uses (`findProjectConfigs`)
+3. otherwise a usage error, naming `appduct init --android-app-id … --ios-app-id …`, `--app-id`,
+   and the config path — raised *before* a link is minted, so a missing app id never strands a
+   pending session
+
+Unlike `scheme`, there is no environment-variable tier and no filesystem-discovery tier: issue
+#63 leaves static discovery of an app id (from `build.gradle`/`app.json`) out of scope, and there
+is no `appId` key in the state directory's `config.json` either — an app id is project-scoped
+client-side settings only, exactly like `scheme`, just without that file's lower tiers.
+
+Only the *client-side* `scheme`/`appId` are overridable per project. A project
+`.appduct/config.json` is read for those keys alone and never redirects daemon-side state
+(`wssPort`, `keyPath`, `policy`, the audit log): `--state-dir` / `APPDUCT_STATE_DIR` remain the
+only way to move the state directory, so a file checked into a repo can never move another
+developer's private key.
 
 `app.config.js` / `app.config.ts` are deliberately **not** evaluated — running arbitrary project
 code to read one string is a far larger blast radius than this warrants. Dynamic-config projects
 use `--scheme`, `APPDUCT_SCHEME`, or `appduct init --scheme <s>`.
 
-`appduct init`, run in an app root, writes that project `.appduct/config.json` (scheme only)
-and prints the MCP server entry to paste plus the `import "@appduct/react-native/auto"`
-reminder. It never generates keys (the daemon auto-generates `key.pem` — §3), and writes the file
-`0600` inside a `0700` directory, matching §3's conventions.
+`appduct init`, run in an app root, writes that project `.appduct/config.json` (`scheme`, and
+now `appId.ios`/`appId.android` via `--ios-app-id <id>`/`--android-app-id <id>`) and prints the
+MCP server entry to paste plus the `import "@appduct/react-native/auto"` reminder. It never
+generates keys (the daemon auto-generates `key.pem` — §3), and writes the file `0600` inside a
+`0700` directory, matching §3's conventions. The two app-id flags are independent — there is no
+single `--app-id` on `init` — because the platforms' ids usually match but not always, and `init`
+never guesses one from a discovered value the way it never guesses `scheme` from an ambiguous
+native probe (§10's discussion of `discoverNativeScheme`).
 
-Re-running it is always safe: it keeps the scheme already recorded and only *notes* it when
-`app.json` has come to declare a different one — a command documented as safe to re-run must not
-start failing because a scheme was renamed. `--scheme <different>` needs `--force` to replace a
-recorded value, `--force` alone re-adopts `app.json`'s, and `--force` merges rather than
-truncating. Note the inverse of the rule above: a project `.appduct/` is committed, so
-`--state-dir` must never point at one — that directory would then hold `key.pem`.
+Re-running it is always safe: it keeps the scheme (and any recorded app id) already recorded and
+only *notes* a scheme divergence when `app.json` has come to declare a different one — a command
+documented as safe to re-run must not start failing because a scheme was renamed. `--scheme
+<different>` needs `--force` to replace a recorded value, `--force` alone re-adopts `app.json`'s;
+the same "replacing needs `--force`" rule applies to `--ios-app-id`/`--android-app-id`, which have
+no discovery tier to re-adopt on `--force` alone. `--force` merges rather than truncating. Note
+the inverse of the rule above: a project `.appduct/` is committed, so `--state-dir` must never
+point at one — that directory would then hold `key.pem`.
 
 Unlike every other consumer, `appduct mcp` does **not** fail when no scheme resolves: the
 server is still useful for proxying tools to a session paired some other way, so the failure is

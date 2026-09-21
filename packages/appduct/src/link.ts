@@ -21,12 +21,12 @@ import { RPC_METHODS, type AgentEndpoint, type LinkCreateResult } from "@appduct
 import {
   deliverToOpenTarget,
   isOpenTarget,
-  isValidBundleId,
-  invalidBundleIdMessage,
+  isValidAppId,
+  invalidAppIdMessage,
   isLoopbackAddress,
   loopbackAddressMessage,
+  platformOf,
   usesLoopbackAddress,
-  MISSING_BUNDLE_ID_MESSAGE,
   OPEN_TARGETS,
   type ExecFn,
   type OpenTarget,
@@ -35,7 +35,7 @@ import { loadConfig } from "./daemon/config.js";
 import { getStateDirPaths } from "./daemon/state-dir.js";
 import { usageError } from "./errors.js";
 import { callDaemon, type SpawnFn } from "./rpc/client.js";
-import { resolveSchemeOrThrow } from "./scheme.js";
+import { describeMissingAppId, resolveAppId, resolveSchemeOrThrow } from "./scheme.js";
 
 /** The emulator/simulator fast path forces `127.0.0.1`: the daemon's wss listener already binds
  * all interfaces, and both delivery mechanisms (adb reverse, the iOS simulator's shared host
@@ -67,8 +67,9 @@ export type MintLinkOptions = {
   /** An adb device serial (`target: "android"`), a simulator udid (`target: "ios-sim"`) or a
    * paired-device udid (`target: "ios-device"`). Only meaningful alongside a target. */
   device?: string;
-  /** Overrides `config.json`'s `iosBundleId`. Only meaningful with `target: "ios-device"`. */
-  bundleId?: string;
+  /** The installed app's id (Android package name / iOS bundle id) — highest-precedence source in
+   * `resolveAppId`'s order. Only meaningful with `target: "android"` or `target: "ios-device"`. */
+  appId?: string;
   /** `target: "ios-device"` only: terminate a running instance before launching
    * (`--terminate-existing`). Off by default. */
   relaunch?: boolean;
@@ -114,8 +115,12 @@ export const mintLink = async (options: MintLinkOptions): Promise<MintLinkResult
     throw usageError('"device" only applies alongside a target.');
   }
 
-  if (options.bundleId !== undefined && options.target !== "ios-device") {
-    throw usageError('"bundleId" only applies alongside target "ios-device".');
+  if (
+    options.appId !== undefined &&
+    options.target !== "android" &&
+    options.target !== "ios-device"
+  ) {
+    throw usageError('"appId" only applies alongside target "android" or target "ios-device".');
   }
 
   if (options.relaunch !== undefined && options.target !== "ios-device") {
@@ -133,16 +138,30 @@ export const mintLink = async (options: MintLinkOptions): Promise<MintLinkResult
     stateDirRoot: paths.root,
   });
 
-  // `ios-device` needs a bundle id `devicectl` can launch; resolved (and required) *before* the
-  // link is minted so a missing one is a plain usage error rather than a stranded pending session.
-  const bundleId = options.target === "ios-device" ? (options.bundleId ?? config.iosBundleId) : undefined;
+  // `android` and `ios-device` both need the installed app's id named explicitly (Android: `-p`,
+  // so Android cannot fall back to an "Open with" chooser; iOS: `devicectl`'s launch target).
+  // Resolved (and required) *before* the link is minted so a missing or malformed one is a plain
+  // usage error rather than a stranded pending session.
+  const platform = options.target === undefined ? undefined : platformOf(options.target);
+  let appId: string | undefined;
 
-  if (options.target === "ios-device" && !bundleId) {
-    throw usageError(MISSING_BUNDLE_ID_MESSAGE);
+  if (platform !== undefined) {
+    const resolved = await resolveAppId({
+      platform,
+      flagAppId: options.appId,
+      cwd: options.cwd,
+      stateDirRoot: paths.root,
+    });
+
+    if (resolved.appId === undefined) {
+      throw usageError(describeMissingAppId(platform, resolved.tried));
+    }
+
+    appId = resolved.appId;
   }
 
-  if (bundleId !== undefined && !isValidBundleId(bundleId)) {
-    throw usageError(invalidBundleIdMessage(bundleId));
+  if (appId !== undefined && !isValidAppId(appId)) {
+    throw usageError(invalidAppIdMessage(appId));
   }
 
   const result = await callDaemon<LinkCreateResult>(
@@ -171,7 +190,7 @@ export const mintLink = async (options: MintLinkOptions): Promise<MintLinkResult
       deepLink,
       wssPort: result.endpoint.port,
       device: options.device,
-      bundleId,
+      appId,
       relaunch: options.relaunch,
       exec: options.exec,
       env: options.env,

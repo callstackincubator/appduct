@@ -14,12 +14,14 @@ import {
   detectBootedTargets,
   isLoopbackAddress,
   isOpenTarget,
+  isValidAppId,
+  platformOf,
   usesLoopbackAddress,
   type ExecFn,
 } from "../cli/open-target.js";
 
 const DEEP_LINK = "playground:///?appduct=abc123";
-const BUNDLE_ID = "com.example.playground";
+const APP_ID = "com.example.playground";
 
 const bootedSimJson = JSON.stringify({
   devices: { "iOS 17.0": [{ state: "Booted", udid: "AAAA", name: "iPhone 15" }] },
@@ -102,7 +104,7 @@ const devicectlListing = (devices: DevicectlFixtureDevice[]): unknown => ({
 const launchArgs = (
   udid: string,
   deepLink: string,
-  bundleId: string,
+  appId: string,
   options: { relaunch?: boolean } = {},
 ): string[] => [
   "devicectl",
@@ -114,7 +116,7 @@ const launchArgs = (
   ...(options.relaunch ? ["--terminate-existing"] : []),
   "--payload-url",
   deepLink,
-  bundleId,
+  appId,
 ];
 
 /** The directory `runDevicectlJson` creates and must remove; asserted gone after every call. */
@@ -250,7 +252,7 @@ describe("deliverToOpenTarget: ios-device", () => {
       target: "ios-device",
       deepLink: DEEP_LINK,
       wssPort: 8443,
-      bundleId: BUNDLE_ID,
+      appId: APP_ID,
       exec,
     });
 
@@ -260,7 +262,7 @@ describe("deliverToOpenTarget: ios-device", () => {
     expect(calls[0]!.args[5]).toBe("--json-output");
     expect(calls[1]).toEqual({
       command: "xcrun",
-      args: launchArgs("00008030-AAAA", DEEP_LINK, BUNDLE_ID),
+      args: launchArgs("00008030-AAAA", DEEP_LINK, APP_ID),
     });
 
     // The deep link is one argv element, unquoted: `execFile` never re-tokenizes and, unlike
@@ -276,7 +278,7 @@ describe("deliverToOpenTarget: ios-device", () => {
       target: "ios-device",
       deepLink: DEEP_LINK,
       wssPort: 8443,
-      bundleId: BUNDLE_ID,
+      appId: APP_ID,
       exec,
     });
 
@@ -296,7 +298,7 @@ describe("deliverToOpenTarget: ios-device", () => {
         target: "ios-device",
         deepLink: DEEP_LINK,
         wssPort: 8443,
-        bundleId: BUNDLE_ID,
+        appId: APP_ID,
         exec,
       }),
     ).rejects.toThrow(/no devices are available/u);
@@ -315,12 +317,12 @@ describe("deliverToOpenTarget: ios-device", () => {
       deepLink: DEEP_LINK,
       wssPort: 8443,
       device: "00008030-BBBB",
-      bundleId: BUNDLE_ID,
+      appId: APP_ID,
       exec,
     });
 
     expect(calls).toEqual([
-      { command: "xcrun", args: launchArgs("00008030-BBBB", DEEP_LINK, BUNDLE_ID) },
+      { command: "xcrun", args: launchArgs("00008030-BBBB", DEEP_LINK, APP_ID) },
     ]);
   });
 
@@ -333,7 +335,7 @@ describe("deliverToOpenTarget: ios-device", () => {
         target: "ios-device",
         deepLink: DEEP_LINK,
         wssPort: 8443,
-        bundleId: BUNDLE_ID,
+        appId: APP_ID,
         exec,
       }),
     ).rejects.toThrow(/no connected ios device was found/iu);
@@ -356,7 +358,7 @@ describe("deliverToOpenTarget: ios-device", () => {
         target: "ios-device",
         deepLink: DEEP_LINK,
         wssPort: 8443,
-        bundleId: BUNDLE_ID,
+        appId: APP_ID,
         exec,
       }),
     ).rejects.toThrow(/My iPhone \(00008030-AAAA\).*Test iPad \(00008030-BBBB\)/su);
@@ -364,13 +366,13 @@ describe("deliverToOpenTarget: ios-device", () => {
     expect(calls).toHaveLength(1);
   });
 
-  test("missing bundle id: a usage error naming both ways to supply one, before anything is run", async () => {
+  test("missing app id: a usage error naming both ways to supply one, before anything is run", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec = devicectlExec(calls, devicectlListing([{ udid: "00008030-AAAA", name: "My iPhone" }]));
 
     await expect(
       deliverToOpenTarget({ target: "ios-device", deepLink: DEEP_LINK, wssPort: 8443, exec }),
-    ).rejects.toThrow(/--bundle-id.*iosBundleId/su);
+    ).rejects.toThrow(/--app-id.*appId.*appId\.<platform>/su);
 
     // Checked first: spending devicectl's list timeout would only delay the same error.
     expect(calls).toHaveLength(0);
@@ -386,7 +388,7 @@ describe("deliverToOpenTarget: ios-device", () => {
         target: "ios-device",
         deepLink: DEEP_LINK,
         wssPort: 8443,
-        bundleId: BUNDLE_ID,
+        appId: APP_ID,
         exec,
       }),
     ).rejects.toThrow(/"xcrun" was not found on PATH/u);
@@ -405,7 +407,7 @@ describe("deliverToOpenTarget: ios-device", () => {
         target: "ios-device",
         deepLink: DEEP_LINK,
         wssPort: 8443,
-        bundleId: BUNDLE_ID,
+        appId: APP_ID,
         exec,
       }),
     ).rejects.toThrow(/is not installed/u);
@@ -422,7 +424,7 @@ describe("deliverToOpenTarget: ios-device", () => {
       target: "ios-device",
       deepLink: DEEP_LINK,
       wssPort: 8443,
-      bundleId: BUNDLE_ID,
+      appId: APP_ID,
       exec,
     });
 
@@ -438,7 +440,7 @@ describe("deliverToOpenTarget: ios-device", () => {
         target: "ios-device",
         deepLink: DEEP_LINK,
         wssPort: 8443,
-        bundleId: BUNDLE_ID,
+        appId: APP_ID,
         exec,
       }),
     ).rejects.toThrow(/no connected ios device was found/iu);
@@ -458,7 +460,7 @@ describe("deliverToOpenTarget: ios-device", () => {
         target: "ios-device",
         deepLink: DEEP_LINK,
         wssPort: 8443,
-        bundleId: BUNDLE_ID,
+        appId: APP_ID,
         exec,
       }),
     ).rejects.toThrow(/no connected ios device was found/iu);
@@ -477,7 +479,7 @@ describe("deliverToOpenTarget: ios-device listing hygiene", () => {
       target: "ios-device",
       deepLink: DEEP_LINK,
       wssPort: 8443,
-      bundleId: BUNDLE_ID,
+      appId: APP_ID,
       exec: devicectlExec(calls, devicectlListing(devices)),
     });
   };
@@ -498,7 +500,7 @@ describe("deliverToOpenTarget: ios-device listing hygiene", () => {
     );
 
     expect(calls).toHaveLength(2);
-    expect(calls[1]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, BUNDLE_ID));
+    expect(calls[1]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, APP_ID));
   });
 
   test("unavailable and unpaired devices are ignored, leaving the one that is actually reachable", async () => {
@@ -514,7 +516,7 @@ describe("deliverToOpenTarget: ios-device listing hygiene", () => {
     );
 
     expect(calls).toHaveLength(2);
-    expect(calls[1]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, BUNDLE_ID));
+    expect(calls[1]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, APP_ID));
   });
 
   test("platform matching is case-insensitive, so an \"ios\" spelling is still deliverable", async () => {
@@ -522,7 +524,7 @@ describe("deliverToOpenTarget: ios-device listing hygiene", () => {
 
     await deliverTo([{ udid: "00008030-AAAA", name: "My iPhone", platform: "ios" }], calls);
 
-    expect(calls[1]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, BUNDLE_ID));
+    expect(calls[1]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, APP_ID));
   });
 
   test("a listing with none of the filter fields keeps the device rather than silently finding nothing", async () => {
@@ -532,7 +534,7 @@ describe("deliverToOpenTarget: ios-device listing hygiene", () => {
     // right failure is a loud launch error, not a silent "no device found" on a plugged-in phone.
     await deliverTo([{ udid: "00008030-AAAA", name: "My iPhone", platform: null }], calls);
 
-    expect(calls[1]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, BUNDLE_ID));
+    expect(calls[1]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, APP_ID));
   });
 
   test("only disconnected/non-iOS entries: reports none found, and says what was ignored", async () => {
@@ -601,7 +603,7 @@ describe("deliverToOpenTarget: ios-device listing hygiene", () => {
     );
 
     expect(calls).toHaveLength(2);
-    expect(calls[1]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, BUNDLE_ID));
+    expect(calls[1]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, APP_ID));
   });
 });
 
@@ -615,7 +617,7 @@ describe("deliverToOpenTarget: ios-device --relaunch", () => {
       deepLink: DEEP_LINK,
       wssPort: 8443,
       device: "00008030-AAAA",
-      bundleId: BUNDLE_ID,
+      appId: APP_ID,
       relaunch,
       exec: devicectlExec(calls, devicectlListing([])),
     });
@@ -627,7 +629,7 @@ describe("deliverToOpenTarget: ios-device --relaunch", () => {
 
     // A plain `process launch` is what the vendored Expo CLI does, so it is the better-attested
     // default; terminating a running app is a behaviour nobody should get without asking.
-    expect(calls[0]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, BUNDLE_ID));
+    expect(calls[0]!.args).toEqual(launchArgs("00008030-AAAA", DEEP_LINK, APP_ID));
     expect(calls[0]!.args).not.toContain("--terminate-existing");
   });
 
@@ -636,7 +638,7 @@ describe("deliverToOpenTarget: ios-device --relaunch", () => {
     await deliver(true, calls);
 
     expect(calls[0]!.args).toEqual(
-      launchArgs("00008030-AAAA", DEEP_LINK, BUNDLE_ID, { relaunch: true }),
+      launchArgs("00008030-AAAA", DEEP_LINK, APP_ID, { relaunch: true }),
     );
   });
 
@@ -664,33 +666,33 @@ describe("isLoopbackAddress", () => {
   });
 });
 
-describe("deliverToOpenTarget: ios-device bundle id validation", () => {
-  const deliverWithBundleId = (bundleId: string, calls: Array<{ command: string; args: string[] }>) =>
+describe("deliverToOpenTarget: ios-device app id validation", () => {
+  const deliverWithAppId = (appId: string, calls: Array<{ command: string; args: string[] }>) =>
     deliverToOpenTarget({
       target: "ios-device",
       deepLink: DEEP_LINK,
       wssPort: 8443,
       device: "00008030-AAAA",
-      bundleId,
+      appId,
       exec: devicectlExec(calls, devicectlListing([])),
     });
 
-  test("a bundle id starting with a dash is rejected before it can be read as a devicectl option", async () => {
+  test("an app id starting with a dash is rejected before it can be read as a devicectl option", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
 
-    // The bundle id is the launch argv's only trailing positional: `--console` here would not be
+    // The app id is the launch argv's only trailing positional: `--console` here would not be
     // "the app to launch", it would change what the command does.
-    await expect(deliverWithBundleId("--console", calls)).rejects.toThrow(/not a valid iOS bundle id/u);
-    await expect(deliverWithBundleId("-x", calls)).rejects.toThrow(/not a valid iOS bundle id/u);
+    await expect(deliverWithAppId("--console", calls)).rejects.toThrow(/not a valid app id/u);
+    await expect(deliverWithAppId("-x", calls)).rejects.toThrow(/not a valid app id/u);
 
     expect(calls).toEqual([]);
   });
 
-  test("bundle ids containing shell/argv metacharacters or whitespace are rejected", async () => {
+  test("app ids containing shell/argv metacharacters or whitespace are rejected", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
 
     for (const bad of ["com.example app", "com.example;rm -rf /", "com.example/../x", "com.$(id)"]) {
-      await expect(deliverWithBundleId(bad, calls)).rejects.toThrow(/not a valid iOS bundle id/u);
+      await expect(deliverWithAppId(bad, calls)).rejects.toThrow(/not a valid app id/u);
     }
 
     expect(calls).toEqual([]);
@@ -699,14 +701,14 @@ describe("deliverToOpenTarget: ios-device bundle id validation", () => {
   test("ordinary reverse-DNS bundle ids, including digits and hyphens, are accepted", async () => {
     for (const good of ["com.example.playground", "com.example.my-app", "com.example.App2"]) {
       const calls: Array<{ command: string; args: string[] }> = [];
-      await deliverWithBundleId(good, calls);
+      await deliverWithAppId(good, calls);
       expect(calls[0]!.args.at(-1)).toBe(good);
     }
   });
 });
 
 describe("deliverToOpenTarget: android", () => {
-  test("happy path with ANDROID_SERIAL set: adb reverse before am start, deep link single-quoted", async () => {
+  test("happy path with ANDROID_SERIAL set: adb reverse before am start, deep link single-quoted, -p last", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec: ExecFn = async (command, args) => {
       calls.push({ command, args });
@@ -717,6 +719,7 @@ describe("deliverToOpenTarget: android", () => {
       target: "android",
       deepLink: DEEP_LINK,
       wssPort: 8443,
+      appId: APP_ID,
       exec,
       env: { ANDROID_SERIAL: "emulator-5554" },
     });
@@ -725,7 +728,17 @@ describe("deliverToOpenTarget: android", () => {
       { command: "adb", args: ["reverse", "tcp:8443", "tcp:8443"] },
       {
         command: "adb",
-        args: ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", `'${DEEP_LINK}'`],
+        args: [
+          "shell",
+          "am",
+          "start",
+          "-a",
+          "android.intent.action.VIEW",
+          "-d",
+          `'${DEEP_LINK}'`,
+          "-p",
+          APP_ID,
+        ],
       },
     ]);
   });
@@ -742,11 +755,19 @@ describe("deliverToOpenTarget: android", () => {
       return { stdout: "", stderr: "" };
     };
 
-    await deliverToOpenTarget({ target: "android", deepLink: DEEP_LINK, wssPort: 8443, exec, env: {} });
+    await deliverToOpenTarget({
+      target: "android",
+      deepLink: DEEP_LINK,
+      wssPort: 8443,
+      appId: APP_ID,
+      exec,
+      env: {},
+    });
 
     expect(calls[0]).toEqual({ command: "adb", args: ["devices"] });
     expect(calls[1]!.args).toEqual(["reverse", "tcp:8443", "tcp:8443"]);
     expect(calls[2]!.args).not.toContain("-s");
+    expect(calls[2]!.args.slice(-2)).toEqual(["-p", APP_ID]);
   });
 
   test("no device attached: a clear error, nothing else runs", async () => {
@@ -757,7 +778,7 @@ describe("deliverToOpenTarget: android", () => {
     };
 
     await expect(
-      deliverToOpenTarget({ target: "android", deepLink: DEEP_LINK, wssPort: 8443, exec, env: {} }),
+      deliverToOpenTarget({ target: "android", deepLink: DEEP_LINK, wssPort: 8443, appId: APP_ID, exec, env: {} }),
     ).rejects.toThrow(/no android device or emulator is attached/iu);
 
     expect(calls).toEqual(["adb devices"]);
@@ -775,7 +796,7 @@ describe("deliverToOpenTarget: android", () => {
     };
 
     await expect(
-      deliverToOpenTarget({ target: "android", deepLink: DEEP_LINK, wssPort: 8443, exec, env: {} }),
+      deliverToOpenTarget({ target: "android", deepLink: DEEP_LINK, wssPort: 8443, appId: APP_ID, exec, env: {} }),
     ).rejects.toThrow(/emulator-5554.*ZY3239|ZY3239.*emulator-5554/su);
   });
 
@@ -791,6 +812,7 @@ describe("deliverToOpenTarget: android", () => {
       deepLink: DEEP_LINK,
       wssPort: 8443,
       device: "emulator-5554",
+      appId: APP_ID,
       exec,
       env: {},
     });
@@ -809,6 +831,8 @@ describe("deliverToOpenTarget: android", () => {
           "android.intent.action.VIEW",
           "-d",
           `'${DEEP_LINK}'`,
+          "-p",
+          APP_ID,
         ],
       },
     ]);
@@ -820,8 +844,167 @@ describe("deliverToOpenTarget: android", () => {
     };
 
     await expect(
-      deliverToOpenTarget({ target: "android", deepLink: DEEP_LINK, wssPort: 8443, exec, env: {} }),
+      deliverToOpenTarget({ target: "android", deepLink: DEEP_LINK, wssPort: 8443, appId: APP_ID, exec, env: {} }),
     ).rejects.toThrow(/"adb" was not found on PATH/u);
+  });
+
+  test("missing app id: a usage error naming every way to supply one, no adb call at all", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const exec: ExecFn = async (command, args) => {
+      calls.push({ command, args });
+      return { stdout: "", stderr: "" };
+    };
+
+    await expect(
+      deliverToOpenTarget({ target: "android", deepLink: DEEP_LINK, wssPort: 8443, exec, env: {} }),
+    ).rejects.toThrow(/--app-id.*appId.*appId\.<platform>/su);
+
+    expect(calls).toEqual([]);
+  });
+
+  test("a malformed app id is rejected before any adb call, including the `adb devices` preflight", async () => {
+    for (const bad of ["--console", "com.x; rm -rf /", "com.x foo"]) {
+      const calls: Array<{ command: string; args: string[] }> = [];
+      const exec: ExecFn = async (command, args) => {
+        calls.push({ command, args });
+        return { stdout: "List of devices attached\nemulator-5554\tdevice\n\n", stderr: "" };
+      };
+
+      await expect(
+        deliverToOpenTarget({ target: "android", deepLink: DEEP_LINK, wssPort: 8443, appId: bad, exec, env: {} }),
+      ).rejects.toThrow(/not a valid app id/u);
+
+      expect(calls).toEqual([]);
+      expect(isValidAppId(bad)).toBe(false);
+    }
+  });
+
+  test('"am start" reporting an unresolved intent throws and names the package, even though adb exits 0', async () => {
+    const exec: ExecFn = async (command, args) => {
+      if (args.includes("start")) {
+        return {
+          stdout:
+            "Starting: Intent { act=android.intent.action.VIEW dat=playground:/// pkg=com.example.playground }\n" +
+            "Error: Activity not started, unable to resolve Intent { act=android.intent.action.VIEW }",
+          stderr: "",
+        };
+      }
+
+      return { stdout: "", stderr: "" };
+    };
+
+    await expect(
+      deliverToOpenTarget({
+        target: "android",
+        deepLink: DEEP_LINK,
+        wssPort: 8443,
+        appId: APP_ID,
+        exec,
+        env: { ANDROID_SERIAL: "emulator-5554" },
+      }),
+    ).rejects.toThrow(new RegExp(`${APP_ID}.*unable to resolve Intent`, "su"));
+  });
+
+  test('an "Error:" line on stderr (rather than stdout) is caught the same way', async () => {
+    const exec: ExecFn = async (command, args) => {
+      if (args.includes("start")) {
+        return { stdout: "", stderr: "Error: Activity class does not exist." };
+      }
+
+      return { stdout: "", stderr: "" };
+    };
+
+    await expect(
+      deliverToOpenTarget({
+        target: "android",
+        deepLink: DEEP_LINK,
+        wssPort: 8443,
+        appId: APP_ID,
+        exec,
+        env: { ANDROID_SERIAL: "emulator-5554" },
+      }),
+    ).rejects.toThrow(/Activity class does not exist/u);
+  });
+
+  test("a refused launch (SecurityException) is caught even when adb drops the exit status", async () => {
+    const exec: ExecFn = async (command, args) => {
+      if (args.includes("start")) {
+        return {
+          stdout: "Starting: Intent { act=android.intent.action.VIEW }\n",
+          stderr:
+            "Exception occurred while executing 'start':\n" +
+            "java.lang.SecurityException: Permission Denial: starting Intent { ... } not exported",
+        };
+      }
+
+      return { stdout: "", stderr: "" };
+    };
+
+    await expect(
+      deliverToOpenTarget({
+        target: "android",
+        deepLink: DEEP_LINK,
+        wssPort: 8443,
+        appId: APP_ID,
+        exec,
+        env: { ANDROID_SERIAL: "emulator-5554" },
+      }),
+    ).rejects.toThrow(/Permission Denial/u);
+  });
+
+  test('"Warning: ... delivered to currently running top-most instance" is a successful delivery', async () => {
+    // A `singleTask` activity (React Native's default) that is already running receives the link
+    // in `onNewIntent`; `am` reports that as a warning, not a failure.
+    const exec: ExecFn = async (command, args) => {
+      if (args.includes("start")) {
+        return {
+          stdout:
+            "Starting: Intent { act=android.intent.action.VIEW }\n" +
+            "Warning: Activity not started, intent has been delivered to currently running top-most instance.\n",
+          stderr: "",
+        };
+      }
+
+      return { stdout: "", stderr: "" };
+    };
+
+    await expect(
+      deliverToOpenTarget({
+        target: "android",
+        deepLink: DEEP_LINK,
+        wssPort: 8443,
+        appId: APP_ID,
+        exec,
+        env: { ANDROID_SERIAL: "emulator-5554" },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  test("an Android package name with underscores is accepted", async () => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const exec: ExecFn = async (command, args) => {
+      calls.push({ command, args });
+      return { stdout: "", stderr: "" };
+    };
+
+    await deliverToOpenTarget({
+      target: "android",
+      deepLink: DEEP_LINK,
+      wssPort: 8443,
+      appId: "com.my_company.my_app",
+      exec,
+      env: { ANDROID_SERIAL: "emulator-5554" },
+    });
+
+    expect(calls.at(-1)?.args.slice(-2)).toEqual(["-p", "com.my_company.my_app"]);
+  });
+});
+
+describe("platformOf", () => {
+  test("maps android/ios-device to their appId.<platform> key, and ios-sim to nothing", () => {
+    expect(platformOf("android")).toBe("android");
+    expect(platformOf("ios-device")).toBe("ios");
+    expect(platformOf("ios-sim")).toBeUndefined();
   });
 });
 

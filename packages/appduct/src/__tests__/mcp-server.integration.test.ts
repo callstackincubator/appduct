@@ -13,8 +13,9 @@
  * moved to `mcp-server.test.ts`, which runs them against an in-memory daemon.
  */
 
-import { writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { connect as connectUds, type Socket } from "node:net";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 
@@ -86,6 +87,20 @@ const startTestDaemon = async (extraConfig: Record<string, unknown> = {}): Promi
   // only knowable from the listener that bound it — never pre-picked, which is what used to race
   // another vitest process for the same number.
   return { daemon, stateDir, port: daemon.listener.port()! };
+};
+
+/** A project root (distinct from the state dir — `appId` resolution never reads the state dir's
+ * config.json; see `resolveAppId`) carrying its own `.appduct/config.json`, for tests that
+ * exercise `appduct_connect`'s project-config tier of `appId` resolution. */
+const writeProjectConfig = async (config: Record<string, unknown>): Promise<string> => {
+  const root = await mkdtemp(path.join(tmpdir(), "appduct-mcp-project-"));
+  stateDirs.push(root);
+
+  const dir = path.join(root, ".appduct");
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, "config.json"), JSON.stringify(config));
+
+  return root;
 };
 
 const rpcCall = (socketPath: string, method: string, params?: unknown): Promise<unknown> => {
@@ -236,13 +251,13 @@ const noDevicesExec: ExecFn = async (command) => {
 const createMcpHandle = async (
   stateDir: string,
   exec: ExecFn = noDevicesExec,
-  iosBundleId?: string,
+  cwd?: string,
 ): Promise<McpServerHandle> => {
   const handle = await createMcpServer({
     stateDir,
     spawn: failIfCalled,
     scheme: "appduct",
-    iosBundleId,
+    cwd,
     exec,
     env: {},
   });
@@ -617,7 +632,7 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
         method: "tools/call",
         params: {
           name: "appduct_connect",
-          arguments: { target: "ios-device", bundleId: "com.example.playground" },
+          arguments: { target: "ios-device", appId: "com.example.playground" },
         },
       },
       CallToolResultSchema,
@@ -698,7 +713,7 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
         method: "tools/call",
         params: {
           name: "appduct_connect",
-          arguments: { target: "ios-device", bundleId: "com.example.playground" },
+          arguments: { target: "ios-device", appId: "com.example.playground" },
         },
       },
       CallToolResultSchema,
@@ -790,7 +805,7 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
           arguments: {
             target: "ios-device",
             device: "00008030-AAAA",
-            bundleId: "com.example.playground",
+            appId: "com.example.playground",
           },
         },
       },
@@ -811,7 +826,7 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
       return { stdout: "", stderr: "" };
     };
 
-    const handle = await createMcpHandle(stateDir, exec, "com.example.playground");
+    const handle = await createMcpHandle(stateDir, exec);
     const client = await connectInMemoryClient(handle);
 
     const delivered = await client.request(
@@ -819,7 +834,12 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
         method: "tools/call",
         params: {
           name: "appduct_connect",
-          arguments: { target: "ios-device", device: "00008030-AAAA", relaunch: true },
+          arguments: {
+            target: "ios-device",
+            device: "00008030-AAAA",
+            appId: "com.example.playground",
+            relaunch: true,
+          },
         },
       },
       CallToolResultSchema,
@@ -840,8 +860,9 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
     expect(JSON.stringify(misplaced.content)).toMatch(/relaunch.{0,4} only applies with target/u);
   });
 
-  test('target "ios-device" falls back to config.json\'s iosBundleId when no bundleId is passed', async () => {
+  test('target "ios-device" falls back to the project config\'s appId.ios when no appId is passed', async () => {
     const { stateDir } = await startTestDaemon({ advertisedIp: "203.0.113.9" });
+    const cwd = await writeProjectConfig({ appId: { ios: "com.example.fromconfig" } });
 
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec: ExecFn = async (command, args) => {
@@ -849,7 +870,7 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
       return { stdout: "", stderr: "" };
     };
 
-    const handle = await createMcpHandle(stateDir, exec, "com.example.fromconfig");
+    const handle = await createMcpHandle(stateDir, exec, cwd);
     const client = await connectInMemoryClient(handle);
 
     const result = await client.request(
@@ -857,7 +878,7 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
         method: "tools/call",
         params: {
           name: "appduct_connect",
-          // An explicit device skips the listing, so this exercises the bundle-id default alone.
+          // An explicit device skips the listing, so this exercises the app-id default alone.
           arguments: { target: "ios-device", device: "00008030-BBBB" },
         },
       },
@@ -870,7 +891,7 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
     expect(calls[0]!.args.at(-1)).toBe("com.example.fromconfig");
   });
 
-  test('target "ios-device" with no bundle id anywhere is an invalid_request, and mints nothing', async () => {
+  test('target "ios-device" with no app id anywhere is an invalid_request, and mints nothing', async () => {
     const { stateDir } = await startTestDaemon();
 
     const calls: string[] = [];
@@ -891,29 +912,150 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
     );
 
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toMatch(/iosBundleId/u);
+    expect(JSON.stringify(result.content)).toMatch(/appId\.ios/u);
     // Rejected before `link.create`, so no pending session is stranded behind a doomed call.
     expect(calls).toEqual([]);
   });
 
-  test('"bundleId" without target "ios-device" is rejected rather than silently ignored', async () => {
+  test('"appId" is rejected with target "ios-sim" or "none", which need no app id', async () => {
     const { stateDir } = await startTestDaemon();
     const handle = await createMcpHandle(stateDir);
     const client = await connectInMemoryClient(handle);
 
-    const result = await client.request(
+    const withIosSim = await client.request(
       {
         method: "tools/call",
         params: {
           name: "appduct_connect",
-          arguments: { target: "ios-sim", bundleId: "com.example.playground" },
+          arguments: { target: "ios-sim", appId: "com.example.playground" },
         },
       },
       CallToolResultSchema,
     );
 
+    expect(withIosSim.isError).toBe(true);
+    expect(JSON.stringify(withIosSim.content)).toMatch(/appId.{0,4} only applies with target/u);
+
+    const withNone = await client.request(
+      {
+        method: "tools/call",
+        params: {
+          name: "appduct_connect",
+          arguments: { target: "none", appId: "com.example.playground" },
+        },
+      },
+      CallToolResultSchema,
+    );
+
+    expect(withNone.isError).toBe(true);
+    expect(JSON.stringify(withNone.content)).toMatch(/appId.{0,4} only applies with target/u);
+  });
+
+  test('target "android" needs an "appId" just like "ios-device" does', async () => {
+    const { stateDir } = await startTestDaemon();
+
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const exec: ExecFn = async (command, args) => {
+      calls.push({ command, args });
+
+      if (args[0] === "devices") {
+        return { stdout: "List of devices attached\nemulator-5554\tdevice\n\n", stderr: "" };
+      }
+
+      return { stdout: "", stderr: "" };
+    };
+
+    const handle = await createMcpHandle(stateDir, exec);
+    const client = await connectInMemoryClient(handle);
+
+    const missing = await client.request(
+      { method: "tools/call", params: { name: "appduct_connect", arguments: { target: "android" } } },
+      CallToolResultSchema,
+    );
+
+    expect(missing.isError).toBe(true);
+    expect(JSON.stringify(missing.content)).toMatch(/appId\.android/u);
+    expect(calls).toEqual([]);
+
+    const delivered = await client.request(
+      {
+        method: "tools/call",
+        params: {
+          name: "appduct_connect",
+          arguments: { target: "android", appId: "com.example.playground" },
+        },
+      },
+      CallToolResultSchema,
+    );
+
+    expect(delivered.isError).not.toBe(true);
+    expect((delivered.structuredContent as { delivered?: true }).delivered).toBe(true);
+    expect(calls.at(-1)!.args.slice(-2)).toEqual(["-p", "com.example.playground"]);
+  });
+
+  test("the zero-argument auto-detected android path resolves appId from the project config", async () => {
+    const { stateDir } = await startTestDaemon();
+    const cwd = await writeProjectConfig({ appId: { android: "com.example.fromconfig" } });
+
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const exec: ExecFn = async (command, args) => {
+      calls.push({ command, args });
+
+      if (command === "xcrun") {
+        return { stdout: JSON.stringify({ devices: {} }), stderr: "" };
+      }
+
+      if (args[0] === "devices") {
+        return { stdout: "List of devices attached\nemulator-5554\tdevice\n\n", stderr: "" };
+      }
+
+      return { stdout: "", stderr: "" };
+    };
+
+    const handle = await createMcpHandle(stateDir, exec, cwd);
+    const client = await connectInMemoryClient(handle);
+
+    const result = await client.request(
+      { method: "tools/call", params: { name: "appduct_connect", arguments: {} } },
+      CallToolResultSchema,
+    );
+
+    const data = result.structuredContent as { delivered?: true; autoDetected?: true; target?: string };
+    expect(result.isError).not.toBe(true);
+    expect(data.delivered).toBe(true);
+    expect(data.autoDetected).toBe(true);
+    expect(data.target).toBe("android");
+    expect(calls.at(-1)!.args.slice(-2)).toEqual(["-p", "com.example.fromconfig"]);
+  });
+
+  test("the zero-argument auto-detected android path is a clear invalid_request when appId cannot be resolved", async () => {
+    const { stateDir } = await startTestDaemon();
+
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const exec: ExecFn = async (command, args) => {
+      calls.push({ command, args });
+
+      if (command === "xcrun") {
+        return { stdout: JSON.stringify({ devices: {} }), stderr: "" };
+      }
+
+      if (args[0] === "devices") {
+        return { stdout: "List of devices attached\nemulator-5554\tdevice\n\n", stderr: "" };
+      }
+
+      return { stdout: "", stderr: "" };
+    };
+
+    const handle = await createMcpHandle(stateDir, exec);
+    const client = await connectInMemoryClient(handle);
+
+    const result = await client.request(
+      { method: "tools/call", params: { name: "appduct_connect", arguments: {} } },
+      CallToolResultSchema,
+    );
+
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toMatch(/bundleId.{0,4} only applies with target/u);
+    expect(JSON.stringify(result.content)).toMatch(/appId\.android/u);
   });
 
   test("an omitted target never picks a physical iPhone, and says so in the QR note", async () => {
@@ -942,7 +1084,7 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
     // ...and the note has to tell the agent that the target exists but must be asked for.
     expect(data.note).toMatch(/never auto-detected/iu);
     expect(data.note).toMatch(/ios-device/u);
-    expect(data.note).toMatch(/bundleId/u);
+    expect(data.note).toMatch(/appId/u);
   });
 
   test("appduct_wait_for_session resolves once a fake client claims the minted session", async () => {

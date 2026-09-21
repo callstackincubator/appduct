@@ -40,10 +40,6 @@ yarn-error.*
 
 app-example
 
-# Intentionally public Appduct playground fixture; every other PEM remains ignored.
-!.appduct/key.pem
-!.appduct/config.json
-
 # generated native folders
 /ios
 /android

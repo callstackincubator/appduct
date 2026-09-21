@@ -65,10 +65,11 @@ adb shell am start -n com.callstack.appduct.playground/.MainActivity
 
 Then drive it from the `appduct` CLI, pointed at a daemon whose state directory this build's
 scheme can reach (see `packages/native/android/README.md`'s live-check section for the full
-sequence):
+sequence). Run it from inside `playground-native/`: the scheme and the app id are recorded in
+`playground-native/.appduct/config.json`.
 
 ```bash
-appduct link --open android --scheme appduct-native
+appduct link --open android
 appduct tools
 appduct invoke sum --input '{"a":2,"b":3}'
 appduct events

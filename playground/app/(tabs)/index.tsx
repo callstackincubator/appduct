@@ -12,13 +12,10 @@ import { ThemedView } from "@/components/themed-view";
 import { Layout, Radius } from "@/constants/theme";
 import { useThemeColor } from "@/hooks/use-theme-color";
 
-// The playground is deliberately *not* the zero-config path: app.json pins `cliPins` with
-// `trust: "pin"` to the fixture key checked in at playground/.appduct/key.pem, so only the
-// launcher below (which points --state-dir at that directory) serves a key this build will trust.
-// A bare `appduct link` would mint a link from the global daemon and fail the TLS pin.
-//
-// In a normal app there is no keygen and no pin to paste: the daemon generates its own key, and
-// `appduct link` reads the scheme straight out of app.json's `expo.scheme`.
+// The playground takes the zero-config path: no `cliPins`, so the app trusts the key pin carried by
+// the bootstrap link, and the daemon is the shared one in ~/.appduct. `playground:appduct` only
+// runs this repository's CLI build from the playground directory, where .appduct/config.json
+// records the scheme and the app ids `--open` needs.
 const CONNECT_COMMANDS = [
   "pnpm exec expo run:ios   # or: pnpm exec expo run:android",
   "pnpm run playground:appduct -- link --open ios-sim   # or: --open android / --qr",
@@ -168,9 +165,9 @@ export default function ToolsScreen() {
             {" '{\"a\":1,\"b\":2}'"}.
           </ThemedText>
           <ThemedText type="caption" style={styles.cardHint}>
-            The launcher exists because this app pins its fixture key (app.json&apos;s cliPins with
-            trust: &quot;pin&quot;), so it only trusts the daemon in playground/.appduct. Your own
-            app needs none of this: no keygen, no pins, and the scheme is read from app.json.
+            In your own app, run appduct link from the app root: the scheme and app ids come from
+            .appduct/config.json (appduct init writes it), and there is no keygen and no pin to
+            paste.
           </ThemedText>
         </View>
 

@@ -27,9 +27,10 @@ export type LinkOptions = {
   target?: OpenTarget;
   /** `--device` equivalent: an adb serial, a simulator udid, or a paired-device udid. */
   device?: string;
-  /** `--bundle-id` equivalent; only valid with `target: "ios-device"`, where it overrides
-   * `config.json`'s `iosBundleId`. */
-  bundleId?: string;
+  /** `--app-id` equivalent: the installed app's id, required (via this, or the project
+   * `.appduct/config.json`'s `appId.<platform>`) with `target: "android"` or `target:
+   * "ios-device"`. */
+  appId?: string;
   /** `--relaunch` equivalent; only valid with `target: "ios-device"`. */
   relaunch?: boolean;
   /** Highest-precedence scheme source, ahead of `APPDUCT_SCHEME`, a project
@@ -58,7 +59,7 @@ export const link = async (options: LinkOptions = {}): Promise<LinkResult> => {
       ttlSeconds: options.ttlSeconds,
       target: options.target,
       device: options.device,
-      bundleId: options.bundleId,
+      appId: options.appId,
       relaunch: options.relaunch,
       scheme: options.scheme,
       cwd: options.cwd,

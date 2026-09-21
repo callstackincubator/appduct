@@ -105,6 +105,11 @@ export type InitCommandData = {
   created: boolean;
   /** This run wrote to the file. `false` on an idempotent re-run. */
   changed: boolean;
+  /** `appId.<platform>` as it stands in the project config after this run — from `--ios-app-id`/
+   * `--android-app-id` on this invocation, or already recorded from an earlier one. Omitted
+   * entirely (rather than `{}`) when neither platform has one, so `--json` output doesn't grow an
+   * empty object issue #63 didn't ask for. */
+  appId?: { ios?: string; android?: string };
   /** Present when the recorded scheme and the value discovery would currently find (`app.json` or
    * a native probe) disagree. The recorded one still wins (a re-run must not start failing because
    * the underlying project file was edited); this says so and names the `--force` invocation that

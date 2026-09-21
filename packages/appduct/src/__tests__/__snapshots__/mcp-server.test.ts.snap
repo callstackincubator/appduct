@@ -7,7 +7,7 @@ exports[`mcp: tools/list and tools/call > the generated MCP tool list (built-ins
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
-        "bundleId": {
+        "appId": {
           "type": "string",
         },
         "device": {

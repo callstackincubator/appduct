@@ -35,9 +35,9 @@ That's the whole loop. There is no host process to start — `appduct` auto-spaw
 
 | Command | Role |
 | --- | --- |
-| `appduct init [--scheme <s>] [--force]` | set up an app directory: write `.appduct/config.json`, print the MCP snippet |
+| `appduct init [--scheme <s>] [--ios-app-id <id>] [--android-app-id <id>] [--force]` | set up an app directory: write `.appduct/config.json`, print the MCP snippet |
 | `appduct keygen [--out <path>] [--force]` | generate a daemon private key, print its app pin |
-| `appduct link [--ttl <s>] [--qr] [--open android\|ios-sim\|ios-device] [--device <id>] [--bundle-id <id>] [--scheme <s>]` | mint a pending session and print its deep link |
+| `appduct link [--ttl <s>] [--qr] [--open android\|ios-sim\|ios-device] [--device <id>] [--app-id <id>] [--scheme <s>]` | mint a pending session and print its deep link |
 | `appduct ls` | list sessions: alias, state, device, tool count |
 | `appduct tools [selector] [name] [--full] [--filter <text>] [--limit <n>] [--offset <n>]` | list a session's tools (one call signature + description per line), or show one tool's full schema |
 | `appduct invoke [selector] <tool> --input '<json>' [--timeout <ms>]` | call a tool |
@@ -97,6 +97,8 @@ It's idempotent and safe to re-run:
 - `--scheme <different>` needs `--force` to replace a recorded scheme; `--force` on its own re-adopts `app.json`'s value.
 - `--force` merges into the existing JSON rather than truncating it.
 
+`--ios-app-id <id>` and `--android-app-id <id>` write `appId.ios` and `appId.android` into the same file — the installed app ids that `--open android`, `--open ios-device` and `appduct_connect` need (see [Delivering the link to a device](#delivering-the-link-to-a-device)). They're two flags rather than one because the platforms' ids don't always match, and `init` never guesses one from the other. Like `--scheme`, replacing an id that's already recorded needs `--force`.
+
 A project `.appduct/config.json` holds client-side settings only — it can never redirect the state directory, key, or policy (`--state-dir` / `APPDUCT_STATE_DIR` do that). **Do not point `--state-dir` at a project `.appduct/` directory you commit** — the state dir is where the daemon keeps `key.pem` and its audit log, and a committed one would publish a private key. The two directories share a name and nothing else.
 
 `appduct mcp` is the one exception to step 6: it starts even with no scheme, because it's still useful for proxying tools to a session paired another way. Only `appduct_connect` fails, and its error names every location tried.
@@ -107,11 +109,13 @@ A project `.appduct/config.json` holds client-side settings only — it can neve
 
 | `--open` | Mechanism | Address in the link |
 | --- | --- | --- |
-| `android` | `adb reverse tcp:<port> tcp:<port>`, then `adb shell am start -a android.intent.action.VIEW -d '<link>'` | `127.0.0.1` (the port is forwarded onto the device) |
+| `android` | `adb reverse tcp:<port> tcp:<port>`, then `adb shell am start -a android.intent.action.VIEW -d '<link>' -p <app-id>` | `127.0.0.1` (the port is forwarded onto the device) |
 | `ios-sim` | `xcrun simctl openurl <udid> <link>` | `127.0.0.1` (the simulator shares the host's network) |
-| `ios-device` **(experimental)** | `xcrun devicectl device process launch --device <udid> [--terminate-existing] --payload-url <link> <bundle-id>` | the machine's detected LAN address — there's no `adb reverse` equivalent on iOS |
+| `ios-device` **(experimental)** | `xcrun devicectl device process launch --device <udid> [--terminate-existing] --payload-url <link> <app-id>` | the machine's detected LAN address — there's no `adb reverse` equivalent on iOS |
 
 With no `--device`, every target requires exactly one device and errors naming each candidate rather than picking one arbitrarily: `android` counts attached devices (`ANDROID_SERIAL` disambiguates), `ios-sim` counts booted simulators, and `ios-device` counts connected iOS devices only — `devicectl` lists every device the Mac has ever paired, so disconnected phones and non-iOS ones are filtered out first.
+
+**`android` and `ios-device` need the installed app's id** — the Android package name or the iOS bundle id. Pass `--app-id <id>` (`appId` over MCP), or record it once in `.appduct/config.json` with `appduct init --android-app-id <id> --ios-app-id <id>`. Without one the command fails before minting anything. Naming the app is what keeps Android from showing an "Open with" chooser when more than one installed app declares your scheme — `adb` would report success, and the session would never be claimed. `ios-sim` needs no app id (`simctl openurl` has no equivalent), and passing one with it is an error. The id may contain only letters, digits, `.`, `_` and `-`, and must start with a letter or digit.
 
 #### `--open ios-device` (experimental)
 
@@ -123,10 +127,10 @@ It needs all of:
 - The device **paired and trusted** by this Mac, with **Developer Mode** enabled on it (Settings → Privacy & Security → Developer Mode).
 - A **development-signed build of your app already installed** — `devicectl` launches an installed app, it doesn't install one.
 - The phone and this machine **on the same network**, reachable at the address the link advertises. `appduct link` prints it on its `Endpoint` line (`--json`: `endpoint.address`); `advertisedIp` in `config.json` overrides detection. If no routable address is found, detection falls back to `127.0.0.1` — which a phone can't reach — so `ios-device` refuses to deliver such a link and tells you to set `advertisedIp`.
-- The app's **bundle id**, from `iosBundleId` in `config.json` or `--bundle-id <id>` on the command line. Without one the command fails with a usage error before minting anything.
+- The app's **bundle id** — see [Delivering the link to a device](#delivering-the-link-to-a-device) for how to supply it.
 
 ```bash
-appduct link --scheme myapp --open ios-device --bundle-id com.example.myapp
+appduct link --scheme myapp --open ios-device --app-id com.example.myapp
 ```
 
 Two things worth knowing before you rely on this:
@@ -164,7 +168,7 @@ An MCP server is usually launched with a working directory you don't control, so
 
 Once configured, the connected app's tools appear as MCP tools automatically: `tools/list` mirrors the live registry (namespaced `<alias>__<name>` when more than one session is active), and `tools/call` proxies straight to the app with progress and errors preserved.
 
-Four built-in tools cover what an agent can't do through the app's own registry. `appduct_connect` mints a link and, by default, delivers it to whichever `android`/`ios-sim` device it detects — pass `target`/`device` to choose, or `target: "none"` to force the human flow — falling back to a QR code, plus instructions to show it, only when there's nothing to deliver to. `appduct_wait_for_session` then waits for that session to be claimed. `target: "ios-device"` reaches a paired physical iPhone or iPad, with `bundleId` (or `iosBundleId` in `config.json`) and the [prerequisites above](#--open-ios-device-experimental) — it's experimental and never auto-detected, so an agent has to ask for it by name.
+Four built-in tools cover what an agent can't do through the app's own registry. `appduct_connect` mints a link and, by default, delivers it to whichever `android`/`ios-sim` device it detects — pass `target`/`device` to choose, or `target: "none"` to force the human flow — falling back to a QR code, plus instructions to show it, only when there's nothing to deliver to. Delivering to `android` (chosen or detected) needs `appId`, resolved the same way as `--app-id` (see [Delivering the link to a device](#delivering-the-link-to-a-device)); passing it with `target: "ios-sim"` or `"none"` is an error. `appduct_wait_for_session` then waits for that session to be claimed. `target: "ios-device"` reaches a paired physical iPhone or iPad, with `appId` and the [prerequisites above](#--open-ios-device-experimental) — it's experimental and never auto-detected, so an agent has to ask for it by name.
 
 The other two give an agent a pull surface over `postEvent()`-pushed app events: `appduct_events` drains everything retained since a cursor, and `appduct_wait_for_event` blocks for a matching event (checking what's already retained before waiting live), rejecting with `tool_timeout` if none arrives in time.
 

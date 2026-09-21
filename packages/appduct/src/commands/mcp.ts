@@ -30,10 +30,9 @@ export type McpCommandContext = {
   checkVersion?: VersionCheckOptions;
   /** `--scheme`, the highest-precedence source in `scheme.ts`'s order. */
   scheme?: string;
-  /** Where scheme discovery starts; defaults to `process.cwd()`. */
+  /** Where scheme discovery starts, and where `appduct_connect` resolves an `appId` from on each
+   * call (`ConnectToolDeps.cwd`); defaults to `process.cwd()`. */
   cwd?: string;
-  /** Overrides `config.json`'s `iosBundleId`; test seam, same shape as `scheme`. */
-  iosBundleId?: string;
   exec?: ExecFn;
   /** Environment for `adb`/`simctl`, not for `APPDUCT_SCHEME` (see `schemeEnv`). */
   env?: NodeJS.ProcessEnv;
@@ -107,7 +106,8 @@ export const handleMcpCommand = async (context: McpCommandContext): Promise<McpH
     checkVersion: context.checkVersion,
     scheme,
     schemeTried: tried,
-    iosBundleId: context.iosBundleId ?? config.iosBundleId,
+    cwd: context.cwd,
+    stateDirRoot: paths.root,
     exec: context.exec,
     env: context.env,
   });
