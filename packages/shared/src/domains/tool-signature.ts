@@ -229,11 +229,17 @@ const renderParamEntry = (
   return entry;
 };
 
-/** The `(...)` params group. Unlike {@link renderObjectType}, an `input_schema` not rooted at
- * `type: "object"` (or absent entirely) is always `(...)` — MCP requires an object-rooted input
- * schema (`tool-descriptor.ts`'s `isObjectRootedSchema`), so anything else means this renderer
- * cannot describe the call's arguments, not that there are none. */
+/** The `(...)` params group. An absent `input_schema` is `()`: the SDKs omit it for a tool that
+ * takes no input, and the MCP server maps it to an empty object schema (`tool-mapping.ts`). Unlike
+ * {@link renderObjectType}, a present `input_schema` not rooted at `type: "object"` is always
+ * `(...)` — MCP requires an object-rooted input schema (`tool-descriptor.ts`'s
+ * `isObjectRootedSchema`), so anything else means this renderer cannot describe the call's
+ * arguments, not that there are none. */
 const renderParams = (inputSchema: ToolSchemaDescriptor | undefined): string => {
+  if (inputSchema === undefined) {
+    return "()";
+  }
+
   if (!isSchemaObject(inputSchema) || inputSchema.type !== "object") {
     return "(...)";
   }

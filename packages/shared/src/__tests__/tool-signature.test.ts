@@ -5,7 +5,7 @@ import { renderToolSignature } from "../domains/tool-signature.js";
 type Case = [label: string, descriptor: Parameters<typeof renderToolSignature>[0], expected: string];
 
 const cases: Case[] = [
-  ["no input/output schema at all", { name: "ping" }, "ping(...)"],
+  ["no input/output schema at all -> no-args, like the MCP mapping", { name: "ping" }, "ping()"],
   [
     "input_schema not rooted at type: object",
     { name: "echo", input_schema: { type: "string" } },

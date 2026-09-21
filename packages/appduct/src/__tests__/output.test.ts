@@ -156,14 +156,14 @@ describe("output rendering", () => {
     expect(descriptionLine!.endsWith("…")).toBe(true);
   });
 
-  test("a tool with no input/output schema at all still gets a signature", () => {
+  test("a tool with no input/output schema at all renders as a no-argument call", () => {
     const rendered =
       renderResult(
         { ok: true, data: { tools: [{ name: "ping", description: "Health check.", policy: "allow" }], total: 1 } },
         { command: "tools", flags: flags() },
       ).stdout ?? "";
 
-    expect(rendered).toContain("  ping(...)");
+    expect(rendered).toContain("  ping()");
   });
 
   test("--full listing renders full detail blocks and still shows the Showing line, with no trailing hint", () => {
