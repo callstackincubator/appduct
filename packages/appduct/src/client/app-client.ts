@@ -168,8 +168,12 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
       try {
         // No `filter`/`limit`/`offset`: this client's public `tools()` contract is "every tool on
         // this session", unchanged by `tools.list`'s daemon-side paging (added for the CLI).
-        const { tools } = await stream.call<ToolsListResult>(RPC_METHODS.toolsList, { selector: sessionId });
-        return tools;
+        const result = await stream.call<ToolsListResult | ToolsListResult["tools"]>(RPC_METHODS.toolsList, {
+          selector: sessionId,
+        });
+        // Unlike the CLI, this client runs no daemon version check, so it can meet a daemon from
+        // before `tools.list` returned `{ tools, total }` — one that still answers a bare array.
+        return Array.isArray(result) ? result : result.tools;
       } catch (error) {
         throw toAppductError(error);
       }
