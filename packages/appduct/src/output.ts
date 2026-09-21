@@ -161,17 +161,29 @@ const isToolsListing = (data: ToolsCommandData): data is ToolsListing => {
 const MAX_LISTED_DESCRIPTION_LENGTH = 120;
 
 const summarizeDescription = (description: string): string => {
-  const firstLine = (description.split("\n")[0] ?? "").trim();
+  // Any line break ends the first line (`\r` alone included), and remaining control characters
+  // are dropped: the description is app-supplied text printed straight to a terminal.
+  const firstLine = (description.split(/\r\n|[\n\r\u2028\u2029]/u)[0] ?? "")
+    .replace(/\p{Cc}/gu, "")
+    .trim();
+  // Cut by code point, never through the middle of a surrogate pair.
+  const codePoints = Array.from(firstLine);
 
-  return firstLine.length > MAX_LISTED_DESCRIPTION_LENGTH
-    ? `${firstLine.slice(0, MAX_LISTED_DESCRIPTION_LENGTH)}…`
+  return codePoints.length > MAX_LISTED_DESCRIPTION_LENGTH
+    ? `${codePoints.slice(0, MAX_LISTED_DESCRIPTION_LENGTH).join("")}…`
     : firstLine;
 };
 
 /** "No tools registered"/"No tools match" for an empty listing (compact or `--full` — both share
  * this line, only the header differs). */
-const renderEmptyToolsLine = (filter: string | undefined): string => {
-  return filter === undefined ? "  No tools registered." : `  No tools match "${filter}".`;
+const renderEmptyToolsLine = (data: ToolsListing): string => {
+  if (data.total > 0) {
+    // An empty page of a non-empty result: `--offset` ran past the end. Saying "No tools
+    // registered" here would send an agent looking for a registry problem that is not there.
+    return `  No tools at offset ${data.offset ?? 0}; ${data.total} matching tool${data.total === 1 ? "" : "s"} in total.`;
+  }
+
+  return data.filter === undefined ? "  No tools registered." : `  No tools match ${JSON.stringify(data.filter)}.`;
 };
 
 /** The `Showing n of total tools (offset o). Narrow with --filter <text> or page with --offset
@@ -191,7 +203,7 @@ const renderTruncationLine = (data: ToolsListing): string[] => {
 
 const renderToolSummaryTable = (colors: ColorPalette, data: ToolsListing): string[] => {
   if (data.tools.length === 0) {
-    return [colors.green("Tools"), renderEmptyToolsLine(data.filter)];
+    return [colors.green("Tools"), renderEmptyToolsLine(data)];
   }
 
   return [
@@ -226,7 +238,7 @@ const renderToolDetail = (colors: ColorPalette, tool: ToolDescriptor, flags: Glo
 
 const renderToolsFullListing = (colors: ColorPalette, data: ToolsListing, flags: GlobalFlags): string[] => {
   if (data.tools.length === 0) {
-    return [colors.green("Tools"), renderEmptyToolsLine(data.filter)];
+    return [colors.green("Tools"), renderEmptyToolsLine(data)];
   }
 
   return [

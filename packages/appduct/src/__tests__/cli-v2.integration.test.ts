@@ -397,6 +397,23 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(detail.ok).toBe(true);
       expect((detail.data as { name: string }).name).toBe("tool_29");
 
+      // The single-arg form that resolves to a tool name follows the same rule as `<sel> <name>`.
+      const probeUnderPaging = await runCliJson(["tools", "tool_29", "--limit", "1"], stateDir);
+      expect(probeUnderPaging.ok).toBe(false);
+      expect(probeUnderPaging.error?.type).toBe("usage_error");
+
+      // A numeric-looking filter is matched as text, verbatim (cac alone would turn "07" into 7).
+      const numericFilter = await runCliJson(["tools", alias, "--filter", "07"], stateDir);
+      expect(numericFilter.ok).toBe(true);
+      const numericFilterData = numericFilter.data as { tools: Array<{ name: string }>; total: number; filter: string };
+      expect(numericFilterData.tools.map((tool) => tool.name)).toEqual(["tool_07"]);
+      expect(numericFilterData.filter).toBe("07");
+
+      // An offset past the end is an empty page of a non-empty registry, not "No tools registered".
+      const pastEnd = await runCliHuman(["tools", alias, "--offset", "100"], stateDir);
+      expect(pastEnd.stdout).toContain("No tools at offset 100; 30 matching tools in total.");
+      expect(pastEnd.stdout).not.toContain("No tools registered");
+
       // Human output: a signature line per tool, and the "Showing" line once the page truncates.
       const human = await runCliHuman(["tools", alias, "--limit", "5"], stateDir);
       expect(human.stdout).toContain("tool_00(value: string)");

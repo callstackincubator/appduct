@@ -71,14 +71,18 @@ const toListing = (result: ToolsListResult, params: ListParams): ToolsListing =>
   };
 };
 
+const listingOnlyError = () => {
+  return usageError(
+    '"--filter", "--limit", and "--offset" only apply to a tools listing, not a single tool lookup.',
+  );
+};
+
 export const handleToolsCommand = async (
   options: ToolsCommandOptions,
   context: ToolsCommandContext,
 ): Promise<CliResult<ToolsCommandData>> => {
   if (options.name !== undefined && hasPagingOptions(options)) {
-    throw usageError(
-      '"--filter", "--limit", and "--offset" only apply to a tools listing, not a single tool lookup.',
-    );
+    throw listingOnlyError();
   }
 
   if (options.selector !== undefined && options.name !== undefined) {
@@ -111,6 +115,12 @@ export const handleToolsCommand = async (
       const tool = findTool(implicitTools.tools, options.selector);
 
       if (tool) {
+        // The same rule as an explicit `<selector> <name>`: silently dropping the listing flags
+        // here would make `tools <name> --limit 5` behave differently from `tools <sel> <name>`.
+        if (hasPagingOptions(options)) {
+          throw listingOnlyError();
+        }
+
         return { ok: true, data: tool };
       }
     }
