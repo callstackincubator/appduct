@@ -4,7 +4,8 @@
  * stale-socket unlink, log rotation — so what it answers for a zombie decides all three.
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 import { describe, expect, test } from "vitest";
 
@@ -24,13 +25,12 @@ const deadPid = (): number => {
 /**
  * A `/proc/<pid>/status` body, in the shape the kernel writes it: `Name`, then `State:\tX (word)`.
  *
- * A *real* zombie cannot be arranged from here. Node reaps its own children automatically (libuv
- * installs a SIGCHLD handler), so a child of this process is never a zombie; producing one needs a
- * grandchild orphaned to a PID 1 that does not reap, which is precisely the container-specific
- * condition this whole check exists for and therefore the one thing a test may not assume. The
- * seam is the reader, so the test supplies the bytes `/proc` would have contained and the
- * decision under test — "a pid that `kill(pid, 0)` accepts is still dead if procfs says Z" — is
- * exercised for real.
+ * Node reaps its own children automatically (libuv installs a SIGCHLD handler), so a child of
+ * this process is never a zombie. The cases below therefore supply the bytes `/proc` would have
+ * contained through the reader seam, so the decision under test — "a pid that `kill(pid, 0)`
+ * accepts is still dead if procfs says Z" — runs on every platform. On Linux one extra case also
+ * arranges a real zombie (a grandchild whose parent never waits) and goes through the default
+ * procfs reader, so the parsing is checked against what the kernel actually writes.
  */
 const procStatus = (state: string, name = "appduct"): string => {
   return `Name:\t${name}\nUmask:\t0022\nState:\t${state}\nTgid:\t1\n`;
@@ -74,4 +74,48 @@ describe("isProcessAlive", () => {
     // And `Z` must be the *state*, not merely a letter somewhere on the line.
     expect(isProcessAlive(process.pid, () => procStatus("S (sleeping)", "Zygote"))).toBe(true);
   });
+
+  // Linux-only: the default reader reads procfs, which nothing else has. `sh` backgrounds a
+  // `sleep 1` and then execs into `sleep 30`, which never calls wait(), so once the `sleep 1`
+  // finishes it stays a zombie child of it for as long as the `sleep 30` lives — a real zombie, no
+  // container needed. (The background sleep outlives the `exec`, so `sh` never gets to reap it.)
+  test.runIf(process.platform === "linux")(
+    "a real zombie is dead through the default /proc reader",
+    async () => {
+      const parent = spawn("/bin/sh", ["-c", "sleep 1 & echo $!; exec sleep 30"], {
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+
+      try {
+        const zombiePid = await new Promise<number>((resolve, reject) => {
+          parent.once("error", reject);
+          parent.stdout.once("data", (chunk: Buffer) => resolve(Number.parseInt(chunk.toString("utf8"), 10)));
+        });
+        expect(zombiePid).toBeGreaterThan(0);
+
+        const stateOf = (): string | undefined => {
+          try {
+            return /^State:\s*(\S)/mu.exec(readFileSync(`/proc/${zombiePid}/status`, "utf8"))?.[1];
+          } catch {
+            return undefined;
+          }
+        };
+        const deadline = Date.now() + 4000;
+
+        while (stateOf() !== "Z" && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+
+        expect(stateOf()).toBe("Z");
+        // The premise: signalling still succeeds, which is exactly why `kill(pid, 0)` alone is wrong.
+        expect(() => process.kill(zombiePid, 0)).not.toThrow();
+        expect(isProcessAlive(zombiePid)).toBe(false);
+        // And the parent that is merely sleeping reads as alive through the same reader.
+        expect(isProcessAlive(parent.pid!)).toBe(true);
+      } finally {
+        parent.kill("SIGKILL");
+      }
+    },
+    10_000,
+  );
 });
