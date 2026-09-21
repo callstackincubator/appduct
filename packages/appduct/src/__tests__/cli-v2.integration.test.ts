@@ -324,11 +324,13 @@ describe("appduct CLI v2: end-to-end command table", () => {
     "tools --filter/--limit/--offset page a large registry, a name lookup still resolves under paging, and human output is a signature listing",
     async () => {
       const stateDir = await makeTempStateDir();
-      const port = JSON.parse(await readFile(path.join(stateDir, "config.json"), "utf8")).wssPort as number;
 
       const status = await runCliJson(["daemon", "status"], stateDir);
       expect(status.ok).toBe(true);
       daemonPids.push((status.data as { daemon: { pid: number } }).daemon.pid);
+      // `wssPort: 0` in the state dir, so the bound port is only known from the daemon itself.
+      const port = (status.data as { daemon: { wss_port: number } }).daemon.wss_port;
+      expect(port).toBeGreaterThan(0);
 
       const linkResult = await runCliJson(["link", "--ttl", "60"], stateDir);
       const linkData = linkResult.data as { deepLink: string };
