@@ -10,6 +10,7 @@
 import { rm } from "node:fs/promises";
 
 import {
+  MAX_TOOLS_FILTER_LENGTH,
   RPC_METHODS,
   EVENT_KINDS,
   type EventKind,
@@ -153,9 +154,6 @@ const asSelectorParams = (params: unknown): { selector?: string } => {
   return { selector };
 };
 
-/** `tools.list`'s `filter` string cap (ARCHITECTURE.md §5) — generous for a name/description
- * substring search, small enough that a malicious/buggy caller can't use it to bloat a request. */
-const MAX_TOOLS_FILTER_LENGTH = 256;
 
 const asToolsListParams = (params: unknown): ToolsListParams => {
   const { selector } = asSelectorParams(params);

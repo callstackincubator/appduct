@@ -1,6 +1,5 @@
 import {
   clampToolTimeoutMs,
-  isObjectRootedSchema,
   MAX_TOOL_TIMEOUT_MS,
   MIN_TOOL_TIMEOUT_MS,
   type StandardSchemaV1,
@@ -72,50 +71,45 @@ const reportShapelessSchema = (
   return undefined;
 };
 
-/** Dedupes the two dev warnings below across repeated registrations of the same tool name. */
-const nonObjectOutputWarningsSeen = new Set<string>();
+/** Dedupes the dev warning below across repeated registrations of the same tool name. */
 const nonObjectInputWarningsSeen = new Set<string>();
 
 /**
- * Issue #26: MCP's `Tool` wire shape requires both `inputSchema.type` and `outputSchema.type` to be
- * the literal `"object"`, so a schema exported as anything else (`z.array`, `z.string`, a
- * `z.union`'s `anyOf`, a `z.discriminatedUnion`'s `oneOf` or a `z.intersection`'s `allOf` — the
- * last two even when every branch is an object) cannot be put on the wire as-is. The tool is still
- * registered and still callable, and the descriptor still carries the real schema for the CLI and
- * the JS client; only the MCP surface degrades. Warn at registration time so an app author learns
- * it here rather than from an agent.
+ * A tool call always carries its `args` as a JSON object (the daemon rejects anything else), so an
+ * input schema whose root `type` rules an object out (`z.string`, `z.number`, `z.array`, ...) can
+ * never be satisfied by a call. Warn at registration time so an app author learns it here rather
+ * than from an agent. The tool is still registered, and the descriptor still carries the schema as
+ * exported.
  *
- * This is a best-effort dev-time hint, not the authority. The MCP server makes the real decision
- * by parsing the composed tool with the SDK's own `ToolSchema` (`mcp/tool-mapping.ts`), which
- * rejects a little more than the root-type check available here — this package cannot depend on
- * the MCP SDK. Every shape zod itself can export is covered by the check below.
+ * A schema with no root `type` — a `z.union`'s `anyOf`, a `z.discriminatedUnion`'s `oneOf`, a
+ * `z.intersection`'s `allOf` — is left alone: its branches can be objects, and args are validated
+ * app-side by the schema itself. An output schema has no constraint at all: a result can be any
+ * JSON value.
  */
-const warnNonObjectRootedSchema = (
+const rulesOutObjectArgs = (schema: ToolSchemaDescriptor): boolean => {
+  const { type } = schema;
+
+  if (typeof type === "string") {
+    return type !== "object";
+  }
+
+  return Array.isArray(type) && !type.includes("object");
+};
+
+const warnNonObjectRootedInputSchema = (
   toolName: string,
-  mode: "input" | "output",
   schema: ToolSchemaDescriptor,
 ): void => {
-  const seen =
-    mode === "output"
-      ? nonObjectOutputWarningsSeen
-      : nonObjectInputWarningsSeen;
-
-  if (seen.has(toolName)) {
+  if (nonObjectInputWarningsSeen.has(toolName)) {
     return;
   }
-  seen.add(toolName);
-
-  const consequence =
-    mode === "output"
-      ? "MCP drops it from tools/list, so agents get the result with no schema describing it."
-      : "MCP replaces it with a permissive empty object schema, so agents cannot see the tool's " +
-        "real arguments.";
+  nonObjectInputWarningsSeen.add(toolName);
 
   logger.devWarn(
-    `Tool "${toolName}" exports a JSON Schema for its ${mode} that is not rooted at ` +
-      `type "object" (got ${JSON.stringify(schema.type ?? null)}). ${consequence} ` +
-      `Wrap the ${mode} in an object schema (for example z.object({ result: ... })) to keep the ` +
-      "full shape over MCP.",
+    `Tool "${toolName}" exports a JSON Schema for its input that is not rooted at ` +
+      `type "object" (got ${JSON.stringify(schema.type ?? null)}). Tool calls always pass ` +
+      "their args as a JSON object, so no call can satisfy it. Wrap the input in an object " +
+      "schema (for example z.object({ value: ... })).",
   );
 };
 
@@ -563,12 +557,8 @@ export const toToolDescriptor = (
     definition.name,
   );
 
-  if (inputSchema !== undefined && !isObjectRootedSchema(inputSchema)) {
-    warnNonObjectRootedSchema(definition.name, "input", inputSchema);
-  }
-
-  if (outputSchema !== undefined && !isObjectRootedSchema(outputSchema)) {
-    warnNonObjectRootedSchema(definition.name, "output", outputSchema);
+  if (inputSchema !== undefined && rulesOutObjectArgs(inputSchema)) {
+    warnNonObjectRootedInputSchema(definition.name, inputSchema);
   }
 
   return {

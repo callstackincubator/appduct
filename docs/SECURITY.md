@@ -284,9 +284,10 @@ tool with no purpose outside a local dev loop, say. It just shouldn't be the exa
 app copies for hardening.
 
 **Consequence for agents and E2E flows:** because registration is the app-side allowlist,
-`tools/list` legitimately differs per build artifact. A CI testing build may expose a
+the tool set legitimately differs per build artifact. A CI testing build may expose a
 different tool set than a local dev build or a hardened production build. Automated flows
-should discover tools via `tools/list` rather than assume a fixed set is always present.
+should discover tools (`appduct tools`, or `appduct_list_tools` over MCP) rather than assume
+a fixed set is always present.
 
 ## Key handling rules
 
@@ -351,7 +352,11 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   `policy.tools["<alias>/<name>"]` overrides) to `"deny"` for anything you don't want an
   arbitrary caller invoking against a production build. Every `tools.call` — CLI, MCP, and
   `appduct/client` alike — is evaluated against this before it ever reaches the app;
-  a denial returns `policy_denied` and never sends a `tool_call` frame. `"prompt"` requires a human gate
+  a denial returns `policy_denied` and never sends a `tool_call` frame. Over MCP, the client's own
+  permission prompt covers `appduct_call_tool` as a whole rather than each app tool, so an operator
+  who "always allows" it has approved every app tool; `policy.destructive: "prompt"` is how to keep
+  a human approving each call to a tool annotated `destructiveHint: true` (an unannotated tool
+  falls under `policy.default`). `"prompt"` requires a human gate
   and fails closed everywhere one can't be guaranteed: today the only implemented gate
   is an MCP client that declares the `elicitation` capability, which receives an
   `elicitation/create` prompt for each call; the CLI and every other client are denied outright

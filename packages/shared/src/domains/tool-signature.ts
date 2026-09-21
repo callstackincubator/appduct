@@ -230,11 +230,9 @@ const renderParamEntry = (
 };
 
 /** The `(...)` params group. An absent `input_schema` is `()`: the SDKs omit it for a tool that
- * takes no input, and the MCP server maps it to an empty object schema (`tool-mapping.ts`). Unlike
- * {@link renderObjectType}, a present `input_schema` not rooted at `type: "object"` is always
- * `(...)` — MCP requires an object-rooted input schema (`tool-descriptor.ts`'s
- * `isObjectRootedSchema`), so anything else means this renderer cannot describe the call's
- * arguments, not that there are none. */
+ * takes no input. Unlike {@link renderObjectType}, a present `input_schema` not rooted at
+ * `type: "object"` is always `(...)` — a call's args are always a JSON object, so anything else
+ * means this renderer cannot describe the call's arguments, not that there are none. */
 const renderParams = (inputSchema: ToolSchemaDescriptor | undefined): string => {
   if (inputSchema === undefined) {
     return "()";
@@ -275,4 +273,23 @@ export const renderToolSignature = (
     // getters throw. The listing that calls this must not die for one tool.
     return `${name}(...)`;
   }
+};
+
+/** The listing's per-tool summary length, in code points. The full description (up to
+ * `MAX_TOOL_DESCRIPTION_LENGTH`) stays available from a single-tool lookup. */
+export const MAX_TOOL_SUMMARY_LENGTH = 120;
+
+/**
+ * A tool description's first line, for a listing (`appduct tools`, `appduct_list_tools`): any line
+ * break ends it (`\r` alone included), remaining control characters are dropped since the text is
+ * app-supplied and may be printed straight to a terminal, and it is capped at
+ * {@link MAX_TOOL_SUMMARY_LENGTH} code points, never cut through a surrogate pair.
+ */
+export const summarizeToolDescription = (description: string): string => {
+  const firstLine = (description.split(/\r\n|[\n\r\u2028\u2029]/u)[0] ?? "").replace(/\p{Cc}/gu, "").trim();
+  const codePoints = Array.from(firstLine);
+
+  return codePoints.length > MAX_TOOL_SUMMARY_LENGTH
+    ? `${codePoints.slice(0, MAX_TOOL_SUMMARY_LENGTH).join("")}…`
+    : firstLine;
 };

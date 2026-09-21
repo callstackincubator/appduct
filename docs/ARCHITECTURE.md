@@ -461,11 +461,31 @@ belong here:
 `appduct mcp` starts a **stdio** MCP server (SDK: `@modelcontextprotocol/sdk`) that
 proxies daemon RPC (auto-spawning the daemon like any client):
 
-- `tools/list` mirrors the live registry. One session → tools under their own names;
-  several → namespaced `<alias>__<name>`. Registry and session changes emit
-  `notifications/tools/list_changed`, so an agent's tool list tracks the device.
-- Tool calls, progress frames, errors (with their `type` preserved), and descriptor
-  annotations all map through verbatim. Two semantics the MCP surface does add:
+- `tools/list` is a fixed set of built-in tools. The app's tools are never listed as MCP
+  tools of their own; an agent reaches them through three built-ins that mirror the CLI (§10):
+  `appduct_list_tools` (`appduct tools`: one-line signatures from `renderToolSignature`, each
+  tool's effective policy, with `filter`/`limit`/`offset` passed through to `tools.list` and
+  `limit` defaulting to 50), `appduct_describe_tool` (`appduct tools <name>`: the whole
+  descriptor), and `appduct_call_tool` (`appduct invoke`: `{ selector?, name, args?, timeoutMs? }`).
+  `timeoutMs` can only shorten the tool's own deadline, since the `tool_call` frame carries no
+  deadline and the app stops the handler at its declared one (`docs/PROTOCOL.md` §5); a longer value, or one outside
+  1000–600000 ms, is rejected rather than clamped. A client cancel that arrives while the consent
+  prompt is open stops the call before `tools.call`, even if the prompt is then accepted. Each
+  takes the same `selector` as the CLI (alias or session id) and resolves it with
+  `sessions.describe` first; every later daemon call for that request — `tools.list`,
+  `tools.call`, the progress subscription, a cancel — names the session by **id**. The daemon
+  gives a departed session's alias to the next device of the same model, so routing by alias
+  could run a call, one the user may already have approved, on a different device; by id it fails
+  with `unknown_session` instead. Results name the session by alias. Unknown parameters are
+  rejected with `invalid_request` rather than dropped, and `null` counts as absent.
+  A registry of hundreds of tools therefore costs a client three tool definitions, and nothing
+  about the registry or the session set changes `tools/list`: the server advertises no
+  `listChanged` capability and never sends `notifications/tools/list_changed`. Schemas travel as
+  data inside a tool result rather than as MCP `Tool.inputSchema`/`outputSchema`, so MCP's
+  object-rooted rule for those fields no longer applies to app schemas.
+- Tool call results, progress frames and errors (with their `type` preserved) map through
+  verbatim: a JSON object result is returned as `structuredContent` as well as text, any other
+  value as text only. Two semantics the MCP surface does add:
   `"prompt"`-policy consent (§12) — one channel, elicitation (issue #10), used whenever the
   client declared the `elicitation` capability at `initialize`: a `"prompt"`-policy call sends one `elicitation/create` request naming the
   tool, the session alias, and the call's arguments, and an `action: "accept"` reply becomes
@@ -768,7 +788,7 @@ deviations):
   list of everything that changes the registry entry — `name`, `description`,
   `timeoutMs` (app-side only, but part of the entry), stringified `annotations`, the
   exported input/output JSON Schemas, and `enabled` — so a re-render never emits a
-  `tool_registry_delta` pair or an agent-side `notifications/tools/list_changed`. Schemas
+  `tool_registry_delta` pair. Schemas
   are compared by identity first and re-exported only when the identity changed
   (hoisted/memoized schemas never re-export; an inline `z.object({…})` re-exports once per
   render and still matches by shape). A schema that exports no JSON Schema (zod 3, plain
@@ -821,9 +841,11 @@ deviations):
   plain-object rule. The `jsonSchema` half of a pair and every converter result are held to
   that same rule, so the forms cannot diverge in what they will publish.
 
-  Separately from all of this, an **input schema should be object-typed at its root** to be
-  usable over MCP — a root `enum`/`const`/`$ref`/`anyOf` is legal JSON Schema but leaves the
-  agent with no named arguments (issue #34). This is documented, not enforced.
+  Separately from all of this, an **input schema has to accept a JSON object**, because
+  `tools.call`'s `args` always are one: a root `type` that rules an object out can never be
+  satisfied (issue #34), and the React Native SDK dev-warns about it. A root `anyOf`/`oneOf`/
+  `allOf` of objects is callable, though its signature renders as `(...)`. This is warned about,
+  not enforced.
 
   Every way a slot can end up with no shape — a missing exporter, an exporter that throws or
   returns a non-object, a paired converter that does either — takes the same route: throw in
@@ -977,6 +999,7 @@ named-pipe path `\\.\pipe\appduct-<user>` behind the same client API.
   pin sets; the anchor-CA design is a future option).
 - Web/browser client (safe no-op stub only).
 - Multiple endpoint candidates in the bootstrap payload.
-- A tool whose `input_schema` is not object-rooted is listed but not usefully callable over MCP,
-  because MCP tool arguments are always an object (§9). Wrapping such arguments so the tool stays
-  callable is tracked in [issue #34](https://github.com/callstackincubator/appduct/issues/34).
+- A tool whose `input_schema` root `type` rules out an object (`"string"`, `"array"`, ...) is
+  listed but not callable, because `tools.call`'s `args` are always a JSON object (§5). Wrapping
+  such arguments so the tool stays callable is tracked in
+  [issue #34](https://github.com/callstackincubator/appduct/issues/34).

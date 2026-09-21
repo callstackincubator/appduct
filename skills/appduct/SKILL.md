@@ -124,9 +124,20 @@ management tools instead of the CLI commands above.
 **Call `appduct_connect` with no arguments.** It auto-detects a booted iOS simulator or
 attached Android device and delivers the link straight to it — no human involved. A result
 with `delivered: true` is done; go on to `appduct_wait_for_session({ sessionId })`,
-which blocks until the device connects (or returns immediately if it already has). After
-that the app's own tools appear directly in `tools/list` — call them with `tools/call`
-like any other MCP tool.
+which blocks until the device connects (or returns immediately if it already has).
+
+The app's own tools are not MCP tools of their own. Reach them through three built-ins that
+mirror the CLI:
+
+1. `appduct_list_tools` lists them as one-line signatures with each tool's policy (like
+   `appduct tools`). On a large app, narrow with `filter`, or page with `limit`/`offset`.
+2. `appduct_describe_tool({ name })` shows one tool's full input and output schema (like
+   `appduct tools <name>`).
+3. `appduct_call_tool({ name, args })` runs it (like `appduct invoke`).
+
+With more than one device connected, pass `selector` (the session alias or id) to each of them. A
+tool with policy `"prompt"` asks the user to approve every call; if the user declines, don't
+retry it on your own.
 
 Pass `target: "android"` / `"ios-sim"` (plus `device` — an adb serial or simulator udid) only
 to override that choice, e.g. when several devices are up and the result said so.
@@ -164,7 +175,7 @@ the `wss://` port or the daemon's key is being rotated.
 ## Declaring tools
 
 The app must register tools before `appduct tools` / `appduct invoke` (or MCP
-`tools/call`) can do anything useful. Register with `registerTool` or `useAppductTool`:
+`appduct_call_tool`) can do anything useful. Register with `registerTool` or `useAppductTool`:
 
 ```ts
 import { registerTool } from "@appduct/react-native";
@@ -191,12 +202,13 @@ registerTool({
 | A raw JSON Schema object (no `~standard`, at least one JSON Schema keyword) | **no** — args pass through | the object, verbatim |
 
 A bare Zod 3 / plain valibot schema (Standard Schema, no exporter) **throws in `__DEV__`**:
-it would otherwise register a shapeless tool that `tools/list` reports as taking any
+it would otherwise register a shapeless tool that `appduct tools` reports as taking any
 object. Pair it, or pass raw JSON Schema.
 
-An input schema must be **object-typed at its root** to be callable over MCP: a root
-`enum`, `const`, `$ref` or `anyOf` is legal JSON Schema but gives the agent no named
-arguments to pass (issue #34).
+An input schema must **accept a JSON object**, since a call's args always are one: a root
+`type` of string, number or array can never be satisfied (issue #34). A root `anyOf`/`oneOf`
+of objects works, but its signature shows as `(...)`, so read the full schema
+(`appduct tools <name>`) before calling it.
 
 ## Notes
 

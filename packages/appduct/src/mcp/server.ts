@@ -1,12 +1,14 @@
 /**
- * The `appduct mcp` stdio MCP server (ARCHITECTURE.md §9): a thin proxy that maps the daemon RPC
- * surface (`rpc/client.ts`, same auto-spawning client the CLI uses) onto MCP's `tools/list`,
- * `tools/call`, `notifications/tools/list_changed`, progress notifications, and one resource
+ * The `appduct mcp` stdio MCP server (ARCHITECTURE.md §9): a thin proxy over the daemon RPC surface
+ * (`rpc/client.ts`, same auto-spawning client the CLI uses). `tools/list` is a fixed set of
+ * built-in tools; the app's own tools are reached through `appduct_list_tools`,
+ * `appduct_describe_tool` and `appduct_call_tool` (`app-tools.ts`), mirroring the CLI, never
+ * listed as MCP tools themselves. Also progress notifications, cancellation, and one resource
  * (`appduct://sessions`). All logging here goes to stderr only — stdout is reserved for the MCP
  * transport's protocol frames.
  *
  * One persistent daemon connection (`stream`) is used for everything except progress-correlated
- * `tools.call`s, which get their own short-lived connection (see `callProxiedTool` below) so the
+ * `tools.call`s, which get their own short-lived connection (see `callAppTool` below) so the
  * `tool_call_started` event that reveals the call's `callId` is unambiguous.
  *
  * This is also where the `"prompt"`-policy consent channel lives (ARCHITECTURE.md §12):
@@ -27,10 +29,10 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { RPC_METHODS, type EventKind, type EventNotification, type SessionsListResult, type ToolsCallResult } from "@appduct/shared";
+import { RPC_METHODS, type EventNotification, type SessionsListResult, type ToolsCallResult } from "@appduct/shared";
 
 import type { ExecFn } from "../cli/open-target.js";
-import { clampTimeout, deriveCallTransportTimeoutMs } from "../daemon/calls.js";
+import { deriveCallTransportTimeoutMs } from "../daemon/calls.js";
 import { getPackageVersion } from "../package-version.js";
 import {
   DaemonRpcError,
@@ -41,6 +43,20 @@ import {
   type VersionCheckOptions,
 } from "../rpc/client.js";
 import {
+  CALL_TOOL_TOOL_DESCRIPTOR,
+  CALL_TOOL_TOOL_NAME,
+  DESCRIBE_TOOL_TOOL_DESCRIPTOR,
+  DESCRIBE_TOOL_TOOL_NAME,
+  handleDescribeToolTool,
+  handleListToolsTool,
+  LIST_TOOLS_TOOL_DESCRIPTOR,
+  LIST_TOOLS_TOOL_NAME,
+  parseCallToolArgs,
+  resolveAppTool,
+  resolveCallDeadline,
+  type ResolvedAppTool,
+} from "./app-tools.js";
+import {
   CONNECT_TOOL_DESCRIPTOR,
   CONNECT_TOOL_NAME,
   handleConnectTool,
@@ -49,7 +65,6 @@ import {
   WAIT_FOR_SESSION_TOOL_DESCRIPTOR,
   WAIT_FOR_SESSION_TOOL_NAME,
 } from "./connect-tool.js";
-import { fetchEffectiveTools } from "./daemon-tools.js";
 import {
   EVENTS_TOOL_DESCRIPTOR,
   EVENTS_TOOL_NAME,
@@ -58,47 +73,13 @@ import {
   WAIT_FOR_EVENT_TOOL_DESCRIPTOR,
   WAIT_FOR_EVENT_TOOL_NAME,
 } from "./events-tool.js";
-import { createMcpToolMapper, emitsMcpOutputSchema } from "./tool-mapping.js";
-import { findNamespacedTool, namespacedToolsSnapshotKey, type NamespacedTool } from "./tool-namespace.js";
 
 const packageVersion = getPackageVersion();
 
 export const SESSIONS_RESOURCE_URI = "appduct://sessions";
 
-/** Event kinds whose arrival can change the effective (namespaced or not) tool list — including
- * the single↔multi namespacing flip itself, which is driven by session count, not tool count. */
-const LIST_CHANGE_EVENT_KINDS: readonly EventKind[] = [
-  "tools_changed",
-  "session_claimed",
-  "session_revoked",
-  "session_expired",
-  "session_suspended",
-  "session_resumed",
-];
-
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-};
-
-/** The *shape* of a rejected tool result, for the error message only — never the value itself,
- * which may be large or carry app data that does not belong in an agent-visible error string. */
-const describeJsonValue = (value: unknown): string => {
-  if (value === null) {
-    return "null";
-  }
-
-  // Defensive: the daemon rejects a `tool_result` frame with no `result`, so nothing on today's
-  // wire path yields `undefined` here. Spelled out anyway so a future one reads as "returned no
-  // value" rather than the `typeof` wording, "returned a undefined".
-  if (value === undefined) {
-    return "no value";
-  }
-
-  if (Array.isArray(value)) {
-    return "an array";
-  }
-
-  return `a ${typeof value}`;
 };
 
 /**
@@ -136,14 +117,14 @@ const formatElicitationArgsPreview = (args: Record<string, unknown>): string => 
 
 /** Names the session alias, the tool, and the actual arguments — the human answering this prompt
  * has nothing else to go on (ARCHITECTURE.md §12 / issue #10). */
-const buildElicitationMessage = (tool: NamespacedTool, args: Record<string, unknown>): string => {
+const buildElicitationMessage = (tool: ResolvedAppTool, args: Record<string, unknown>): string => {
   return (
-    `Appduct: allow the MCP tool "${tool.descriptor.name}" to run on session "${tool.selector}"? ` +
+    `Appduct: allow the app tool "${tool.descriptor.name}" to run on session "${tool.alias}" (${tool.sessionId})? ` +
     `Arguments: ${formatElicitationArgsPreview(args)}`
   );
 };
 
-/** Thrown from `callProxiedTool` when the human declined or cancelled an elicitation prompt (or it
+/** Thrown from `callAppTool` when the human declined or cancelled an elicitation prompt (or it
  * timed out), so the outer `tools/call` handler can turn it into an ordinary MCP tool **result**
  * with `isError: true` — never a thrown protocol-level error — matching every other error path in
  * this file (`toolErrorContentFromError` below): the agent reading the result must be able to
@@ -169,7 +150,7 @@ class ElicitationDeclinedError extends Error {
  */
 const requestElicitationConsent = async (
   server: Server,
-  tool: NamespacedTool,
+  tool: ResolvedAppTool,
   args: Record<string, unknown>,
   // Injectable so tests can exercise the timeout branch without an actual 10-minute wait; every
   // production caller passes `ELICITATION_TIMEOUT_MS` (via `CreateMcpServerOptions.elicitationTimeoutMs`).
@@ -194,13 +175,13 @@ const requestElicitationConsent = async (
 
     return {
       type: "declined",
-      message: `The user ${result.action === "cancel" ? "cancelled" : "declined"} the request to call "${tool.descriptor.name}" on session "${tool.selector}".`,
+      message: `The user ${result.action === "cancel" ? "cancelled" : "declined"} the request to call "${tool.descriptor.name}" on session "${tool.alias}".`,
     };
   } catch (error) {
     if (error instanceof McpError && error.code === ErrorCode.RequestTimeout) {
       return {
         type: "declined",
-        message: `Timed out after ${timeoutMs / 1000}s waiting for a human to respond to the consent prompt for "${tool.descriptor.name}" on session "${tool.selector}".`,
+        message: `Timed out after ${timeoutMs / 1000}s waiting for a human to respond to the consent prompt for "${tool.descriptor.name}" on session "${tool.alias}".`,
       };
     }
 
@@ -221,7 +202,7 @@ const toolSuccessContent = (result: unknown): CallToolResult => {
   return { content };
 };
 
-/** Errors from a tool call — proxied device tool or built-in management tool alike — become MCP
+/** Errors from a tool call — an app tool run through `appduct_call_tool` or a built-in alike — become MCP
  * tool-error *content*, never a thrown protocol-level error: the preserved
  * `type` and `message` are put in the text so an agent reading the result can branch on them. */
 const toolErrorContent = (type: string, message: string, details?: unknown): CallToolResult => {
@@ -256,37 +237,11 @@ const toolErrorContentFromError = (error: unknown): CallToolResult => {
 };
 
 /**
- * The success path for a *proxied* device tool (issue #26). An MCP client requires
- * `structuredContent` on every successful call to a tool whose `tools/list` entry carried an
- * `outputSchema`, so this shares `emitsMcpOutputSchema` with the mapping layer: the two decisions
- * are the same predicate and cannot drift. When a schema *was* advertised and the result is not an
- * object anyway (reachable only when the schema's validator is looser than its declared shape,
- * `tool-invocation.ts`), the call fails as `tool_output_validation_error` rather than as an opaque
- * client-side protocol error. A tool whose schema was dropped, or that has none, keeps the
- * opportunistic behaviour: text content always, plus `structuredContent` when the result happens
- * to be an object — which is allowed, since the client has no schema to validate it against.
- */
-const proxiedToolResultContent = (tool: NamespacedTool, result: unknown): CallToolResult => {
-  if (!emitsMcpOutputSchema(tool.descriptor.output_schema)) {
-    return toolSuccessContent(result);
-  }
-
-  if (!isPlainObject(result)) {
-    return toolErrorContent(
-      "tool_output_validation_error",
-      `Tool "${tool.mcpName}" declares an object output schema but returned ${describeJsonValue(result)}.`,
-    );
-  }
-
-  return toolSuccessContent(result);
-};
-
-/**
  * How this server opens a daemon connection. Both the startup stream and each short-lived
  * progress stream go through it, so a caller can put something other than a real daemon on the
  * other end. The only production implementation is {@link openDaemonStream}; the seam exists so
- * the behaviour that is purely this module's own — name mapping, schema degradation, consent,
- * namespacing, `list_changed` — can be tested without a TLS listener, a pidfile and a
+ * the behaviour that is purely this module's own — the built-in tools, consent, progress and
+ * cancellation — can be tested without a TLS listener, a pidfile and a
  * subprocess, none of which those behaviours depend on.
  */
 export type OpenDaemonStreamFn = (options: {
@@ -360,14 +315,15 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
 
   const server = new Server(
     { name: "appduct", version: packageVersion },
-    { capabilities: { tools: { listChanged: true }, resources: {} } },
+    // `tools/list` is a fixed set of built-ins, so there is never a list change to announce.
+    { capabilities: { tools: {}, resources: {} } },
   );
 
   /**
    * Resolves the `consent` param for one `"prompt"`-policy `tools.call` (ARCHITECTURE.md §12),
-   * shared by both call paths below so the logic exists exactly once. Recomputes the tool's live
-   * policy's implications at call time — never trusts anything cached from a prior `tools/list`
-   * snapshot.
+   * shared by both call paths below so the logic exists exactly once. Works from the policy the
+   * daemon reported when `appduct_call_tool` resolved the tool for this call, never from an
+   * earlier `appduct_list_tools` result.
    *
    * Elicitation (issue #10) is the only channel. A client that didn't declare the capability gets
    * no consent marker, so the daemon denies the call with reason `no_consent_channel`. An
@@ -376,7 +332,7 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
    * "no consent obtained".
    */
   const resolveToolCallConsent = async (
-    tool: NamespacedTool,
+    tool: ResolvedAppTool,
     args: Record<string, unknown>,
   ): Promise<"elicitation" | undefined> => {
     if (tool.policy !== "prompt" || !clientSupportsElicitation(server)) {
@@ -404,13 +360,11 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
     return undefined;
   };
 
-  // One mapper per server: it owns the dedup for the "this schema had to be degraded" stderr
-  // notices, which would otherwise repeat on every `tools/list` and every list-changed refresh.
-  const mapToMcpTool = createMcpToolMapper();
-
-  const callProxiedTool = async (
-    tool: NamespacedTool,
+  const callAppTool = async (
+    tool: ResolvedAppTool,
     args: Record<string, unknown>,
+    /** The caller's `timeoutMs`, overriding the tool's declared deadline when set. */
+    requestedTimeoutMs: number | undefined,
     progressToken: string | number | undefined,
     sendNotification: (notification: unknown) => Promise<void>,
     // The MCP SDK aborts this automatically on an inbound `notifications/cancelled` for this
@@ -419,23 +373,30 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
     // `callId` to cancel by until it has already resolved.
     signal: AbortSignal,
   ): Promise<unknown> => {
+    // The deadline this call runs under, resolved once (from the `tools.list` snapshot the tool was
+    // matched against, or a shorter one the caller asked for) and sent explicitly rather than left
+    // to the daemon's `?? tool.timeout_ms` fallback, so the watchdog below can never be sized off a
+    // different read: the daemon consults its live registry, which a re-registration between that
+    // snapshot and this call could have moved, and a watchdog built for the older value would fire
+    // first and mask the daemon's real `tool_timeout` (issue #25). Checked before consent, so a
+    // bad `timeoutMs` never costs the user a prompt.
+    const timeoutMs = resolveCallDeadline(tool, requestedTimeoutMs);
+    const transportTimeoutMs = deriveCallTransportTimeoutMs(timeoutMs);
+
     const consent = await resolveToolCallConsent(tool, args);
 
-    // The deadline this call runs under, resolved once from the `tools.list` snapshot it was
-    // matched against, and sent explicitly rather than left to the daemon's `?? tool.timeout_ms`
-    // fallback. `clampTimeout` folds in the 10 s default for a tool that declares nothing, so
-    // there is exactly one number here and the watchdog below can never be sized off a different
-    // read: the daemon consults its live registry, which a re-registration between that snapshot
-    // and this call could have moved, and a watchdog built for the older value would fire first
-    // and mask the daemon's real `tool_timeout` (issue #25).
-    const timeoutMs = clampTimeout(tool.descriptor.timeout_ms);
-    const transportTimeoutMs = deriveCallTransportTimeoutMs(timeoutMs);
+    // The consent prompt can stay open for minutes, and the client may cancel the request while it
+    // does. Nothing has reached the app yet, so a cancel that arrived in the meantime must stop the
+    // call here — otherwise a user accepting a stale prompt would run a call its client gave up on.
+    if (signal.aborted) {
+      throw new McpBuiltinToolError("tool_cancelled", `The call to "${tool.descriptor.name}" was cancelled before it started.`);
+    }
 
     if (progressToken === undefined) {
       const result = await stream.call<ToolsCallResult>(
         RPC_METHODS.toolsCall,
         {
-          selector: tool.selector,
+          selector: tool.sessionId,
           name: tool.descriptor.name,
           args,
           caller: "mcp",
@@ -448,20 +409,24 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
       return result.result;
     }
 
-    // A dedicated connection carries only this one in-flight `tools.call`, so the first
-    // `tool_call_started` it sees for this tool name is unambiguously this call — the daemon only
-    // reveals `callId` once the call is already in flight (ARCHITECTURE.md §5's `ToolsCallResult`
-    // doc comment), so this is the only way to correlate it before the call finishes.
+    // A dedicated connection carries only this one in-flight `tools.call`, and the first
+    // `tool_call_started` it sees for this tool name on this session is taken to be this call — the
+    // daemon only reveals `callId` once the call is already in flight (ARCHITECTURE.md §5's
+    // `ToolsCallResult` doc comment), so this is the only way to correlate it before the call
+    // finishes. It is not airtight: two concurrent calls of the same tool on the same session (two
+    // agents, or MCP and the CLI) can each take the other's `callId`, and then progress and a cancel
+    // go to the wrong call.
     const progressStream = await openStream({ stateDir: options.stateDir, spawn: options.spawn });
 
     try {
       await progressStream.call(RPC_METHODS.eventsSubscribe, {
-        sessionSelector: tool.selector,
+        sessionSelector: tool.sessionId,
         kinds: ["tool_call_started", "tool_call_progress"],
       });
 
       let callId: string | undefined;
-      let cancelRequested = signal.aborted;
+      // Re-read: the signal can abort while the progress stream above was opening.
+      let cancelRequested: boolean = signal.aborted;
 
       const maybeCancel = (): void => {
         if (callId === undefined || !cancelRequested) {
@@ -469,9 +434,9 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
         }
 
         progressStream
-          .call(RPC_METHODS.toolsCancel, { selector: tool.selector, callId, reason: "mcp_client_cancelled" })
+          .call(RPC_METHODS.toolsCancel, { selector: tool.sessionId, callId, reason: "mcp_client_cancelled" })
           .catch((error: unknown) => {
-            console.error("appduct mcp: failed to cancel a proxied tool call:", error);
+            console.error("appduct mcp: failed to cancel an app tool call:", error);
           });
       };
 
@@ -514,7 +479,7 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
         const result = await progressStream.call<ToolsCallResult>(
           RPC_METHODS.toolsCall,
           {
-            selector: tool.selector,
+            selector: tool.sessionId,
             name: tool.descriptor.name,
             args,
             caller: "mcp",
@@ -535,15 +500,15 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
   };
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools = await fetchEffectiveTools(stream.call);
-
     return {
       tools: [
         CONNECT_TOOL_DESCRIPTOR,
         WAIT_FOR_SESSION_TOOL_DESCRIPTOR,
+        LIST_TOOLS_TOOL_DESCRIPTOR,
+        DESCRIBE_TOOL_TOOL_DESCRIPTOR,
+        CALL_TOOL_TOOL_DESCRIPTOR,
         EVENTS_TOOL_DESCRIPTOR,
         WAIT_FOR_EVENT_TOOL_DESCRIPTOR,
-        ...tools.map(mapToMcpTool),
       ],
     };
   });
@@ -591,22 +556,33 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
         );
       }
 
-      const tools = await fetchEffectiveTools(stream.call);
-      const tool = findNamespacedTool(tools, name);
-
-      if (!tool) {
-        return toolErrorContent("tool_not_found", `Tool "${name}" is not registered.`);
+      if (name === LIST_TOOLS_TOOL_NAME) {
+        return toolSuccessContent(await handleListToolsTool(args, stream.call));
       }
 
-      return proxiedToolResultContent(
-        tool,
-        await callProxiedTool(
-          tool,
-          args,
-          progressToken,
-          extra.sendNotification as (notification: unknown) => Promise<void>,
-          extra.signal,
-        ),
+      if (name === DESCRIBE_TOOL_TOOL_NAME) {
+        return toolSuccessContent(await handleDescribeToolTool(args, stream.call));
+      }
+
+      if (name === CALL_TOOL_TOOL_NAME) {
+        const callArgs = parseCallToolArgs(args);
+        const tool = await resolveAppTool(stream.call, callArgs.selector, callArgs.name);
+
+        return toolSuccessContent(
+          await callAppTool(
+            tool,
+            callArgs.args,
+            callArgs.timeoutMs,
+            progressToken,
+            extra.sendNotification as (notification: unknown) => Promise<void>,
+            extra.signal,
+          ),
+        );
+      }
+
+      return toolErrorContent(
+        "tool_not_found",
+        `"${name}" is not an Appduct MCP tool. Use ${LIST_TOOLS_TOOL_NAME} to find the app's tools and ${CALL_TOOL_TOOL_NAME} to run one.`,
       );
     } catch (error) {
       return toolErrorContentFromError(error);
@@ -638,53 +614,7 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
     };
   });
 
-  // --- notifications/tools/list_changed ---
-
-  let lastSnapshotKey: string | undefined;
-  let closed = false;
-
-  const refreshAndMaybeNotifyListChanged = async (): Promise<void> => {
-    const tools = await fetchEffectiveTools(stream.call);
-
-    if (closed) {
-      return;
-    }
-
-    const key = namespacedToolsSnapshotKey(tools);
-    const changed = lastSnapshotKey !== undefined && key !== lastSnapshotKey;
-    lastSnapshotKey = key;
-
-    if (changed) {
-      await server.sendToolListChanged();
-    }
-  };
-
-  const unsubscribeFromDaemonEvents = stream.onNotification((payload) => {
-    const event = payload as EventNotification;
-
-    if (LIST_CHANGE_EVENT_KINDS.includes(event.kind)) {
-      refreshAndMaybeNotifyListChanged().catch((error: unknown) => {
-        if (closed) {
-          // Expected: the shared connection closed (server shutting down) while a refresh
-          // triggered by the last few daemon events was still in flight.
-          return;
-        }
-
-        // A failed refresh/notify must never crash the process — the next qualifying event (or the
-        // client's own next `tools/list`) will simply see the current state instead.
-        console.error("appduct mcp: failed to refresh the tool list after a daemon event:", error);
-      });
-    }
-  });
-
-  await stream.call(RPC_METHODS.eventsSubscribe, { kinds: LIST_CHANGE_EVENT_KINDS as EventKind[] });
-  // Establish the baseline before any daemon event can race a real change in — the guard above
-  // (`lastSnapshotKey !== undefined`) means this first call only seeds state, never notifies.
-  await refreshAndMaybeNotifyListChanged();
-
   const close = async (): Promise<void> => {
-    closed = true;
-    unsubscribeFromDaemonEvents();
     stream.close();
   };
 

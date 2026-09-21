@@ -382,10 +382,10 @@ describe("policy: prompt without elicitation", () => {
     const client = await connectClientWithoutElicitation(mcpHandle, { name: "claude-code", version: "2.1.199" });
 
     const listed = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
-    expect(listed.tools.find((tool) => tool.name === "echo")?._meta).toBeUndefined();
+    expect(listed.tools.some((tool) => tool._meta !== undefined)).toBe(false);
 
     const result = await client.request(
-      { method: "tools/call", params: { name: "echo", arguments: {} } },
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "echo", args: {} } } },
       CallToolResultSchema,
     );
     expect(result.isError).toBe(true);
@@ -461,7 +461,7 @@ describe("policy: prompt without elicitation", () => {
     const client = await connectClientWithoutElicitation(mcpHandle);
 
     const result = await client.request(
-      { method: "tools/call", params: { name: "echo", arguments: {} } },
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "echo", args: {} } } },
       CallToolResultSchema,
     );
     expect(result.isError).toBe(true);
@@ -496,7 +496,7 @@ describe("policy: prompt without elicitation", () => {
     app.socket.close();
   });
 
-  test('policy "deny" is still denied for an MCP client, and no _meta is emitted for a "deny" tool', async () => {
+  test('policy "deny" is still denied for an MCP client', async () => {
     const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "deny" } } });
     const app = await claimApp(daemon, port, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
@@ -510,11 +510,8 @@ describe("policy: prompt without elicitation", () => {
     mcpHandles.push(mcpHandle);
     const client = await connectClientWithoutElicitation(mcpHandle);
 
-    const listed = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
-    expect(listed.tools.find((tool) => tool.name === "echo")?._meta).toBeUndefined();
-
     const result = await client.request(
-      { method: "tools/call", params: { name: "echo", arguments: {} } },
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "echo", args: {} } } },
       CallToolResultSchema,
     );
     expect(result.isError).toBe(true);
@@ -550,11 +547,8 @@ describe("policy: prompt without elicitation", () => {
     mcpHandles.push(mcpHandle);
     const client = await connectClientWithoutElicitation(mcpHandle);
 
-    const listed = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
-    expect(listed.tools.find((tool) => tool.name === "echo")?._meta).toBeUndefined();
-
     const result = await client.request(
-      { method: "tools/call", params: { name: "echo", arguments: {} } },
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "echo", args: {} } } },
       CallToolResultSchema,
     );
     expect(result.isError).not.toBe(true);
@@ -583,7 +577,7 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
     return client;
   };
 
-  test('tools/list never emits _meta for a "prompt" tool — consent is asked at call time, not flagged at listing time', async () => {
+  test('appduct_list_tools reports a "prompt" tool\'s policy, and nothing is flagged at listing time — consent is asked at call time', async () => {
     const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
     const app = await claimApp(daemon, port, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
@@ -593,7 +587,13 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
     const client = await connectElicitationClient(mcpHandle, () => ({ action: "accept" }));
 
     const listed = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
-    expect(listed.tools.find((tool) => tool.name === "echo")?._meta).toBeUndefined();
+    expect(listed.tools.some((tool) => tool._meta !== undefined)).toBe(false);
+
+    const appTools = await client.request(
+      { method: "tools/call", params: { name: "appduct_list_tools", arguments: {} } },
+      CallToolResultSchema,
+    );
+    expect(appTools.structuredContent).toMatchObject({ tools: [{ name: "echo", policy: "prompt" }] });
 
     app.socket.close();
   });
@@ -620,7 +620,7 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
     });
 
     const result = await client.request(
-      { method: "tools/call", params: { name: "echo", arguments: { text: "hi there" } } },
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "echo", args: { text: "hi there" } } } },
       CallToolResultSchema,
     );
     expect(result.isError).not.toBe(true);
@@ -663,7 +663,7 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
     const client = await connectElicitationClient(mcpHandle, () => ({ action: "accept" }));
 
     const result = await client.request(
-      { method: "tools/call", params: { name: "boom", arguments: {} } },
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "boom", args: {} } } },
       CallToolResultSchema,
     );
     expect(result.isError).toBe(true);
@@ -693,7 +693,7 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
       const client = await connectElicitationClient(mcpHandle, () => ({ action }));
 
       const result = await client.request(
-        { method: "tools/call", params: { name: "echo", arguments: {} } },
+        { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "echo", args: {} } } },
         CallToolResultSchema,
       );
       expect(result.isError).toBe(true);
@@ -735,7 +735,7 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
     await client.connect(clientTransport);
 
     const result = await client.request(
-      { method: "tools/call", params: { name: "echo", arguments: {} } },
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "echo", args: {} } } },
       CallToolResultSchema,
     );
     expect(result.isError).toBe(true);
@@ -782,7 +782,7 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
     await client.connect(clientTransport);
 
     const result = await client.request(
-      { method: "tools/call", params: { name: "echo", arguments: {} } },
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "echo", args: {} } } },
       CallToolResultSchema,
     );
     expect(result.isError).toBe(true);
@@ -861,7 +861,7 @@ describe("audit: one line per tools.call attempt", () => {
     await client.connect(clientTransport);
 
     const mcpResult = await client.request(
-      { method: "tools/call", params: { name: "echo", arguments: {} } },
+      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "echo", args: {} } } },
       CallToolResultSchema,
     );
     expect(mcpResult.isError).not.toBe(true);
