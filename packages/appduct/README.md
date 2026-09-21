@@ -208,7 +208,7 @@ Once configured, an agent reaches the connected app's tools through three built-
 
 | Tool | Does what | CLI equivalent |
 | --- | --- | --- |
-| `appduct_list_tools` | Lists the app's tools as one-line signatures, with each tool's policy. Returns 50 at a time unless given `limit`; takes `filter` and `offset`. | `appduct tools` |
+| `appduct_list_tools` | Lists the app's tools as one-line signatures, with each tool's group and policy, plus the app's groups with counts. Returns 50 at a time unless given `limit`; takes `group`, `filter` and `offset`. | `appduct tools` |
 | `appduct_describe_tool` | Shows one tool's full input and output schema. | `appduct tools <name>` |
 | `appduct_call_tool` | Calls a tool by `name` with `args`, with progress and errors preserved. | `appduct invoke` |
 

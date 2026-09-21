@@ -464,9 +464,10 @@ proxies daemon RPC (auto-spawning the daemon like any client):
 - `tools/list` is a fixed set of built-in tools. The app's tools are never listed as MCP
   tools of their own; an agent reaches them through three built-ins that mirror the CLI (§10):
   `appduct_list_tools` (`appduct tools`: one-line signatures from `renderToolSignature`, each
-  tool's effective policy, with `filter`/`limit`/`offset` passed through to `tools.list` and
-  `limit` defaulting to 50), `appduct_describe_tool` (`appduct tools <name>`: the whole
-  descriptor), and `appduct_call_tool` (`appduct invoke`: `{ selector?, name, args?, timeoutMs? }`).
+  tool's `group` and effective policy, with `group`/`filter`/`limit`/`offset` passed through to
+  `tools.list`, `limit` defaulting to 50, and the daemon's whole-registry `groups` summary on
+  every result), `appduct_describe_tool` (`appduct tools <name>`: the whole descriptor, `group`
+  included), and `appduct_call_tool` (`appduct invoke`: `{ selector?, name, args?, timeoutMs? }`).
   `timeoutMs` can only shorten the tool's own deadline, since the `tool_call` frame carries no
   deadline and the app stops the handler at its declared one (`docs/PROTOCOL.md` §5); a longer value, or one outside
   1000–600000 ms, is rejected rather than clamped. A client cancel that arrives while the consent

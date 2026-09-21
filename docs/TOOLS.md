@@ -140,7 +140,7 @@ registerCartTool({ name: "add_item", description: "Add a product to the cart", h
 registerCartTool({ name: "clear_cart", description: "Remove every item from the cart", handler: clearCart });
 ```
 
-A malformed group (`"checkout/"`, `"a/b/c"`, `"check out"`) makes the registration throw, like a malformed tool name. Groups only change how `appduct tools` lists your tools. They don't change tool names, how tools are called, or what an MCP client sees.
+A malformed group (`"checkout/"`, `"a/b/c"`, `"check out"`) makes the registration throw, like a malformed tool name. Groups only change how tools are listed, by `appduct tools` and by `appduct_list_tools` over MCP. They don't change tool names or how tools are called.
 
 ## Make the input schema accept an object
 

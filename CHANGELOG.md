@@ -24,8 +24,10 @@ package versions for a release.
   truncated listing's footer names the top-level groups to narrow to. `tools.list` gains a
   `group` param (applied before `total` and paging) and a `groups` summary of the whole registry
   on every result, so `appduct tools --json` now returns `{ tools, total, groups }` and each
-  entry carries its `group`. The MCP built-ins (`appduct_list_tools` and friends) don't take a
-  `group` yet.
+  entry carries its `group`.
+- **New: groups over MCP.** `appduct_list_tools` takes a `group` (same matching as `--group`),
+  shows each tool's `group`, and returns the `groups` summary on every result, so an agent can
+  see an app's areas and list one of them. `appduct_describe_tool` includes the tool's `group`.
 - **Fixed (iOS): a tool name with a trailing newline (`"tool\n"`) is now rejected**, matching
   `@appduct/shared` and Android. The Swift core's name check accepted it because ICU's `$` also
   matches before a final line terminator; the daemon would then have rejected the snapshot.

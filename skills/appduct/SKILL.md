@@ -134,8 +134,10 @@ which blocks until the device connects (or returns immediately if it already has
 The app's own tools are not MCP tools of their own. Reach them through three built-ins that
 mirror the CLI:
 
-1. `appduct_list_tools` lists them as one-line signatures with each tool's policy (like
-   `appduct tools`). On a large app, narrow with `filter`, or page with `limit`/`offset`.
+1. `appduct_list_tools` lists them as one-line signatures with each tool's group and policy
+   (like `appduct tools`), and every result carries the app's `groups` with counts. On a large
+   app, pick a group from that summary and list it with `group` (`"checkout"` includes
+   `"checkout/payment"`), or narrow with `filter`, or page with `limit`/`offset`.
 2. `appduct_describe_tool({ name })` shows one tool's full input and output schema (like
    `appduct tools <name>`).
 3. `appduct_call_tool({ name, args })` runs it (like `appduct invoke`).

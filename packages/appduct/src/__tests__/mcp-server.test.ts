@@ -172,7 +172,78 @@ describe("mcp: appduct_list_tools", () => {
           annotations: { destructiveHint: true },
         },
       ],
+      groups: [{ group: null, total: 2 }],
     });
+  });
+
+  test("narrows to a group, subgroups included, while groups still summarizes every tool", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setTools([
+      { name: "begin", group: "checkout" },
+      { name: "pay", group: "checkout/payment" },
+      { name: "add_item", group: "cart" },
+      { name: "ping" },
+    ]);
+
+    const client = await startServerWithClient(daemon);
+    const result = await callBuiltin(client, "appduct_list_tools", { group: "checkout" });
+
+    expect(result.structuredContent).toMatchObject({
+      session: "pixel-8",
+      group: "checkout",
+      total: 2,
+      tools: [
+        { name: "begin", group: "checkout" },
+        { name: "pay", group: "checkout/payment" },
+      ],
+      groups: [
+        { group: "cart", total: 1 },
+        { group: "checkout", total: 2 },
+        { group: "checkout/payment", total: 1 },
+        { group: null, total: 1 },
+      ],
+    });
+    expect(daemon.calls().filter((call) => call.method === RPC_METHODS.toolsList).at(-1)?.params).toMatchObject({
+      group: "checkout",
+    });
+  });
+
+  test("against a daemon that predates groups, asking for a group fails instead of listing everything", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setTools([{ name: "ping" }]);
+    // An older daemon answers tools.list with no `groups` and ignores `group`.
+    const openOldStream = async () => {
+      const stream = await daemon.openStream();
+      const call = stream.call;
+      return {
+        ...stream,
+        call: async <TResult>(method: string, params?: unknown): Promise<TResult> => {
+          const result = await call<TResult>(method, params);
+
+          if (method === RPC_METHODS.toolsList) {
+            const { groups: _groups, ...rest } = result as Record<string, unknown>;
+            return rest as TResult;
+          }
+
+          return result;
+        },
+      };
+    };
+
+    const handle = await createMcpServer({ stateDir: "/nonexistent-state-dir", openStream: openOldStream, env: {} });
+    mcpHandles.push(handle);
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    await handle.connect(serverTransport);
+    const client = new Client({ name: "test-client", version: "0.0.0" });
+    await client.connect(clientTransport);
+
+    const plain = await callBuiltin(client, "appduct_list_tools", {});
+    expect(plain.structuredContent).toMatchObject({ tools: [{ name: "ping" }] });
+    expect(plain.structuredContent).not.toHaveProperty("groups");
+
+    expect(errorText(await callBuiltin(client, "appduct_list_tools", { group: "cart" }))).toContain(
+      "does not support tool groups",
+    );
   });
 
   test("forwards filter/limit/offset to the daemon, echoes them, and reports total before paging", async () => {
@@ -269,7 +340,7 @@ describe("mcp: appduct_list_tools", () => {
 });
 
 describe("mcp: appduct_describe_tool", () => {
-  test("returns the whole descriptor, its signature and policy, with every schema exactly as registered", async () => {
+  test("returns the whole descriptor, group included, with its signature and policy, and every schema exactly as registered", async () => {
     const daemon = createFakeDaemon();
     daemon.addSession({ alias: "pixel-8" }).setTools([
       {
@@ -280,6 +351,7 @@ describe("mcp: appduct_describe_tool", () => {
         output_schema: { type: "array", items: { type: "string" } },
         annotations: { readOnlyHint: true },
         timeout_ms: 30_000,
+        group: "todos",
       },
     ]);
 
@@ -296,6 +368,7 @@ describe("mcp: appduct_describe_tool", () => {
       output_schema: { type: "array", items: { type: "string" } },
       annotations: { readOnlyHint: true },
       timeout_ms: 30_000,
+      group: "todos",
     });
   });
 

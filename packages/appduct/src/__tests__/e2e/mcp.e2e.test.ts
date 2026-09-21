@@ -82,6 +82,7 @@ describe("e2e: mcp (real stdio subprocess)", () => {
         total: 1,
         limit: 50,
         tools: [{ name: "echo", signature: "echo(text?: string)", summary: "Echoes its input.", policy: "allow" }],
+        groups: [{ group: null, total: 1 }],
       });
 
       const described = await client.request(

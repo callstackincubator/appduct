@@ -345,7 +345,7 @@ describe("mcp: calling app tools", () => {
     app.socket.close();
   });
 
-  test("grouped tools are listed and called over MCP exactly like ungrouped ones, and the group never reaches MCP", async () => {
+  test("appduct_list_tools narrows to a group on the real daemon, and grouped tools describe and call like any other", async () => {
     const { daemon, stateDir, port } = await startTestDaemon();
     const app = await claimApp(daemon, port);
     await snapshotTools(daemon, app, [
@@ -358,21 +358,34 @@ describe("mcp: calling app tools", () => {
     const client = await connectInMemoryClient(handle);
 
     const listed = await client.request(
-      { method: "tools/call", params: { name: "appduct_list_tools", arguments: {} } },
+      { method: "tools/call", params: { name: "appduct_list_tools", arguments: { group: "checkout" } } },
       CallToolResultSchema,
     );
-    expect((listed.structuredContent as { tools: Array<{ name: string }> }).tools.map((tool) => tool.name)).toEqual([
-      "begin",
-      "pay",
-      "ping",
-    ]);
-    expect(JSON.stringify(listed.structuredContent)).not.toContain("checkout");
+    expect(listed.structuredContent).toMatchObject({
+      total: 2,
+      tools: [
+        { name: "begin", group: "checkout" },
+        { name: "pay", group: "checkout/payment" },
+      ],
+      groups: [
+        { group: "checkout", total: 2 },
+        { group: "checkout/payment", total: 1 },
+        { group: null, total: 1 },
+      ],
+    });
+
+    const badGroup = await client.request(
+      { method: "tools/call", params: { name: "appduct_list_tools", arguments: { group: "a/b/c" } } },
+      CallToolResultSchema,
+    );
+    expect(badGroup.isError).toBe(true);
+    expect((badGroup.content[0] as { text: string }).text).toContain("invalid_request");
 
     const described = await client.request(
       { method: "tools/call", params: { name: "appduct_describe_tool", arguments: { name: "pay" } } },
       CallToolResultSchema,
     );
-    expect(described.structuredContent).not.toHaveProperty("group");
+    expect(described.structuredContent).toMatchObject({ name: "pay", group: "checkout/payment" });
 
     app.socket.on("message", (data) => {
       const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
