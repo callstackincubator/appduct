@@ -1,3 +1,7 @@
 {
-  "scheme": "playground"
+  "scheme": "playground",
+  "appId": {
+    "ios": "com.aitwar.playground",
+    "android": "com.aitwar.playground"
+  }
 }

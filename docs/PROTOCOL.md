@@ -57,16 +57,18 @@ endpoint and brackets IPv6 literals: `wss://[fd00::1]:8443` vs. `wss://192.168.1
 1. **Emulator/simulator fast path** (`appduct link --open android|ios-sim`, or the MCP
    `appduct_connect` tool's `target` argument): the daemon mints the link with the
    advertised address forced to `127.0.0.1`, `adb reverse`/`simctl openurl` delivers it —
-   no human, fully scriptable.
+   no human, fully scriptable. `android` additionally names the app explicitly (`adb shell am
+   start ... -p <app-id>`, issue #63): without it, more than one installed app declaring the
+   same scheme pops an "Open with" chooser that `am start` still reports as success.
 2. **Physical device on LAN**: printed deep link + QR (`appduct link --qr`).
 3. **Physical iOS device, experimental** (`--open ios-device` / `target: "ios-device"`,
    issue #31): `xcrun devicectl device process launch --device <udid> --payload-url <link>
-   <bundle-id>` hands the link to an installed, dev-signed app on a connected iOS 17+ device
+   <app-id>` hands the link to an installed, dev-signed app on a connected iOS 17+ device
    (`--relaunch` adds `--terminate-existing`; what a plain launch does to an *already-running*
    app is unverified on hardware). This is path 2's addressing with path 1's automation: the
    link keeps the **detected LAN address** — there is no `adb reverse` equivalent on iOS, so
    `127.0.0.1` would point the phone at itself, and a link that would advertise loopback is
-   refused rather than delivered. Never auto-detected, and needs the app's bundle id.
+   refused rather than delivered. Never auto-detected, and needs the app's id (its bundle id).
 4. **Remote/production**: the same deep link delivered out-of-band; policy and audit
    apply identically (§6 below, `docs/ARCHITECTURE.md` §12).
 

@@ -20,13 +20,13 @@ export const route: Route = async (context) => {
           scheme: typeof options.scheme === "string" ? options.scheme : undefined,
           open: typeof options.open === "string" ? options.open : undefined,
           device: typeof options.device === "string" ? options.device : undefined,
-          // cac camelCases `--bundle-id`; the dashed spelling is kept as a fallback so a
+          // cac camelCases `--app-id`; the dashed spelling is kept as a fallback so a
           // parser change can't silently drop the flag.
-          bundleId:
-            typeof options.bundleId === "string"
-              ? options.bundleId
-              : typeof options["bundle-id"] === "string"
-                ? options["bundle-id"]
+          appId:
+            typeof options.appId === "string"
+              ? options.appId
+              : typeof options["app-id"] === "string"
+                ? options["app-id"]
                 : undefined,
           // Left `undefined` when absent rather than coerced to `false`, so that
           // "--relaunch only applies with --open ios-device" fires on the flag actually being

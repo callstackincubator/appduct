@@ -18,9 +18,12 @@ import { afterEach, describe, expect, test } from "vitest";
 import { decodeBootstrap } from "@appduct/shared";
 
 import { handleLinkCommand } from "../commands/link.js";
+import { handleLsCommand } from "../commands/ls.js";
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import type { ExecFn } from "../cli/open-target.js";
 import { makeTempStateDir, removeStateDir } from "./fixtures.js";
+
+const APP_ID = "com.example.playground";
 
 const runningDaemons: RunningDaemon[] = [];
 const stateDirs: string[] = [];
@@ -51,6 +54,20 @@ const startTestDaemon = async (
   // only knowable from the listener that bound it — never pre-picked, which is what used to race
   // another vitest process for the same number.
   return { daemon, stateDir, port: daemon.listener.port()! };
+};
+
+/** A project root (distinct from the state dir — `appId` resolution never reads the state dir's
+ * config.json; see `resolveAppId`) with its own `.appduct/config.json`, so tests can exercise the
+ * project-config tier of `appId` resolution. Cleaned up alongside every other temp dir. */
+const writeProjectConfig = async (config: Record<string, unknown>): Promise<string> => {
+  const root = await mkdtemp(path.join(tmpdir(), "appduct-link-open-project-"));
+  stateDirs.push(root);
+
+  const dir = path.join(root, ".appduct");
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, "config.json"), JSON.stringify(config));
+
+  return root;
 };
 
 /** Stub `exec` for the `ios-device` path: `devicectl list devices --json-output <file>` writes its
@@ -174,7 +191,7 @@ describe("link --open: CLI wiring", () => {
     void daemon;
   });
 
-  test("--open android runs adb reverse before am start, quoting the deep link for the device shell", async () => {
+  test("--open android runs adb reverse before am start, quoting the deep link for the device shell, -p naming the app", async () => {
     const { stateDir, port } = await startTestDaemon();
 
     const calls: Array<{ command: string; args: string[] }> = [];
@@ -184,7 +201,7 @@ describe("link --open: CLI wiring", () => {
     };
 
     const result = await handleLinkCommand(
-      { open: "android" },
+      { open: "android", appId: APP_ID },
       { stateDir, exec, env: { ANDROID_SERIAL: "emulator-5554" } },
     );
 
@@ -208,18 +225,80 @@ describe("link --open: CLI wiring", () => {
       "android.intent.action.VIEW",
       "-d",
       `'${result.data.deepLink}'`,
+      "-p",
+      APP_ID,
     ]);
+  });
+
+  test("no app id anywhere (android): a usage error naming every fix, and no session is minted", async () => {
+    const { stateDir } = await startTestDaemon();
+
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const exec: ExecFn = async (command, args) => {
+      calls.push({ command, args });
+      return { stdout: "", stderr: "" };
+    };
+
+    await expect(
+      handleLinkCommand({ open: "android" }, { stateDir, exec, env: { ANDROID_SERIAL: "emulator-5554" } }),
+    ).rejects.toThrow(/app-id.*appId\.android/su);
+
+    // Raised before `link.create`: nothing ran, and no pending session was left behind to expire
+    // on its own TTL.
+    expect(calls).toEqual([]);
+
+    const sessions = await handleLsCommand({ stateDir });
+    expect(sessions.ok).toBe(true);
+    if (sessions.ok) {
+      expect(sessions.data).toEqual([]);
+    }
+  });
+
+  test("--app-id beats the project config", async () => {
+    const { stateDir } = await startTestDaemon();
+    const cwd = await writeProjectConfig({ appId: { android: "com.example.fromconfig" } });
+
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const exec: ExecFn = async (command, args) => {
+      calls.push({ command, args });
+      return { stdout: "", stderr: "" };
+    };
+
+    await handleLinkCommand(
+      { open: "android", appId: "com.example.fromflag" },
+      { stateDir, cwd, exec, env: { ANDROID_SERIAL: "emulator-5554" } },
+    );
+
+    expect(calls[1]!.args.at(-1)).toBe("com.example.fromflag");
+  });
+
+  test("with no --app-id, appId.android from the project config is used", async () => {
+    const { stateDir } = await startTestDaemon();
+    const cwd = await writeProjectConfig({ appId: { android: "com.example.fromconfig" } });
+
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const exec: ExecFn = async (command, args) => {
+      calls.push({ command, args });
+      return { stdout: "", stderr: "" };
+    };
+
+    await handleLinkCommand(
+      { open: "android" },
+      { stateDir, cwd, exec, env: { ANDROID_SERIAL: "emulator-5554" } },
+    );
+
+    expect(calls[1]!.args.at(-1)).toBe("com.example.fromconfig");
   });
 });
 
 describe("link --open ios-device: the LAN address, not 127.0.0.1", () => {
   test("--open ios-device mints the daemon's advertised address and launches via devicectl", async () => {
-    const { stateDir } = await startTestDaemon({ iosBundleId: "com.example.playground" });
+    const { stateDir } = await startTestDaemon();
 
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec = devicectlExec(calls, [{ udid: "00008030-AAAA", name: "My iPhone" }]);
 
-    const result = await handleLinkCommand({ open: "ios-device" }, { stateDir, exec });
+    const result = await handleLinkCommand({ open: "ios-device", appId: APP_ID }, { stateDir, exec });
 
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -250,51 +329,58 @@ describe("link --open ios-device: the LAN address, not 127.0.0.1", () => {
         "00008030-AAAA",
         "--payload-url",
         result.data.deepLink,
-        "com.example.playground",
+        APP_ID,
       ],
     });
   });
 
-  test("--bundle-id overrides config.json's iosBundleId", async () => {
-    const { stateDir } = await startTestDaemon({ iosBundleId: "com.example.fromconfig" });
+  test("--app-id beats the project config", async () => {
+    const { stateDir } = await startTestDaemon();
+    const cwd = await writeProjectConfig({ appId: { ios: "com.example.fromconfig" } });
 
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec = devicectlExec(calls, [{ udid: "00008030-AAAA", name: "My iPhone" }]);
 
     const result = await handleLinkCommand(
-      { open: "ios-device", bundleId: "com.example.fromflag" },
-      { stateDir, exec },
+      { open: "ios-device", appId: "com.example.fromflag" },
+      { stateDir, cwd, exec },
     );
 
     expect(result.ok).toBe(true);
     expect(calls[1]!.args.at(-1)).toBe("com.example.fromflag");
   });
 
-  test("no bundle id anywhere: a usage error, and no link is minted or delivered", async () => {
+  test("no app id anywhere (ios-device): a usage error naming every fix, and no session is minted", async () => {
     const { stateDir } = await startTestDaemon();
 
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec = devicectlExec(calls, [{ udid: "00008030-AAAA", name: "My iPhone" }]);
 
     await expect(handleLinkCommand({ open: "ios-device" }, { stateDir, exec })).rejects.toThrow(
-      /--bundle-id.*iosBundleId/su,
+      /app-id.*appId\.ios/su,
     );
 
     // Raised before `link.create`, so a call that could never deliver does not leave a pending
     // session behind to expire on its own TTL.
     expect(calls).toHaveLength(0);
+
+    const sessions = await handleLsCommand({ stateDir });
+    expect(sessions.ok).toBe(true);
+    if (sessions.ok) {
+      expect(sessions.data).toEqual([]);
+    }
   });
 
-  test("--bundle-id without --open ios-device is a usage error", async () => {
+  test("--app-id only applies with --open android or --open ios-device", async () => {
     const { stateDir } = await startTestDaemon();
 
     await expect(
-      handleLinkCommand({ open: "ios-sim", bundleId: "com.example.playground" }, { stateDir }),
-    ).rejects.toThrow(/"--bundle-id" only applies with "--open ios-device"/u);
+      handleLinkCommand({ open: "ios-sim", appId: APP_ID }, { stateDir }),
+    ).rejects.toThrow(/"--app-id" only applies with "--open android" or "--open ios-device"/u);
 
     await expect(
-      handleLinkCommand({ bundleId: "com.example.playground" }, { stateDir }),
-    ).rejects.toThrow(/"--bundle-id" only applies with "--open ios-device"/u);
+      handleLinkCommand({ appId: APP_ID }, { stateDir }),
+    ).rejects.toThrow(/"--app-id" only applies with "--open android" or "--open ios-device"/u);
   });
 
   test("an unknown --open value names every accepted target", async () => {
@@ -306,26 +392,26 @@ describe("link --open ios-device: the LAN address, not 127.0.0.1", () => {
   });
 
   test("--relaunch is opt-in: absent by default, adds --terminate-existing when passed", async () => {
-    const { stateDir } = await startTestDaemon({ iosBundleId: "com.example.playground" });
+    const { stateDir } = await startTestDaemon();
 
     const plainCalls: Array<{ command: string; args: string[] }> = [];
     await handleLinkCommand(
-      { open: "ios-device" },
+      { open: "ios-device", appId: APP_ID },
       { stateDir, exec: devicectlExec(plainCalls, [{ udid: "00008030-AAAA", name: "My iPhone" }]) },
     );
     expect(plainCalls[1]!.args).not.toContain("--terminate-existing");
 
     const relaunchCalls: Array<{ command: string; args: string[] }> = [];
     await handleLinkCommand(
-      { open: "ios-device", relaunch: true },
+      { open: "ios-device", appId: APP_ID, relaunch: true },
       { stateDir, exec: devicectlExec(relaunchCalls, [{ udid: "00008030-AAAA", name: "My iPhone" }]) },
     );
     expect(relaunchCalls[1]!.args).toContain("--terminate-existing");
-    // Placed before the URL, so the positional bundle id stays last.
+    // Placed before the URL, so the positional app id stays last.
     expect(relaunchCalls[1]!.args.indexOf("--terminate-existing")).toBeLessThan(
       relaunchCalls[1]!.args.indexOf("--payload-url"),
     );
-    expect(relaunchCalls[1]!.args.at(-1)).toBe("com.example.playground");
+    expect(relaunchCalls[1]!.args.at(-1)).toBe(APP_ID);
   });
 
   test("--relaunch without --open ios-device is a usage error", async () => {
@@ -340,17 +426,14 @@ describe("link --open ios-device: the LAN address, not 127.0.0.1", () => {
     // `detectAdvertisedAddress` falls back to 127.0.0.1 with no routable interface. Delivering
     // that link points the phone at itself: the app connects to nothing, the session is never
     // claimed, and `wait_for_session` blocks for its whole timeout with no clue why.
-    const { stateDir } = await startTestDaemon({
-      advertisedIp: "127.0.0.1",
-      iosBundleId: "com.example.playground",
-    });
+    const { stateDir } = await startTestDaemon({ advertisedIp: "127.0.0.1" });
 
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec = devicectlExec(calls, [{ udid: "00008030-AAAA", name: "My iPhone" }]);
 
-    await expect(handleLinkCommand({ open: "ios-device" }, { stateDir, exec })).rejects.toThrow(
-      /advertisedIp/u,
-    );
+    await expect(
+      handleLinkCommand({ open: "ios-device", appId: APP_ID }, { stateDir, exec }),
+    ).rejects.toThrow(/advertisedIp/u);
 
     // Nothing was delivered — the phone never gets an unusable link.
     expect(calls).toEqual([]);
@@ -373,15 +456,15 @@ describe("link --open ios-device: the LAN address, not 127.0.0.1", () => {
     expect(result.ok).toBe(true);
   });
 
-  test("a --bundle-id that could be read as a devicectl option is rejected before minting", async () => {
+  test("a --app-id that could be read as a devicectl option is rejected before minting", async () => {
     const { stateDir } = await startTestDaemon();
 
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec = devicectlExec(calls, [{ udid: "00008030-AAAA", name: "My iPhone" }]);
 
     await expect(
-      handleLinkCommand({ open: "ios-device", bundleId: "--console" }, { stateDir, exec }),
-    ).rejects.toThrow(/not a valid iOS bundle id/u);
+      handleLinkCommand({ open: "ios-device", appId: "--console" }, { stateDir, exec }),
+    ).rejects.toThrow(/not a valid app id/u);
 
     expect(calls).toEqual([]);
   });
@@ -389,7 +472,7 @@ describe("link --open ios-device: the LAN address, not 127.0.0.1", () => {
 
 describe("client link({ target: \"ios-device\" })", () => {
   test("the programmatic client takes the same path as the CLI: LAN address, devicectl launch", async () => {
-    const { stateDir } = await startTestDaemon({ iosBundleId: "com.example.playground" });
+    const { stateDir } = await startTestDaemon();
 
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec = devicectlExec(calls, [{ udid: "00008030-AAAA", name: "My iPhone" }]);
@@ -397,7 +480,7 @@ describe("client link({ target: \"ios-device\" })", () => {
     // `appduct/client`'s `link()` is what a test's globalSetup calls; it must not drift from
     // `appduct link` (both go through `mintLink`, and this is the test that says so).
     const { link } = await import("../client/bootstrap.js");
-    const result = await link({ stateDir, target: "ios-device", exec, autoSpawn: false });
+    const result = await link({ stateDir, target: "ios-device", appId: APP_ID, exec, autoSpawn: false });
 
     expect(result.delivered).toBe(true);
     expect(result.target).toBe("ios-device");
@@ -414,11 +497,11 @@ describe("client link({ target: \"ios-device\" })", () => {
       "00008030-AAAA",
       "--payload-url",
       result.deepLink,
-      "com.example.playground",
+      APP_ID,
     ]);
   });
 
-  test("the programmatic client surfaces a missing bundle id as an AppductError", async () => {
+  test("the programmatic client surfaces a missing app id as an AppductError", async () => {
     const { stateDir } = await startTestDaemon();
 
     const calls: Array<{ command: string; args: string[] }> = [];
@@ -428,7 +511,7 @@ describe("client link({ target: \"ios-device\" })", () => {
 
     await expect(
       link({ stateDir, target: "ios-device", exec, autoSpawn: false }),
-    ).rejects.toThrow(/iosBundleId/u);
+    ).rejects.toThrow(/app-id.*appId\.ios/su);
 
     expect(calls).toEqual([]);
   });

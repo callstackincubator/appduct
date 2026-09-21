@@ -224,10 +224,12 @@ appduct`, or invoke the workspace build directly if the two might disagree.
 `manifestPlaceholders["appductScheme"]` in your app's `build.gradle` — see
 [The `appductScheme` placeholder](#the-appductscheme-placeholder) above.
 
-**`appduct link --open android` reports "unable to resolve Intent".** The scheme
-`--scheme`/`appduct link` used doesn't match `manifestPlaceholders["appductScheme"]` on the
-installed build, or the app was built before that placeholder was set (rebuild and reinstall —
-placeholders are baked in at build time, not read at runtime).
+**`appduct link --open android` reports "unable to resolve Intent".** Either the app id
+(`--app-id`, or `appId.android` in `.appduct/config.json`) isn't the installed build's
+`applicationId` — check for an `applicationIdSuffix` on the variant you installed — or the scheme
+`appduct link` used doesn't match `manifestPlaceholders["appductScheme"]` on the installed build.
+If the app was built before that placeholder was set, rebuild and reinstall — placeholders are
+baked in at build time, not read at runtime.
 
 **A bootstrap link reaches the trampoline but the app never claims the session, failing with an
 EPERM-style connect error.** Your app's manifest is missing

@@ -57,7 +57,10 @@ is for builds that leave your machine — do not do it as part of a first-time s
    `.appduct/config.json` and prints the MCP server entry to paste into an agent's
    config. Re-running it is always safe: it keeps the scheme already recorded, and only
    notes it if `app.json` has since come to declare a different one. Use
-   `appduct init --force` to adopt the new `app.json` value.
+   `appduct init --force` to adopt the new `app.json` value. Add
+   `--android-app-id <package> --ios-app-id <bundle-id>` (`expo.android.package` and
+   `expo.ios.bundleIdentifier`) so `--open android` and `appduct_connect` can deliver links
+   without an `--app-id` on every call.
 5. Run prebuild or rebuild the native project so the native config is applied.
 6. Use a development build. Expo Go is not enough — this library ships native code.
 
@@ -72,7 +75,9 @@ If the project uses a dynamic `app.config.js` / `app.config.ts`, discovery does 
 3. Configure URL schemes / intent filters so bootstrap links (`{scheme}:///?appduct=…`)
    open your app.
 4. Run `appduct init --scheme <scheme>` in the project root — there is no `app.json`
-   `expo.scheme` to discover, so name the scheme you configured in step 3.
+   `expo.scheme` to discover, so name the scheme you configured in step 3. Add
+   `--android-app-id <applicationId> --ios-app-id <bundle-id>` so device delivery works
+   without an `--app-id` on every call.
 5. Add the optional private-LAN-only setting only if the project wants that restriction.
 6. Rebuild the native app after the configuration changes.
 

@@ -70,14 +70,6 @@ export type AppductConfig = {
    * CLI-side setting an operator wants to set once rather than pass with every `link` invocation.
    */
   scheme?: string;
-  /**
-   * The app's iOS bundle id, used only by the experimental `--open ios-device` /
-   * `appduct_connect` `target: "ios-device"` delivery path (issue #31): `xcrun devicectl device
-   * process launch` needs to be told which installed app to hand the URL to, and there is nothing
-   * in the deep link itself that says so. Overridable per invocation by `--bundle-id` (CLI) or
-   * `bundleId` (MCP). CLI-side like `scheme`, not a daemon setting.
-   */
-  iosBundleId?: string;
 };
 
 const KNOWN_TOP_LEVEL_KEYS = new Set<string>([
@@ -92,7 +84,6 @@ const KNOWN_TOP_LEVEL_KEYS = new Set<string>([
   "policy",
   "advertisedIp",
   "scheme",
-  "iosBundleId",
   "restartDaemonOnVersionMismatch",
 ]);
 
@@ -228,15 +219,6 @@ export const loadConfig = async (
 
   if (parsed.scheme !== undefined) {
     config.scheme = requireNonEmptyString(parsed.scheme, "scheme");
-  }
-
-  // Only a non-empty string here, like `scheme` — deliberately *not* the bundle-id charset check.
-  // This loader runs on every daemon start, and a typo in a CLI-side convenience key must not stop
-  // the daemon from starting. The charset is enforced where the value is actually used (`mintLink`,
-  // `handleConnectTool`, and `deliverToOpenTarget` itself), which is where it can be reported as a
-  // usage error against the command that needed it.
-  if (parsed.iosBundleId !== undefined) {
-    config.iosBundleId = requireNonEmptyString(parsed.iosBundleId, "iosBundleId");
   }
 
   if (parsed.graceSeconds !== undefined) {

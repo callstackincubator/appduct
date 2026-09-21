@@ -82,17 +82,27 @@ From `link`'s JSON output, use:
 For a simulator/emulator you control directly, skip the deep link entirely:
 
 ```bash
-appduct link --open ios-sim     # or: --open android
+appduct link --open ios-sim                                   # no app id needed
+appduct link --open android --app-id com.example.myapp        # app id required
 ```
+
+**`--open android` needs `--app-id <id>`** (the installed app's package name) — without it
+the command fails with a usage error before minting anything. This is not optional the way it
+looks: without naming the package, more than one installed app declaring the same scheme pops
+an ambiguous "Open with" chooser on the device, `adb` still reports success either way, and the
+next step (`appduct_wait_for_session`/polling) then blocks its whole timeout with nothing
+explaining why. Skip `--app-id` if `appduct init --android-app-id <id>` already recorded one in
+this project's `.appduct/config.json` — it is picked up automatically. `--open ios-sim` is the
+one target that needs no app id at all.
 
 With more than one simulator booted (or several devices attached) this errors and lists
 them rather than picking one — re-run with `--device <udid|serial>`.
 
 A paired **physical iPhone/iPad** has an experimental path of its own, never auto-detected
-and always opt-in:
+and always opt-in — it needs `--app-id` too (the iOS bundle id, same flag as Android's):
 
 ```bash
-appduct link --scheme myapp --open ios-device --bundle-id com.example.myapp
+appduct link --scheme myapp --open ios-device --app-id com.example.myapp
 ```
 
 It goes through `xcrun devicectl`, so it needs iOS 17+, Xcode 15+, the device paired,
@@ -121,11 +131,20 @@ like any other MCP tool.
 Pass `target: "android"` / `"ios-sim"` (plus `device` — an adb serial or simulator udid) only
 to override that choice, e.g. when several devices are up and the result said so.
 
+**Android delivery needs an `appId` too** — explicit `target: "android"` or the zero-argument
+auto-detected path, either one. Pass it, or record `appId.android` once via `appduct init
+--android-app-id <id>` in the project's `.appduct/config.json`; otherwise the call fails with a
+clear `invalid_request` before anything is minted, rather than delivering to an ambiguous
+"Open with" chooser that would leave `appduct_wait_for_session` hanging with no explanation.
+`target: "ios-sim"` and `target: "none"` are the only ones that never need an `appId` — passing
+one there is itself rejected.
+
 `target: "ios-device"` reaches a paired **physical** iPhone/iPad and additionally needs
-`bundleId` (or `iosBundleId` in `config.json`); add `relaunch: true` if the app is already
-running and the link does not take. It is experimental and is never picked automatically — a
-paired iPhone may be someone's personal phone — so ask for it by name only when the user has
-said that is where the app is running, and expect the same prerequisites as the CLI flag above.
+`appId` (the iOS bundle id, same argument Android uses); add `relaunch: true` if the app is
+already running and the link does not take. It is experimental and is never picked
+automatically — a paired iPhone may be someone's personal phone — so ask for it by name only
+when the user has said that is where the app is running, and expect the same prerequisites as
+the CLI flag above.
 
 **If the result has a `qr` field instead of `delivered: true`, nothing was delivered and a
 human has to act.** Do not call `appduct_wait_for_session` yet — it produces no output

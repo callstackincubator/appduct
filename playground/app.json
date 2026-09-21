@@ -35,11 +35,7 @@
       [
         "@appduct/react-native",
         {
-          "cliPins": [
-            "sha256/jMvNOyMBXvRaZlyrje70/867kKkSA/qTlu30xCrTk4s="
-          ],
-          "allowPrivateLanOnly": true,
-          "trust": "pin"
+          "allowPrivateLanOnly": true
         }
       ],
       "./plugins/with-app-display-name",

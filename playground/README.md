@@ -6,13 +6,15 @@
 
 The playground is an Expo **development build** that demonstrates Appduct's v2 model: an
 always-on **daemon** on your machine, an app that claims a **pinned `wss://`** session from a
-bootstrap deep link, and a thin **CLI/MCP** surface driving tools registered in JS—no extra debug
+bootstrap deep link that carries the daemon's key pin, and a thin **CLI/MCP** surface driving tools registered in JS—no extra debug
 screens in the app, same ideas as in **production** builds.
 
 ## Why it's here
 
-- **End-to-end check** that SPKI pins in `app.json` match the daemon's key material while tools
-  run from the **CLI** (or an MCP client), not in-app menus.
+- **Zero-config path**: no keys or pins to set up. The app trusts the key pin carried by the
+  bootstrap link (`trust: "link"`, the default without `cliPins`), and uses the same shared daemon
+  in `~/.appduct` as any other app, while tools run from the **CLI** (or an MCP client), not
+  in-app menus.
 - **Safe local defaults**: `allowPrivateLanOnly` stays enabled while iterating—same knob as
   production, not a statement that Appduct only works offline or on one subnet.
 - **Resume smoke test**: the app uses `@appduct/react-native/auto`, so a Metro reload suspends
@@ -26,13 +28,12 @@ screens in the app, same ideas as in **production** builds.
 Everything below runs from the monorepo root unless noted. Use a **development build**, not Expo
 Go—this app ships native pinning code.
 
-### 1. Use the committed playground host identity
+### 1. Nothing to configure
 
-The playground ships an intentionally non-secret TLS host-key fixture at
-`.appduct/key.pem`; its matching SPKI pin is already in `app.json`. The launcher below selects
-that isolated state directory and corrects the key mode after checkout, so no key generation or
-configuration changes are needed. Do not use this identity for another app or any production
-environment.
+The deep-link scheme and the app's id on each platform are recorded in `.appduct/config.json`,
+so no `--scheme` or `--app-id` flags are needed. The `playground:appduct` script below runs this
+repository's own CLI build from the playground directory; the daemon it talks to is the shared
+one in `~/.appduct`.
 
 ### 2. Build and run the dev client
 

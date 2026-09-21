@@ -33,7 +33,9 @@
  * project file (`native-scheme.ts`'s doc comment has the detail). Dynamic-config projects use
  * `--scheme`, `APPDUCT_SCHEME`, or a project `.appduct/config.json` instead.
  *
- * A project `.appduct/config.json` carries client-side keys only (`scheme` today). It never
+ * A project `.appduct/config.json` carries client-side keys only — `scheme` and, since issue #63,
+ * `appId.<platform>` (see {@link resolveAppId} below, which mirrors this module's shape but with a
+ * shorter order: no environment-variable tier and no filesystem-discovery tier). It never
  * redirects the state directory — `--state-dir` / `APPDUCT_STATE_DIR` remain the only way to do
  * that — so a project file can never move the daemon's key, socket or audit log.
  */
@@ -332,6 +334,76 @@ export const readProjectConfigScheme = async (path: string): Promise<string | un
   return requireValidScheme(scheme, `"scheme" in ${path}`);
 };
 
+/** A target's platform, and the key it reads under `appId` in a project config — `"ios"` for
+ * `ios-device`, `"android"` for `android`. See `cli/open-target.ts`'s `platformOf`, the single
+ * place a delivery target is mapped to one of these. */
+export type AppIdPlatform = "ios" | "android";
+
+const APP_ID_PLATFORMS: ReadonlySet<string> = new Set<AppIdPlatform>(["ios", "android"]);
+
+/**
+ * Reads `appId.<platform>` out of a project `.appduct/config.json`. Same stance as
+ * {@link readProjectConfigScheme}: this is Appduct's own file, so anything wrong with the `appId`
+ * block is a hard error rather than a silent fall-through, including an unknown key inside it — a
+ * typo'd `"andriod"` must read as "this file is broken", not as "no Android app id was recorded",
+ * which would otherwise look exactly like a project that simply hasn't set one up yet.
+ *
+ * Deliberately does *not* apply `cli/open-target.ts`'s `isValidAppId` charset check here: that
+ * check guards an argv/remote-shell hazard at the point a value is actually used, the same
+ * arrangement the old `iosBundleId` config key had. A structurally well-formed but wrong-for-its-
+ * platform id is caught there instead, with the command that needed it named in the error.
+ */
+export const readProjectConfigAppId = async (
+  path: string,
+  platform: AppIdPlatform,
+): Promise<string | undefined> => {
+  const file = await readJsonFile(path);
+
+  if (!file) {
+    return undefined;
+  }
+
+  if (!isPlainObject(file.raw)) {
+    throw usageError(`Invalid Appduct project config at ${path}: must be a JSON object.`);
+  }
+
+  const appId = file.raw.appId;
+
+  if (appId === undefined) {
+    return undefined;
+  }
+
+  if (!isPlainObject(appId)) {
+    throw usageError(
+      `Invalid Appduct project config at ${path}: "appId" must be an object with "ios" and/or ` +
+        '"android" keys.',
+    );
+  }
+
+  for (const key of Object.keys(appId)) {
+    if (!APP_ID_PLATFORMS.has(key)) {
+      throw usageError(
+        `Invalid Appduct project config at ${path}: unknown key "appId.${key}" (expected "ios" ` +
+          'and/or "android").',
+      );
+    }
+  }
+
+  const value = appId[platform];
+
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || value.length === 0) {
+    throw usageError(
+      `Invalid Appduct project config at ${path}: "appId.${platform}" must be a non-empty string.`,
+    );
+  }
+
+  return value;
+};
+
 export type ResolveSchemeOptions = {
   /** `--scheme` (or a programmatic `scheme` option) — highest precedence. */
   flagScheme?: string;
@@ -468,4 +540,95 @@ export const resolveSchemeOrThrow = async (options: ResolveSchemeOptions = {}): 
   }
 
   return resolved.scheme;
+};
+
+/** Which step of {@link resolveAppId}'s order produced the app id. */
+export type AppIdSource = "flag" | "project-config";
+
+export type ResolvedAppId = {
+  /** Undefined when no source produced one; `tried` then explains where we looked. */
+  appId?: string;
+  source?: AppIdSource;
+  /** Human-readable descriptions of every location consulted, in order, for error messages. */
+  tried: string[];
+};
+
+export type ResolveAppIdOptions = {
+  /** Which `appId.<platform>` key to read from a project config; see `cli/open-target.ts`'s
+   * `platformOf`. */
+  platform: AppIdPlatform;
+  /** `--app-id` (CLI `link`) / `appId` (MCP `appduct_connect`) / `appId` (`mintLink`, the
+   * `appduct/client` `link()`) — highest precedence, because the target is known at the call
+   * site. */
+  flagAppId?: string;
+  /** Where the project walk-up starts. Defaults to `process.cwd()`. */
+  cwd?: string;
+  /** The state directory root, so the walk-up never mistakes it for a project config. */
+  stateDirRoot?: string;
+  /** Overrides the home directory whose `.appduct` the walk-up skips (tests point this at a
+   * temp tree rather than the real `$HOME`). */
+  homeDir?: string;
+};
+
+/**
+ * Resolves an app id against the order the contract fixes: an explicit value first, then the
+ * nearest project `.appduct/config.json` declaring `appId.<platform>` (the same walk-up
+ * {@link resolveScheme} uses, via {@link findProjectConfigs}). Unlike {@link resolveScheme} there
+ * is no environment-variable tier and no filesystem-discovery tier (issue #63 leaves static
+ * discovery of an app id from `build.gradle`/`app.json` out of scope) — an app id that cannot be
+ * found either way is a plain usage error, not something worth guessing at.
+ */
+export const resolveAppId = async (options: ResolveAppIdOptions): Promise<ResolvedAppId> => {
+  const cwd = resolve(options.cwd ?? process.cwd());
+  const tried: string[] = [];
+
+  tried.push("the --app-id flag");
+
+  if (options.flagAppId !== undefined && options.flagAppId.length > 0) {
+    return { appId: options.flagAppId, source: "flag", tried };
+  }
+
+  const projectConfigPaths = findProjectConfigs(cwd, {
+    stateDirRoot: options.stateDirRoot,
+    homeDir: options.homeDir,
+  });
+
+  tried.push(
+    projectConfigPaths.length === 0
+      ? `${PROJECT_CONFIG_RELATIVE_PATH} (searched upwards from ${cwd})`
+      : projectConfigPaths.join(", "),
+  );
+
+  for (const projectConfigPath of projectConfigPaths) {
+    const projectAppId = await readProjectConfigAppId(projectConfigPath, options.platform);
+
+    if (projectAppId !== undefined) {
+      return { appId: projectAppId, source: "project-config", tried };
+    }
+  }
+
+  return { tried };
+};
+
+/**
+ * The shared "no app id anywhere" message (issue #63). Every caller renders the same body — the
+ * CLI's `--app-id` guard, `mintLink`, and `appduct_connect` — so the three fixes it names (the
+ * flag, the MCP argument, and the project config `appduct init` writes) cannot drift between them.
+ */
+export const describeMissingAppId = (platform: AppIdPlatform, tried: string[]): string => {
+  const locations =
+    tried.length === 0
+      ? ""
+      : `Looked in, in order:\n${tried
+          .map((location, index) => `  ${index + 1}. ${location}`)
+          .join("\n")}\n`;
+
+  const platformLabel = platform === "android" ? "Android" : "a physical iPhone/iPad";
+  const initFlag = platform === "android" ? "--android-app-id" : "--ios-app-id";
+
+  return (
+    `Delivering to ${platformLabel} needs the installed app's id, and none was found. ${locations}` +
+    `Set one with \`appduct init ${initFlag} <id>\`, --app-id <id>, or "appId.${platform}" in ` +
+    `${PROJECT_CONFIG_RELATIVE_PATH}.`
+  );
 };

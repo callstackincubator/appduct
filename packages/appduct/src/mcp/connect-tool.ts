@@ -23,18 +23,18 @@ import {
   deliverToOpenTarget,
   detectBootedTargets,
   isOpenTarget,
-  isValidBundleId,
-  invalidBundleIdMessage,
+  isValidAppId,
+  invalidAppIdMessage,
   isLoopbackAddress,
   loopbackAddressMessage,
+  platformOf,
   usesLoopbackAddress,
-  MISSING_BUNDLE_ID_MESSAGE,
   type ExecFn,
   type OpenTarget,
 } from "../cli/open-target.js";
 import { composeDeepLink } from "../link.js";
 import { renderQrToTerminal } from "../qr-terminal.js";
-import { describeMissingScheme } from "../scheme.js";
+import { describeMissingAppId, describeMissingScheme, resolveAppId } from "../scheme.js";
 import {
   openDaemonStream,
   DaemonRpcError,
@@ -81,21 +81,26 @@ export const CONNECT_TOOL_DESCRIPTOR = {
     "booted iOS simulator or attached Android device and delivers the link to it, returning " +
     "{ sessionId, delivered: true, autoDetected: true } — this is the normal agent path and needs " +
     "no human. Pass target \"android\" or \"ios-sim\" (optionally with \"device\") to choose " +
-    "explicitly, or target \"none\" to force the human flow. Target \"ios-device\" is an " +
-    "experimental, never-auto-detected path that delivers to a paired physical iPhone/iPad via " +
-    "xcrun devicectl; it needs \"bundleId\" (or \"iosBundleId\" in config.json), iOS 17+, Xcode " +
-    "15+, a connected and trusted device with Developer Mode on, a dev-signed build installed, and " +
-    "the phone on the same network as this machine. Pass \"relaunch\": true with it if the app is " +
-    "already running and the delivery does not take. Only when no device is " +
-    "detected (or target is \"none\") does this return a QR code for a human to scan, along with " +
-    "an \"instructions\" field saying what to do with it. Follow up with " +
-    "appduct_wait_for_session to know when the device has connected.",
+    "explicitly, or target \"none\" to force the human flow. Delivering to \"android\" (explicit " +
+    "or auto-detected) needs \"appId\" (the Android package name) — without it, more than one " +
+    "installed app declaring the same scheme would show an ambiguous \"Open with\" chooser on the " +
+    "device instead of failing loudly. Target \"ios-device\" is an experimental, " +
+    "never-auto-detected path that delivers to a paired physical iPhone/iPad via xcrun devicectl; " +
+    "it needs \"appId\" (the iOS bundle id), iOS 17+, Xcode 15+, a connected and trusted device " +
+    "with Developer Mode on, a dev-signed build installed, and the phone on the same network as " +
+    "this machine. An \"appId\" not supplied here falls back to \"appId.<platform>\" in the " +
+    "nearest .appduct/config.json (see \"appduct init\"); it is rejected outright with target " +
+    "\"ios-sim\" or \"none\", which need no app id. Pass \"relaunch\": true with ios-device if the " +
+    "app is already running and the delivery does not take. Only when no device is detected (or " +
+    "target is \"none\") does this return a QR code for a human to scan, along with an " +
+    "\"instructions\" field saying what to do with it. Follow up with appduct_wait_for_session to " +
+    "know when the device has connected.",
   inputSchema: {
     type: "object",
     properties: {
       target: { type: "string", enum: ["android", "ios-sim", "ios-device", NO_TARGET] },
       device: { type: "string" },
-      bundleId: { type: "string" },
+      appId: { type: "string" },
       relaunch: { type: "boolean" },
       ttlSeconds: { type: "number", exclusiveMinimum: 0 },
     },
@@ -203,9 +208,16 @@ export type ConnectToolDeps = {
   /** Every location `scheme.ts` consulted, named in the failure below so an agent can tell its
    * human exactly where to put a scheme instead of guessing at one global file. */
   schemeTried?: string[];
-  /** `config.json`'s `iosBundleId`, the default for the experimental `ios-device` target when the
-   * call did not pass `bundleId`. Same source order as `scheme`. */
-  iosBundleId?: string;
+  /** Where the project `.appduct/config.json` walk-up starts when resolving an `appId` for
+   * `target: "android"`/`"ios-device"` (`scheme.ts`'s `resolveAppId`) — unlike `scheme`, this is
+   * resolved fresh on every call rather than once at startup, since which platform's `appId.<key>`
+   * is needed depends on the call's (or auto-detection's) target. Defaults to `process.cwd()`. */
+  cwd?: string;
+  /** The state directory in use, so the `appId` walk-up can never mistake it for a project config
+   * — the same exclusion `resolveScheme` is given at server startup (`commands/mcp.ts`). Without
+   * it, an operator who points `--state-dir` at a directory on the walk-up path would have that
+   * *global* file read at the project tier, inverting the documented precedence. */
+  stateDirRoot?: string;
   exec?: ExecFn;
   env?: NodeJS.ProcessEnv;
 };
@@ -232,11 +244,48 @@ export type ConnectToolResult = {
 type ResolvedDelivery = {
   target: OpenTarget;
   device?: string;
-  /** Resolved bundle id for `target: "ios-device"` (call argument, else `config.json`). */
-  bundleId?: string;
+  /** Resolved app id for `target: "android"`/`"ios-device"` (call argument, else project config).
+   * Left undefined when `platformOf(target)` is undefined (`ios-sim`, which needs none) OR when
+   * resolution found nothing — the caller distinguishes those two with `platformOf` itself. */
+  appId?: string;
   /** Human-readable device description for notes and errors. */
   label: string;
   autoDetected: boolean;
+};
+
+type DeliveryResolution = {
+  delivery?: ResolvedDelivery;
+  note?: string;
+  /** Every location `resolveAppId` consulted, set whenever `delivery`'s target needs one — named
+   * in {@link describeMissingAppId} when nothing resolved. */
+  appIdTried?: string[];
+};
+
+/**
+ * Attaches a resolved `appId` to a delivery candidate whose target needs one — `android` (explicit
+ * or auto-detected) and `ios-device` (always explicit; see {@link resolveDelivery}'s doc comment).
+ * `ios-sim` passes through untouched: {@link platformOf} returns `undefined` for it, and it is the
+ * one target `--app-id`/`appId` must never be required for.
+ */
+const withResolvedAppId = async (
+  base: ResolvedDelivery,
+  flagAppId: string | undefined,
+  deps: ConnectToolDeps,
+): Promise<DeliveryResolution> => {
+  const platform = platformOf(base.target);
+
+  if (platform === undefined) {
+    return { delivery: base };
+  }
+
+  const resolved = await resolveAppId({
+    platform,
+    flagAppId,
+    cwd: deps.cwd,
+    stateDirRoot: deps.stateDirRoot,
+  });
+
+  return { delivery: { ...base, appId: resolved.appId }, appIdTried: resolved.tried };
 };
 
 /**
@@ -248,21 +297,17 @@ type ResolvedDelivery = {
 const resolveDelivery = async (
   requested: ConnectTarget | undefined,
   device: string | undefined,
-  bundleId: string | undefined,
+  appId: string | undefined,
   deps: ConnectToolDeps,
-): Promise<{ delivery?: ResolvedDelivery; note?: string }> => {
+): Promise<DeliveryResolution> => {
   if (requested !== undefined && requested !== NO_TARGET) {
     // `ios-device` is reachable only through this branch: `detectBootedTargets` never returns it,
     // so a paired iPhone can never be picked up by the auto-detection path below.
-    return {
-      delivery: {
-        target: requested,
-        device,
-        ...(requested === "ios-device" ? { bundleId: bundleId ?? deps.iosBundleId } : {}),
-        label: device ?? requested,
-        autoDetected: false,
-      },
-    };
+    return withResolvedAppId(
+      { target: requested, device, label: device ?? requested, autoDetected: false },
+      appId,
+      deps,
+    );
   }
 
   if (requested === NO_TARGET) {
@@ -274,7 +319,10 @@ const resolveDelivery = async (
   const detection = await detectBootedTargets({ exec: deps.exec, env: deps.env });
 
   if (detection.kind === "single") {
-    return { delivery: { ...detection.detected, autoDetected: true } };
+    // The auto-detected target may still be `android`, which needs an `appId` exactly as an
+    // explicit `target: "android"` would — nobody asked for a specific device, but the app being
+    // launched on it is not optional.
+    return withResolvedAppId({ ...detection.detected, autoDetected: true }, appId, deps);
   }
 
   if (detection.kind === "ambiguous") {
@@ -291,7 +339,7 @@ const resolveDelivery = async (
     note:
       'No "target" was given and no booted iOS simulator or attached Android device was detected, ' +
       "so the link could not be delivered automatically. A physical iPhone/iPad is never " +
-      'auto-detected: to deliver to one, re-call with target "ios-device" plus "bundleId" (needs ' +
+      'auto-detected: to deliver to one, re-call with target "ios-device" plus "appId" (needs ' +
       "iOS 17+, Xcode 15+ and a paired, trusted device with Developer Mode on) — otherwise use " +
       "the QR flow below.",
   };
@@ -305,7 +353,7 @@ export const handleConnectTool = async (
 
   const requestedTarget = asOptionalConnectTarget(args.target);
   const device = asOptionalNonEmptyString(args.device, "device");
-  const bundleId = asOptionalNonEmptyString(args.bundleId, "bundleId");
+  const appId = asOptionalNonEmptyString(args.appId, "appId");
   const relaunch = asOptionalBoolean(args.relaunch, "relaunch");
   const ttlSeconds = asOptionalPositiveNumber(args.ttlSeconds, "ttlSeconds");
 
@@ -317,10 +365,15 @@ export const handleConnectTool = async (
     );
   }
 
-  if (bundleId !== undefined && requestedTarget !== "ios-device") {
+  // Valid with an explicit "android"/"ios-device" target, *and* with no target at all — the
+  // auto-detection path below may still land on "android", which needs one just as much as an
+  // explicit target does. Rejected for "ios-sim" (no equivalent of `-p`/a bundle id exists to pass
+  // it to) and "none" (no delivery is being attempted, so there is nothing for it to name).
+  if (appId !== undefined && (requestedTarget === "ios-sim" || requestedTarget === NO_TARGET)) {
     throw new McpBuiltinToolError(
       "invalid_request",
-      '"bundleId" only applies with target "ios-device".',
+      '"appId" only applies with target "android", target "ios-device", or no target at all ' +
+        "(auto-detection).",
     );
   }
 
@@ -339,16 +392,22 @@ export const handleConnectTool = async (
   // not stay narrowed across one).
   const scheme = deps.scheme;
 
-  const { delivery, note } = await resolveDelivery(requestedTarget, device, bundleId, deps);
+  const { delivery, note, appIdTried } = await resolveDelivery(requestedTarget, device, appId, deps);
 
   // Rejected before minting, so a call that cannot possibly deliver does not strand a pending
-  // session behind it.
-  if (delivery?.target === "ios-device" && !delivery.bundleId) {
-    throw new McpBuiltinToolError("invalid_request", MISSING_BUNDLE_ID_MESSAGE);
+  // session behind it. `platformOf` is `undefined` for `ios-sim`, the one delivery target that
+  // never needs (and never gets) a resolved `appId`.
+  const deliveryPlatform = delivery ? platformOf(delivery.target) : undefined;
+
+  if (deliveryPlatform !== undefined && delivery?.appId === undefined) {
+    throw new McpBuiltinToolError(
+      "invalid_request",
+      describeMissingAppId(deliveryPlatform, appIdTried ?? []),
+    );
   }
 
-  if (delivery?.bundleId !== undefined && !isValidBundleId(delivery.bundleId)) {
-    throw new McpBuiltinToolError("invalid_request", invalidBundleIdMessage(delivery.bundleId));
+  if (delivery?.appId !== undefined && !isValidAppId(delivery.appId)) {
+    throw new McpBuiltinToolError("invalid_request", invalidAppIdMessage(delivery.appId));
   }
 
   // A link's advertised address is fixed at mint time: `127.0.0.1` only when it is being handed to
@@ -397,7 +456,7 @@ export const handleConnectTool = async (
     await deliverToOpenTarget({
       target: delivery.target,
       device: delivery.device,
-      bundleId: delivery.bundleId,
+      appId: delivery.appId,
       relaunch,
       deepLink,
       wssPort: result.endpoint.port,

@@ -51,6 +51,26 @@ package versions for a release.
   many positionals, `--limit 0`) crashed the CLI with a stack trace instead of printing a usage
   error with exit code 64. A numeric flag given without a value (`--limit`, `--limit -1`,
   `--since`, `--ttl`, `--timeout`) is now a usage error; it used to be read as `1`.
+- **Breaking: `--open android` / `target: "android"` now require the installed app's id** —
+  including an Android device `appduct_connect` auto-detects, which now fails with
+  `invalid_request` until an app id is configured.
+  Previously `adb shell am start` was invoked with an implicit intent (no `-p`); when more than
+  one installed app declared the deep-link scheme, Android showed an "Open with" chooser and
+  `am start` still reported success, so `appduct_wait_for_session`/the CLI blocked its whole
+  timeout with nothing explaining why (issue #63). Delivery now names the package explicitly
+  (`am start ... -p <app-id>`) and requires an app id rather than falling back — for both
+  `android` and the experimental `ios-device` target.
+  - **Migration:** run `appduct init --scheme <s> --android-app-id <id> --ios-app-id <id>` in
+    your app root once (writes `appId.android`/`appId.ios` into `.appduct/config.json`), or pass
+    `--app-id <id>` on `appduct link` / `appId` on the MCP `appduct_connect` tool / `appId` on
+    `mintLink`/`appduct/client`'s `link()` per call. `ios-sim` needs none of this — it is a usage
+    error to pass one there.
+  - **Removed:** `--bundle-id` (CLI), `bundleId` (MCP `appduct_connect`), `bundleId`
+    (`mintLink`/`appduct/client`'s `link()`), and `config.json`'s `iosBundleId` — all replaced by
+    `--app-id`/`appId`/`appId.<platform>` above, which now also covers `android`. There is no
+    deprecation shim: a leftover `iosBundleId` in `config.json` is silently ignored (an unknown
+    key just warns, and `loadConfig`'s `warn` defaults to a no-op), so the delivery-time error
+    above is the only signal that it needs replacing.
 
 ## 0.10.0 (2026-09-16)
 

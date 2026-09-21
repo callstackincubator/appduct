@@ -87,6 +87,8 @@ describe("CLI integration", () => {
     const initHelp = helpFor("init");
     expect(initHelp).toContain("--scheme");
     expect(initHelp).toContain("--force");
+    expect(initHelp).toContain("--ios-app-id");
+    expect(initHelp).toContain("--android-app-id");
 
     const keygenHelp = helpFor("keygen");
     expect(keygenHelp).toContain("--out");
@@ -98,22 +100,22 @@ describe("CLI integration", () => {
     expect(linkHelp).toContain("--scheme");
     expect(linkHelp).toContain("--open");
     expect(linkHelp).toContain("--device");
-    expect(linkHelp).toContain("--bundle-id");
+    expect(linkHelp).toContain("--app-id");
     expect(linkHelp).toContain("--relaunch");
     expect(linkHelp).toContain("ios-device");
 
-    // `--bundle-id` has to survive cac's camelCasing all the way into `handleLinkCommand`, and a
+    // `--app-id` has to survive cac's camelCasing all the way into `handleLinkCommand`, and a
     // flag that quietly parsed to `undefined` would look identical to one that was never passed:
-    // `link --open ios-sim --bundle-id ...` would then mint and deliver instead of erroring. The
+    // `link --open ios-sim --app-id ...` would then mint and deliver instead of erroring. The
     // validation runs before any daemon contact, so this needs no state dir beyond an empty one.
-    const misplacedBundleId = runCliBinary(
-      ["link", "--open", "ios-sim", "--bundle-id", "com.example.playground", "--json"],
-      { stateDir: path.join(tmpdir(), "appduct-bundle-id-flag-nonexistent") },
+    const misplacedAppId = runCliBinary(
+      ["link", "--open", "ios-sim", "--app-id", "com.example.playground", "--json"],
+      { stateDir: path.join(tmpdir(), "appduct-app-id-flag-nonexistent") },
     );
-    expect(misplacedBundleId.exitCode).not.toBe(0);
+    expect(misplacedAppId.exitCode).not.toBe(0);
     // `--json` escapes the quotes in the message, so match on the shape rather than the literal.
-    expect(`${misplacedBundleId.stdout}${misplacedBundleId.stderr}`).toMatch(
-      /--bundle-id.{0,4} only applies with .{0,4}--open ios-device/u,
+    expect(`${misplacedAppId.stdout}${misplacedAppId.stderr}`).toMatch(
+      /--app-id.{0,4} only applies with .{0,4}--open android.{0,4} or .{0,4}--open ios-device/u,
     );
 
     const toolsHelp = helpFor("tools");

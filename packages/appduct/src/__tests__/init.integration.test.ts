@@ -393,6 +393,122 @@ describe("init command", () => {
   });
 });
 
+describe("init command (--ios-app-id / --android-app-id, issue #63)", () => {
+  test("writes both ids into the project config, alongside scheme", async () => {
+    const root = await makeAppRoot("myapp");
+
+    const result = await handleInitCommand(
+      { iosAppId: "com.example.ios", androidAppId: "com.example.android" },
+      { cwd: root },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { appId: { ios: "com.example.ios", android: "com.example.android" } },
+    });
+    expect(await readProjectConfig(root)).toEqual({
+      scheme: "myapp",
+      appId: { ios: "com.example.ios", android: "com.example.android" },
+    });
+  });
+
+  test("the two ids are independent: writing only one leaves the other untouched", async () => {
+    const root = await makeAppRoot("myapp");
+
+    await handleInitCommand({ androidAppId: "com.example.android" }, { cwd: root });
+    const result = await handleInitCommand({ iosAppId: "com.example.ios" }, { cwd: root });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { appId: { ios: "com.example.ios", android: "com.example.android" } },
+    });
+    expect(await readProjectConfig(root)).toEqual({
+      scheme: "myapp",
+      appId: { ios: "com.example.ios", android: "com.example.android" },
+    });
+  });
+
+  test("re-running with the same id is a no-op", async () => {
+    const root = await makeAppRoot("myapp");
+
+    await handleInitCommand({ androidAppId: "com.example.android" }, { cwd: root });
+    const second = await handleInitCommand({ androidAppId: "com.example.android" }, { cwd: root });
+
+    expect(second).toMatchObject({ ok: true, data: { changed: false } });
+  });
+
+  test("replacing a recorded id needs --force, exactly like --scheme", async () => {
+    const root = await makeAppRoot("myapp");
+    await handleInitCommand({ androidAppId: "com.example.old" }, { cwd: root });
+
+    await expect(
+      handleInitCommand({ androidAppId: "com.example.new" }, { cwd: root }),
+    ).rejects.toThrow(/--force/u);
+
+    const forced = await handleInitCommand(
+      { androidAppId: "com.example.new", force: true },
+      { cwd: root },
+    );
+    expect(forced).toMatchObject({ ok: true, data: { appId: { android: "com.example.new" } } });
+    expect(await readProjectConfig(root)).toMatchObject({
+      appId: { android: "com.example.new" },
+    });
+  });
+
+  test("--force on its own (no app id flags) does not touch an already-recorded id", async () => {
+    const root = await makeAppRoot("myapp");
+    await handleInitCommand({ androidAppId: "com.example.android" }, { cwd: root });
+
+    const result = await handleInitCommand({ force: true }, { cwd: root });
+
+    expect(result).toMatchObject({ ok: true, data: { appId: { android: "com.example.android" } } });
+  });
+
+  test("no appId flags at all: the config carries only scheme, same as before issue #63", async () => {
+    const root = await makeAppRoot("myapp");
+
+    const result = await handleInitCommand({}, { cwd: root });
+
+    expect(result.ok && result.data.appId).toBeUndefined();
+    expect(await readProjectConfig(root)).toEqual({ scheme: "myapp" });
+  });
+
+  test("a malformed already-recorded appId is reported rather than silently overwritten", async () => {
+    const root = await makeAppRoot("myapp");
+    await writeProjectConfigRaw(root, { scheme: "myapp", appId: { android: "" } });
+
+    await expect(handleInitCommand({}, { cwd: root })).rejects.toThrow(/appId\.android/u);
+
+    // --android-app-id is about to replace exactly the broken value, so it is not fatal here.
+    const result = await handleInitCommand({ androidAppId: "com.example.android" }, { cwd: root });
+    expect(result).toMatchObject({ ok: true, data: { appId: { android: "com.example.android" } } });
+  });
+
+  test("an app id that delivery would refuse is rejected before anything is written", async () => {
+    for (const [option, bad] of [
+      ["androidAppId", "com.x;reboot"],
+      ["androidAppId", ""],
+      ["iosAppId", "--console"],
+      ["iosAppId", "com.$(id)"],
+    ] as const) {
+      const root = await makeAppRoot("myapp");
+
+      await expect(handleInitCommand({ [option]: bad }, { cwd: root })).rejects.toThrow(
+        /not a valid app id/u,
+      );
+      await expect(readFile(path.join(root, ".appduct", "config.json"), "utf8")).rejects.toThrow();
+    }
+  });
+
+  test("an Android package name with underscores is accepted", async () => {
+    const root = await makeAppRoot("myapp");
+
+    await handleInitCommand({ androidAppId: "com.my_company.app" }, { cwd: root });
+
+    expect(await readProjectConfig(root)).toMatchObject({ appId: { android: "com.my_company.app" } });
+  });
+});
+
 /**
  * Issue #48's addition: `init` runs the exact same static-file discovery `resolveScheme`'s last
  * step does (`scheme.ts`'s `discoverStaticProjectScheme`) — `app.json` first, then the native
@@ -654,5 +770,31 @@ describe("appduct init (CLI)", () => {
     });
     expect(forced.exitCode).toBe(0);
     expect(await readProjectConfig(root)).toEqual({ scheme: "other" });
+  });
+
+  test("--ios-app-id/--android-app-id write appId, and re-running is still safe", async () => {
+    const root = await makeAppRoot("myapp");
+    const stateDir = await makeStateDir();
+
+    const first = runCliBinary(
+      ["init", "--ios-app-id", "com.example.ios", "--android-app-id", "com.example.android", "--json"],
+      { cwd: root, stateDir },
+    );
+    expect(first.exitCode).toBe(0);
+    expect(JSON.parse(first.stdout)).toMatchObject({
+      ok: true,
+      data: { appId: { ios: "com.example.ios", android: "com.example.android" } },
+    });
+    expect(await readProjectConfig(root)).toEqual({
+      scheme: "myapp",
+      appId: { ios: "com.example.ios", android: "com.example.android" },
+    });
+
+    const second = runCliBinary(
+      ["init", "--ios-app-id", "com.example.ios", "--android-app-id", "com.example.android", "--json"],
+      { cwd: root, stateDir },
+    );
+    expect(second.exitCode).toBe(0);
+    expect(JSON.parse(second.stdout)).toMatchObject({ ok: true, data: { changed: false } });
   });
 });

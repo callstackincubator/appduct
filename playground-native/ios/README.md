@@ -29,8 +29,9 @@ xcrun simctl install booted \
   ~/Library/Developer/Xcode/DerivedData/AppductPlayground-*/Build/Products/Debug-iphonesimulator/AppductPlayground.app
 xcrun simctl launch booted com.callstack.appduct.playgroundnative
 
-# 3. Point the CLI at it -- the app registers the `appduct-native` URL scheme.
-appduct link --scheme appduct-native --open ios-sim
+# 3. Point the CLI at it. playground-native/.appduct/config.json records the app's
+#    `appduct-native` URL scheme, so no --scheme is needed.
+appduct link --open ios-sim
 appduct tools
 appduct invoke sum --input '{"a":2,"b":3}'
 ```

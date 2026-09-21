@@ -2,9 +2,17 @@
  * `appduct init` (issue #29): the one command that takes an app root from "package installed"
  * to "an agent can connect".
  *
- * It writes a *project-level* `.appduct/config.json` holding the deep-link scheme, and returns
- * the two things that are not discoverable from the filesystem: the MCP server entry to paste into
- * an agent's config, and the `import "@appduct/react-native/auto"` reminder the app needs.
+ * It writes a *project-level* `.appduct/config.json` holding the deep-link scheme and, since issue
+ * #63, the installed app's id per platform (`appId.ios`/`appId.android` — needed to deliver a
+ * link with `--open ios-device`/`--open android` without an "Open with" chooser silently eating
+ * it), and returns the two things that are not discoverable from the filesystem: the MCP server
+ * entry to paste into an agent's config, and the `import "@appduct/react-native/auto"` reminder
+ * the app needs.
+ *
+ * Unlike `scheme`, an app id has no discovery tier: `--ios-app-id`/`--android-app-id` (or an
+ * already-recorded value) is the whole story, and the two are independent flags rather than one
+ * `--app-id` — the platforms' ids usually match but not always, and `init` never guesses one from
+ * the other (see `discoverNativeScheme`'s own refusal to guess when two probes disagree).
  *
  * What it deliberately does **not** do:
  *
@@ -38,6 +46,7 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
+import { invalidAppIdMessage, isValidAppId } from "../cli/open-target.js";
 import type { CliResult, InitCommandData } from "../cli/result-types.js";
 import { usageError } from "../errors.js";
 import {
@@ -53,6 +62,12 @@ import {
 export type InitCommandOptions = {
   scheme?: string;
   force?: boolean;
+  /** Writes `appId.ios`. Optional and independent of `androidAppId` — the two ids usually match
+   * but not always, so `init` never guesses one from the other (issue #63; see
+   * `discoverNativeScheme`'s own refusal-to-guess for the same reasoning applied to a scheme). */
+  iosAppId?: string;
+  /** Writes `appId.android`. See {@link iosAppId}. */
+  androidAppId?: string;
 };
 
 export type InitCommandContext = {
@@ -151,6 +166,57 @@ const readExistingScheme = (
   return scheme;
 };
 
+/**
+ * The `appId.<platform>` already recorded in the project config. Same "fatal unless this run is
+ * about to overwrite it anyway" stance as {@link readExistingScheme}, scoped per platform: a
+ * malformed `appId.android` must not block a run that only touches `--ios-app-id`, and vice versa
+ * — `replaceable` is `true` exactly when this run's own flag (or `--force`) is already about to
+ * replace *this* platform's value.
+ */
+const readExistingAppId = (
+  existing: Record<string, unknown> | undefined,
+  path: string,
+  platform: "ios" | "android",
+  flagName: "--ios-app-id" | "--android-app-id",
+  replaceable: boolean,
+): string | undefined => {
+  const appId = existing?.appId;
+
+  if (appId === undefined) {
+    return undefined;
+  }
+
+  if (typeof appId !== "object" || appId === null || Array.isArray(appId)) {
+    if (replaceable) {
+      return undefined;
+    }
+
+    throw usageError(
+      `${path} records an invalid "appId" (must be an object with "ios" and/or "android" keys). ` +
+        `Fix it, or re-run with \`${flagName} <id> --force\` to replace it.`,
+    );
+  }
+
+  const value = (appId as Record<string, unknown>)[platform];
+
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || value.length === 0) {
+    if (replaceable) {
+      return undefined;
+    }
+
+    throw usageError(
+      `${path} records an invalid "appId.${platform}" (must be a non-empty string). Fix it, or ` +
+        `re-run with \`${flagName} <id> --force\` to replace it.`,
+    );
+  }
+
+  return value;
+};
+
 export const handleInitCommand = async (
   options: InitCommandOptions,
   context: InitCommandContext = {},
@@ -181,6 +247,18 @@ export const handleInitCommand = async (
     );
   }
 
+  // The same shape check delivery applies (`cli/open-target.ts`), run here too so a value that
+  // could never be delivered is refused at the flag rather than written into a file the user is
+  // told is safe to commit, only to fail on every later `link --open`.
+  for (const [flag, value] of [
+    ["--ios-app-id", options.iosAppId],
+    ["--android-app-id", options.androidAppId],
+  ] as const) {
+    if (value !== undefined && !isValidAppId(value)) {
+      throw usageError(`${invalidAppIdMessage(value)} (from ${flag})`);
+    }
+  }
+
   const existing = await readExistingConfig(configPath);
   // A `--scheme` or a `--force` is about to overwrite whatever is recorded, so a garbage value
   // there is not worth failing over — and failing would make this error's own remedy unusable.
@@ -189,6 +267,57 @@ export const handleInitCommand = async (
     configPath,
     options.force === true || options.scheme !== undefined,
   );
+  // Same "fatal unless this run overwrites it anyway" stance, scoped per platform — see
+  // `readExistingAppId`'s doc comment.
+  const existingIosAppId = readExistingAppId(
+    existing,
+    configPath,
+    "ios",
+    "--ios-app-id",
+    options.force === true || options.iosAppId !== undefined,
+  );
+  const existingAndroidAppId = readExistingAppId(
+    existing,
+    configPath,
+    "android",
+    "--android-app-id",
+    options.force === true || options.androidAppId !== undefined,
+  );
+
+  if (
+    options.iosAppId !== undefined &&
+    existingIosAppId !== undefined &&
+    existingIosAppId !== options.iosAppId &&
+    !options.force
+  ) {
+    throw usageError(
+      `${configPath} already records "appId.ios" as "${existingIosAppId}", but --ios-app-id asked ` +
+        `for "${options.iosAppId}". Re-run with --force to replace it (every other key in the file ` +
+        "is preserved), or drop --ios-app-id to keep what is recorded.",
+    );
+  }
+
+  if (
+    options.androidAppId !== undefined &&
+    existingAndroidAppId !== undefined &&
+    existingAndroidAppId !== options.androidAppId &&
+    !options.force
+  ) {
+    throw usageError(
+      `${configPath} already records "appId.android" as "${existingAndroidAppId}", but ` +
+        `--android-app-id asked for "${options.androidAppId}". Re-run with --force to replace it ` +
+        "(every other key in the file is preserved), or drop --android-app-id to keep what is " +
+        "recorded.",
+    );
+  }
+
+  // No discovery tier for an app id (issue #63 leaves static discovery — build.gradle, app.json —
+  // out of scope, unlike `scheme`): a platform's id is either what was just given, or whatever was
+  // already recorded. `--force` alone adopts nothing new here because there is nothing to adopt.
+  const iosAppId = options.iosAppId ?? existingIosAppId;
+  const androidAppId = options.androidAppId ?? existingAndroidAppId;
+  const appIdChanged = iosAppId !== existingIosAppId || androidAppId !== existingAndroidAppId;
+
   // Same discovery `resolveScheme`'s own last step runs (app.json, then the native Android/iOS
   // probes) — never APPDUCT_SCHEME, never a walk-up, per this file's doc comment. `discovered`
   // throws on its own for a malformed value or two native probes disagreeing, exactly as it would
@@ -268,11 +397,18 @@ export const handleInitCommand = async (
         "adopt that value instead."
       : undefined;
 
-  const alreadyCorrect = existingScheme === scheme;
+  const alreadyCorrect = existingScheme === scheme && !appIdChanged;
 
   if (!alreadyCorrect) {
-    // Merge rather than replace: `--force` changes the scheme, it does not reset the file.
-    const next = { ...(existing ?? {}), scheme };
+    // Merge rather than replace: `--force` changes the scheme/appId, it does not reset the file.
+    const next: Record<string, unknown> = { ...(existing ?? {}), scheme };
+
+    if (iosAppId !== undefined || androidAppId !== undefined) {
+      next.appId = {
+        ...(iosAppId === undefined ? {} : { ios: iosAppId }),
+        ...(androidAppId === undefined ? {} : { android: androidAppId }),
+      };
+    }
 
     await mkdir(dirname(configPath), { recursive: true, mode: 0o700 });
     await writeFile(configPath, `${JSON.stringify(next, null, 2)}\n`, {
@@ -301,6 +437,14 @@ export const handleInitCommand = async (
       ...(origin === undefined ? {} : { origin }),
       created: existing === undefined,
       changed: !alreadyCorrect,
+      ...(iosAppId === undefined && androidAppId === undefined
+        ? {}
+        : {
+            appId: {
+              ...(iosAppId === undefined ? {} : { ios: iosAppId }),
+              ...(androidAppId === undefined ? {} : { android: androidAppId }),
+            },
+          }),
       ...(note === undefined ? {} : { note }),
       mcpServerEntry: {
         command: "appduct",
@@ -314,9 +458,16 @@ export const handleInitCommand = async (
           "work too.",
         "With the app running, pair a device: `appduct link --open ios-sim` (or `--open android`).",
         ...(origin === undefined ? [] : [`Scheme "${scheme}" was read from ${origin}.`]),
-        `This file is safe to commit — it holds only "scheme". Do not point --state-dir at this ` +
-          "directory: the state dir holds the daemon's private key and audit log, which must " +
-          "never be committed.",
+        ...(iosAppId === undefined && androidAppId === undefined
+          ? [
+              "Delivering to a physical iPhone (`--open ios-device`) or an Android device/emulator " +
+                "(`--open android`) needs the installed app's id: run `appduct init --ios-app-id " +
+                "<id> --android-app-id <id>`, or pass --app-id on `appduct link`.",
+            ]
+          : []),
+        `This file is safe to commit — it holds only "scheme" and "appId". Do not point --state-dir ` +
+          "at this directory: the state dir holds the daemon's private key and audit log, which " +
+          "must never be committed.",
       ],
     },
   };
