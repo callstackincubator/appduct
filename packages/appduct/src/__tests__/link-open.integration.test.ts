@@ -11,7 +11,9 @@
  *    *not* get the override — a physical iPhone reaches the daemon only over the LAN (issue #31).
  */
 
-import { writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
 

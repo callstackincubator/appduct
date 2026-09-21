@@ -13,8 +13,9 @@
  * moved to `mcp-server.test.ts`, which runs them against an in-memory daemon.
  */
 
-import { writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { connect as connectUds, type Socket } from "node:net";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 
