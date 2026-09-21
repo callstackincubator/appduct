@@ -11,6 +11,7 @@ const docsDir = fileURLToPath(new URL('./src/content/docs/', import.meta.url));
 /** Sidebar groups in display order: directory → label. */
 const groups = [
 	['start', 'Start here'],
+	['install', 'Installation'],
 	['guides', 'Guides'],
 	['reference', 'Reference'],
 ];

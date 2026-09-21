@@ -20,7 +20,7 @@ The build fails on a broken internal link between docs pages (checked by `starli
 
 | Path | What it is |
 | --- | --- |
-| `src/content/docs/` | Docs pages, one `.md`/`.mdx` file per page. The folder decides the sidebar group (`start`, `guides`, `reference`); `sidebar.order` in the frontmatter decides the position. Link between pages with site URLs such as `/appduct/start/quick-start/`. |
+| `src/content/docs/` | Docs pages, one `.md`/`.mdx` file per page. The folder decides the sidebar group (`start`, `install`, `guides`, `reference`); `sidebar.order` in the frontmatter decides the position. Link between pages with site URLs such as `/appduct/start/quick-start/`. |
 | `src/pages/index.astro` | The landing page. |
 | `src/pages/[...slug].md.ts` | Serves every docs page as raw Markdown at `<page>.md`. |
 | `src/components/` | Starlight component overrides: header title and links, hero, footer, default dark theme. |

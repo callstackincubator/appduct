@@ -2,12 +2,13 @@
 title: iOS setup
 description: Add Appduct to a SwiftUI or UIKit app without React Native, register tools in Swift, and connect it to the CLI.
 sidebar:
-  order: 4
+  label: iOS
+  order: 2
 ---
 
 import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-This page adds Appduct to a plain iOS app, with no React Native or Expo. You register tools in Swift, and the CLI or an agent calls them the same way as in a React Native app. Building with React Native instead? See [React Native setup](/appduct/start/react-native/).
+This page adds Appduct to a plain iOS app, with no React Native or Expo. You register tools in Swift, and the CLI or an agent calls them the same way as in a React Native app. Building with React Native instead? See [React Native setup](/appduct/install/react-native/).
 
 **Requirements**
 
@@ -235,4 +236,10 @@ appduct doctor build/Shop.app --assert-present   # a build that should
 
 **The app crashes or misbehaves when a tool updates the UI.** The handler touched UI off the main actor. Use `await MainActor.run`.
 
-For a complete example app, see the [native iOS playground](/appduct/start/playground/#native-ios-playground).
+## Next steps
+
+- [Write more useful tools](/appduct/guides/writing-tools/): schemas, timeouts, and groups. Tool registration lives in Swift, on this page.
+- [Connect an agent](/appduct/guides/agents/) such as Claude Code or Cursor over MCP.
+- [Drive the app from a CLI or an E2E test](/appduct/guides/cli/).
+- [Keep Appduct out of your Release builds](/appduct/guides/build-variants/#verify-the-built-app), and verify it with `appduct doctor`.
+- Try the [native iOS playground](/appduct/start/playground/#native-ios-playground) for a working example app.

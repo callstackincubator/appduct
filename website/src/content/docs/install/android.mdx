@@ -2,12 +2,13 @@
 title: Android setup
 description: Add Appduct to a Kotlin or Java Android app without React Native, register tools, and connect it to the CLI.
 sidebar:
-  order: 5
+  label: Android
+  order: 3
 ---
 
 import { Steps } from '@astrojs/starlight/components';
 
-This page adds Appduct to a plain Android app, with no React Native. You register tools in Kotlin, and the CLI or an agent calls them the same way as in a React Native app. Building with React Native instead? See [React Native setup](/appduct/start/react-native/).
+This page adds Appduct to a plain Android app, with no React Native. You register tools in Kotlin, and the CLI or an agent calls them the same way as in a React Native app. Building with React Native instead? See [React Native setup](/appduct/install/react-native/).
 
 **Requirements**
 
@@ -191,4 +192,10 @@ appduct doctor app/build/outputs/apk/debug/app-debug.apk --assert-present
 
 **A handler crashes when it touches the UI.** Handlers run off the main thread. Use `withContext(Dispatchers.Main)`.
 
-For a complete example app, see the [native Android playground](/appduct/start/playground/#native-android-playground).
+## Next steps
+
+- [Write more useful tools](/appduct/guides/writing-tools/): schemas, timeouts, and groups. Tool registration lives in Kotlin, on this page.
+- [Connect an agent](/appduct/guides/agents/) such as Claude Code or Cursor over MCP.
+- [Drive the app from a CLI or an E2E test](/appduct/guides/cli/).
+- [Keep Appduct out of your release builds](/appduct/guides/build-variants/#verify-the-built-app), and verify it with `appduct doctor`.
+- Try the [native Android playground](/appduct/start/playground/#native-android-playground) for a working example app.

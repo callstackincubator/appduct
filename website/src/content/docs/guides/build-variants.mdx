@@ -119,9 +119,9 @@ To make sure a project never includes Appduct on a platform, regardless of envir
 
 Apps using Appduct without React Native get the same debug-only default through their dependency setup:
 
-- **iOS with Swift Package Manager:** Debug builds get the real library; Release builds get a version that does nothing. Enable the `AlwaysEnabled` package trait to include it in Release. See [iOS setup](/appduct/start/ios/#ship-appduct-in-a-release-build).
+- **iOS with Swift Package Manager:** Debug builds get the real library; Release builds get a version that does nothing. Enable the `AlwaysEnabled` package trait to include it in Release. See [iOS setup](/appduct/install/ios/#ship-appduct-in-a-release-build).
 - **iOS with CocoaPods:** `pod 'AppductCore', :configurations => ['Debug']`. Remove the restriction to include it everywhere.
-- **Android:** `debugImplementation` of `core`, `releaseImplementation` of `core-noop`. Depend on `core` for a variant to include it. See [Android setup](/appduct/start/android/#ship-appduct-in-a-release-build).
+- **Android:** `debugImplementation` of `core`, `releaseImplementation` of `core-noop`. Depend on `core` for a variant to include it. See [Android setup](/appduct/install/android/#ship-appduct-in-a-release-build).
 
 `APPDUCT_ENABLED` doesn't apply to these apps.
 

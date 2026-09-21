@@ -2,7 +2,8 @@
 title: React Native setup
 description: Add Appduct to an Expo or bare React Native app, register tools, and connect it to the CLI.
 sidebar:
-  order: 3
+  label: React Native
+  order: 1
 ---
 
 import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -178,3 +179,11 @@ If your app handles incoming links itself (custom routing, an in-app QR scanner)
 **`registerTool` throws in development.** The schema can't describe itself to agents (for example, Zod 3 or plain Valibot on its own), or the tool name or group is malformed. The error says what to fix. See [Writing tools](/appduct/guides/writing-tools/).
 
 **`connect()` rejects with `appduct_disabled`.** The build has no Appduct native code: it's a release build, Expo Go, or Appduct was excluded. See [Build variants](/appduct/guides/build-variants/).
+
+## Next steps
+
+- [Write more useful tools](/appduct/guides/writing-tools/): schemas, timeouts, and groups.
+- [Connect an agent](/appduct/guides/agents/) such as Claude Code or Cursor over MCP.
+- [Drive the app from a CLI or an E2E test](/appduct/guides/cli/).
+- [Keep Appduct out of your release builds](/appduct/guides/build-variants/#verify-the-built-app), and verify it with `appduct doctor`.
+- Try the [Expo playground](/appduct/start/playground/#expo-playground) for a working example app.

@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-Reference for `@appduct/react-native`. For setup, see [React Native setup](/appduct/start/react-native/); for how to design tools, see [Write tools](/appduct/guides/writing-tools/).
+Reference for `@appduct/react-native`. For setup, see [React Native setup](/appduct/install/react-native/); for how to design tools, see [Write tools](/appduct/guides/writing-tools/).
 
 ## Entry points
 

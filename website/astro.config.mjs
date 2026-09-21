@@ -57,6 +57,7 @@ export default defineConfig({
 			},
 			sidebar: [
 				{ label: 'Start here', items: [{ autogenerate: { directory: 'start' } }] },
+				{ label: 'Installation', items: [{ autogenerate: { directory: 'install' } }] },
 				{ label: 'Guides', items: [{ autogenerate: { directory: 'guides' } }] },
 				{ label: 'Reference', items: [{ autogenerate: { directory: 'reference' } }] },
 			],
@@ -79,13 +80,18 @@ export default defineConfig({
 						'',
 						llmsPageIndex({ site, base }),
 					].join('\n'),
-					promote: ['start/introduction', 'start/quick-start', 'start/**'],
+					promote: ['start/introduction', 'start/quick-start', 'start/**', 'install/**'],
 					demote: ['reference/protocol', 'reference/architecture'],
 					customSets: [
 						{
 							label: 'Getting started',
-							description: 'installing Appduct and setting it up for React Native, iOS, or Android',
+							description: 'what Appduct is and the fastest way to try it',
 							paths: ['start/**'],
+						},
+						{
+							label: 'Installation',
+							description: 'setting up Appduct for React Native, iOS, or Android',
+							paths: ['install/**'],
 						},
 						{
 							label: 'Reference',
