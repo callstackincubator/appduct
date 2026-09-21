@@ -20,7 +20,7 @@ Sets up the current app directory: writes `.appduct/config.json` (mode `0600`) a
 | `--scheme <scheme>` | Scheme to record. Without it, `init` looks in `app.json` and your native project files, never in `APPDUCT_SCHEME` or a parent directory. |
 | `--ios-app-id <id>` | iOS bundle id, recorded as `appId.ios`. Needed for `--open ios-device`. |
 | `--android-app-id <id>` | Android package name, recorded as `appId.android`. Needed for `--open android`. |
-| `--force` | Replace a value that's already recorded. On its own, re-reads the scheme from `app.json`. Merges into the existing file rather than overwriting it. |
+| `--force` | Replace a value that's already recorded. On its own, re-reads the scheme from your project files. Merges into the existing file rather than overwriting it. |
 
 A plain re-run keeps the recorded scheme and adds a note if your project files now declare a different one.
 
@@ -189,7 +189,9 @@ With `--json`, the error's `type` field names the exact error. See [Error types]
    2. Android: the `appductScheme` manifest placeholder in `app/build.gradle.kts` or `app/build.gradle`, then the first `<data android:scheme>` in an intent filter with `android.intent.action.VIEW` in `app/src/main/AndroidManifest.xml`.
    3. iOS: the first `CFBundleURLSchemes` entry in any `Info.plist` up to two levels down (skipping `Pods`, `build`, `node_modules`, `DerivedData`), then XcodeGen's `project.yml`.
 
-If nothing is found, the error lists every location. If the Android and iOS projects disagree, the command fails and names both. Dynamic config (`app.config.js`, Gradle scripts) is never run.
+All of these paths are relative to the current directory. From a React Native root, the Android files sit under `android/`, so only `app.json` and the iOS files are read there.
+
+If nothing is found, the error lists every location. If two of these files declare different schemes, the command fails and names both. Dynamic config (`app.config.js`, Gradle scripts) is never run.
 
 ## Config files
 

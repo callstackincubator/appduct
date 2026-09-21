@@ -66,7 +66,7 @@ You don't need keys, certificates, or a config plugin for a first run, in any bu
        - **iOS:** add the scheme under `CFBundleURLTypes` in `Info.plist` (Xcode: target → Info → URL Types).
        - **Android:** add an intent filter with `android.intent.action.VIEW` and `<data android:scheme="myapp" />` to your main activity in `AndroidManifest.xml`.
 
-       The CLI finds the scheme in these files automatically when you run it from the project root.
+       Use the same scheme on both platforms. Run from the project root, the CLI reads it from the iOS `Info.plist`; it doesn't look inside `android/`. If the app has no iOS project, record the scheme with `appduct init --scheme myapp` in step 5.
      </TabItem>
    </Tabs>
 
@@ -174,7 +174,7 @@ If your app handles incoming links itself (custom routing, an in-app QR scanner)
 
 **Android shows an "Open with" chooser, or nothing happens.** More than one installed app declares your scheme. Pass `--app-id` with your package name, or record it with `appduct init --android-app-id`.
 
-**`appduct link` reports conflicting schemes.** Your `ios/` and `android/` projects declare different schemes. Pass `--scheme`, or record one with `appduct init --scheme`.
+**Links open on iOS but not on Android (bare React Native).** From the project root, the CLI takes the scheme from the iOS `Info.plist`, so an Android app that declares a different scheme never receives the link. Use the same scheme on both platforms, or pass `--scheme`.
 
 **`registerTool` throws in development.** The schema can't describe itself to agents (for example, Zod 3 or plain Valibot on its own), or the tool name or group is malformed. The error says what to fix. See [Writing tools](/appduct/guides/writing-tools/).
 
