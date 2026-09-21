@@ -66,7 +66,7 @@ You don't need keys, certificates, or a config plugin for a first run, in any bu
        - **iOS:** add the scheme under `CFBundleURLTypes` in `Info.plist` (Xcode: target → Info → URL Types).
        - **Android:** add an intent filter with `android.intent.action.VIEW` and `<data android:scheme="myapp" />` to your main activity in `AndroidManifest.xml`.
 
-       Use the same scheme on both platforms. Run from the project root, the CLI reads it from the iOS `Info.plist`; it doesn't look inside `android/`. If the app has no iOS project, record the scheme with `appduct init --scheme myapp` in step 5.
+       Use the same scheme on both platforms. When you run the CLI from the project root, it reads the scheme from the iOS `Info.plist` and doesn't look inside `android/`. If the app has no iOS project, record the scheme with `appduct init --scheme myapp` in step 5.
      </TabItem>
    </Tabs>
 

@@ -220,7 +220,7 @@ It reads `.app`, `.ipa`, `.apk`, and `.aab` files. With `--assert-absent` or `--
 4. `scheme` in `~/.appduct/config.json`.
 5. Your project files, in the current directory: `app.json` (`expo.scheme`), then Android (`appductScheme` in `app/build.gradle(.kts)`, or `AndroidManifest.xml`), then iOS (`CFBundleURLSchemes` in an `Info.plist`, or XcodeGen's `project.yml`).
 
-If none has a scheme, the error lists every place it looked. If two project files declare different schemes, it stops and names both rather than picking one. From a React Native root, only `app.json` and the iOS files are read: the Android files are expected at `app/` in the current directory, not under `android/`. Appduct never runs `app.config.js` or a Gradle build to find the scheme; for dynamic config, use `appduct init --scheme`.
+If none has a scheme, the error lists every place it looked. If two project files declare different schemes, it stops and names both rather than picking one. From a React Native root, it reads only `app.json` and the iOS files, because it looks for Android's files in `app/` of the current directory, not in `android/`. Appduct never runs `app.config.js` or a Gradle build to find the scheme; for dynamic config, use `appduct init --scheme`.
 
 ## Keep the background service healthy
 
