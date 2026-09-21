@@ -3,7 +3,8 @@
 Use this file when the task is to add Appduct to a new React Native project.
 
 The development path needs **no keys, no pins and no config file**. The daemon generates
-its own host key on first start, the deep-link scheme is discovered from `app.json`, and a
+its own host key on first start, the deep-link scheme is discovered from the project's own
+files (`app.json`, or the Android/iOS project files — see below), and a
 debug build trusts the pin carried in the link itself. Everything under **Hardening** below
 is for builds that leave your machine — do not do it as part of a first-time setup.
 
@@ -32,7 +33,7 @@ is for builds that leave your machine — do not do it as part of a first-time s
    (`docs/SECURITY.md`, "Trust modes").
 7. Optional: use `addAppductListener("error", ...)` to observe bootstrap parse
    failures, connect failures, or socket errors — one unified channel for all of them.
-6. Advanced: use `getAppductState()` / `addAppductListener("stateChange", ...)` for
+8. Advanced: use `getAppductState()` / `addAppductListener("stateChange", ...)` for
    manual connection-state UI.
 9. Production builds that shouldn't ship Appduct at all should be built with
    `APPDUCT_ENABLED=0` rather than gated by a runtime flag. That variable drops the
@@ -74,8 +75,16 @@ If the project uses a dynamic `app.config.js` / `app.config.ts`, discovery does 
 2. Run the normal native dependency installation steps for the project.
 3. Configure URL schemes / intent filters so bootstrap links (`{scheme}:///?appduct=…`)
    open your app.
-4. Run `appduct init --scheme <scheme>` in the project root — there is no `app.json`
-   `expo.scheme` to discover, so name the scheme you configured in step 3. Add
+4. Run `appduct init` in the project root. With no `app.json` `expo.scheme`, discovery
+   falls back to static native project files, all relative to the directory you run it in
+   (never a walk-up): `app/build.gradle(.kts)`'s `appductScheme` manifest placeholder, then
+   `app/src/main/AndroidManifest.xml`'s first `<data android:scheme>` in a `VIEW` intent
+   filter, then any `Info.plist` up to two levels down for the first `CFBundleURLSchemes`
+   entry, then xcodegen's `project.yml`. From a bare React Native root the iOS plist probe
+   reaches `ios/<App>/Info.plist`, but the Android ones expect an Android project root
+   (`android/`), so pass `appduct init --scheme <scheme>` with the scheme you configured in
+   step 3 whenever discovery comes up empty. It also refuses to guess when two probes
+   resolve different schemes — `--scheme` is the answer there too. Add
    `--android-app-id <applicationId> --ios-app-id <bundle-id>` so device delivery works
    without an `--app-id` on every call.
 5. Add the optional private-LAN-only setting only if the project wants that restriction.

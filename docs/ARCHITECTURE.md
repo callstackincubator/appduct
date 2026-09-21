@@ -553,8 +553,20 @@ they cannot drift. First match wins:
    the state directory in use — those are *global* config, and matching them here would apply them
    one tier above their own)
 4. `scheme` in the state directory's `config.json`
-5. `<cwd>/app.json`'s `expo.scheme` (a string, or the first entry of an array — the same
-   normalization `app.plugin.js` applies; no walk-up)
+5. a static-file probe of the project in `<cwd>` (no walk-up), in this order — `scheme.ts`'s
+   `discoverStaticProjectScheme` owns the whole step:
+   a. `<cwd>/app.json`'s `expo.scheme` (a string, or the first entry of an array — the same
+      normalization `app.plugin.js` applies)
+   b. Android: `app/build.gradle(.kts)`'s `appductScheme` manifest placeholder, then
+      `app/src/main/AndroidManifest.xml`'s first `<data android:scheme>` in a `VIEW` intent
+      filter
+   c. iOS: any `Info.plist` up to two levels below the app root (excluding
+      `Pods`/`build`/`node_modules`/`DerivedData`) for the first `CFBundleURLSchemes` entry,
+      then xcodegen's `project.yml` for the same key
+
+   `native-scheme.ts` owns 5b/5c, parses every file statically (no `plutil`, no `xcodebuild`,
+   no Gradle evaluation), and refuses to guess when two of its probes resolve *different*
+   schemes — it throws a usage error naming both sources instead.
 6. otherwise an error naming every location above
 
 The project `.appduct/config.json` carries a second key alongside `scheme` since issue #63:
@@ -595,9 +607,11 @@ never guesses one from a discovered value the way it never guesses `scheme` from
 native probe (§10's discussion of `discoverNativeScheme`).
 
 Re-running it is always safe: it keeps the scheme (and any recorded app id) already recorded and
-only *notes* a scheme divergence when `app.json` has come to declare a different one — a command
+only *notes* a scheme divergence when discovery (`app.json` or a native project file) has come to
+declare a different one — a command
 documented as safe to re-run must not start failing because a scheme was renamed. `--scheme
-<different>` needs `--force` to replace a recorded value, `--force` alone re-adopts `app.json`'s;
+<different>` needs `--force` to replace a recorded value, `--force` alone re-adopts whatever
+discovery currently finds;
 the same "replacing needs `--force`" rule applies to `--ios-app-id`/`--android-app-id`, which have
 no discovery tier to re-adopt on `--force` alone. `--force` merges rather than truncating. Note
 the inverse of the rule above: a project `.appduct/` is committed, so `--state-dir` must never
@@ -760,12 +774,13 @@ deviations):
   the daemon's own reason — surfaced on the unified `stateChange` event's `reason` — rather
   than retried for the remainder of the grace window. Transport-level closes stay
   retryable, including `1011 send_failed` and `1001 daemon_shutdown`: the daemon may well
-  be back before grace expires. The `sessionChange` event itself carries only
-  `{ sessionId, alias }`, both `null` once the session is gone; it no longer distinguishes
-  a claim from a resume from a loss (that categorization was JS-tracked state that no
-  longer exists on this side of the bridge) — a listener that needs the departing session's
-  id/alias keeps the most recent non-null event, and reads the reason off the paired
-  `stateChange` event.
+  be back before grace expires. The `sessionChange` event mirrors native's `onSessionChange`
+  exactly: `{ type, sessionId, alias, reason? }`, where `type` is `"claimed"` / `"resumed"` /
+  `"lost"`, `sessionId`/`alias` go `null` once the session is gone, and `reason` is set only
+  for `"lost"` (`revoked`, `grace_expired`, `closed_by_app`, or a terminal close reason from
+  the daemon — PROTOCOL.md §7). That mirrors the paired `stateChange` event's `reason`, which
+  says the same thing from the state machine's perspective rather than the session's; a
+  listener that needs the departing session's id/alias keeps the most recent non-null event.
 - Native's own `handleUrl(url)` decodes the v2 bootstrap payload, checks expiry and the
   private-IP policy (`allowPrivateLanOnly`, read once from the same manifest/plist key
   `resolveTrustedPins` uses), and decides whether the link outranks a session already held
