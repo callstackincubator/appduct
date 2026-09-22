@@ -26,8 +26,9 @@ const COMPOSITION_ROOTS = [
 
 // Burn-down list: files that reached Node I/O directly before the ports rule existed. Remove
 // a file from here when you convert it (port in the module, node-*.ts adapter beside it,
-// in-memory fake for tests). Never add a file to this list.
-const LEGACY_NODE_IO = [
+// in-memory fake for tests). Never add a file to this list. lint-boundaries.test.ts checks
+// that every entry here still violates, so a converted file cannot be left behind.
+export const LEGACY_NODE_IO = [
   "packages/appduct/src/artifact-inspect.ts",
   "packages/appduct/src/cli/open-target.ts",
   "packages/appduct/src/commands/init.ts",
@@ -52,7 +53,7 @@ const LEGACY_NODE_IO = [
 
 // Rule 4, tests observe public behaviour only. These three module-mocked before the ban; same
 // deal as above: remove when converted, never add.
-const LEGACY_VI_MOCK = [
+export const LEGACY_VI_MOCK = [
   "packages/appduct/src/__tests__/audit-retention.test.ts",
   "packages/appduct/src/__tests__/log-rotation.test.ts",
   "packages/appduct/src/__tests__/tools-command.test.ts",
@@ -61,7 +62,7 @@ const LEGACY_VI_MOCK = [
 // Tests that reached inside the client module before the boundary rule existed. Remove when
 // converted to the module's index.ts (exporting what the test needs, if it belongs on the public
 // API, or testing through it). Never add a file here.
-const LEGACY_MODULE_BOUNDARY = [
+export const LEGACY_MODULE_BOUNDARY = [
   "packages/appduct/src/__tests__/app-client.test.ts",
   "packages/appduct/src/__tests__/call-timeouts.test.ts",
   "packages/appduct/src/__tests__/link-open.integration.test.ts",
@@ -85,6 +86,32 @@ const discoverModules = () => {
 };
 const modules = discoverModules();
 const inside = (file, dir) => file === dir || file.startsWith(dir + path.sep);
+
+const PORT_MESSAGE =
+  "Reach outside the process through a port: define the interface in the module, put the real adapter in a node-<capability>.ts file beside it, and construct it in a composition root. See the architecture skill.";
+const MOCK_MESSAGE =
+  "Tests observe public behaviour; a test that needs to mock I/O is telling you the code needs a port with an in-memory fake.";
+const NODE_IO_NAMES = new Set(NODE_IO.flatMap((name) => [name, `node:${name}`]));
+
+export const NODE_IO_RESTRICTION = ["error", { paths: [...NODE_IO_NAMES].map((name) => ({ name, message: PORT_MESSAGE })) }];
+export const VI_MOCK_RESTRICTION = [
+  "error",
+  { object: "vi", property: "mock", message: MOCK_MESSAGE },
+  { object: "vi", property: "doMock", message: MOCK_MESSAGE },
+];
+
+// no-restricted-imports never visits import() expressions, so the dynamic form of the same
+// escape gets its own rule under the same exemptions.
+const noNodeIoDynamicImport = {
+  meta: { type: "problem", docs: { description: "no dynamic import() of Node I/O outside adapters" }, schema: [], messages: { port: PORT_MESSAGE } },
+  create(context) {
+    return {
+      ImportExpression(node) {
+        if (node.source.type === "Literal" && NODE_IO_NAMES.has(node.source.value)) context.report({ node, messageId: "port" });
+      },
+    };
+  },
+};
 
 const moduleBoundary = {
   meta: {
@@ -121,7 +148,7 @@ export default [
   {
     files: SOURCE,
     languageOptions: { parser: tseslint.parser, ecmaVersion: 2024, sourceType: "module" },
-    plugins: { appduct: { rules: { "module-boundary": moduleBoundary } } },
+    plugins: { appduct: { rules: { "module-boundary": moduleBoundary, "no-node-io-dynamic-import": noNodeIoDynamicImport } } },
   },
   {
     files: SOURCE,
@@ -131,27 +158,11 @@ export default [
   {
     files: SOURCE,
     ignores: ["**/__tests__/**", "**/node-*.ts", ...COMPOSITION_ROOTS, ...LEGACY_NODE_IO],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: NODE_IO.flatMap((name) => [name, `node:${name}`]).map((name) => ({
-            name,
-            message: "Reach outside the process through a port: define the interface in the module, put the real adapter in a node-<capability>.ts file beside it, and construct it in a composition root. See the architecture skill.",
-          })),
-        },
-      ],
-    },
+    rules: { "no-restricted-imports": NODE_IO_RESTRICTION, "appduct/no-node-io-dynamic-import": "error" },
   },
   {
     files: TESTS,
     ignores: LEGACY_VI_MOCK,
-    rules: {
-      "no-restricted-properties": [
-        "error",
-        { object: "vi", property: "mock", message: "Tests observe public behaviour; a test that needs to mock I/O is telling you the code needs a port with an in-memory fake." },
-        { object: "vi", property: "doMock", message: "Tests observe public behaviour; a test that needs to mock I/O is telling you the code needs a port with an in-memory fake." },
-      ],
-    },
+    rules: { "no-restricted-properties": VI_MOCK_RESTRICTION },
   },
 ];

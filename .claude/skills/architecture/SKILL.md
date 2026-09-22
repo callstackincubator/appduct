@@ -62,8 +62,9 @@ Each port ships two **adapters**, side by side in source, never under `__tests__
   needs to inspect it (`files()`, `modes()`). Tests across the repo reuse it.
 
 Modules receive ports as constructor or factory arguments. Only a **composition root**
-constructs real adapters: the CLI entry (`packages/appduct/src/cli/...`) and the daemon entry
-(`packages/appduct/src/daemon/daemon.ts`). Nothing else writes `new NodeFilesystem()`.
+constructs real adapters. There are three, and lint knows exactly these:
+`packages/appduct/src/bin.ts`, `packages/appduct/src/cli.ts` and
+`packages/appduct/src/daemon/daemon.ts`. Nothing else writes `new NodeFilesystem()`.
 
 Why this matters here: tests then never touch the real home directory, the real socket path
 or the real clock, and a test that needs to mock I/O is the signal that a port is missing.
