@@ -10,9 +10,9 @@ skill in `.claude/skills/`) turns that section into a versioned heading.
 
 ## Unreleased
 
-- **Fix: an ungrouped tool reports `group: null` to every reader.** `appduct_describe_tool` and
-  the descriptor `appduct_call_tool` echoes back dropped the key instead of reporting `null`, so
-  they disagreed with `appduct_list_tools` about the same tool. `ToolDescriptor.group` is
+- **Fix: an ungrouped tool reports `group: null` to every reader.** `appduct_describe_tool`
+  dropped the key instead of reporting `null`, so it disagreed with `appduct_list_tools` about
+  the same tool. `ToolDescriptor.group` is
   `string | undefined` again — it is the registration type, and registering `null` has always been
   rejected — so the type app authors write against (`appduct/client`, the React Native SDK's
   `getRegisteredTools()`) no longer admits a value that throws. Code reading a `tools.list` entry
