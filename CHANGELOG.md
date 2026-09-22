@@ -8,7 +8,7 @@ This file is maintained by hand. There is no automated changelog tooling (see
 `docs/CI.md#release-policy` for why) — update this file as part of the commit that bumps the
 package versions for a release.
 
-## Unreleased
+## 0.11.0 (2026-09-22)
 
 - **Docs: designing tools for agents.** `docs/TOOLS.md` gains a "Designing tools for agents"
   section (name by intent, annotate, pair mutations with observers, declare `outputSchema`,
