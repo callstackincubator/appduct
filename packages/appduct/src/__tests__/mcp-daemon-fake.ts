@@ -135,11 +135,15 @@ export const createFakeDaemon = (): FakeDaemon => {
       alias: options.alias,
       sessionId,
       setTools: (tools) => {
-        const entries = tools.map((tool) => ({
+        const entries: FakeToolEntry[] = tools.map((tool) => ({
           description: "A test tool.",
           policy: "allow" as const,
           ...tool,
-        })) as FakeToolEntry[];
+          // The daemon normalises an ungrouped tool to `group: null` on every entry it serves
+          // (`daemon/daemon.ts`), so the fake does too. Without it these entries would carry a
+          // shape no daemon sends, and a reader that drops the key would pass here.
+          group: tool.group ?? null,
+        }));
 
         toolsByAlias.set(options.alias, entries);
         summary.toolCount = entries.length;
