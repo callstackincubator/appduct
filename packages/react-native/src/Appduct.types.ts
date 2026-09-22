@@ -36,10 +36,12 @@ export type AppductConnectOptions = {
   deviceOs?: string;
   /**
    * The bootstrap deep link's separate `pin` query param (`bootstrap.ts`'s `extractLinkPin`),
-   * distinct from and never part of the `appduct` v2 binary payload. Opt-in hardening
-   * dev-mode: native only trusts this for the connection when built in debug mode with no
-   * build-time `cliPins` configured — embedded pins always win, and release builds without pins
-   * keep the existing hard error regardless of `linkPin`.
+   * distinct from and never part of the `appduct` v2 binary payload. Opt-in hardening dev-mode:
+   * native trusts this for the connection alone whenever the effective trust mode is `"link"` —
+   * the default in *every* build type when no build-time `cliPins` are configured, since trust
+   * resolution consults no build-type signal (`docs/SECURITY.md` "Trust modes"). Embedded pins
+   * always win, so a build with `cliPins` ignores this outright; a `"link"` build that carries no
+   * usable `linkPin` keeps the existing hard error.
    */
   linkPin?: string;
 };

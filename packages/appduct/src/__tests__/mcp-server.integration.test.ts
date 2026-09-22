@@ -814,7 +814,7 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
 
     const data = result.structuredContent as { deepLink: string };
 
-    // Without this, an app whose effective trust is "link" (a debug build with no embedded
+    // Without this, an app whose effective trust is "link" (any build type with no embedded
     // cliPins) cannot pin the daemon from an agent-minted link, though it can from a CLI-minted
     // one. It matters most for ios-device, the first MCP path reaching a phone over the LAN.
     const query = new URLSearchParams(data.deepLink.slice(data.deepLink.indexOf("?") + 1));

@@ -84,8 +84,8 @@ From `link`'s JSON output, use:
 - **`data.deepLinkPayload`** to compose the full URL yourself, or just print/relay
   **`data`**'s rendered deep link (`<scheme>:///?appduct=<deepLinkPayload>&pin=<sha256/...>`)
   for a human to open, or scan the QR from `appduct link --scheme myapp --qr` on a TTY.
-  Relay the rendered link whole — the `pin` param is what lets a debug build with no embedded
-  pins trust the daemon, and anything re-parsing the payload must stop at the `&`.
+  Relay the rendered link whole — the `pin` param is what lets a build with no embedded pins
+  trust the daemon, in any build type, and anything re-parsing the payload must stop at the `&`.
 - **`data.sessionId`** — the selector to poll with in the next step.
 
 For a simulator/emulator you control directly, skip the deep link entirely:
