@@ -161,7 +161,14 @@ export type ToolsListParams = SessionSelectorParams & {
  * that would apply to it right now — resolved daemon-side (it needs `session.alias` and
  * `config.policy`) so the MCP server knows which calls need an elicitation prompt without a
  * second round trip. */
-export type ToolsListEntry = ToolDescriptor & {
+export type ToolsListEntry = Omit<ToolDescriptor, "group"> & {
+  /**
+   * Always present on a listing: the tool's group, or `null` when it has none. Apps register an
+   * ungrouped tool by *omitting* `group`; the daemon normalises that to `null` here so that entries
+   * and the `groups` summary speak one vocabulary (see `ToolDescriptor.group`). A daemon predating
+   * tool groups omits the key entirely, which callers normalise with `entry.group ?? null`.
+   */
+  group: string | null;
   policy: EffectivePolicyDecision;
 };
 

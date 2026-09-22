@@ -342,7 +342,10 @@ const renderToolDetail = (colors: ColorPalette, tool: ToolDescriptor, flags: Glo
       ["Description", tool.description],
       ["Input schema", tool.input_schema],
       ["Output schema", tool.output_schema],
-      ["Group", tool.group],
+      // `?? undefined` keeps an ungrouped tool's row hidden rather than printing a bare "null":
+      // `renderFields` drops undefined rows, and the machine form's `null` is for consumers, not
+      // for a human scanning one tool's schema.
+      ["Group", tool.group ?? undefined],
       ["Annotations", tool.annotations],
       // Only rendered for a tool that declares one; `renderFields` drops undefined rows, so a
       // tool on the daemon's default deadline shows no line at all rather than a misleading

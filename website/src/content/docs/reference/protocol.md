@@ -203,7 +203,7 @@ The app runs its own timer per call, using the tool's `timeout_ms` or 10 seconds
 | `output_schema` | No | A JSON object |
 | `annotations` | No | `readOnlyHint`, `destructiveHint`, `idempotentHint`. `destructiveHint: true` selects the `destructive` policy. |
 | `timeout_ms` | No | Positive integer. The default time limit for calls; the service clamps it to 1,000–600,000. |
-| `group` | No | `^[a-zA-Z0-9_-]{1,64}(/[a-zA-Z0-9_-]{1,64})?$`. Omit for an ungrouped tool; `null` and `""` are invalid. |
+| `group` | No | `^[a-zA-Z0-9_-]{1,64}(/[a-zA-Z0-9_-]{1,64})?$`. Omit for an ungrouped tool; `null` and `""` are invalid. A tool listing reports an ungrouped tool's `group` back as `null`. |
 
 Descriptor fields are snake_case. A camelCase `timeoutMs` on a descriptor is an unknown field, not a time limit. The service never inspects schema contents, only that they're objects. Services that don't know `group` ignore it.
 

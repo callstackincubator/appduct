@@ -297,6 +297,13 @@ field rather than an annotation because `annotations` is exactly the three MCP h
 is never emitted on the MCP `Tool` JSON. A daemon that predates groups ignores the field (like
 any unknown descriptor key), so an app can send it to any daemon.
 
+"No group" is spelled one way per direction. On the way in an app *omits* `group`; on the way
+out a `tools.list` entry *always* reports it, as `null` for an ungrouped tool. That is the same
+value the `groups` summary uses for its own ungrouped bucket (ARCHITECTURE.md §5's `tools.list`),
+so one test — `group === null` — answers "ungrouped" in either half of a listing. Consumers must
+not probe for the key's presence instead, and a daemon that predates groups simply omits it from
+entries.
+
 ## 6. Session state machine
 
 ```

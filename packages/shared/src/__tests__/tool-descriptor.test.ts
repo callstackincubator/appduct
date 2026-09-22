@@ -206,6 +206,24 @@ describe("tool groups", () => {
     expect(toolGroupMatches("checkout/paymentx", "checkout/payment")).toBe(false);
     expect(toolGroupMatches("Checkout", "checkout")).toBe(false);
     expect(toolGroupMatches(undefined, "checkout")).toBe(false);
+    // The `null` a `tools.list` entry carries for an ungrouped tool behaves like the `undefined` an
+    // app registered with: it matches no group, so `--group` can never sweep in ungrouped tools.
+    expect(toolGroupMatches(null, "checkout")).toBe(false);
+    expect(toolGroupMatches(null, "")).toBe(false);
+  });
+
+  test("summarizeToolGroups treats a listing entry's null group like an omitted one", () => {
+    // The daemon summarizes over `tools.list` entries, where an ungrouped tool's `group` is `null`
+    // rather than absent. If only `undefined` counted, the summary's ungrouped row would vanish the
+    // moment entries were normalised — silently, and only for the listing that made them so.
+    const asRegistered = [{ group: "cart" }, {}, {}];
+    const asListed = [{ group: "cart" }, { group: null }, { group: null }];
+
+    expect(summarizeToolGroups(asListed)).toEqual(summarizeToolGroups(asRegistered));
+    expect(summarizeToolGroups(asListed)).toEqual([
+      { group: "cart", total: 1 },
+      { group: null, total: 2 },
+    ]);
   });
 
   test("summarizeToolGroups counts parents including subgroups, keeps a parent before its subgroups, null last", () => {

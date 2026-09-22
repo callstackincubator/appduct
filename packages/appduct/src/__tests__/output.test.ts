@@ -236,6 +236,27 @@ describe("output rendering", () => {
     expect(renderDetail()).not.toContain("Timeout (ms)");
   });
 
+  test("tools detail renders a Group row for a grouped tool and none for one whose group is null", () => {
+    // A `tools.list` entry reports an ungrouped tool as `group: null`, not as an absent key, so the
+    // human detail view must normalise that away rather than print a bare "Group  null" row.
+    const renderDetail = (group: string | null): string | undefined =>
+      renderResult(
+        {
+          ok: true,
+          data: {
+            name: "pay_card",
+            description: "Pays for the cart.",
+            group,
+          },
+        },
+        { command: "tools", flags: flags() },
+      ).stdout;
+
+    expect(renderDetail("checkout/payment")).toMatch(/Group\s+checkout\/payment/);
+    expect(renderDetail(null)).not.toMatch(/Group\s/);
+    expect(renderDetail(null)).not.toContain("null");
+  });
+
   test("tools detail output renders full schema/annotations", () => {
     const rendered = renderResult(
       {

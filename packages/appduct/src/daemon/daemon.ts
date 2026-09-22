@@ -603,6 +603,10 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           // server knows which calls need an elicitation prompt without a second round trip.
           const entries: ToolsListEntry[] = resolved.registry.list().map((descriptor) => ({
             ...descriptor,
+            // Normalised once, here, so every reader of a listing finds the key: an app registers an
+            // ungrouped tool by omitting `group`, a listing reports it as `null` — the same value the
+            // `groups` summary uses for its ungrouped bucket.
+            group: descriptor.group ?? null,
             policy: evaluatePolicy(descriptor, { alias: resolved.alias }, config.policy),
           }));
 

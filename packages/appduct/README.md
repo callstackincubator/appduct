@@ -105,7 +105,7 @@ Groups
 $ appduct tools --group checkout
 ```
 
-`--group checkout` lists `checkout` and all of its subgroups; `--group checkout/payment` lists only that subgroup. Matching is by whole name and case-sensitive, so `--group checkout` never matches a `checkoutx` group. `--group` combines with `--filter`, `--limit` and `--offset`. When a listing without `--group` is cut short, the footer names the top-level groups to narrow to: `Showing 5 of 22 tools (offset 0). Narrow with --group <name> (groups: cart 12, checkout 8) or --filter <text>, or page with --offset <n>.` A group that is not one or two `/`-separated names of letters, digits, `_` and `-` (for example `checkout/` or `a/b/c`) is a usage error. With `--json`, each tool carries its `group`, and `groups` lists every group with its count, whatever `--group` or `--filter` you passed.
+`--group checkout` lists `checkout` and all of its subgroups; `--group checkout/payment` lists only that subgroup. Matching is by whole name and case-sensitive, so `--group checkout` never matches a `checkoutx` group. `--group` combines with `--filter`, `--limit` and `--offset`. When a listing without `--group` is cut short, the footer names the top-level groups to narrow to: `Showing 5 of 22 tools (offset 0). Narrow with --group <name> (groups: cart 12, checkout 8) or --filter <text>, or page with --offset <n>.` A group that is not one or two `/`-separated names of letters, digits, `_` and `-` (for example `checkout/` or `a/b/c`) is a usage error. With `--json`, each tool carries its `group` — `null` for an ungrouped tool, exactly the value `groups` uses for its own ungrouped row — and `groups` lists every group with its count, whatever `--group` or `--filter` you passed.
 
 ### The deep-link scheme
 
