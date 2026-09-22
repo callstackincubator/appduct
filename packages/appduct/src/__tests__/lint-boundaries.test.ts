@@ -5,7 +5,7 @@
  * only from adapters and composition roots, and tests never module-mock.
  */
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { ESLint } from "eslint";
 import { describe, expect, test } from "vitest";
@@ -39,6 +39,11 @@ describe("lint: ports", () => {
     expect(rules).toEqual([]);
   });
 
+  test("a dynamic import() of Node I/O fails too", async () => {
+    const rules = await lint("packages/appduct/src/daemon/probe-new.ts", 'export const read = async (p: string) => (await import("node:fs/promises")).readFile(p, "utf8");\n');
+    expect(rules).toContain("appduct/no-node-io-dynamic-import");
+  });
+
   test("the same rule holds in @appduct/shared", async () => {
     const rules = await lint("packages/shared/src/domains/probe-new.ts", 'import { platform } from "node:os";\nexport const p = platform;\n');
     expect(rules).toContain("no-restricted-imports");
@@ -61,8 +66,10 @@ describe("lint: module boundaries", () => {
     expect(rules).toEqual([]);
   });
 
-  test("a directory without an index.ts is not a module yet, so its files are importable", async () => {
-    const rules = await lint("packages/appduct/src/mcp/probe.ts", 'import { createEventBus } from "../daemon/event-bus.js";\nexport const b = createEventBus;\n');
+  test("a directory without an index.ts is not a module, so its files are importable", async () => {
+    // Discovery only lists directories that exist and have an index.ts, so a path that never
+    // will is the one that cannot turn this test stale.
+    const rules = await lint("packages/appduct/src/mcp/probe.ts", 'import { thing } from "../no-such-dir/thing.js";\nexport const t = thing;\n');
     expect(rules).toEqual([]);
   });
 });
@@ -76,5 +83,44 @@ describe("lint: tests", () => {
   test("a test may reach Node I/O for its own temp files", async () => {
     const rules = await lint("packages/appduct/src/__tests__/probe.test.ts", 'import { mkdtemp } from "node:fs/promises";\nexport const t = mkdtemp;\n');
     expect(rules).toEqual([]);
+  });
+});
+
+/**
+ * The burn-down lists exempt files that predate the rules. Each entry must still be a genuine
+ * violator: a file converted to a port but left on the list would silently re-admit the exact
+ * regression it was converted to remove. Linting each listed file with its exemption removed
+ * must therefore be red, and a file that no longer exists fails here rather than lingering.
+ */
+describe("lint: burn-down lists", () => {
+  type Config = {
+    LEGACY_NODE_IO: string[];
+    LEGACY_VI_MOCK: string[];
+    LEGACY_MODULE_BOUNDARY: string[];
+    NODE_IO_RESTRICTION: unknown;
+    VI_MOCK_RESTRICTION: unknown;
+  };
+  const loadConfig = async (): Promise<Config> => import(pathToFileURL(path.join(repoRoot, "eslint.config.mjs")).href);
+
+  const violators = async (files: string[], rules: Record<string, unknown>, expectedRule: string) => {
+    const withoutExemption = new ESLint({ cwd: repoRoot, overrideConfig: [{ files, rules }] });
+    const results = await withoutExemption.lintFiles(files);
+    return results.filter((r) => r.messages.some((m) => m.ruleId === expectedRule)).map((r) => path.relative(repoRoot, r.filePath));
+  };
+
+  test("every LEGACY_NODE_IO entry still reaches Node I/O directly", async () => {
+    const { LEGACY_NODE_IO, NODE_IO_RESTRICTION } = await loadConfig();
+    expect(LEGACY_NODE_IO.length).toBeGreaterThan(0);
+    expect(await violators(LEGACY_NODE_IO, { "no-restricted-imports": NODE_IO_RESTRICTION }, "no-restricted-imports")).toEqual(LEGACY_NODE_IO);
+  });
+
+  test("every LEGACY_VI_MOCK entry still module-mocks", async () => {
+    const { LEGACY_VI_MOCK, VI_MOCK_RESTRICTION } = await loadConfig();
+    expect(await violators(LEGACY_VI_MOCK, { "no-restricted-properties": VI_MOCK_RESTRICTION }, "no-restricted-properties")).toEqual(LEGACY_VI_MOCK);
+  });
+
+  test("every LEGACY_MODULE_BOUNDARY entry still reaches inside a module", async () => {
+    const { LEGACY_MODULE_BOUNDARY } = await loadConfig();
+    expect(await violators(LEGACY_MODULE_BOUNDARY, { "appduct/module-boundary": "error" }, "appduct/module-boundary")).toEqual(LEGACY_MODULE_BOUNDARY);
   });
 });
