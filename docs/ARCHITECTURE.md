@@ -66,7 +66,9 @@ Deliberately out of scope, so the boundaries of the design are explicit:
 ## 3. State directory
 
 Default `~/.appduct/`, overridable with `APPDUCT_STATE_DIR` (tests rely on the
-override). Created lazily with mode `0700`. Layout:
+override). Created lazily with mode `0700` — by `startDaemon`, and by the auto-spawn path before
+it takes the spawn-lock (§4), since that writes the lock and `daemon.log` from the *parent*
+process, before the daemon it spawns exists. Layout:
 
 | Path | Purpose | Mode |
 | --- | --- | --- |
@@ -154,9 +156,10 @@ only-when-no-sessions-are-live (§4, "Version drift").
   `daemonLogMaxBytes` — §3); `stop` sends `daemon.shutdown` over
   RPC (SIGTERM fallback via pidfile); `status` renders `daemon.status`.
 - **Auto-spawn:** the shared RPC client library used by every CLI command attempts to
-  connect to `daemon.sock`. On `ENOENT`/`ECONNREFUSED` it (1) takes an exclusive
-  spawn-lock file to prevent double-spawn races, (2) spawns `daemon run` detached,
-  (3) polls the socket until ready (timeout 5 s), (4) retries the original request.
+  connect to `daemon.sock`. On `ENOENT`/`ECONNREFUSED` it (1) creates the state directory if it
+  is not there yet (§3), (2) takes an exclusive spawn-lock file to prevent double-spawn races,
+  (3) spawns `daemon run` detached, (4) polls the socket until ready (timeout 5 s), (5) retries
+  the original request.
   A stale socket file with a dead pid is unlinked before spawning.
 - Single instance is enforced via the pidfile (write with `O_EXCL`; on conflict, check
   liveness and take over only if dead). Liveness is `process.kill(pid, 0)` — with `EPERM` counted

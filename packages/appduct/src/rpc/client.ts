@@ -1,7 +1,8 @@
 /**
  * The auto-spawning RPC client library (ARCHITECTURE.md §4, §5) used by the CLI, MCP server, and
- * tests to talk to `daemon.sock`. On `ENOENT`/`ECONNREFUSED` it takes an exclusive spawn-lock,
- * spawns `daemon run` detached, polls the socket until ready, then retries the request once.
+ * tests to talk to `daemon.sock`. On `ENOENT`/`ECONNREFUSED` it creates the state dir if it is
+ * missing, takes an exclusive spawn-lock, spawns `daemon run` detached, polls the socket until
+ * ready, then retries the request once.
  */
 
 import { connect, type Socket } from "node:net";
@@ -18,7 +19,7 @@ import {
 } from "../daemon/log-rotation.js";
 import { isProcessAlive } from "../daemon/pidfile.js";
 import { isSocketConnectable } from "../daemon/socket-probe.js";
-import { getStateDirPaths, type StateDirPaths } from "../daemon/state-dir.js";
+import { ensureStateDir, getStateDirPaths, type StateDirPaths } from "../daemon/state-dir.js";
 import { getPackageRoot } from "../package-root.js";
 import { DAEMON_VERSION_OVERRIDE_ENV } from "../package-version.js";
 
@@ -584,6 +585,13 @@ const spawnDaemonAndWait = async (
   pollIntervalMs: number,
   options: SpawnDaemonOptions = {},
 ): Promise<SpawnDaemonOutcome> => {
+  // On a fresh machine nothing has created the state dir yet — `startDaemon` does it, but only
+  // once the child is already running, and everything below this line writes into that directory
+  // *from the parent*: the spawn-lock right here, then `daemon.log`'s fd inside `defaultSpawn`.
+  // Without this, the first command on a clean install (including `appduct mcp`, which dies
+  // before an MCP client ever finishes `initialize`) fails with a bare `ENOENT` on the lock path.
+  await ensureStateDir(paths.root);
+
   const acquiredLock = await acquireSpawnLock(paths.spawnLockPath);
   let lockWaitTimedOut = false;
 

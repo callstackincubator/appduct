@@ -8,6 +8,18 @@ This file is maintained by hand; there is no automated changelog tooling. Every 
 user-visible change adds a line under `Unreleased`, and the release PR (see the `cut-release`
 skill in `.claude/skills/`) turns that section into a versioned heading.
 
+## Unreleased
+
+- **Fix: the first Appduct command on a clean machine no longer fails with a bare `ENOENT`.**
+  Nothing created the state directory before the auto-spawn path wrote into it: `~/.appduct` is
+  created by `startDaemon`, but the spawn-lock and `daemon.log`'s fd are opened by the *parent*
+  process, before the daemon it spawns exists. So with no `~/.appduct` yet, every command that
+  auto-spawns a daemon — `appduct ls`, `appduct daemon start|status`, and `appduct mcp`, which
+  died before an MCP client could finish `initialize` — failed with
+  `ENOENT: ... open '~/.appduct/daemon.spawn.lock'` until someone ran `appduct daemon run` in the
+  foreground once. The auto-spawn path now creates the directory (mode `0700`, same as the daemon
+  would) before taking the lock.
+
 ## 0.11.0 (2026-09-22)
 
 - **Docs: designing tools for agents.** `docs/TOOLS.md` gains a "Designing tools for agents"
