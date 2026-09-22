@@ -54,6 +54,7 @@
     "@types/node": "^22.10.0",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.25.12",
+    "eslint": "^10",
     "typescript": "~5.9.2"
   },
   "files": [

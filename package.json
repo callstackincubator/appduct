@@ -16,7 +16,9 @@
     "website"
   ],
   "devDependencies": {
+    "eslint": "^10",
     "turbo": "^2.8.20",
+    "typescript-eslint": "^8",
     "vitest": "^4.1.6"
   },
   "peerDependencies": {
