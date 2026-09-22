@@ -46,6 +46,10 @@ PR added and check each criterion has one that fails without the change.
 - **Simplification checklist** from the `architecture` skill.
 - **Changelog and docs.** A user-visible change that neither adds nor amends an `Unreleased`
   line; a surface `docs/ARCHITECTURE.md` still describes the old way.
+- **User-facing text.** READMEs, `docs/`, website, `skills/appduct`, CLI help, error messages
+  and changelog entries follow the `user-facing-docs` skill: implementation detail leaked,
+  marketing adjectives, time-relative words, an unhappy path left out. Load that skill when
+  the diff touches those paths.
 
 You may run `pnpm typecheck` and the affected tests on the PR head. CI results come from
 `gh pr checks`; do not repeat green CI jobs.

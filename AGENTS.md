@@ -76,6 +76,7 @@ Load the skill before starting the matching task. They live in `.claude/skills/`
 | Investigating a bug report or checking a feature is ready | `triage-issue` |
 | Writing a bug report or feature request | `file-issue` |
 | Running the app on a simulator and driving it through the CLI | `e2e-device` |
+| Writing or editing anything an Appduct user reads: READMEs, `docs/`, website, the shipped skill, CLI help, error messages, changelog | `user-facing-docs` |
 | Cutting a release | `cut-release` |
 | Curating agent memory (monthly, or when the inbox has notes) | `review-memory` |
 | Taking an issue from `status:ready` to a reviewed, tested PR | `work-issue` (orchestrator) |
