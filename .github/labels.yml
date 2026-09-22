@@ -1,4 +1,5 @@
-# Source of truth for this repo's labels. Apply with scripts/sync-labels.sh.
+# The repository's label set, applied once by hand on 2026-09-22. Adding a label means editing
+# this file and creating it with `gh label create`, so the two stay in step.
 #
 # Rules: exactly one type: and one status: per issue; any number of platform: and area:.
 # platform: is absent when the issue is platform-independent (daemon, CLI, MCP).

@@ -66,8 +66,7 @@ gh issue create --title "<under 70 chars>" \
 
 Labels, from `.github/labels.yml`: exactly one `type:`, `status:needs-triage` always,
 `platform:` only when platform-specific, `area:` when one fits (`area:tooling` covers repo
-scripts, CI and workspace config). If `gh label list` shows the namespaced labels are
-missing, run `scripts/sync-labels.sh` first.
+scripts, CI and workspace config).
 
 ## Report
 

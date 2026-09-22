@@ -11,7 +11,6 @@ If told not to post, print the comment and the label commands instead.
 
 ```bash
 gh issue view <N> --comments --json title,body,labels,comments
-gh label list --limit 100 | grep -c '^status:' || scripts/sync-labels.sh   # labels present?
 ```
 
 An issue with no `type:` label: decide bug or feature from the body and add the label. A
