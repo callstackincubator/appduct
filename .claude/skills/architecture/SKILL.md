@@ -13,8 +13,9 @@ Read the `architecture` section of `.agents/memory/LESSONS.md` before starting, 
 ## Modules
 
 A module is a directory. Its `index.ts` exports the public API; everything else in the
-directory is internal. Nothing outside the directory imports a non-index file, and lint
-enforces that once the boundary rule lands.
+directory is internal. Nothing outside the directory imports a non-index file. Lint enforces
+this (`appduct/module-boundary` in the root `eslint.config.mjs`) for every directory that has
+an `index.ts`, so adding one is what turns a directory into a module.
 
 Design the public API before the internals. Ask what the caller needs to know to use the
 module correctly; that and nothing more goes in `index.ts`. If two modules need each other's
@@ -55,20 +56,25 @@ export type Filesystem = {
 
 Each port ships two **adapters**, side by side in source, never under `__tests__`:
 
-- `node-filesystem.ts`: wraps `node:fs`. The only file in the module allowed to import it.
+- `node-filesystem.ts`: wraps `node:fs`. Lint allows Node I/O imports only in files named
+  `node-*.ts`, in the composition roots, and in tests; everything else is an error.
 - `memory-filesystem.ts`: an in-memory fake with the same interface, plus whatever a test
   needs to inspect it (`files()`, `modes()`). Tests across the repo reuse it.
 
 Modules receive ports as constructor or factory arguments. Only a **composition root**
-constructs real adapters: the CLI entry (`packages/appduct/src/cli/...`) and the daemon entry
-(`packages/appduct/src/daemon/daemon.ts`). Nothing else writes `new NodeFilesystem()`.
+constructs real adapters. There are three, and lint knows exactly these:
+`packages/appduct/src/bin.ts`, `packages/appduct/src/cli.ts` and
+`packages/appduct/src/daemon/daemon.ts`. Nothing else writes `new NodeFilesystem()`.
 
 Why this matters here: tests then never touch the real home directory, the real socket path
 or the real clock, and a test that needs to mock I/O is the signal that a port is missing.
 `vi.mock` of `node:*` or of a repo module is banned for that reason.
 
-Existing code predates this rule. Convert a file when you substantively touch it. Do not
-open a PR whose only purpose is converting files you were not otherwise changing.
+Existing code predates this rule; the files that still import Node I/O directly are listed
+in `eslint.config.mjs` under `LEGACY_NODE_IO`, with the three module-mocking tests under
+`LEGACY_VI_MOCK`. Convert a file when you substantively touch it and remove it from the list
+in the same PR. Never add to the lists. Do not open a PR whose only purpose is converting
+files you were not otherwise changing.
 
 There is already a `Clock` type in `packages/appduct/src/cli/types.ts` and several `*Deps`
 types in `packages/appduct/src/mcp/`. Extend those rather than inventing parallel ones.
