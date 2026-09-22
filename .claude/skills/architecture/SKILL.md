@@ -73,6 +73,24 @@ open a PR whose only purpose is converting files you were not otherwise changing
 There is already a `Clock` type in `packages/appduct/src/cli/types.ts` and several `*Deps`
 types in `packages/appduct/src/mcp/`. Extend those rather than inventing parallel ones.
 
+## Native code (Swift and Kotlin)
+
+Same rules, different spelling:
+
+- **Module** is a Swift target or a Kotlin package. The public API is what is `public`;
+  everything else is `internal` and nothing outside reaches it. No `@testable import` to get
+  at internals; test through the public surface.
+- **Ports** are a `protocol` or `interface` named for the capability (`Clock`, `Transport`,
+  `KeyStore`). The real adapter and the in-memory fake sit next to each other in source, not
+  under the test target, so every test can reuse the fake. The `Real/` directories under
+  `packages/native/ios/Sources/AppductCore` are where real adapters live today.
+- **Side effects** flow through the existing callback and event surface the core already
+  exposes to the SDK entry points; a component never reads or writes another component's
+  state directly.
+- **Shared behaviour** between the three SDKs is specified once, in
+  `packages/native/fixtures`. A change to a wire or descriptor shape updates the fixture
+  first, then each SDK until its conformance test is green.
+
 ## Simplification checklist
 
 Run this against your own diff before opening a PR. The review-pr skill runs it too, and a

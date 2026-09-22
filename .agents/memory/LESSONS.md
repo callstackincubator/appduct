@@ -23,6 +23,8 @@ Caps: 10 entries per section, 40 in total. Over the cap, the next review merges 
 
 ## triage-issue
 
+## design-feature
+
 ## file-issue
 
 ## e2e-device

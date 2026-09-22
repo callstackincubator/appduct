@@ -48,3 +48,6 @@ playground-native/ios/.swiftpm/
 # Claude Code per-user settings and worktrees; .claude/settings.json and .claude/skills are shared
 .claude/settings.local.json
 .claude/worktrees/
+
+# Worktrees made by scripts/worktree.sh
+.worktrees/

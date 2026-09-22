@@ -23,6 +23,22 @@ agent reading the product skill. Anything they read to get something done is use
 Not user-facing: `AGENTS.md`, `.claude/skills/`, `.agents/memory/`, `docs/ARCHITECTURE.md`,
 `docs/PROTOCOL.md`, `docs/internal/`, code comments, PR and issue text.
 
+## Where a change lands
+
+Every user-visible change updates every surface that describes it. Miss one and the docs
+contradict each other, which is worse than no docs.
+
+| Change | Surfaces |
+| --- | --- |
+| CLI command or flag | the command's `--help` text in code; `website/src/content/docs/reference`; `skills/appduct/references/cli.md` if an agent needs it |
+| SDK API (React Native, iOS, Android) | that package's README; the matching website guide; `docs/TOOLS.md` when it is about tools |
+| MCP built-in tool or its behaviour | `skills/appduct/SKILL.md` "Over MCP"; website reference |
+| Error type or message | `skills/appduct/SKILL.md` "Output and errors"; the website page that shows the command |
+| Setup, config or build variant | `skills/appduct/references/setup.md`; `website/src/content/docs/install`; `docs/BUILD-VARIANTS.md` |
+| Security-relevant behaviour | `docs/SECURITY.md` |
+
+Always: the changelog line, and `pnpm check:links` before the PR.
+
 The `review-pr` skill checks changes to the paths above against the rules below.
 
 Write for the person using the tool, not the person who built it.

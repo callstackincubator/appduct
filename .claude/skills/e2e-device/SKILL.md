@@ -84,6 +84,9 @@ $a invoke throwing_tool --input '{}' --json; echo "exit=$? (non-zero expected, t
 
 A checked-in script for this pass is planned; until it exists, this chain is the suite.
 
+A step that fails and passes on one immediate rerun is a flake: report it as "flaky" with the
+step, do not rerun a third time, and file it with `file-issue` if no issue exists.
+
 ## Feature evidence
 
 Then the one to three CLI or MCP calls that exercise the change under test. Read the PR's

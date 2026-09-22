@@ -17,6 +17,9 @@
 - name: status:needs-triage
   color: fbca04
   description: Not yet investigated; run the triage-issue skill
+- name: status:needs-design
+  color: fbca04
+  description: A feature that needs a design pass before it can be worked; run design-feature
 - name: status:ready
   color: 0e8a16
   description: Spec and fix direction are clear; an agent can pick it up

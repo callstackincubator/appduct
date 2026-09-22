@@ -13,17 +13,25 @@ issue, not about file contents.
 Subagents: in Claude Code use the Agent tool with a fresh general-purpose agent per step. In
 OpenCode use the task tool. Either way the prompt is short and names the skill to load.
 
+Read the `work-issue` section of `.agents/memory/LESSONS.md` before starting, plus General.
+
 ## 1. Take stock
 
 ```bash
 gh issue view <N> --comments --json title,body,labels,comments
 ```
 
-- Not `status:ready`: stop and say what is missing (`status:needs-triage` means run
-  `triage-issue` first; `status:blocked` names a question for a human).
-- Derive the branch name the way `implement-issue` does and check for an existing branch and
-  draft PR. If they exist, read the PR body and the last commit message; that tells you which
-  phase to resume at.
+- `status:needs-triage` on a bug: delegate `triage-issue` first, then re-read.
+- `status:needs-design` on a feature: delegate `design-feature`, then stop; a human
+  approves the design before anything else happens.
+- `status:blocked`: stop and repeat the question from the last comment.
+- `status:ready` on a parent issue with an approved `## Design` comment and a task list:
+  work the children in order, one full loop each, and stop between them if one blocks.
+- `status:ready` otherwise: continue below.
+
+Derive the branch name the way `implement-issue` does and check for an existing branch and
+draft PR. If they exist, read the PR body and the last commit message; that tells you which
+phase to resume at.
 
 ## 2. Delegate, in order
 
@@ -67,8 +75,8 @@ Implement: done (5/5 green)  Review: round 2, approve  E2E: pass (iOS)  Ready: y
 ## Reports you consume
 
 Each skill ends with a fixed block (`implement-issue`, `review-pr`, `e2e-device`,
-`triage-issue`). Reason only over those and the issue. If a report is missing the block or
-adds narration, ask that subagent for the block, do not guess from prose.
+`triage-issue`, `design-feature`). Reason only over those and the issue. If a report is
+missing the block or adds narration, ask that subagent for the block, do not guess from prose.
 
 ## Your own report
 

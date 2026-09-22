@@ -28,6 +28,7 @@ pnpm test                        # vitest, all packages
 pnpm lint && pnpm typecheck
 pnpm --filter appduct test -- src/__tests__/<file>   # one file
 pnpm playground:appduct -- <cli args>                # this repo's CLI, from the playground
+scripts/worktree.sh <branch>                         # worktree with deps linked offline, ~7 s
 ```
 
 ## Rules
@@ -73,8 +74,9 @@ Load the skill before starting the matching task. They live in `.claude/skills/`
 | Designing or writing any non-trivial code | `architecture` |
 | Implementing an issue (tests first, draft PR, checkpoints) | `implement-issue` |
 | Reviewing a PR or branch | `review-pr` |
-| Investigating a bug report or checking a feature is ready | `triage-issue` |
-| Writing a bug report or feature request | `file-issue` |
+| Investigating a bug report | `triage-issue` |
+| Designing a feature too big for one PR, or sizing one | `design-feature` |
+| Turning a request or a found bug into an issue (interviews first) | `file-issue` |
 | Running the app on a simulator and driving it through the CLI | `e2e-device` |
 | Writing or editing anything an Appduct user reads: READMEs, `docs/`, website, the shipped skill, CLI help, error messages, changelog | `user-facing-docs` |
 | Cutting a release | `cut-release` |

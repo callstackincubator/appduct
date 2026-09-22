@@ -21,6 +21,7 @@ pending
 ### Checklist
 
 - [ ] `CHANGELOG.md` has a line under `Unreleased`, or the change is not user-visible
+- [ ] User-facing docs updated for every surface the change touches (`user-facing-docs` skill), or the change is not user-visible
 - [ ] No new import past a module's `index.ts`; no new direct `node:*` I/O outside an adapter
 - [ ] Simplification checklist from the `architecture` skill applied, exceptions explained above
 - [ ] `docs/ARCHITECTURE.md` updated if a surface it describes changed
