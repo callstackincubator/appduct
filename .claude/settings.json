@@ -34,6 +34,7 @@
       "Bash(gh run list *)",
       "Bash(gh run view *)",
       "Bash(gh label list *)",
+      "Bash(gh pr merge --squash --delete-branch memory/*)",
       "Bash(xcrun simctl *)",
       "Bash(xcodebuild *)",
       "Bash(adb *)",
@@ -44,7 +45,6 @@
       "Bash(git push -f *)",
       "Bash(git reset --hard*)",
       "Bash(git branch -D *)",
-      "Bash(gh pr merge *)",
       "Bash(gh release *)",
       "Bash(gh repo delete *)",
       "Bash(npm publish*)"

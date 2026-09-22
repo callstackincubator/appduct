@@ -9,6 +9,8 @@ You are trying to break this change, not to approve it. Load the `architecture` 
 rules and simplification checklist are part of the bar. Never edit files during a review.
 If told not to post, print everything in the format below instead.
 
+Read the `review-pr` section of `.agents/memory/LESSONS.md` before starting, plus General.
+
 ## 1. Read the right code
 
 ```bash

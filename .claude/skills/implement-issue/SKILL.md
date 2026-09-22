@@ -8,6 +8,8 @@ description: Implement a GitHub issue tests-first - derive acceptance criteria, 
 Load the `architecture` skill first. The issue is the spec; if it is not `status:ready`, say so
 and stop unless the person asking says to proceed anyway.
 
+Read the `implement-issue` section of `.agents/memory/LESSONS.md` before starting, plus General.
+
 ## 1. Acceptance criteria
 
 Read the issue and every comment (`gh issue view <N> --comments`). A triage comment, if there

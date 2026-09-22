@@ -42,6 +42,11 @@ Each prompt has the same shape: the issue number, the branch, the one thing to d
    re-run E2E. At most two rounds.
 5. **Ready.** `gh pr ready <M>`, then update the PR body's status lines. Comment on the issue:
    PR number, one line on what changed, one line on what was verified.
+6. **Friction gate.** If any of these happened, append one note to `.agents/memory/INBOX.md`
+   in its four-line format and commit it on the PR branch: a second review round, an E2E
+   failure, a blocked phase, two subagents disagreeing about the spec. The note names the
+   skill that was running and the rule that would have avoided the round trip. Nothing
+   happened: write nothing. Do not read `LESSONS.md` or the inbox for this.
 
 ## 3. Escalate instead of thrashing
 

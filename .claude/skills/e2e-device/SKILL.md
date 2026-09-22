@@ -7,6 +7,8 @@ description: Build and run a playground app on an iOS simulator or Android emula
 
 You produce evidence, you do not fix things. If something fails, report it precisely and stop.
 
+Read the `e2e-device` section of `.agents/memory/LESSONS.md` before starting, plus General.
+
 ## Which targets
 
 Pick from the paths the PR changes. Run every row that matches.

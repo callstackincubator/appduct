@@ -40,6 +40,7 @@
       "git reset --hard*": "deny",
       "git branch -D *": "deny",
       "gh pr merge *": "deny",
+      "gh pr merge --squash --delete-branch memory/*": "allow",
       "gh release *": "deny",
       "gh repo delete *": "deny",
       "npm publish*": "deny"

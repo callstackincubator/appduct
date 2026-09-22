@@ -12,6 +12,8 @@ tag is `v<version>`.
 
 Two phases. Never run phase 2 inside a `work-issue` loop or without the explicit yes.
 
+Read the `cut-release` section of `.agents/memory/LESSONS.md` before starting, plus General.
+
 ## Phase 1: release PR
 
 1. Preconditions, all must hold:

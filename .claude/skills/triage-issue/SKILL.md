@@ -17,6 +17,8 @@ gh label list --limit 100 | grep -c '^status:' || scripts/sync-labels.sh   # lab
 An issue with no `type:` label: decide bug or feature from the body and add the label. A
 previous triage comment: read it first; your comment confirms it in one line or corrects it.
 
+Read the `triage-issue` section of `.agents/memory/LESSONS.md` before starting, plus General.
+
 ## When to block
 
 `status:blocked` whenever a human has to decide something before work can start: missing

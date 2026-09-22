@@ -9,6 +9,8 @@ Never file an issue for something you can fix inside the change you are already 
 Note it in the PR instead. If told not to create the issue, print the title, labels and body
 in the format below instead of running `gh issue create`.
 
+Read the `file-issue` section of `.agents/memory/LESSONS.md` before starting, plus General.
+
 ## 1. Check for a duplicate
 
 Two searches: distinctive words from the symptom, then the literal identifier involved (a

@@ -14,6 +14,7 @@ the daemon, CLI, MCP server and SDKs fit together.
 | `packages/native` | Framework-free iOS (Swift) and Android (Kotlin) core |
 | `playground`, `playground-native` | Expo app and native apps registering the same five demo tools |
 | `skills/appduct` | The skill shipped to Appduct users; not for working on this repo |
+| `.agents/memory` | Agent memory: curated `LESSONS.md` read by section, raw `INBOX.md` write-only |
 | `docs/` | Architecture, protocol, security, tools; `docs/tasks` is a historical design record |
 
 ## Commands
@@ -50,7 +51,11 @@ pnpm playground:appduct -- <cli args>                # this repo's CLI, from the
 7. **Branches** are `issue-<N>-<slug>`, derived from the issue (see the implement-issue skill).
    PRs reference the issue and follow the PR template.
 8. **Nothing irreversible without a human**: no force push, no `gh pr merge`, no release, no
-   `npm publish`, no deleting branches other than your own.
+   `npm publish`, no deleting branches other than your own. One exception: the review-memory
+   skill merges its own PR when it touches nothing outside `.agents/memory/`.
+9. **Memory.** Before a task, read the section of [.agents/memory/LESSONS.md](.agents/memory/LESSONS.md)
+   named after your skill, plus General. Never read `INBOX.md`; only append to it, and only
+   through the work-issue friction gate.
 
 ## Writing
 
@@ -72,5 +77,6 @@ Load the skill before starting the matching task. They live in `.claude/skills/`
 | Writing a bug report or feature request | `file-issue` |
 | Running the app on a simulator and driving it through the CLI | `e2e-device` |
 | Cutting a release | `cut-release` |
+| Curating agent memory (monthly, or when the inbox has notes) | `review-memory` |
 | Taking an issue from `status:ready` to a reviewed, tested PR | `work-issue` (orchestrator) |
 | Driving an Appduct-enabled app as a user of Appduct | `appduct` (in `skills/`) |

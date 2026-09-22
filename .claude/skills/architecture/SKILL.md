@@ -8,6 +8,8 @@ description: How code in this repo is structured - modules with a public API, ca
 The compressed version is in `AGENTS.md`. This file is the reasoning and the examples, so
 you can apply the rules to a case they do not name.
 
+Read the `architecture` section of `.agents/memory/LESSONS.md` before starting, plus General.
+
 ## Modules
 
 A module is a directory. Its `index.ts` exports the public API; everything else in the
