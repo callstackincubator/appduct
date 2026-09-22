@@ -4,9 +4,10 @@ Use this file when the task is to add Appduct to a new React Native project.
 
 The development path needs **no keys, no pins and no config file**. The daemon generates
 its own host key on first start, the deep-link scheme is discovered from the project's own
-files (`app.json`, or the Android/iOS project files — see below), and a
-debug build trusts the pin carried in the link itself. Everything under **Hardening** below
-is for builds that leave your machine — do not do it as part of a first-time setup.
+files (`app.json`, or the Android/iOS project files — see below), and any build with no
+embedded pins trusts the pin carried in the link itself — in every build type, not just a
+debug one. Everything under **Hardening** below is for builds that leave your machine — do
+not do it as part of a first-time setup.
 
 ## Shared requirements
 

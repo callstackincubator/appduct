@@ -11,10 +11,11 @@
  * The `pin` param is separate from the `appduct` bootstrap blob (opt-in hardening dev-mode) — it
  * is never part of that binary v2 payload, so old apps that don't know about it simply ignore it.
  * It carries the daemon's SPKI pin (same value as `daemon.status`'s `pinnedKeys[0]` / `appduct
- * keygen`'s output) so a debug build with no build-time `cliPins` configured can trust it for this
- * one connection instead of requiring a native rebuild just to test locally. The pin is standard
- * (non-URL-safe) base64 (`sha256/<44-char-base64>`, may contain `+`/`/`/`=`), so it is percent-
- * encoded here; native/JS parsers use `URLSearchParams`, which decodes it back.
+ * keygen`'s output) so any build that embeds no `cliPins` — whatever its build type, there is no
+ * build-type gate — can trust it for this one connection instead of requiring a native rebuild
+ * just to test locally. The pin is standard (non-URL-safe) base64
+ * (`sha256/<44-char-base64>`, may contain `+`/`/`/`=`), so it is percent-encoded here; native/JS
+ * parsers use `URLSearchParams`, which decodes it back.
  */
 import { RPC_METHODS, type AgentEndpoint, type LinkCreateResult } from "@appduct/shared";
 
