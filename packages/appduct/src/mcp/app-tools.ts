@@ -188,7 +188,10 @@ const toDescriptor = (entry: ToolsListEntry): ToolDescriptor => {
     output_schema: entry.output_schema,
     annotations: entry.annotations,
     timeout_ms: entry.timeout_ms,
-    group: entry.group,
+    // Normalised the same way the listing normalises it, so `appduct_describe_tool` and
+    // `appduct_call_tool` never disagree with `appduct_list_tools` about whether a tool has a
+    // group. The `?? null` also covers a daemon that predates groups and omits the key entirely.
+    group: entry.group ?? null,
   };
 };
 
