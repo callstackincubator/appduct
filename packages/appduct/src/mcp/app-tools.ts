@@ -19,8 +19,8 @@ import {
   summarizeToolDescription,
   TOOL_GROUP_PATTERN,
   type EffectivePolicyDecision,
+  type ListedToolDescriptor,
   type SessionsDescribeResult,
-  type ToolDescriptor,
   type ToolsListEntry,
   type ToolsListResult,
 } from "@appduct/shared";
@@ -119,7 +119,7 @@ export const CALL_TOOL_TOOL_DESCRIPTOR = {
 export type ResolvedAppTool = {
   sessionId: string;
   alias: string;
-  descriptor: ToolDescriptor;
+  descriptor: ListedToolDescriptor;
   policy: EffectivePolicyDecision;
 };
 
@@ -180,7 +180,7 @@ const asRequiredString = (value: unknown, field: string): string => {
 
 /** Explicit pick, so a non-descriptor field on `ToolsListEntry` (today `policy`) is reported once,
  * on its own key, rather than twice. */
-const toDescriptor = (entry: ToolsListEntry): ToolDescriptor => {
+const toDescriptor = (entry: ToolsListEntry): ListedToolDescriptor => {
   return {
     name: entry.name,
     description: entry.description,

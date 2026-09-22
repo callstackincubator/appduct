@@ -8,6 +8,17 @@ This file is maintained by hand. There is no automated changelog tooling (see
 `docs/CI.md#release-policy` for why) — update this file as part of the commit that bumps the
 package versions for a release.
 
+## Unreleased
+
+- **Fix: an ungrouped tool reports `group: null` to every reader.** `appduct_describe_tool` and
+  the descriptor `appduct_call_tool` echoes back dropped the key instead of reporting `null`, so
+  they disagreed with `appduct_list_tools` about the same tool. `ToolDescriptor.group` is
+  `string | undefined` again — it is the registration type, and registering `null` has always been
+  rejected — so the type app authors write against (`appduct/client`, the React Native SDK's
+  `getRegisteredTools()`) no longer admits a value that throws. Code reading a `tools.list` entry
+  takes the new `ListedToolDescriptor` (or `ToolsListEntry`, which adds `policy`), where `group` is
+  `string | null`; `appduct/client`'s `tools()` now returns those entries.
+
 ## 0.11.0 (2026-09-22)
 
 - **Docs: designing tools for agents.** `docs/TOOLS.md` gains a "Designing tools for agents"

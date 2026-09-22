@@ -16,7 +16,7 @@
  * unpaged registry, so a name lookup can never miss a tool that paging would have left off a page.
  */
 
-import { RPC_METHODS, type ToolDescriptor, type ToolsListResult } from "@appduct/shared";
+import { RPC_METHODS, type ToolsListEntry, type ToolsListResult } from "@appduct/shared";
 
 import type { CliResult, ToolGroupsListing, ToolsCommandData, ToolsListing } from "../cli/result-types.js";
 import { connectionError, usageError } from "../errors.js";
@@ -57,7 +57,9 @@ const listTools = (
   );
 };
 
-const findTool = (tools: ToolDescriptor[], name: string): ToolDescriptor | undefined => {
+/** Over daemon *listing* entries, never registrations: an entry spells an ungrouped tool's group
+ * `null`, which `ToolDescriptor` does not admit. */
+const findTool = (tools: ToolsListEntry[], name: string): ToolsListEntry | undefined => {
   return tools.find((tool) => tool.name === name);
 };
 

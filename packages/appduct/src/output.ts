@@ -4,8 +4,8 @@ import {
   renderToolSignature,
   summarizeToolDescription,
   type EventNotification,
+  type ListedToolDescriptor,
   type SessionSummary,
-  type ToolDescriptor,
   type ToolGroupSummary,
   type ToolsListEntry,
 } from "@appduct/shared";
@@ -153,7 +153,7 @@ const renderLsData = (colors: ColorPalette, data: LsCommandData, now: Date): str
 };
 
 /** `renderToolsData` distinguishes the listing form of `ToolsCommandData` (`ToolsListing`, which
- * carries `tools`/`total`) from the bare single-tool detail form purely by shape — a `ToolDescriptor`
+ * carries `tools`/`total`) from the bare single-tool detail form purely by shape — a single entry
  * never has a `tools` array of its own, so this never misclassifies either one. */
 const isToolsListing = (data: ToolsCommandData): data is ToolsListing => {
   return typeof data === "object" && data !== null && Array.isArray((data as ToolsListing).tools);
@@ -334,7 +334,11 @@ const renderToolSummaryTable = (colors: ColorPalette, data: ToolsListing): strin
   ];
 };
 
-const renderToolDetail = (colors: ColorPalette, tool: ToolDescriptor, flags: GlobalFlags): string[] => {
+const renderToolDetail = (
+  colors: ColorPalette,
+  tool: ListedToolDescriptor,
+  flags: GlobalFlags,
+): string[] => {
   return renderFields(
     colors.green(`Tool: ${tool.name}`),
     [

@@ -13,7 +13,7 @@ import {
   RPC_METHODS,
   type EventNotification,
   type EventsSinceResult,
-  type ToolDescriptor,
+  type ListedToolDescriptor,
   type ToolsCallResult,
   type ToolsListResult,
 } from "@appduct/shared";
@@ -93,8 +93,9 @@ export type AppEvent<TPayload = unknown> = {
 export type AppClient<TTools = ToolMap> = {
   readonly sessionId: string;
 
-  /** `tools.list` for this session. */
-  tools(): Promise<ToolDescriptor[]>;
+  /** `tools.list` for this session. An entry spells an ungrouped tool's `group` as `null`,
+   * where a registration omits it. */
+  tools(): Promise<ListedToolDescriptor[]>;
 
   /** `tools.call`; rejects with a {@link AppductError} whose `type` preserves the wire error
    * type verbatim (e.g. `"tool_timeout"`, `"policy_denied"`, `"session_suspended"`). */
@@ -164,7 +165,7 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
   const client = {
     sessionId,
 
-    tools: async (): Promise<ToolDescriptor[]> => {
+    tools: async (): Promise<ListedToolDescriptor[]> => {
       try {
         // No `filter`/`limit`/`offset`: this client's public `tools()` contract is "every tool on
         // this session", unchanged by `tools.list`'s daemon-side paging (added for the CLI).

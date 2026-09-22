@@ -10,8 +10,8 @@ import type {
   EffectivePolicyDecision,
   EventNotification,
   SessionSummary,
-  ToolDescriptor,
   ToolGroupSummary,
+  ToolsListEntry,
   ToolsListResult,
 } from "@appduct/shared";
 
@@ -167,9 +167,10 @@ export type ToolGroupsListing = {
   total: number;
 };
 
-/** `appduct tools`: a listing, a groups summary (`--groups`), or a single descriptor when a tool
- * name resolved to a detail lookup. */
-export type ToolsCommandData = ToolsListing | ToolGroupsListing | ToolDescriptor;
+/** `appduct tools`: a listing, a groups summary (`--groups`), or a single entry when a tool name
+ * resolved to a detail lookup. The detail form is the daemon's own listing entry, picked out of
+ * `tools.list` — not a registration, so its `group` is `null` for an ungrouped tool. */
+export type ToolsCommandData = ToolsListing | ToolGroupsListing | ToolsListEntry;
 
 /** `appduct invoke`: the tool's raw result payload, printed as-is. */
 export type InvokeCommandData = unknown;

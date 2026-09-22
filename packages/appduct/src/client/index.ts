@@ -23,4 +23,4 @@ export type {
   ToolMap,
   WaitForEventOptions,
 } from "./app-client.js";
-export type { AgentEndpoint, ErrorType, ToolDescriptor } from "@appduct/shared";
+export type { AgentEndpoint, ErrorType, ListedToolDescriptor, ToolDescriptor } from "@appduct/shared";
