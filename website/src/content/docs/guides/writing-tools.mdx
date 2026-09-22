@@ -187,6 +187,22 @@ useAppductTool({
 
 `destructiveHint: true` matters beyond information: the [policy](/appduct/guides/security/#limit-what-callers-can-run) can require approval for, or deny, destructive tools as a class. Mark every tool that deletes data, signs out, or spends money.
 
+## Design tools for the agent that calls them
+
+An agent picks a tool from one line, `name(params) -> result`, plus the first line of its description. Write for that reader:
+
+- **Name by intent.** `go_to_checkout`, `set_feature_flag`; not `dispatch_action`.
+- **Annotate.** `readOnlyHint` on every observer, `destructiveHint` on anything that deletes, signs out, or pays. Policy and approval prompts key on it (see [above](#annotate-what-a-tool-does)).
+- **Pair each mutation with an observer, and return the new state.** `seed_cart -> { cartId, itemCount }` next to `get_cart`, so the agent can verify in one call.
+- **Declare an object-rooted `outputSchema`.** That's what puts `-> { ... }` in the listing. Wrap a scalar: `{ count }`, not `number`.
+- **First line of the description: one sentence, what it does.** Then preconditions and side effects: "Requires a signed-in user. Navigates to the Cart tab."
+- **Describe parameters, and prefer enums** over free strings, so the signature lists the allowed values.
+- **Make setup tools idempotent** (`login(userId)` is a no-op when already signed in) and mark them `idempotentHint`.
+- **Few coarse tools beat many fine ones.** `complete_onboarding()`, not `dismiss_step_1` through `dismiss_step_7`.
+- **Set `timeoutMs`** on anything that touches the network, and **never register a tool that needs a person to finish**: return when the state change is done, and [post an event](#tell-callers-something-happened) for anything later.
+
+Then connect a device and run `appduct tools`. That listing is what the agent sees: fix any `...` in a signature, any tool without `-> { ... }`, and any first line that doesn't say what the tool needs. The full list of rules, with before-and-after examples, is in [`docs/TOOLS.md`](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#designing-tools-for-agents).
+
 ## Long-running tools
 
 A call gets **10 seconds** by default. For a tool that needs longer, like a real login or seeding data through your backend, declare `timeoutMs`:

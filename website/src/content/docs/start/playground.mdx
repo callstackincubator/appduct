@@ -19,11 +19,13 @@ The tools:
 
 | Tool | What it does |
 | --- | --- |
-| `sum` | Adds two numbers |
-| `call_count` | Reports how many times the counted tools have run |
-| `reset_counter` | Resets the counter; marked destructive |
-| `slow_task` | Takes about 1.5 seconds and reports progress |
-| `throwing_tool` | Always fails, so you can see a `tool_execution_error` |
+| `sum` | Adds two numbers; counts as a call |
+| `call_count` | Reports how many times the counted tools have run; marked read-only |
+| `reset_counter` | Resets the counter to zero; marked destructive and idempotent |
+| `slow_task` | Takes about 1.5 seconds and reports progress; counts as a call |
+| `throwing_tool` | Always fails with `tool_execution_error`; marked read-only |
+
+They follow the rules in [Design tools for the agent that calls them](/appduct/guides/writing-tools/#design-tools-for-the-agent-that-calls-them), so they're a fair template to copy.
 
 **Requirements:** a clone of [the repository](https://github.com/callstackincubator/appduct), Node 20 or newer, and pnpm. Each app also needs its platform's tools: Xcode for iOS, the Android SDK and Java 17 for Android.
 

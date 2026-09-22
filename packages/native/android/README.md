@@ -89,6 +89,11 @@ schema library — the native SDK does no app-side input/output validation (the 
 either). `annotations` takes a `ToolAnnotations(readOnlyHint?, destructiveHint?, idempotentHint?)`
 matching `PROTOCOL.md` §5.
 
+Tools are read by agents from a one-line signature and the first line of the description: name
+them by intent, set `readOnlyHint` on observers and `destructiveHint` on anything that deletes,
+signs out or pays, and give every tool an `outputSchema`. See
+[`docs/TOOLS.md`](../../../docs/TOOLS.md#designing-tools-for-agents) for the full list of rules.
+
 On an app with many tools, pass `group` so agents can list them one area at a time
 (`appduct tools --group cart`). A group is `"cart"` or one subgroup below it, like
 `"checkout/payment"`; each part uses tool-name characters (letters, digits, `_`, `-`, at most 64).

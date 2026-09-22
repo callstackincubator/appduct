@@ -48,7 +48,7 @@ class PlaygroundApplication : Application() {
     private fun registerTools() {
         Appduct.register(
             name = "sum",
-            description = "Adds two numbers.",
+            description = "Adds two numbers. Counts as a call in call_count.",
             inputSchema = JSONObject(
                 """{"type":"object","properties":{"a":{"type":"number"},"b":{"type":"number"}},"required":["a","b"]}""",
             ),
@@ -61,7 +61,7 @@ class PlaygroundApplication : Application() {
 
         Appduct.register(
             name = "call_count",
-            description = "Reports how many times the playground's counted tools have run.",
+            description = "Reports how many times the counted tools (sum, slow_task) have run. Read-only.",
             outputSchema = JSONObject("""{"type":"object","properties":{"count":{"type":"number"}}}"""),
             annotations = ToolAnnotations(readOnlyHint = true),
         ) { _ ->
@@ -70,9 +70,9 @@ class PlaygroundApplication : Application() {
 
         Appduct.register(
             name = "reset_counter",
-            description = "Resets the playground's call counter to zero.",
+            description = "Resets the call counter to zero. Destructive; a no-op when it is already zero.",
             outputSchema = JSONObject("""{"type":"object","properties":{"count":{"type":"number"}}}"""),
-            annotations = ToolAnnotations(destructiveHint = true),
+            annotations = ToolAnnotations(destructiveHint = true, idempotentHint = true),
         ) { _ ->
             PlaygroundState.callCount = 0
             PlaygroundState.logEvent("tool reset_counter()")
@@ -81,7 +81,7 @@ class PlaygroundApplication : Application() {
 
         Appduct.register(
             name = "slow_task",
-            description = "Takes ~1.5s and reports progress along the way.",
+            description = "Takes about 1.5 s and reports progress along the way. Counts as a call in call_count.",
             outputSchema = JSONObject("""{"type":"object","properties":{"done":{"type":"boolean"}}}"""),
             timeoutMs = 5_000,
         ) { _, context ->
@@ -96,7 +96,8 @@ class PlaygroundApplication : Application() {
 
         Appduct.register(
             name = "throwing_tool",
-            description = "Always throws, to exercise tool_execution_error.",
+            description = "Always fails with tool_execution_error. Changes nothing.",
+            annotations = ToolAnnotations(readOnlyHint = true),
         ) { _ ->
             throw RuntimeException("throwing_tool always fails on purpose.")
         }
