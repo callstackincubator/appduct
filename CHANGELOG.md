@@ -4,9 +4,9 @@ All notable changes to `appduct`, `@appduct/shared`, and `@appduct/react-native`
 documented here. The three packages are versioned in lockstep (identical version numbers), so one
 changelog covers all of them.
 
-This file is maintained by hand. There is no automated changelog tooling (see
-`docs/CI.md#release-policy` for why) — update this file as part of the commit that bumps the
-package versions for a release.
+This file is maintained by hand; there is no automated changelog tooling. Every PR with a
+user-visible change adds a line under `Unreleased`, and the release PR (see the `cut-release`
+skill in `.claude/skills/`) turns that section into a versioned heading.
 
 ## Unreleased
 

@@ -1,0 +1,35 @@
+name: Feature request
+description: Something Appduct should do that it does not do today.
+labels: ["type:feature", "status:needs-design"]
+body:
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: The problem or cost today. Who hits it, and when.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected outcome
+      description: What you can observe once it exists. Commands, output, behaviour.
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints and non-goals
+      description: What must not change, security or compatibility limits, what is explicitly out of scope.
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: How we know it is done
+      description: Numbered acceptance criteria, each something a test could check. Leave empty if unsure; the design pass writes them.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: One line each, if any.
