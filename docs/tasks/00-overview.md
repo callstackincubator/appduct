@@ -1,5 +1,8 @@
 # Overview: autolinking-gated inclusion + explicit trust
 
+> **Historical record.** Every task in this series has landed. The files stay because source
+> comments cite them for design rationale; do not start new work from them.
+
 This directory holds the task breakdown for replacing the current "default-inert release
 builds" design with a simpler one:
 

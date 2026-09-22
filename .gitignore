@@ -44,3 +44,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # playground-native/ios/README.md.
 playground-native/ios/*.xcodeproj
 playground-native/ios/.swiftpm/
+
+# Claude Code per-user settings and worktrees; .claude/settings.json and .claude/skills are shared
+.claude/settings.local.json
+.claude/worktrees/
