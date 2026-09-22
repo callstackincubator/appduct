@@ -6,8 +6,12 @@
  * The cases that genuinely need a real daemon on the other end of the socket live in
  * `rpc-client.integration.test.ts`.
  */
-import { rm, utimes, writeFile } from "node:fs/promises";
+import { rm, stat, utimes, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
+import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -216,6 +220,42 @@ describe("callDaemon", () => {
     ).rejects.toThrow(DaemonUnavailableError);
 
     await rm(stateDir, { force: true, recursive: true });
+  });
+
+  test("a state dir that does not exist yet is created before the spawn-lock is taken", async () => {
+    // The fresh-install case: nothing has ever run `startDaemon`, so `~/.appduct` is absent. Every
+    // other test in this file starts from a `mkdtemp`'d state dir, which is exactly how this
+    // slipped through — the parent writes the spawn-lock and `daemon.log` itself, long before the
+    // child it spawns would create the directory.
+    // Short name on purpose: the control socket lives inside this directory, and a UDS path
+    // over the platform limit (104 bytes on macOS) fails to connect with EINVAL.
+    const stateDir = path.join(tmpdir(), `appduct-fresh-${randomUUID().slice(0, 8)}`);
+    stateDirs.push(stateDir);
+    expect(existsSync(stateDir)).toBe(false);
+
+    let spawnCalls = 0;
+    // Recorded *inside* the spawn: `defaultSpawn` opens `daemon.log`'s fd before the child exists,
+    // so "the directory is there by the time spawn runs" is the property that actually matters.
+    let stateDirExistedAtSpawn = false;
+    const spawn: SpawnFn = () => {
+      spawnCalls += 1;
+      stateDirExistedAtSpawn = existsSync(stateDir);
+    };
+
+    await expect(
+      callDaemon(
+        "daemon.status",
+        {},
+        { stateDir, autoSpawn: true, spawn, spawnPollIntervalMs: 20, spawnWaitTimeoutMs: 150 },
+      ),
+      // Times out waiting for the daemon this fake spawn never starts — the point is that it gets
+      // that far at all, instead of throwing ENOENT on the lock path.
+    ).rejects.toThrow(DaemonUnavailableError);
+
+    expect(spawnCalls).toBe(1);
+    expect(stateDirExistedAtSpawn).toBe(true);
+    // Same 0700 the daemon itself would have applied (ARCHITECTURE.md §3).
+    expect((await stat(stateDir)).mode & 0o777).toBe(0o700);
   });
 });
 
