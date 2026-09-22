@@ -7,79 +7,90 @@ description: Drive an Appduct-enabled app (React Native, iOS or Android) from th
 
 Appduct lets you call functions a running app has registered as **tools**. One `appduct`
 daemon on this machine holds every device session; the CLI and `appduct mcp` are thin clients
-of it and start it on first use. There is no server to start or stop.
+of it and start it on first use. There is no server for you to start.
 
 ## The loop
 
 ```bash
-appduct ls                                  # connected devices; empty → references/cli.md
+appduct ls                                  # connected devices
 appduct tools                               # one signature + description per tool
 appduct tools <name>                        # one tool's full input/output schema
-appduct invoke <name> --input '{"k":"v"}'   # call it (--input is required; pass '{}' for no args)
+appduct invoke <name> --input '{"k":"v"}'   # call it; --input is required, use '{}' for no args
 ```
 
+- If `appduct ls` is empty, connect a device first: read [references/cli.md](./references/cli.md),
+  section "Connect a device".
 - Every session command takes an optional **selector** (alias or session id from `appduct ls`)
-  as its first positional argument. Omit it with one device connected; with several, the CLI
-  fails with `ambiguous_session` and lists the aliases.
-- A signature reads `name(param: type, optional?: type = default) -> { result }`. `...` means
-  that part of the schema could not be summarized: read `appduct tools <name>` before calling.
-  A trailing `[prompt]` or `[deny]` is the tool's policy.
-- Large app: `appduct tools --groups` first, then `--group <name>` (a parent group includes its
-  subgroups), or `--filter <text>` on name and description. `--limit`/`--offset` page a listing
-  whose footer says tools were left out.
+  as its first positional argument. Omit it when one device is connected. With several, the
+  CLI fails with `ambiguous_session` and lists the aliases; pass one.
+- A signature reads `name(param: type, optional?: type = default) -> { result }`. A trailing
+  `[prompt]` or `[deny]` is the tool's policy. `...` means that part of the schema could not be
+  summarized: run `appduct tools <name>` before calling that tool, and only for such tools.
+- When the listing footer says tools were left out: run `appduct tools --groups`, then
+  `appduct tools --group <name>` (a parent group includes its subgroups), or
+  `appduct tools --filter <text>` (matches name and description), or page with
+  `--limit <n> --offset <n>`.
 
-## Chain calls instead of narrating between them
+## Run a known sequence as one command
 
-Every `appduct` command is a short-lived process talking to the same daemon, so a sequence you
-already know belongs in one shell invocation. Failures exit non-zero, so `&&` stops at the first:
+Do not run one `appduct` command per turn and think in between. Read the listing once, plan the
+whole sequence, then pick the smallest form that fits:
 
-```bash
-appduct invoke login --input '{"userId":"u_42"}' \
-  && appduct invoke seed_cart --input '{"items":3}' \
-  && appduct invoke get_cart --input '{}'
-```
+1. **Fixed sequence:** chain with `&&`. Every failure exits non-zero, so the chain stops at the
+   first one.
 
-When a later call needs an earlier result, parse `--json`. A success is `{ "ok": true, "data": … }`;
-a failure is `{ "ok": false, "error": { "type": … } }` on stderr:
+   ```bash
+   appduct invoke login --input '{"userId":"u_42"}' \
+     && appduct invoke seed_cart --input '{"items":3}' \
+     && appduct invoke get_cart --input '{}'
+   ```
 
-```bash
-cart_id=$(appduct invoke create_cart --input '{}' --json | jq -r .data.cartId)
-appduct invoke add_item --input "{\"cartId\":\"$cart_id\",\"sku\":\"SKU-1042\"}"
-```
+2. **A later call needs an earlier result:** add `--json` and parse it with `jq`. Success is
+   `{ "ok": true, "data": … }` on stdout; failure is `{ "ok": false, "error": { "type": … } }`
+   on stderr.
 
-Read the listing once, plan the whole sequence, and fetch full schemas only for tools whose
-signature shows `...`. A test suite should use `appduct/client` (see the CLI reference) rather
-than spawning `appduct invoke` per call.
+   ```bash
+   cart_id=$(appduct invoke create_cart --input '{}' --json | jq -r .data.cartId)
+   appduct invoke add_item --input "{\"cartId\":\"$cart_id\",\"sku\":\"SKU-1042\"}"
+   ```
+
+3. **A loop, a branch on a result, or a wait for an app event:** write a short `.mjs` script
+   with `appduct/client` and run it with `node`. It holds one daemon connection, returns typed
+   errors, and has `waitForEvent`. The `appduct` package must be a dependency of the project
+   (`npm i -D appduct` if it is not; a global install cannot be imported). Example in
+   [references/cli.md](./references/cli.md), section "Scripts and test suites".
+
+4. **Something the user will keep:** the same `appduct/client` code, as a test in their suite.
 
 ## Output and errors
 
-- Plain text is for reading and may change between versions. Add `--json` only when something
-  parses the output (`--pretty` indents it).
+- Read the plain-text output. Add `--json` only when a command or script parses it; `--pretty`
+  indents it.
 - `no_session`, `unknown_session`, or an empty `appduct ls`: no device is connected. Connect one
-  (references/cli.md).
-- `policy_denied`: the daemon's policy blocks this tool. Retrying will not help; it is a
-  `policy` change in `~/.appduct/config.json`, and the user's call to make.
+  ([references/cli.md](./references/cli.md), "Connect a device").
+- `policy_denied`: the daemon's policy blocks this tool. Do not retry and do not edit
+  `~/.appduct/config.json`; tell the user which tool was denied.
 - `tool_timeout`: a call gets 10 s unless the app registered the tool with `timeoutMs`.
-  `--timeout <ms>` can only shorten that.
-- `tool_execution_error`: the app's handler threw; the message is the app's.
-- An empty `appduct tools` is not an error: the app registered nothing.
+  `--timeout <ms>` can only shorten that; the fix is in the app's registration.
+- `tool_execution_error`: the app's handler threw; report its message.
+- An empty `appduct tools` listing is not an error: the app registered no tools.
 
 ## Over MCP
 
-Same loop through built-in tools that describe themselves: `appduct_connect` then
-`appduct_wait_for_session` to connect a device, and `appduct_list_tools`,
-`appduct_describe_tool`, `appduct_call_tool` for the app's tools (the app's tools are not MCP
-tools of their own). With several devices connected pass `selector`. A tool with policy
-`"prompt"` asks the user to approve each call; if they decline, do not retry it yourself.
+Same loop, through built-in tools whose descriptions say how to use them: `appduct_connect`
+then `appduct_wait_for_session` to connect a device; `appduct_list_tools`,
+`appduct_describe_tool` and `appduct_call_tool` for the app's tools (the app's tools are not
+MCP tools of their own). With several devices connected, pass `selector`. A tool with policy
+`"prompt"` asks the user to approve each call; if they decline, do not call it again.
 
 ## References
 
-Read only what the task needs:
+Read a reference only when its trigger applies:
 
-- [references/cli.md](./references/cli.md): connect a device (`appduct link`, `--open`, QR,
-  MCP `appduct_connect`), watch events, end a session, every command and flag, `appduct/client`
-  for test suites.
-- [references/writing-tools.md](./references/writing-tools.md): register tools in the app
-  (`registerTool`/`useAppductTool`, Swift, Kotlin), the schema rules, and how to design tools so
-  the agent calling them gets it right first time.
-- [references/setup.md](./references/setup.md): add Appduct to a project for the first time.
+- [references/cli.md](./references/cli.md): `appduct ls` is empty, or you need a command or flag
+  not shown above (`link`, `events`, `revoke`, `init`, `--open`, QR, MCP `appduct_connect`), or
+  you are writing a script or test with `appduct/client`.
+- [references/writing-tools.md](./references/writing-tools.md): the task is to add, change or
+  review tools in the app's code (`registerTool`, `useAppductTool`, Swift or Kotlin `register`).
+- [references/setup.md](./references/setup.md): the task is to add Appduct to a project that
+  does not have it yet.

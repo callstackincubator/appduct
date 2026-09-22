@@ -89,24 +89,43 @@ deadline by default). `--timeout <ms>` is clamped to 1,000–600,000 and can onl
 deadline; the app aborts the handler at its own timer regardless. If a tool needs longer, the fix
 is in the app's registration, not the call.
 
-## Test suites: `appduct/client`
+## Scripts and test suites: `appduct/client`
 
-The same daemon RPC the CLI uses, without spawning a process per call:
+The same daemon RPC the CLI uses, without spawning a process per call. Use it from a short
+`.mjs` script for a sequence with a loop, a branch or a wait, and from a test suite for anything
+the user keeps. The `appduct` package must be a dependency of the project (`npm i -D appduct`);
+a globally installed CLI cannot be imported.
 
-```ts
-import { connect, link, waitForSession } from "appduct/client";
+```js
+// seed.mjs — run with: node seed.mjs
+import { connect } from "appduct/client";
 
-const { sessionId } = await link({ target: "ios-sim" });      // globalSetup
-const app = await waitForSession(sessionId, { timeoutMs: 60_000 });
-
-const { total } = await app.call("sum", { a: 2, b: 3 });
-const { payload } = await app.waitForEvent("checkout_done", { timeoutMs: 5_000 });
-await expect(app.call("wipe_data", {})).rejects.toMatchObject({ type: "policy_denied" });
-app.close();
+const app = await connect(); // the single connected device; connect({ selector: "pixel-8" }) names one
+try {
+  const { cartId } = await app.call("create_cart", {});
+  for (const sku of ["SKU-1042", "SKU-2077"]) {
+    await app.call("add_item", { cartId, sku });
+  }
+  await app.call("place_order", { paymentMethod: "card" });
+  const { payload } = await app.waitForEvent("checkout_completed", { timeoutMs: 15_000 });
+  console.log(JSON.stringify(payload));
+} finally {
+  app.close();
+}
 ```
 
-`connect()` picks the single session, or `connect({ selector })` names one. Declare a tool map
-type (`connect<Tools>()`) for typed `call`s.
+A failed call rejects with an `AppductError` whose `type` is the wire error type (`policy_denied`,
+`tool_timeout`, `tool_execution_error`, …), so a test can assert on it:
+
+```ts
+import { link, waitForSession } from "appduct/client";
+
+const { sessionId } = await link({ target: "ios-sim" });                 // globalSetup
+const app = await waitForSession(sessionId, { timeoutMs: 60_000 });
+await expect(app.call("wipe_data", {})).rejects.toMatchObject({ type: "policy_denied" });
+```
+
+Declare a tool map type (`connect<Tools>()`) for typed `call`s.
 
 ## Notes
 
