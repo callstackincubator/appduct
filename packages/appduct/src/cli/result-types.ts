@@ -136,7 +136,8 @@ export type LinkCommandData = {
   expiresAt: number;
   /** The daemon's SPKI pin, same value as embedded in `deepLink`'s `pin` query param — surfaced
    * as its own field for `--json` consumers that don't want to re-parse the URL (opt-in
-   * hardening dev-mode: native clients trust this only in debug builds with no `cliPins`). */
+   * hardening dev-mode: native clients trust it only when the build embeds no `cliPins`, in any
+   * build type). */
   pin: string;
   /** Present (and `true`) only once `--open <target>` has successfully delivered the link
    * (ARCHITECTURE.md §10). */

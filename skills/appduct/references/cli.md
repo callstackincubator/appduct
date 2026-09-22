@@ -29,7 +29,8 @@ the iOS `Info.plist`/`project.yml`). No key, pin or config file is needed for a 
   take on a running app add `--relaunch`. If it fails, fall back to `--qr`. It is never picked
   automatically; use it only when the user says the app runs on a physical iPhone.
 - No device you can reach: `appduct link --json` and relay `data.deepLink` **whole** to a human
-  (the trailing `&pin=sha256/...` is what lets a debug build trust the daemon), or use `--qr`
+  (the trailing `&pin=sha256/...` is what lets a build with no embedded pins trust the daemon,
+  in any build type), or use `--qr`
   on a TTY.
 
 Then wait for the app to claim the session: poll `appduct ls --json` until the session shows

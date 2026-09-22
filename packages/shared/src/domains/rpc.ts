@@ -121,8 +121,9 @@ export type LinkCreateResult = {
    * `pinnedKeys[0]` / `appduct keygen`'s output), composed by callers into the deep link's
    * separate `pin` query param, alongside the existing `appduct` bootstrap blob (see
    * ARCHITECTURE.md §8 for that blob's binary layout, unchanged here). Old apps must keep
-   * ignoring this param. Native clients only trust it when built in debug mode with no
-   * build-time `cliPins` configured; embedded pins always win.
+   * ignoring this param. Native clients trust it for that link's session alone whenever their
+   * effective trust mode is `"link"` — the default in every build type when no build-time
+   * `cliPins` are configured; embedded pins always win.
    */
   pin: string;
 };
