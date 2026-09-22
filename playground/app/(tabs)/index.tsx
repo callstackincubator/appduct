@@ -56,9 +56,16 @@ export default function ToolsScreen() {
   // Groups: `counter` and `diagnostics` (with a `diagnostics/progress` subgroup), plus `sum`
   // left ungrouped -- so `appduct tools` shows headings, `--groups` has something to list, and
   // `--group diagnostics` vs `--group diagnostics/progress` differ.
+  //
+  // These tools are the template an agent copies (docs/TOOLS.md, "Designing tools for agents"):
+  // every tool that returns something has an object-rooted `outputSchema`, observers carry
+  // `readOnlyHint`, the one that
+  // resets state carries `destructiveHint` (and `idempotentHint`, since resetting twice is the
+  // same as once), and each description's first line says what the tool does, then its side
+  // effects.
   useAppductTool({
     name: "sum",
-    description: "Adds two numbers.",
+    description: "Adds two numbers. Counts as a call in call_count.",
     inputSchema: z.object({
       a: z.number(),
       b: z.number(),
@@ -74,7 +81,7 @@ export default function ToolsScreen() {
 
   useAppductTool({
     name: "call_count",
-    description: "Reports how many times the playground's counted tools have run.",
+    description: "Reports how many times the counted tools (sum, slow_task) have run. Read-only.",
     group: "counter",
     annotations: { readOnlyHint: true },
     outputSchema: z.object({
@@ -87,9 +94,9 @@ export default function ToolsScreen() {
 
   useAppductTool({
     name: "reset_counter",
-    description: "Resets the playground's call counter to zero.",
+    description: "Resets the call counter to zero. Destructive; a no-op when it is already zero.",
     group: "counter",
-    annotations: { destructiveHint: true },
+    annotations: { destructiveHint: true, idempotentHint: true },
     outputSchema: z.object({
       count: z.number(),
     }),
@@ -101,7 +108,7 @@ export default function ToolsScreen() {
 
   useAppductTool({
     name: "slow_task",
-    description: "Takes ~1.5s and reports progress along the way.",
+    description: "Takes about 1.5 s and reports progress along the way. Counts as a call in call_count.",
     group: "diagnostics/progress",
     outputSchema: z.object({
       done: z.boolean(),
@@ -123,8 +130,9 @@ export default function ToolsScreen() {
 
   useAppductTool({
     name: "throwing_tool",
-    description: "Always throws, to exercise tool_execution_error.",
+    description: "Always fails with tool_execution_error. Changes nothing.",
     group: "diagnostics",
+    annotations: { readOnlyHint: true },
     handler: () => {
       throw new Error("throwing_tool always fails on purpose.");
     },

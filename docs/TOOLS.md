@@ -1,8 +1,8 @@
 # Registering tools
 
 How the app side of Appduct publishes tools: the schema forms it accepts, what the
-`useAppductTool` hook actually re-registers, the shape a published schema has to take, and
-how long a call may run. The five-minute version lives in the
+`useAppductTool` hook actually re-registers, the shape a published schema has to take, how long a
+call may run, and [what makes a tool good for the agent that calls it](#designing-tools-for-agents). The five-minute version lives in the
 [package README](../packages/react-native/README.md#4-define-tools-in-app-startup-code); keeping a
 destructive tool out of a build variant is [its own
 section](./SECURITY.md#gating-a-tool-by-build-variant) of the security model.
@@ -169,3 +169,110 @@ useAppductTool(
 That deadline is enforced end to end: the app aborts the handler's `signal` at it, and it also travels to the daemon as the descriptor's `timeout_ms`, so an agent calling the tool over MCP (or `appduct invoke` with no `--timeout`) gets the same budget instead of a `tool_timeout` at 10 seconds.
 
 The SDK clamps the value to `[1_000, 600_000]` ms before either timer is set, so the handler's abort timer and the daemon's call deadline are always the same number (a value outside that range is clamped with a dev warning). A caller that passes its own timeout (`appduct invoke --timeout`, `app.call(name, args, { timeoutMs })`) can only **shorten** the deadline, never extend it past this one — the app aborts the handler at its own timer regardless, so for a tool that declares nothing, a caller asking for 60 seconds still gets the app's 10-second default. That app-side fallback is fixed natively (`AppductClient`'s own `defaultToolTimeoutMs`, `APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`) and JS cannot override it — `createAppductClient`'s options are empty, and the TurboModule spec has no channel for it. Declare `timeoutMs` per tool when a call needs longer than the default.
+
+## Designing tools for agents
+
+Everything above is mechanics. This section is about the reader: the agent that runs
+`appduct tools` (or `appduct_list_tools` over MCP) and has to pick and call a tool from a listing
+like
+
+```
+seed_cart(items: int, clear?: bool = true) -> { cartId: string, itemCount: int }
+  Fill the current user's cart with test items. Requires a signed-in user.
+```
+
+The listing is a signature derived from the JSON Schema, the first line of the description, and a
+policy tag. That is all the agent decides from, so each rule below fixes a way that decision goes
+wrong. The same rules apply to the Swift and Kotlin `register` calls, whose `annotations`
+(`ToolAnnotations(readOnlyHint:destructiveHint:idempotentHint:)`), `timeoutMs`, `group` and raw
+JSON Schema `inputSchema`/`outputSchema` map one to one onto the fields below.
+
+**Name by intent, not implementation.** The name is the first thing an agent matches a task
+against; a name that describes your architecture says nothing about when to call it.
+`dispatch_action(type, payload)` → `go_to_checkout()`, `set_feature_flag(name, enabled)`.
+
+**Set `annotations`, and get `destructiveHint` right.** The daemon's policy engine and an MCP
+client's approval prompt key on `destructiveHint`; a destructive tool without it runs under
+`policy.default`, so a user who set `policy.destructive` to `"prompt"` is never asked.
+`readOnlyHint` tells the agent a call is free to repeat. `{ name: "wipe_local_data" }` →
+`{ name: "wipe_local_data", annotations: { destructiveHint: true } }`; every `get_*` gets
+`readOnlyHint: true`.
+
+**Pair every mutation with an observer, and return the new state from the mutation.** An agent
+cannot verify `seed_cart` without `get_cart`, and reading the result back costs a second call.
+`seed_cart -> undefined` → `seed_cart -> { cartId, itemCount }` next to `get_cart -> { ... }`.
+
+**Declare an `outputSchema`, rooted in an object.** It is what puts `-> { ... }` in the listing;
+without one the agent has to call the tool to learn what comes back, and over MCP the result is
+only text, never structured content. Wrap a scalar so the result can grow without breaking callers:
+`z.number()` → `z.object({ count: z.number() })`.
+
+**Put what the tool does in the description's first line, then preconditions and side effects.**
+The listing shows only the first line, so make it one sentence that says what the tool does.
+Follow it with what the tool needs and what else it changes; name the screen or feature so
+`--filter` finds it. `"Checkout"` → `"Place an order for the current cart and navigate to the
+confirmation screen. Requires a signed-in user with a non-empty cart. Charges the test payment
+method."`
+
+**Describe every parameter, with units and allowed values.** `.describe()` in zod, `description`
+in raw JSON Schema. Prefer enums over free strings: the signature then lists the values, and the
+agent cannot guess wrong. `tab: z.string()` → `tab: z.enum(["home", "cart", "profile"])`;
+`delay: z.number()` → `delayMs: z.number().int().describe("Delay in milliseconds")`.
+
+**Make setup tools idempotent, and say so.** `login(userId)` should be a no-op when that user is
+already signed in, and carry `idempotentHint: true`; an agent that lost track of state can then
+call it again instead of reasoning about whether it already did.
+
+**Prefer a few coarse tools over many fine ones.** An agent pays for every line of the listing on
+every task; a wide tool costs one line. `dismiss_step_1()` … `dismiss_step_7()` →
+`complete_onboarding()`.
+
+**Declare `timeoutMs` on anything that touches the network.** The default is 10 seconds and only
+the registration can raise it ([Long-running tools](#long-running-tools)).
+
+**Do not register a tool that needs a person to finish.** A tool that opens a modal and resolves
+when the user taps a button times out from the agent's point of view. Return once the state
+change is done; for something that happens later, `postEvent("checkout_completed", { orderId })`
+and let the caller wait for the event.
+
+**Keep the input schema object-rooted** ([above](#make-the-input-schema-accept-an-object)), and
+**group tools by feature** once there is more than a screenful of them
+([above](#group-tools-in-a-large-app)), so the agent lists `cart` instead of everything.
+
+Put together:
+
+```ts
+// Before: the listing shows `checkout(payload: ...)` and the word "Checkout".
+registerTool({
+  name: "checkout",
+  description: "Checkout",
+  inputSchema: z.object({ payload: z.any() }),
+  handler: async ({ payload }) => runCheckout(payload),
+});
+
+// After: `place_order(paymentMethod?: "card" | "apple_pay" = "card") -> { orderId: string, total: int }`
+// with the first line of the description under it, and a [prompt] tag when policy asks for one.
+registerTool({
+  name: "place_order",
+  description:
+    "Place an order for the current cart and navigate to the confirmation screen. " +
+    "Requires a signed-in user with a non-empty cart. Charges the test payment method.",
+  group: "checkout",
+  inputSchema: z.object({
+    paymentMethod: z.enum(["card", "apple_pay"]).default("card").describe("Saved test payment method to charge"),
+  }),
+  outputSchema: z.object({
+    orderId: z.string(),
+    total: z.number().int().describe("Order total in cents"),
+  }),
+  annotations: { destructiveHint: true },
+  timeoutMs: 30_000,
+  handler: async ({ paymentMethod }) => checkout.placeOrder(paymentMethod),
+});
+```
+
+**Read it back.** Once the tools are registered, connect a device and run `appduct tools`. That
+listing is exactly what the calling agent sees: fix any `...` in a signature (a schema shape the
+renderer cannot summarize, usually a root union), any tool without `-> { ... }`, and any description
+whose first line does not say what the tool needs. The [playground's tools](../playground/app/(tabs)/index.tsx)
+follow these rules and are a reasonable template to copy.

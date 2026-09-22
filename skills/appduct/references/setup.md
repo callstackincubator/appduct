@@ -11,11 +11,12 @@ is for builds that leave your machine — do not do it as part of a first-time s
 ## Shared requirements
 
 1. Install `appduct` where the operator or agent will run the CLI (or configure it as
-   an MCP server — see the main skill file). Its daemon auto-spawns on first use; there
+   an MCP server — see [cli.md](./cli.md)). Its daemon auto-spawns on first use; there
    is no separate host process to start.
 2. Install `@appduct/react-native` in the app.
 3. Register the app tools you want Appduct to expose (`registerTool` /
-   `useAppductTool`).
+   `useAppductTool`), following [writing-tools.md](./writing-tools.md) so the agent that
+   calls them can use them.
 4. Import `@appduct/react-native/auto` once near the app's entry point to install the
    deep-link bootstrap listener automatically — or `require()` it at the point you want
    it installed (e.g. behind `__DEV__`). (If you'd rather drive bootstrap yourself —

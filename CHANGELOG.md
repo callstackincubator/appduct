@@ -10,6 +10,14 @@ package versions for a release.
 
 ## Unreleased
 
+- **Docs: designing tools for agents.** `docs/TOOLS.md` gains a "Designing tools for agents"
+  section (name by intent, annotate, pair mutations with observers, declare `outputSchema`,
+  describe parameters, coarse over fine, `timeoutMs`, no tools that wait on a person), linked from
+  the React Native, iOS and Android READMEs and the website. The Appduct skill is split into a short
+  `SKILL.md` (the CLI loop, chaining calls in one shell invocation, errors) plus on-demand
+  references for the CLI, writing tools and setup. The playground tools now follow the rules:
+  `reset_counter` is also `idempotentHint`, `throwing_tool` is `readOnlyHint`, and descriptions
+  name their side effects.
 - **New: tool groups.** A tool can declare an optional `group` — a top-level group (`"cart"`)
   or one subgroup below it (`"checkout/payment"`); each part matches the tool-name pattern
   `[a-zA-Z0-9_-]{1,64}`. Set it with `registerTool`/`useAppductTool`'s `group` option (a change

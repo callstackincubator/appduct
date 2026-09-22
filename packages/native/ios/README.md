@@ -173,6 +173,10 @@ try Appduct.shared.register(
 
 - `annotations` (`ToolAnnotations(readOnlyHint:destructiveHint:idempotentHint:)`) and `timeoutMs`
   are optional, exactly like the JS API's `registerTool`.
+  Set them the way an agent needs them: `readOnlyHint` on every observer, `destructiveHint` on
+  anything that deletes, signs out or pays, and an `outputSchema` on every tool, so `appduct tools`
+  shows a complete signature. [`docs/TOOLS.md`](../../../docs/TOOLS.md#designing-tools-for-agents)
+  has the full list of rules, with examples.
 - `group` is optional too. On an app with many tools, set it so agents can list them one area at a
   time (`appduct tools --group cart`). A group is `"cart"` or one subgroup below it, like
   `"checkout/payment"`; each part uses tool-name characters (letters, digits, `_`, `-`, at most 64).

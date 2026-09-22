@@ -87,6 +87,8 @@ Make `inputSchema` accept an object: a call's arguments are always a JSON object
 
 To keep a destructive tool out of some build variants, pass `{ enabled }` rather than wrapping the hook in an `if` — see [Gating a tool by build variant](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#gating-a-tool-by-build-variant).
 
+An agent picks a tool from one signature line and the first line of its description, so name tools by intent, set `annotations` (`readOnlyHint`, `destructiveHint`), declare an `outputSchema`, and describe each parameter — see [Designing tools for agents](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#designing-tools-for-agents).
+
 ### 5. Start the daemon and test the flow
 
 `appduct` auto-spawns its daemon. `link` needs your app's deep-link scheme: pass `--scheme` (matching `expo.scheme`), or set `scheme` once in `~/.appduct/config.json`:
@@ -143,7 +145,7 @@ Omit the session selector when only one session is active; pass an alias or sess
 ## Going further
 
 - [Trust modes](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#trust-modes) and [Configuring trust](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#configuring-trust) — pins, plugin options, bare-RN native keys.
-- [Registering tools](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md) — schema forms, what re-registers, tool groups, input schemas that accept an object, `timeoutMs`.
+- [Registering tools](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md) — schema forms, what re-registers, tool groups, input schemas that accept an object, `timeoutMs`, and [designing tools for agents](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#designing-tools-for-agents).
 - [Gating a tool by build variant](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#gating-a-tool-by-build-variant) — `enabled`, and why `__DEV__` is wrong here.
 - [Build variants](https://github.com/callstackincubator/appduct/blob/main/docs/BUILD-VARIANTS.md) — `APPDUCT_ENABLED`, autolinking exclusion, compiling Appduct out of production builds.
 - [What a build without the native module does](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#what-a-build-without-the-native-module-does).
