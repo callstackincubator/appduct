@@ -103,6 +103,8 @@ describe("lint: burn-down lists", () => {
   const loadConfig = async (): Promise<Config> => import(pathToFileURL(path.join(repoRoot, "eslint.config.mjs")).href);
 
   const violators = async (files: string[], rules: Linter.RulesRecord, expectedRule: string) => {
+    // A finished list is the goal; lintFiles([]) would throw, which is the wrong kind of red.
+    if (files.length === 0) return [];
     const withoutExemption = new ESLint({ cwd: repoRoot, overrideConfig: [{ files, rules }] });
     const results = await withoutExemption.lintFiles(files);
     return results.filter((r) => r.messages.some((m) => m.ruleId === expectedRule)).map((r) => path.relative(repoRoot, r.filePath));
@@ -110,7 +112,6 @@ describe("lint: burn-down lists", () => {
 
   test("every LEGACY_NODE_IO entry still reaches Node I/O directly", async () => {
     const { LEGACY_NODE_IO, NODE_IO_RESTRICTION } = await loadConfig();
-    expect(LEGACY_NODE_IO.length).toBeGreaterThan(0);
     expect(await violators(LEGACY_NODE_IO, { "no-restricted-imports": NODE_IO_RESTRICTION }, "no-restricted-imports")).toEqual(LEGACY_NODE_IO);
   });
 
