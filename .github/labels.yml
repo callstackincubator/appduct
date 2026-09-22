@@ -1,0 +1,80 @@
+# The repository's label set, applied once by hand on 2026-09-22. Adding a label means editing
+# this file and creating it with `gh label create`, so the two stay in step.
+#
+# Rules: exactly one type: and one status: per issue; any number of platform: and area:.
+# platform: is absent when the issue is platform-independent (daemon, CLI, MCP).
+
+- name: type:bug
+  color: d73a4a
+  description: Behaves differently from what docs or code promise
+- name: type:feature
+  color: a2eeef
+  description: Something Appduct should do that it does not today
+- name: type:chore
+  color: cfd3d7
+  description: Maintenance with no user-visible change
+
+- name: status:needs-triage
+  color: fbca04
+  description: Not yet investigated; run the triage-issue skill
+- name: status:needs-design
+  color: fbca04
+  description: A feature that needs a design pass before it can be worked; run design-feature
+- name: status:ready
+  color: 0e8a16
+  description: Spec and fix direction are clear; an agent can pick it up
+- name: status:blocked
+  color: b60205
+  description: Needs a human decision; the question is in the last comment
+
+- name: platform:ios
+  color: 1d76db
+  description: Affects the iOS SDK or iOS builds
+- name: platform:android
+  color: 1d76db
+  description: Affects the Android SDK or Android builds
+- name: platform:react-native
+  color: 1d76db
+  description: Affects the React Native SDK, Expo plugin or Metro helper
+
+- name: area:cli
+  color: 5319e7
+  description: packages/appduct CLI commands and output
+- name: area:daemon
+  color: 5319e7
+  description: Daemon lifecycle, sessions, RPC, policy, audit
+- name: area:mcp
+  color: 5319e7
+  description: MCP server and built-in tools
+- name: area:native-core
+  color: 5319e7
+  description: packages/native Swift and Kotlin core
+- name: area:react-native-sdk
+  color: 5319e7
+  description: packages/react-native
+- name: area:docs
+  color: 5319e7
+  description: README, docs/, skills
+- name: area:website
+  color: 5319e7
+  description: website/
+- name: area:tooling
+  color: 5319e7
+  description: Repo scripts, CI workflows, workspace config
+
+# Kept from GitHub's defaults and Dependabot.
+- name: good first issue
+  color: 7057ff
+  description: Good for newcomers
+- name: help wanted
+  color: 008672
+  description: Extra attention is needed
+- name: duplicate
+  color: cfd3d7
+  description: This issue or pull request already exists
+- name: dependencies
+  color: 0366d6
+  description: Pull requests that update a dependency file
+- name: github_actions
+  color: "000000"
+  description: Pull requests that update GitHub Actions code

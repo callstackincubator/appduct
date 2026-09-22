@@ -1,0 +1,56 @@
+name: Bug report
+description: Something behaves differently from what the docs or the code promise.
+labels: ["type:bug", "status:needs-triage"]
+body:
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens
+      description: Observed behaviour, one or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should happen
+      description: The expected state, concretely. Not "it should work".
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Exact commands or steps from a clean state, and the output you got. Say how often if intermittent.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Appduct version
+      placeholder: "0.10.0 as installed, or a commit sha when running from this repo"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Add the matching platform label too, if you can.
+      multiple: true
+      options:
+        - iOS
+        - Android
+        - React Native
+        - None (daemon, CLI, MCP, repo tooling)
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "macOS 26.1, Xcode 26, iPhone 17 simulator, Node 24"
+  - type: textarea
+    id: root-cause
+    attributes:
+      label: Root cause, if you traced it
+      description: Only what you verified in code, with path and line. Otherwise write "not investigated"; triage will.
