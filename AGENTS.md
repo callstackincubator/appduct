@@ -14,7 +14,7 @@ the daemon, CLI, MCP server and SDKs fit together.
 | `packages/native` | Framework-free iOS (Swift) and Android (Kotlin) core |
 | `playground`, `playground-native` | Expo app and native apps registering the same five demo tools |
 | `skills/appduct` | The skill shipped to Appduct users; not for working on this repo |
-| `.agents/` | Agent resources: `memory/` (curated `LESSONS.md` read by section, raw `INBOX.md` write-only), `scripts/` (worktree bootstrap) |
+| `.agents/` | Agent resources: `memory/` (curated `LESSONS.md` read by section, raw `INBOX.md` write-only), `scripts/` (worktree create and remove, also wired as Claude Code hooks) |
 | `docs/` | Architecture, protocol, security, tools; `docs/tasks` is a historical design record |
 
 ## Commands
@@ -28,7 +28,8 @@ pnpm test                        # vitest, all packages
 pnpm lint && pnpm typecheck
 pnpm --filter appduct test -- src/__tests__/<file>   # one file
 pnpm playground:appduct -- <cli args>                # this repo's CLI, from the playground
-.agents/scripts/worktree.sh <branch>                 # worktree with node_modules cloned copy-on-write, ~10 s
+.agents/scripts/worktree.sh <branch>                 # worktree with node_modules cloned copy-on-write, ~10 s;
+                                                     # Claude Code's worktree hooks call it and worktree-remove.sh
 ```
 
 ## Rules

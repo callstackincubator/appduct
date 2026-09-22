@@ -49,5 +49,27 @@
       "Bash(gh repo delete *)",
       "Bash(npm publish*)"
     ]
+  },
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.agents/scripts/worktree.sh"
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.agents/scripts/worktree-remove.sh"
+          }
+        ]
+      }
+    ]
   }
 }

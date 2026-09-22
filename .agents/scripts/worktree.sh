@@ -2,6 +2,11 @@
 # Creates a git worktree for a branch and makes it buildable in seconds.
 #
 #   .agents/scripts/worktree.sh <branch> [base]      base defaults to origin/main
+#   echo '{"name":"<branch>"}' | .agents/scripts/worktree.sh
+#
+# The second form is what Claude Code's WorktreeCreate hook uses (see .claude/settings.json):
+# the hook passes JSON on stdin and reads the last stdout line as the worktree path. Every
+# other message goes to stderr for that reason.
 #
 # Every node_modules tree of the main checkout is cloned into the worktree with APFS
 # clonefile(2): one call per tree, no data copied, blocks shared copy-on-write. pnpm then
@@ -9,13 +14,18 @@
 # place. On a filesystem without clonefile (Linux) the clone is skipped and pnpm links the
 # tree from its store offline instead; nothing is downloaded either way.
 #
-# Prints the worktree path. An existing local or remote branch is checked out as is; a new one
-# is created from base. Worktrees live under <main checkout>/.worktrees/<branch>, which is
-# gitignored. Remove one with `git worktree remove .worktrees/<branch>`.
+# An existing local or remote branch is checked out as is; a new one is created from base.
+# Worktrees live under <main checkout>/.worktrees/<branch>, which is gitignored. Remove one
+# with .agents/scripts/worktree-remove.sh or `git worktree remove .worktrees/<branch>`.
 set -eu
 
-branch=${1:?usage: .agents/scripts/worktree.sh <branch> [base]}
-base=${2:-origin/main}
+if [ $# -eq 0 ]; then
+  branch=$(python3 -c 'import json, sys; print(json.load(sys.stdin)["name"])')
+  base=origin/main
+else
+  branch=$1
+  base=${2:-origin/main}
+fi
 
 main_root=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
 dir="$main_root/.worktrees/$branch"
@@ -35,7 +45,7 @@ else
 fi
 
 if [ "$(uname)" = Darwin ]; then
-  python3 - "$main_root" "$dir" <<'EOF'
+  python3 - "$main_root" "$dir" <<'EOF' >&2
 import ctypes, os, sys
 src_root, dst_root = sys.argv[1], sys.argv[2]
 libc = ctypes.CDLL("libSystem.dylib", use_errno=True)
@@ -46,7 +56,7 @@ for parent, names, _ in os.walk(src_root):
     if "node_modules" in names:
         names.remove("node_modules")
         src = os.path.join(parent, "node_modules")
-        dst = os.path.join(dst_root, rel, "node_modules") if rel != "." else os.path.join(dst_root, "node_modules")
+        dst = os.path.join(dst_root, "node_modules") if rel == "." else os.path.join(dst_root, rel, "node_modules")
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         if libc.clonefile(src.encode(), dst.encode(), 0) != 0:
             err = ctypes.get_errno()
@@ -56,6 +66,6 @@ fi
 
 # --offline: every package is already in place (Darwin) or in the store (elsewhere). If this
 # fails, the lockfile changed on the branch; run `pnpm install --frozen-lockfile` there once.
-(cd "$dir" && pnpm install --frozen-lockfile --offline --ignore-scripts >/dev/null)
+(cd "$dir" && pnpm install --frozen-lockfile --offline --ignore-scripts >/dev/null 2>&1)
 
 echo "$dir"
