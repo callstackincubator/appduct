@@ -174,7 +174,10 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
         });
         // Unlike the CLI, this client runs no daemon version check, so it can meet a daemon from
         // before `tools.list` returned `{ tools, total }` — one that still answers a bare array.
-        return Array.isArray(result) ? result : result.tools;
+        const entries = Array.isArray(result) ? result : result.tools;
+        // That daemon predates tool groups as well and sends no `group` key, so normalise it the
+        // way the daemon itself would. Callers are told every entry carries one.
+        return entries.map((entry) => ({ ...entry, group: entry.group ?? null }));
       } catch (error) {
         throw toAppductError(error);
       }
