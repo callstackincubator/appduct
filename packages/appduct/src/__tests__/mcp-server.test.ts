@@ -26,7 +26,7 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { RPC_METHODS } from "@appduct/shared";
+import { RPC_METHODS, type ToolsListResult } from "@appduct/shared";
 
 import { createMcpServer, type McpServerHandle } from "../mcp/server.js";
 import { createFakeDaemon, toolError, type FakeDaemon } from "./mcp-daemon-fake.js";
@@ -373,6 +373,24 @@ describe("mcp: appduct_describe_tool", () => {
     });
   });
 
+  test("reports an ungrouped tool's group as null, the value appduct_list_tools reports for it", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setTools([{ name: "echo", description: "Echoes its input." }]);
+
+    const client = await startServerWithClient(daemon);
+    const result = await callBuiltin(client, "appduct_describe_tool", { name: "echo" });
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({
+      session: "pixel-8",
+      signature: "echo()",
+      policy: "allow",
+      name: "echo",
+      description: "Echoes its input.",
+      group: null,
+    });
+  });
+
   test("an unknown tool is tool_not_found and points at appduct_list_tools", async () => {
     const daemon = createFakeDaemon();
     daemon.addSession({ alias: "pixel-8" }).setTools([{ name: "echo" }]);
@@ -631,5 +649,26 @@ describe("mcp: appduct_call_tool", () => {
     // Naming the old session by id fails, instead of reaching the replacement.
     const stale = errorText(await callBuiltin(client, "appduct_call_tool", { selector: "sess-old", name: "whoami" }));
     expect(stale).toContain("unknown_session");
+  });
+});
+
+/**
+ * Everything above is only worth as much as the fake's fidelity to the daemon. The daemon
+ * normalises an ungrouped tool's `group` to `null` on every `tools.list` entry
+ * (`daemon/daemon.ts`), so a fake that left the key absent would let a reader that drops the key
+ * pass its tests against a shape no daemon ever sends.
+ */
+describe("mcp: the in-memory daemon fake", () => {
+  test("lists an ungrouped tool with a null group, the way the daemon serves one", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setTools([{ name: "echo" }, { name: "pay", group: "checkout" }]);
+
+    const stream = await daemon.openStream();
+    const result = await stream.call<ToolsListResult>(RPC_METHODS.toolsList, { selector: "pixel-8" });
+
+    expect(result.tools.map((entry) => [entry.name, entry.group])).toEqual([
+      ["echo", null],
+      ["pay", "checkout"],
+    ]);
   });
 });

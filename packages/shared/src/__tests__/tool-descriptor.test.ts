@@ -10,6 +10,7 @@ import {
   MAX_TOOL_TIMEOUT_MS,
   MIN_TOOL_TIMEOUT_MS,
   TOOL_NAME_PATTERN,
+  type ToolDescriptor,
 } from "../domains/tool-descriptor.js";
 
 const valid = () => ({
@@ -194,6 +195,16 @@ describe("tool groups", () => {
     expect(isToolDescriptor(valid())).toBe(true);
     expect(isToolDescriptor({ ...valid(), group: "a/b/c" })).toBe(false);
     expect(isToolDescriptor({ ...valid(), group: null })).toBe(false);
+  });
+
+  test("the ToolDescriptor type rejects the null group that registration rejects", () => {
+    // `ToolDescriptor` is what an app author writes against (`appduct/client`, the React Native
+    // SDK's `getRegisteredTools`). A type that admits `group: null` promises a registration the
+    // guard below — and the `group-null` conformance vector — throws out.
+    // @ts-expect-error -- an ungrouped tool omits `group`; `null` is not a way to spell it.
+    const registered: ToolDescriptor = { ...valid(), group: null };
+
+    expect(isToolDescriptor(registered)).toBe(false);
   });
 
   test("toolGroupMatches matches by segment: a parent includes its subgroups, never a longer name", () => {
