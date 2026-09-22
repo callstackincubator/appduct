@@ -14,8 +14,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const eslint = new ESLint({ cwd: repoRoot });
 
 const lint = async (relativePath: string, code: string) => {
-  const [result] = await eslint.lintText(code, { filePath: path.join(repoRoot, relativePath) });
-  return result.messages.map((message) => message.ruleId);
+  const results = await eslint.lintText(code, { filePath: path.join(repoRoot, relativePath) });
+  return (results[0]?.messages ?? []).map((message) => message.ruleId);
 };
 
 describe("lint: ports", () => {
