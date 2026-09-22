@@ -1,6 +1,6 @@
 {
   "name": "appduct",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Driving React Native tools without in-app debug UI.",
   "type": "module",
   "main": "./dist/index.js",

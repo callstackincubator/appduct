@@ -10,6 +10,8 @@ skill in `.claude/skills/`) turns that section into a versioned heading.
 
 ## Unreleased
 
+## 0.11.1 (2026-09-22)
+
 - **Fix: an ungrouped tool reports `group: null` to every reader.** `appduct_describe_tool`
   dropped the key instead of reporting `null`, so it disagreed with `appduct_list_tools` about
   the same tool. `ToolDescriptor.group` is
