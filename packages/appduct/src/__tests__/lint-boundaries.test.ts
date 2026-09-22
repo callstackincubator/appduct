@@ -7,7 +7,7 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { ESLint } from "eslint";
+import { ESLint, type Linter } from "eslint";
 import { describe, expect, test } from "vitest";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
@@ -97,12 +97,12 @@ describe("lint: burn-down lists", () => {
     LEGACY_NODE_IO: string[];
     LEGACY_VI_MOCK: string[];
     LEGACY_MODULE_BOUNDARY: string[];
-    NODE_IO_RESTRICTION: unknown;
-    VI_MOCK_RESTRICTION: unknown;
+    NODE_IO_RESTRICTION: Linter.RuleEntry;
+    VI_MOCK_RESTRICTION: Linter.RuleEntry;
   };
   const loadConfig = async (): Promise<Config> => import(pathToFileURL(path.join(repoRoot, "eslint.config.mjs")).href);
 
-  const violators = async (files: string[], rules: Record<string, unknown>, expectedRule: string) => {
+  const violators = async (files: string[], rules: Linter.RulesRecord, expectedRule: string) => {
     const withoutExemption = new ESLint({ cwd: repoRoot, overrideConfig: [{ files, rules }] });
     const results = await withoutExemption.lintFiles(files);
     return results.filter((r) => r.messages.some((m) => m.ruleId === expectedRule)).map((r) => path.relative(repoRoot, r.filePath));
