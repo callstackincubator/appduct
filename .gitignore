@@ -49,5 +49,5 @@ playground-native/ios/.swiftpm/
 .claude/settings.local.json
 .claude/worktrees/
 
-# Worktrees made by scripts/worktree.sh
+# Worktrees made by .agents/scripts/worktree.sh
 .worktrees/

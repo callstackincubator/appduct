@@ -14,7 +14,7 @@ the daemon, CLI, MCP server and SDKs fit together.
 | `packages/native` | Framework-free iOS (Swift) and Android (Kotlin) core |
 | `playground`, `playground-native` | Expo app and native apps registering the same five demo tools |
 | `skills/appduct` | The skill shipped to Appduct users; not for working on this repo |
-| `.agents/memory` | Agent memory: curated `LESSONS.md` read by section, raw `INBOX.md` write-only |
+| `.agents/` | Agent resources: `memory/` (curated `LESSONS.md` read by section, raw `INBOX.md` write-only), `scripts/` (worktree bootstrap) |
 | `docs/` | Architecture, protocol, security, tools; `docs/tasks` is a historical design record |
 
 ## Commands
@@ -28,7 +28,7 @@ pnpm test                        # vitest, all packages
 pnpm lint && pnpm typecheck
 pnpm --filter appduct test -- src/__tests__/<file>   # one file
 pnpm playground:appduct -- <cli args>                # this repo's CLI, from the playground
-scripts/worktree.sh <branch>                         # worktree with deps linked offline, ~7 s
+.agents/scripts/worktree.sh <branch>                 # worktree with node_modules cloned copy-on-write, ~10 s
 ```
 
 ## Rules
@@ -78,7 +78,7 @@ Load the skill before starting the matching task. They live in `.claude/skills/`
 | Designing a feature too big for one PR, or sizing one | `design-feature` |
 | Turning a request or a found bug into an issue (interviews first) | `file-issue` |
 | Running the app on a simulator and driving it through the CLI | `e2e-device` |
-| Writing or editing anything an Appduct user reads: READMEs, `docs/`, website, the shipped skill, CLI help, error messages, changelog | `user-facing-docs` |
+| Writing or editing anything an Appduct user reads: READMEs, `docs/`, website, the shipped skill, CLI help, error messages, changelog | `writing-user-docs` |
 | Cutting a release | `cut-release` |
 | Curating agent memory (monthly, or when the inbox has notes) | `review-memory` |
 | Taking an issue from `status:ready` to a reviewed, tested PR | `work-issue` (orchestrator) |

@@ -19,7 +19,7 @@ n=<issue number>
 slug=$(gh issue view "$n" --json title -q .title | tr '[:upper:]' '[:lower:]' \
   | sed -E 's/[^a-z0-9]+/-/g; s/^-//; s/-$//' | cut -c1-40 | sed -E 's/-$//')
 branch="issue-$n-$slug"
-dir=$(scripts/worktree.sh "$branch")     # existing branch is resumed, new one starts from origin/main
+dir=$(.agents/scripts/worktree.sh "$branch")     # existing branch is resumed, new one starts from origin/main
 cd "$dir" && pnpm build
 ```
 
@@ -38,7 +38,7 @@ If a criterion cannot be phrased that way, post the list as an issue comment wit
 question under it, apply `status:blocked`, and stop. Do not guess.
 
 Add one criterion of your own when the change is user-visible: the docs. Name the surfaces
-from the `user-facing-docs` skill's table (README, `docs/`, website, the shipped skill, CLI
+from the `writing-user-docs` skill's table (README, `docs/`, website, the shipped skill, CLI
 help, error text) and write them with that skill. The changelog line is separate and always
 required.
 
