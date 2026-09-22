@@ -107,7 +107,6 @@ const runCliHuman = async (args: string[], stateDir: string): Promise<{ stdout: 
 
 /** Headings are colored even when piped (the CLI's palette is not TTY-gated), so line-level
  * assertions compare the text without SGR sequences. */
-// eslint-disable-next-line no-control-regex
 const stripAnsi = (value: string): string => value.replace(/\[[0-9;]*m/gu, "");
 
 const connectFakeApp = (port: number): Promise<WebSocket> => {

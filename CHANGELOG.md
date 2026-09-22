@@ -18,6 +18,15 @@ skill in `.claude/skills/`) turns that section into a versioned heading.
   `getRegisteredTools()`) no longer admits a value that throws. Code reading a `tools.list` entry
   takes the new `ListedToolDescriptor` (or `ToolsListEntry`, which adds `policy`), where `group` is
   `string | null`; `appduct/client`'s `tools()` now returns those entries.
+- **Fix: the first Appduct command on a clean machine no longer fails with a bare `ENOENT`.**
+  Nothing created the state directory before the auto-spawn path wrote into it: `~/.appduct` is
+  created by `startDaemon`, but the spawn-lock and `daemon.log`'s fd are opened by the *parent*
+  process, before the daemon it spawns exists. So with no `~/.appduct` yet, every command that
+  auto-spawns a daemon — `appduct ls`, `appduct daemon start|status`, and `appduct mcp`, which
+  died before an MCP client could finish `initialize` — failed with
+  `ENOENT: ... open '~/.appduct/daemon.spawn.lock'` until someone ran `appduct daemon run` in the
+  foreground once. The auto-spawn path now creates the directory (mode `0700`, same as the daemon
+  would) before taking the lock.
 
 ## 0.11.0 (2026-09-22)
 
