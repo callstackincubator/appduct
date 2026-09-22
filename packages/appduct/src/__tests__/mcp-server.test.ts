@@ -163,11 +163,12 @@ describe("mcp: appduct_list_tools", () => {
       total: 2,
       limit: 50,
       tools: [
-        { name: "echo", signature: "echo()", summary: "Echoes its input.", policy: "allow" },
+        { name: "echo", signature: "echo()", summary: "Echoes its input.", group: null, policy: "allow" },
         {
           name: "seed_cart",
           signature: "seed_cart(items: int, sku?: string) -> { added: int }",
           summary: "Seeds the cart.",
+          group: null,
           policy: "prompt",
           annotations: { destructiveHint: true },
         },

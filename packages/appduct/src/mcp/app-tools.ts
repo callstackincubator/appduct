@@ -254,7 +254,9 @@ export const handleListToolsTool = async (rawArgs: unknown, call: DaemonCall) =>
       name: entry.name,
       signature: renderToolSignature(entry),
       summary: summarizeToolDescription(entry.description),
-      ...(entry.group !== undefined ? { group: entry.group } : {}),
+      // Always present: `null` for an ungrouped tool, mirroring `groups`. The `?? null` also covers
+      // a daemon that predates groups and omits the key from its entries entirely.
+      group: entry.group ?? null,
       policy: entry.policy,
       ...(entry.annotations ? { annotations: entry.annotations } : {}),
     })),

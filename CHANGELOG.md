@@ -24,15 +24,17 @@ package versions for a release.
   to it re-registers the tool), with `createToolGroup("cart")` to bind one group for a whole
   feature module, or with the `group` parameter of the Swift and Kotlin `register` calls. An
   invalid group invalidates the registry snapshot exactly like an invalid `timeout_ms`, so all
-  three SDKs reject it at registration. A daemon that predates groups ignores the field.
+  three SDKs reject it at registration — an explicit `null` included, so an ungrouped tool omits
+  the option rather than passing `null`. A daemon that predates groups ignores the field.
 - **New: `appduct tools --group <name>` and `appduct tools --groups`.** `--group checkout` lists
   the `checkout` group and all its subgroups (`checkout/payment` lists just that subgroup) and
   combines with `--filter`/`--limit`/`--offset`; `--groups` lists only the groups and their tool
   counts. Without `--group`, a registry with groups is listed under group headings, and a
   truncated listing's footer names the top-level groups to narrow to. `tools.list` gains a
   `group` param (applied before `total` and paging) and a `groups` summary of the whole registry
-  on every result, so `appduct tools --json` now returns `{ tools, total, groups }` and each
-  entry carries its `group`.
+  on every result, so `appduct tools --json` now returns `{ tools, total, groups }`. Every entry
+  carries a `group`, `null` for an ungrouped tool — the same value the `groups` summary uses for
+  its own ungrouped row, so one test answers "ungrouped" in either half of the result.
 - **New: groups over MCP.** `appduct_list_tools` takes a `group` (same matching as `--group`),
   shows each tool's `group`, and returns the `groups` summary on every result, so an agent can
   see an app's areas and list one of them. `appduct_describe_tool` includes the tool's `group`.

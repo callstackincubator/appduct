@@ -81,7 +81,11 @@ describe("e2e: mcp (real stdio subprocess)", () => {
         session: alias,
         total: 1,
         limit: 50,
-        tools: [{ name: "echo", signature: "echo(text?: string)", summary: "Echoes its input.", policy: "allow" }],
+        // `group: null` on the entry, `group: null` in the summary below: the same "no group" in both
+        // halves of the result, so a caller never compares `undefined` in one and `null` in the other.
+        tools: [
+          { name: "echo", signature: "echo(text?: string)", summary: "Echoes its input.", group: null, policy: "allow" },
+        ],
         groups: [{ group: null, total: 1 }],
       });
 

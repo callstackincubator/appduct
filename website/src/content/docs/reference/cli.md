@@ -67,7 +67,7 @@ Lists a device's tools as one-line signatures, or shows one tool's full schema w
 | `--offset <n>` | Skip the first `n` tools of the name-sorted list. |
 | `--full` | Print full schemas for every listed tool. |
 
-`--groups`, `--group`, `--filter`, `--limit`, and `--offset` can't be combined with `name`. With `--json`, the listing is `{ tools, total, groups }`, where `total` counts matches before `--limit` and `--offset`.
+`--groups`, `--group`, `--filter`, `--limit`, and `--offset` can't be combined with `name`. With `--json`, the listing is `{ tools, total, groups }`, where `total` counts matches before `--limit` and `--offset`. Every listed tool carries a `group` — its group name, or `null` when it has none, which is also how `groups` spells its ungrouped row.
 
 Signature syntax: `name: type` for a required argument, `name?: type` for an optional one, `= value` for a default, `-> type` for the result. `...` marks a part the signature can't summarize. `[prompt]` or `[deny]` marks a tool whose policy isn't `"allow"`.
 

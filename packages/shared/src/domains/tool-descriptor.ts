@@ -23,10 +23,14 @@ export const isValidToolGroup = (value: unknown): value is string => {
  * Segment match of a tool's `group` against a selected group (`tools.list`'s `group` param):
  * `checkout` selects `checkout` itself and every `checkout/*` subgroup, `checkout/payment` selects
  * exactly that subgroup, and `checkout` never selects `checkoutx`. Case-sensitive. An ungrouped
- * tool (`toolGroup` undefined) matches nothing.
+ * tool matches nothing — whether its `group` is the absent `undefined` an app registers with or the
+ * `null` a `tools.list` entry reports (see {@link ToolDescriptor.group}).
  */
-export const toolGroupMatches = (toolGroup: string | undefined, selected: string): boolean => {
-  if (toolGroup === undefined) {
+export const toolGroupMatches = (
+  toolGroup: string | null | undefined,
+  selected: string,
+): boolean => {
+  if (toolGroup === undefined || toolGroup === null) {
     return false;
   }
 
@@ -70,12 +74,17 @@ const compareGroupPaths = (a: string, b: string): number => {
  * names compare by code point, never `localeCompare`, so the order does not depend on the
  * daemon's locale.
  */
-export const summarizeToolGroups = (tools: ReadonlyArray<{ group?: string }>): ToolGroupSummary[] => {
+export const summarizeToolGroups = (
+  tools: ReadonlyArray<{ group?: string | null }>,
+): ToolGroupSummary[] => {
   const totals = new Map<string, number>();
   let ungrouped = 0;
 
   for (const tool of tools) {
-    if (tool.group === undefined) {
+    // Both spellings of "no group" belong in this bucket: the absent key an app registers with, and
+    // the explicit `null` a `tools.list` entry carries (the daemon summarizes over *entries*, so if
+    // only `undefined` counted here the summary's ungrouped row would silently disappear).
+    if (tool.group === undefined || tool.group === null) {
       ungrouped += 1;
       continue;
     }
@@ -149,10 +158,20 @@ export type ToolDescriptor = {
   timeout_ms?: number;
   /**
    * The group this tool belongs to (PROTOCOL.md §5): a top-level group (`checkout`) or a subgroup
-   * (`checkout/payment`), see {@link TOOL_GROUP_PATTERN}. Optional — an ungrouped tool omits it.
-   * Used by `tools.list`'s `group` filter and `groups` summary; never part of the MCP `Tool`.
+   * (`checkout/payment`), see {@link TOOL_GROUP_PATTERN}.
+   *
+   * "No group" has exactly one spelling per direction. On the way *in*, an app omits the key, and a
+   * registered `null` is an invalid descriptor ({@link isToolDescriptor}) — pinned for all three SDKs
+   * by `packages/native/fixtures/tool-descriptors.json`'s `group-null` vector. On the way *out*, a
+   * `tools.list` entry (`ToolsListEntry`) always carries the key, with `null` for an ungrouped tool:
+   * the same value the `groups` summary uses for its own ungrouped bucket
+   * ({@link ToolGroupSummary}), so one test — `entry.group === null` — answers "ungrouped" anywhere
+   * in a listing. Consumers must therefore not probe `"group" in entry`.
+   *
+   * Drives `tools.list`'s `group` filter and `groups` summary; never part of an MCP built-in's own
+   * schema (the app tools surfaced through `appduct_list_tools` do report it, one per entry).
    */
-  group?: string;
+  group?: string | null;
 };
 
 const isJsonObject = (value: unknown): value is Record<string, unknown> => {

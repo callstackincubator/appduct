@@ -461,16 +461,22 @@ describe("tools.list / tools.call: round trip", () => {
       { group: null, total: 1 },
     ];
 
-    type Listing = { tools: Array<{ name: string; group?: string }>; total: number; groups: unknown };
+    type Listing = {
+      tools: Array<{ name: string; group: string | null }>;
+      total: number;
+      groups: unknown;
+    };
     const list = async (params: Record<string, unknown>) =>
       (await rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias, ...params })) as Listing;
 
     const all = await list({});
     expect(all.total).toBe(7);
     expect(all.groups).toEqual(wholeRegistryGroups);
-    // `group` rides along on each entry, straight off the descriptor.
+    // Every entry carries `group`: the tool's own group, or `null` when it has none — the same value
+    // the `groups` summary uses for its ungrouped bucket, so `=== null` answers "ungrouped" either way.
     expect(all.tools.find((tool) => tool.name === "pay_card")?.group).toBe("checkout/payment");
-    expect(all.tools.find((tool) => tool.name === "ping")).not.toHaveProperty("group");
+    expect(all.tools.find((tool) => tool.name === "ping")?.group).toBeNull();
+    expect(all.tools.every((tool) => "group" in tool)).toBe(true);
 
     // A parent includes its subgroups, never a longer top-level name.
     const checkout = await list({ group: "checkout" });
