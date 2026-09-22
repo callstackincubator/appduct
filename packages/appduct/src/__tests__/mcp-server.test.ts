@@ -26,9 +26,10 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { RPC_METHODS } from "@appduct/shared";
+import { RPC_METHODS, type ToolsListResult } from "@appduct/shared";
 
 import { createMcpServer, type McpServerHandle } from "../mcp/server.js";
+import type { DaemonStream } from "../rpc/client.js";
 import { createFakeDaemon, toolError, type FakeDaemon } from "./mcp-daemon-fake.js";
 
 const mcpHandles: McpServerHandle[] = [];
@@ -52,7 +53,7 @@ const BUILTIN_TOOL_NAMES = [
 /** Starts an MCP server over `daemon` and connects an SDK `Client` to it in-process. `stateDir` is
  * never touched: nothing here reaches the filesystem, because `openStream` is the only path the
  * server has to a daemon and it is the fake's. */
-const startServerWithClient = async (daemon: FakeDaemon): Promise<Client> => {
+const startServerWithClient = async (daemon: Pick<FakeDaemon, "openStream">): Promise<Client> => {
   const handle = await createMcpServer({
     stateDir: "/nonexistent-state-dir",
     openStream: daemon.openStream,
@@ -68,6 +69,30 @@ const startServerWithClient = async (daemon: FakeDaemon): Promise<Client> => {
   await client.connect(clientTransport);
 
   return client;
+};
+
+/** `daemon` as a daemon that predates tool groups serves it: `tools.list` comes back with no
+ * `groups` summary and no `group` key on any entry, which is the only input that tells a reader
+ * that normalises `group` apart from one that passes it through. */
+const openPreGroupsStream = (daemon: FakeDaemon) => {
+  return async (): Promise<DaemonStream> => {
+    const stream = await daemon.openStream();
+    const { call } = stream;
+
+    return {
+      ...stream,
+      call: async <TResult>(method: string, params?: unknown): Promise<TResult> => {
+        const result = await call<TResult>(method, params);
+
+        if (method !== RPC_METHODS.toolsList) {
+          return result;
+        }
+
+        const { groups: _groups, tools, ...rest } = result as ToolsListResult;
+        return { ...rest, tools: tools.map(({ group: _group, ...entry }) => entry) } as TResult;
+      },
+    };
+  };
 };
 
 const callBuiltin = async (client: Client, name: string, args: Record<string, unknown>): Promise<CallToolResult> => {
@@ -212,31 +237,8 @@ describe("mcp: appduct_list_tools", () => {
   test("against a daemon that predates groups, asking for a group fails instead of listing everything", async () => {
     const daemon = createFakeDaemon();
     daemon.addSession({ alias: "pixel-8" }).setTools([{ name: "ping" }]);
-    // An older daemon answers tools.list with no `groups` and ignores `group`.
-    const openOldStream = async () => {
-      const stream = await daemon.openStream();
-      const call = stream.call;
-      return {
-        ...stream,
-        call: async <TResult>(method: string, params?: unknown): Promise<TResult> => {
-          const result = await call<TResult>(method, params);
 
-          if (method === RPC_METHODS.toolsList) {
-            const { groups: _groups, ...rest } = result as Record<string, unknown>;
-            return rest as TResult;
-          }
-
-          return result;
-        },
-      };
-    };
-
-    const handle = await createMcpServer({ stateDir: "/nonexistent-state-dir", openStream: openOldStream, env: {} });
-    mcpHandles.push(handle);
-    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
-    await handle.connect(serverTransport);
-    const client = new Client({ name: "test-client", version: "0.0.0" });
-    await client.connect(clientTransport);
+    const client = await startServerWithClient({ openStream: openPreGroupsStream(daemon) });
 
     const plain = await callBuiltin(client, "appduct_list_tools", {});
     expect(plain.structuredContent).toMatchObject({ tools: [{ name: "ping" }] });
@@ -371,6 +373,35 @@ describe("mcp: appduct_describe_tool", () => {
       timeout_ms: 30_000,
       group: "todos",
     });
+  });
+
+  test("reports an ungrouped tool's group as null, the value appduct_list_tools reports for it", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setTools([{ name: "echo", description: "Echoes its input." }]);
+
+    const client = await startServerWithClient(daemon);
+    const result = await callBuiltin(client, "appduct_describe_tool", { name: "echo" });
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({
+      session: "pixel-8",
+      signature: "echo()",
+      policy: "allow",
+      name: "echo",
+      description: "Echoes its input.",
+      group: null,
+    });
+  });
+
+  test("against a daemon that predates groups, an ungrouped tool's group is still null", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setTools([{ name: "ping", description: "Pings." }]);
+
+    const client = await startServerWithClient({ openStream: openPreGroupsStream(daemon) });
+    const result = await callBuiltin(client, "appduct_describe_tool", { name: "ping" });
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ name: "ping", group: null });
   });
 
   test("an unknown tool is tool_not_found and points at appduct_list_tools", async () => {
@@ -631,5 +662,26 @@ describe("mcp: appduct_call_tool", () => {
     // Naming the old session by id fails, instead of reaching the replacement.
     const stale = errorText(await callBuiltin(client, "appduct_call_tool", { selector: "sess-old", name: "whoami" }));
     expect(stale).toContain("unknown_session");
+  });
+});
+
+/**
+ * Everything above is only worth as much as the fake's fidelity to the daemon. The daemon
+ * normalises an ungrouped tool's `group` to `null` on every `tools.list` entry
+ * (`daemon/daemon.ts`), so a fake that left the key absent would let a reader that drops the key
+ * pass its tests against a shape no daemon ever sends.
+ */
+describe("mcp: the in-memory daemon fake", () => {
+  test("lists an ungrouped tool with a null group, the way the daemon serves one", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setTools([{ name: "echo" }, { name: "pay", group: "checkout" }]);
+
+    const stream = await daemon.openStream();
+    const result = await stream.call<ToolsListResult>(RPC_METHODS.toolsList, { selector: "pixel-8" });
+
+    expect(result.tools.map((entry) => [entry.name, entry.group])).toEqual([
+      ["echo", null],
+      ["pay", "checkout"],
+    ]);
   });
 });

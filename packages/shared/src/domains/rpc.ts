@@ -157,11 +157,12 @@ export type ToolsListParams = SessionSelectorParams & {
   offset?: number;
 };
 
-/** A `tools.list` entry: the tool's descriptor plus the policy decision (ARCHITECTURE.md §12)
- * that would apply to it right now — resolved daemon-side (it needs `session.alias` and
- * `config.policy`) so the MCP server knows which calls need an elicitation prompt without a
- * second round trip. */
-export type ToolsListEntry = Omit<ToolDescriptor, "group"> & {
+/**
+ * A tool as a *listing* describes it: every `ToolDescriptor` field, but with the listing's spelling
+ * of "no group". This is the type to read a `tools.list` entry with; `ToolDescriptor` is the
+ * registration side, and an app that registers `group: null` is rejected.
+ */
+export type ListedToolDescriptor = Omit<ToolDescriptor, "group"> & {
   /**
    * Always present on a listing: the tool's group, or `null` when it has none. Apps register an
    * ungrouped tool by *omitting* `group`; the daemon normalises that to `null` here so that entries
@@ -169,6 +170,13 @@ export type ToolsListEntry = Omit<ToolDescriptor, "group"> & {
    * tool groups omits the key entirely, which callers normalise with `entry.group ?? null`.
    */
   group: string | null;
+};
+
+/** A `tools.list` entry: the tool as the listing describes it plus the policy decision
+ * (ARCHITECTURE.md §12) that would apply to it right now — resolved daemon-side (it needs
+ * `session.alias` and `config.policy`) so the MCP server knows which calls need an elicitation
+ * prompt without a second round trip. */
+export type ToolsListEntry = ListedToolDescriptor & {
   policy: EffectivePolicyDecision;
 };
 

@@ -19,8 +19,8 @@ import {
   summarizeToolDescription,
   TOOL_GROUP_PATTERN,
   type EffectivePolicyDecision,
+  type ListedToolDescriptor,
   type SessionsDescribeResult,
-  type ToolDescriptor,
   type ToolsListEntry,
   type ToolsListResult,
 } from "@appduct/shared";
@@ -119,7 +119,7 @@ export const CALL_TOOL_TOOL_DESCRIPTOR = {
 export type ResolvedAppTool = {
   sessionId: string;
   alias: string;
-  descriptor: ToolDescriptor;
+  descriptor: ListedToolDescriptor;
   policy: EffectivePolicyDecision;
 };
 
@@ -180,7 +180,7 @@ const asRequiredString = (value: unknown, field: string): string => {
 
 /** Explicit pick, so a non-descriptor field on `ToolsListEntry` (today `policy`) is reported once,
  * on its own key, rather than twice. */
-const toDescriptor = (entry: ToolsListEntry): ToolDescriptor => {
+const toDescriptor = (entry: ToolsListEntry): ListedToolDescriptor => {
   return {
     name: entry.name,
     description: entry.description,
@@ -188,7 +188,10 @@ const toDescriptor = (entry: ToolsListEntry): ToolDescriptor => {
     output_schema: entry.output_schema,
     annotations: entry.annotations,
     timeout_ms: entry.timeout_ms,
-    group: entry.group,
+    // Normalised the same way the listing normalises it, so `appduct_describe_tool` never
+    // disagrees with `appduct_list_tools` about whether a tool has a group. The `?? null` also
+    // covers a daemon that predates groups and omits the key entirely.
+    group: entry.group ?? null,
   };
 };
 

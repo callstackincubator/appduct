@@ -232,7 +232,7 @@ import { connect } from "appduct/client";
 // auto-spawns the daemon and picks the single session, or pass { selector: "pixel-8" } to target one explicitly
 const app = await connect();
 
-await app.tools();                                  // ToolDescriptor[]
+await app.tools();                                  // ListedToolDescriptor[]; an ungrouped tool's group is null
 const { total } = await app.call("sum", { a: 2, b: 3 });
 const { payload } = await app.waitForEvent("checkout_done", { timeoutMs: 5_000 });
 app.close();

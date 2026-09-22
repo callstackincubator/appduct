@@ -168,10 +168,15 @@ export type ToolDescriptor = {
    * ({@link ToolGroupSummary}), so one test — `entry.group === null` — answers "ungrouped" anywhere
    * in a listing. Consumers must therefore not probe `"group" in entry`.
    *
+   * This type is the *registration* side, and the one app authors write against (`appduct/client`
+   * re-exports it; the React Native SDK's `getRegisteredTools` returns it), so it admits only what
+   * registration admits: a string or nothing. A reader of a listing takes `ToolsListEntry`, whose
+   * own `group: string | null` carries the wire spelling.
+   *
    * Drives `tools.list`'s `group` filter and `groups` summary; never part of an MCP built-in's own
    * schema (the app tools surfaced through `appduct_list_tools` do report it, one per entry).
    */
-  group?: string | null;
+  group?: string;
 };
 
 const isJsonObject = (value: unknown): value is Record<string, unknown> => {

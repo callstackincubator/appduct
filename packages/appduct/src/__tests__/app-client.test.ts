@@ -21,12 +21,15 @@ const streamAnswering = (result: unknown): DaemonStream => {
 
 describe("AppClient.tools()", () => {
   test("unwraps the `{ tools, total }` tools.list result", async () => {
-    const client = makeAppClient(streamAnswering({ tools: [toolEntry], total: 1 }), "s1");
-    expect(await client.tools()).toEqual([toolEntry]);
+    const listed = { ...toolEntry, group: "diagnostics" };
+    const client = makeAppClient(streamAnswering({ tools: [listed], total: 1 }), "s1");
+    expect(await client.tools()).toEqual([listed]);
   });
 
   test("still accepts a bare array from a daemon that predates `{ tools, total }`", async () => {
     const client = makeAppClient(streamAnswering([toolEntry]), "s1");
-    expect(await client.tools()).toEqual([toolEntry]);
+    // That daemon predates tool groups too and sends no `group` key. Every entry carries one, so
+    // `tool.group === null` answers "ungrouped" here as it does anywhere else.
+    expect(await client.tools()).toEqual([{ ...toolEntry, group: null }]);
   });
 });

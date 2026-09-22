@@ -10,6 +10,14 @@ skill in `.claude/skills/`) turns that section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: an ungrouped tool reports `group: null` to every reader.** `appduct_describe_tool`
+  dropped the key instead of reporting `null`, so it disagreed with `appduct_list_tools` about
+  the same tool. `ToolDescriptor.group` is
+  `string | undefined` again — it is the registration type, and registering `null` has always been
+  rejected — so the type app authors write against (`appduct/client`, the React Native SDK's
+  `getRegisteredTools()`) no longer admits a value that throws. Code reading a `tools.list` entry
+  takes the new `ListedToolDescriptor` (or `ToolsListEntry`, which adds `policy`), where `group` is
+  `string | null`; `appduct/client`'s `tools()` now returns those entries.
 - **Fix: the first Appduct command on a clean machine no longer fails with a bare `ENOENT`.**
   Nothing created the state directory before the auto-spawn path wrote into it: `~/.appduct` is
   created by `startDaemon`, but the spawn-lock and `daemon.log`'s fd are opened by the *parent*
