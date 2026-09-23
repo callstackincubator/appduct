@@ -49,7 +49,7 @@ pnpm playground:appduct -- <cli args>                # this repo's CLI, from the
 5. **Tests first.** Acceptance criteria from the issue, red tests committed before any
    implementation, checkpoint commits that each lower the failing count.
 6. **Changelog.** Every PR with a user-visible change adds or amends a line under
-   `## Unreleased` in [CHANGELOG.md](CHANGELOG.md).
+   `## Unreleased` in [CHANGELOG.md](CHANGELOG.md), written with the `writing-changelog` skill.
 7. **Branches** are `issue-<N>-<slug>`, derived from the issue (see the implement-issue skill).
    PRs reference the issue and follow the PR template.
 8. **Nothing irreversible without a human**: no force push, no `gh pr merge`, no release, no
@@ -79,7 +79,8 @@ Load the skill before starting the matching task. They live in `.claude/skills/`
 | Designing a feature too big for one PR, or sizing one | `design-feature` |
 | Turning a request or a found bug into an issue (interviews first) | `file-issue` |
 | Running the app on a simulator and driving it through the CLI | `e2e-device` |
-| Writing or editing anything an Appduct user reads: READMEs, `docs/`, website, the shipped skill, CLI help, error messages, changelog | `writing-user-docs` |
+| Writing or editing anything an Appduct user reads: READMEs, `docs/`, website, the shipped skill, CLI help, error messages | `writing-user-docs` |
+| Adding, amending or reviewing an entry in `CHANGELOG.md` | `writing-changelog` |
 | Cutting a release | `cut-release` |
 | Curating agent memory (monthly, or when the inbox has notes) | `review-memory` |
 | Taking an issue from `status:ready` to a reviewed, tested PR | `work-issue` (orchestrator) |
