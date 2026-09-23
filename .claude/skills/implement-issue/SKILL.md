@@ -39,8 +39,8 @@ question under it, apply `status:blocked`, and stop. Do not guess.
 
 Add one criterion of your own when the change is user-visible: the docs. Name the surfaces
 from the `writing-user-docs` skill's table (README, `docs/`, website, the shipped skill, CLI
-help, error text) and write them with that skill. The changelog line is separate and always
-required.
+help, error text) and write them with that skill. The changelog entry is always required and
+is written with the `writing-changelog` skill.
 
 ## 3. Red tests
 
@@ -94,8 +94,9 @@ Do not widen scope. Something you notice that is not a criterion becomes an issu
 
 ## 5. Finish
 
-- Add or amend the changelog line under `## Unreleased` if the change is user-visible. If
-  `Unreleased` is missing because a release was just cut, add the section.
+- Add or amend the changelog entry under `## Unreleased` if the change is user-visible, with
+  the `writing-changelog` skill loaded. If `Unreleased` is missing because a release was just
+  cut, add the section.
 - Run the `architecture` skill's "Before you open the PR" list against the diff.
 - Fill the PR template fully. The E2E evidence section is filled by the `e2e-device` skill
   (a separate run or subagent); leave it marked pending and say so in your report.

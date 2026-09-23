@@ -18,7 +18,7 @@ agent reading the product skill. Anything they read to get something done is use
 - `website/` content
 - `skills/appduct/` (the skill shipped to users; not the repo's own `.claude/skills/`)
 - CLI help text, error messages and MCP tool descriptions in `packages/appduct/src`
-- `CHANGELOG.md` entries
+- `CHANGELOG.md` entries, which have their own form in the `writing-changelog` skill
 
 Not user-facing: `AGENTS.md`, `.claude/skills/`, `.agents/memory/`, `docs/ARCHITECTURE.md`,
 `docs/PROTOCOL.md`, `docs/internal/`, code comments, PR and issue text.
@@ -37,7 +37,7 @@ contradict each other, which is worse than no docs.
 | Setup, config or build variant | `skills/appduct/references/setup.md`; `website/src/content/docs/install`; `docs/BUILD-VARIANTS.md` |
 | Security-relevant behaviour | `docs/SECURITY.md` |
 
-Always: the changelog line, and `pnpm check:links` before the PR.
+Always: the changelog entry (`writing-changelog` skill), and `pnpm check:links` before the PR.
 
 The `review-pr` skill checks changes to the paths above against the rules below.
 

@@ -5,8 +5,9 @@ documented here. The three packages are versioned in lockstep (identical version
 changelog covers all of them.
 
 This file is maintained by hand; there is no automated changelog tooling. Every PR with a
-user-visible change adds a line under `Unreleased`, and the release PR (see the `cut-release`
-skill in `.claude/skills/`) turns that section into a versioned heading.
+user-visible change adds a line under `Unreleased` in the form the `writing-changelog` skill in
+`.claude/skills/` describes, and the release PR (see the `cut-release` skill there) turns that
+section into a versioned heading.
 
 ## Unreleased
 

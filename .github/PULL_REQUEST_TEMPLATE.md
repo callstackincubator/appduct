@@ -20,7 +20,7 @@ pending
 
 ### Checklist
 
-- [ ] `CHANGELOG.md` has a line under `Unreleased`, or the change is not user-visible
+- [ ] `CHANGELOG.md` has an entry under `Unreleased` (`writing-changelog` skill), or the change is not user-visible
 - [ ] User-facing docs updated for every surface the change touches (`writing-user-docs` skill), or the change is not user-visible
 - [ ] No new import past a module's `index.ts`; no new direct `node:*` I/O outside an adapter
 - [ ] Simplification checklist from the `architecture` skill applied, exceptions explained above
