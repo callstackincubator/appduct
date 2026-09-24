@@ -134,15 +134,21 @@ const noTlsBypass = {
   meta: { type: "problem", docs: { description: "no disabling TLS verification in tests" }, schema: [], messages: { bypass: TLS_MESSAGE } },
   create(context) {
     const report = (node) => context.report({ node, messageId: "bypass" });
+    const isFalse = (node) => node.type === "Literal" && node.value === false;
     return {
       Property(node) {
         const key = node.computed ? undefined : keyName(node.key);
         if (key === "NODE_TLS_REJECT_UNAUTHORIZED") report(node);
-        if (key === "rejectUnauthorized" && node.value.type === "Literal" && node.value.value === false) report(node);
+        if (key === "rejectUnauthorized" && isFalse(node.value)) report(node);
       },
       AssignmentExpression(node) {
-        const target = node.left;
-        if (target.type === "MemberExpression" && keyName(target.property) === "NODE_TLS_REJECT_UNAUTHORIZED") report(node);
+        const key = node.left.type === "MemberExpression" ? keyName(node.left.property) : undefined;
+        if (key === "NODE_TLS_REJECT_UNAUTHORIZED") report(node);
+        if (key === "rejectUnauthorized" && isFalse(node.right)) report(node);
+      },
+      // vi.stubEnv("NODE_TLS_REJECT_UNAUTHORIZED", "0"), Reflect.set(process.env, "NODE_TLS_REJECT_UNAUTHORIZED", ...)
+      CallExpression(node) {
+        if (node.arguments.some((arg) => arg.type === "Literal" && arg.value === "NODE_TLS_REJECT_UNAUTHORIZED")) report(node);
       },
     };
   },
