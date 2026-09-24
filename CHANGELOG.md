@@ -11,9 +11,11 @@ section into a versioned heading.
 
 ## Unreleased
 
-- **Breaking: the CLI commands are now noun-verb, with no aliases.** `ls`, `revoke`, `link`,
-  `tools` and `invoke` are gone — use `sessions ls|revoke|link`, `tools ls|describe|call`, and
-  `events tail|since <cursor>` instead; a removed command's error names its replacement.
+- **Breaking: the CLI commands are now noun-verb, with no aliases.** `ls` is now `sessions ls`,
+  `revoke` is `sessions revoke`, `link` is `sessions link`, `tools` is `tools ls`, `tools <name>`
+  is `tools describe <name>`, `invoke` is `tools call`, `events` is `events tail`, and
+  `events --since <cursor>` is `events since <cursor>`; a removed command's error names its
+  replacement.
 
 ## 0.12.0 (2026-09-24)
 
