@@ -62,16 +62,23 @@ describe("a bare noun with no verb, or an unknown verb, names its verbs (criteri
     expect(parsed.error.message).toBe(`The ${noun} command requires a verb: ${verbList} (got "bogus-verb").`);
   });
 
-  test.each(["sessions", "tools", "events"])('"appduct %s --help" exits 0', (noun) => {
+  // The issue asks for the verbs on the *noun's own* `--help`, not only the global one: an agent
+  // that runs `appduct events --help` needs to learn about `since` right there.
+  test.each([
+    ["sessions", ["ls", "revoke", "link"]],
+    ["tools", ["ls", "describe", "call"]],
+    ["events", ["tail", "since"]],
+  ])('"appduct %s --help" exits 0 and names its verbs', (noun, verbs) => {
     const result = runCliBinary([noun, "--help"]);
 
     expect(result.exitCode).toBe(0);
+    for (const verb of verbs) {
+      expect(result.stdout).toContain(verb);
+    }
   });
 
-  // cac's per-command `--help` shows usage and flags but never a command's own description
-  // (checked against `appduct daemon --help`, the existing model, which doesn't print its verbs
-  // either) — a description only surfaces in the *global* `--help`'s "Commands" section, so that
-  // is where each noun's verbs actually get printed, exactly like `daemon`'s already does.
+  // The global `--help`'s "Commands" section also names every verb, exactly like `daemon`'s
+  // already does.
   test.each([
     ["sessions", ["ls", "revoke", "link"]],
     ["tools", ["ls", "describe", "call"]],
