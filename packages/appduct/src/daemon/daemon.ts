@@ -48,9 +48,11 @@ import { argsSha256, createAuditLogger, type AuditLogger } from "./audit.js";
 import { createCallsManager, type CallsManager } from "./calls.js";
 import { loadConfig, type AppductConfig, type ConfigWarnFn } from "./config.js";
 import { createEventBus, type EventBus } from "./event-bus.js";
+import { createEventsLog } from "./events-log.js";
 import { startListener, type DaemonListener } from "./listener.js";
 import { evaluate as evaluatePolicy } from "./policy.js";
 import { acquirePidfile, type PidfileHandle } from "./pidfile.js";
+import { NodeAppendOnlyFile } from "./node-append-only-file.js";
 import { RpcApplicationError } from "./rpc-errors.js";
 import { startRpcServer, type RpcServer } from "./rpc-server.js";
 import { createSessionManager, type SessionManager } from "./sessions.js";
@@ -396,6 +398,18 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
     warn: options.warn,
   });
 
+  // Appduct's own events, for debugging the daemon (ARCHITECTURE.md §3). Created with the audit
+  // logger for the same reason: shutdown can always flush it.
+  const eventsLog = createEventsLog({
+    file: new NodeAppendOnlyFile(paths.eventsLogPath),
+    maxBytes: config.eventsLogMaxBytes,
+    warn:
+      options.warn ??
+      ((message: string) => {
+        process.stderr.write(`${message}\n`);
+      }),
+  });
+
   let auditPruneInterval: IntervalHandle | undefined;
   let pidfile: PidfileHandle | undefined;
   let server: RpcServer | undefined;
@@ -439,6 +453,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
       // Flush the audit queue last: nothing else here writes audit records, but this makes sure a
       // record enqueued by the very last `tools.call` before shutdown actually lands on disk.
       await auditLogger.flush();
+      await eventsLog.flush();
     } finally {
       resolveExited();
     }
@@ -453,6 +468,12 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
 
     eventBus = createEventBus({ clock, bufferSize: config.eventBufferSize });
     const activeEventBus = eventBus;
+    // `app_event` belongs to the app, not to Appduct, so it never lands in the daemon's own log.
+    activeEventBus.subscribe((event) => {
+      if (event.kind !== "app_event") {
+        eventsLog.record(event);
+      }
+    });
     const detectAddress =
       options.detectAddress ??
       ((): ReturnType<typeof detectAdvertisedAddress> => detectAdvertisedAddress({ override: config.advertisedIp }));
