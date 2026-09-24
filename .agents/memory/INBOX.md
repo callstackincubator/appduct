@@ -1,8 +1,8 @@
 # Lessons inbox
 
 Raw notes from finished work. Append only; never read this file before a task. The
-`review-memory` skill reads it, promotes what repeats into [LESSONS.md](LESSONS.md), drops the
-rest, and empties it.
+`review-memory` skill reads it weekly, promotes what repeats into [LESSONS.md](LESSONS.md),
+keeps a lone note for one more review (marked `Seen:`), and drops the rest.
 
 One note per PR that hit friction, four lines:
 

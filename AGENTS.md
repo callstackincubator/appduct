@@ -82,6 +82,6 @@ Load the skill before starting the matching task. They live in `.claude/skills/`
 | Writing or editing anything an Appduct user reads: READMEs, `docs/`, website, the shipped skill, CLI help, error messages | `writing-user-docs` |
 | Adding, amending or reviewing an entry in `CHANGELOG.md` | `writing-changelog` |
 | Cutting a release | `cut-release` |
-| Curating agent memory (monthly, or when the inbox has notes) | `review-memory` |
+| Curating agent memory (weekly, or when the inbox has notes) | `review-memory` |
 | Taking an issue from `status:ready` to a reviewed, tested PR | `work-issue` (orchestrator) |
 | Driving an Appduct-enabled app as a user of Appduct | `appduct` (in `skills/`) |
