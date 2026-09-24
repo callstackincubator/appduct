@@ -48,6 +48,7 @@ export const createCli = () => {
   // positional (`sessions link --qr --open ios-sim`) would swallow it as that flag's value.
   cli
     .command("sessions [...args]", "Manage Appduct sessions: ls, revoke, or link.")
+    .usage("sessions <ls|revoke|link> [selector] [args]")
     .option("--ttl <seconds>", "link: time-to-live in seconds (default: from config.json).")
     .option("--qr", "link: also render the deep link as a terminal QR code.")
     .option(
@@ -71,6 +72,7 @@ export const createCli = () => {
 
   cli
     .command("tools [...args]", "List a session's tools, describe one, or call one: ls, describe, or call.")
+    .usage("tools <ls|describe|call> [selector] [args]")
     .option("--full", "ls: render full schemas/annotations for every listed tool.")
     .option("--group <name>", "ls: only tools in this group (\"checkout\" includes \"checkout/payment\").")
     .option("--groups", "ls: list the session's groups with tool counts instead of its tools.")
@@ -86,6 +88,7 @@ export const createCli = () => {
 
   cli
     .command("events [...args]", "Stream the app's events, or replay them since a cursor: tail or since.")
+    .usage("events <tail|since> [selector] [args]")
     .option("--follow", "tail: accepted for script readability; the default behavior already follows.");
 
   cli
