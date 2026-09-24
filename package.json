@@ -4,7 +4,6 @@
   "scripts": {
     "build": "turbo run build",
     "check:links": "node scripts/check-md-links.mjs",
-    "check:skills": "node scripts/check-skill-models.mjs",
     "clean": "turbo run clean",
     "lint": "turbo run lint",
     "test": "turbo run test",

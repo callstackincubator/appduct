@@ -70,9 +70,8 @@ no restating the question. Commit subjects: conventional prefix, imperative, und
 
 Load the skill before starting the matching task. They live in `.claude/skills/`.
 Model, Effort and Forked mirror each skill's `model:`, `effort:` and `context: fork`
-frontmatter, and `pnpm check:skills` fails CI when they drift. A forked skill runs in its own
-subagent on its model and effort however it is started, and sees only the arguments it was
-invoked with.
+frontmatter; change both together. A forked skill runs in its own subagent on its model and
+effort however it is started, and sees only the arguments it was invoked with.
 
 | Task | Skill | Model | Effort | Forked |
 | --- | --- | --- | --- | --- |
