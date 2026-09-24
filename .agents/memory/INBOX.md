@@ -28,3 +28,8 @@ One note per PR that hit friction, four lines:
   Would have prevented it: at the start, check for a simulator (xcrun, or an Android emulator with KVM) and, if there is none, ask the human up front to run e2e-device locally.
   Cost: blocked
   Seen: 2026-09-24
+
+- 2026-09-24 #102 skill: work-issue
+  What went wrong: the full loop (tests-first implement, subagent review, fix rounds, E2E) ran on a PR that was only skill markdown and a permission allowlist; the implement subagent spent eleven minutes inventing dry runs to stand in for tests, and the human stopped the orchestration as overkill.
+  Would have prevented it: work-issue takes a light path for issues labelled area:tooling or area:docs with nothing under packages/: one implement round, one review read by the orchestrator, no E2E, ready.
+  Cost: blocked (human intervened), one wasted review round
