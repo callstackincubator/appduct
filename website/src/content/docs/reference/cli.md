@@ -220,6 +220,7 @@ Default location `~/.appduct/config.json`. Every key is optional. Read when the 
 | `eventBufferSize` | `256` | Events kept per session. |
 | `auditRetentionDays` | `30` | Days of audit log to keep. |
 | `daemonLogMaxBytes` | `10485760` | Size at which `daemon.log` is rotated. |
+| `eventsLogMaxBytes` | `10485760` | Size at which `events.log` is rotated. |
 | `policy` | `{ "default": "allow", "destructive": "allow" }` | See [Limit what callers can run](/appduct/guides/security/#limit-what-callers-can-run). |
 | `advertisedIp` | detected | Address put in links for physical devices. |
 | `scheme` | none | Fallback scheme. |
@@ -227,7 +228,7 @@ Default location `~/.appduct/config.json`. Every key is optional. Read when the 
 
 ### State directory contents
 
-`~/.appduct/` (mode `0700`) holds `daemon.sock`, `daemon.pid`, `daemon.log`, `daemon.log.1`, `key.pem`, `config.json`, and `audit/<YYYY-MM-DD>.jsonl`, each mode `0600`.
+`~/.appduct/` (mode `0700`) holds `daemon.sock`, `daemon.pid`, `daemon.log`, `daemon.log.1`, `events.log`, `events.log.1`, `key.pem`, `config.json`, and `audit/<YYYY-MM-DD>.jsonl`, each mode `0600`. `events.log` records Appduct's own events (links, sessions, tool calls), one JSON line each, for debugging Appduct; your app's events never go there.
 
 ## MCP tools
 

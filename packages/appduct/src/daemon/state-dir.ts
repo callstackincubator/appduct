@@ -16,6 +16,8 @@ export type StateDirPaths = {
   socketPath: string;
   pidFilePath: string;
   logFilePath: string;
+  /** The daemon's own event log; rotated to `<eventsLogPath>.1`. */
+  eventsLogPath: string;
   keyPath: string;
   configPath: string;
   auditDir: string;
@@ -34,6 +36,7 @@ export const getStateDirPaths = (stateDir: string): StateDirPaths => {
     socketPath: join(stateDir, "daemon.sock"),
     pidFilePath: join(stateDir, "daemon.pid"),
     logFilePath: join(stateDir, "daemon.log"),
+    eventsLogPath: join(stateDir, "events.log"),
     keyPath: join(stateDir, "key.pem"),
     configPath: join(stateDir, "config.json"),
     auditDir: join(stateDir, "audit"),
