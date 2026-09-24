@@ -1,6 +1,6 @@
 ---
 name: review-memory
-description: Curate agent memory - read the lessons inbox and the curated lessons file, promote what repeats, prune what is stale, open a memory-only PR and merge it. Use monthly, when the inbox has notes, when a lessons section is over its cap, or when asked to review, consolidate or dream over memory.
+description: Curate agent memory - read the lessons inbox and the curated lessons file, promote what repeats, prune what is stale, open a memory-only PR and merge it. Use weekly, when the inbox has notes, when a lessons section is over its cap, or when asked to review, consolidate or dream over memory.
 ---
 
 # Review memory
@@ -13,10 +13,19 @@ PR a human merges.
 ## 1. Read
 
 ```bash
-git fetch origin && git switch -c "memory/$(date +%Y-%m-%d)" origin/main
+git fetch origin && git switch --detach origin/main
 cat .agents/memory/INBOX.md .agents/memory/LESSONS.md
 git log --oneline --since="3 months ago" -- .agents/memory
+gh pr list --state open --search "chore(memory): review in:title"
 ```
+
+Stop without a branch or PR, and report why, when either holds:
+
+- the inbox has no notes under its header and no section is over its cap;
+- an earlier memory review PR is still open. Reviewing again would stack a second PR on
+  the same inbox.
+
+Otherwise branch: `git switch -c "memory/$(date +%Y-%m-%d)"`.
 
 ## 2. Decide per inbox note
 
@@ -26,9 +35,12 @@ git log --oneline --since="3 months ago" -- .agents/memory
 - **Promote to General** only when it applies to every skill. Expect this to be rare.
 - **Mark for a mechanism** when the rule could be a lint rule or a test. Keep the entry
   and add "mechanism: <what>" to it; file a `type:chore` issue via the `file-issue` skill
-  so a human can schedule it. Once the mechanism lands, the entry is deleted on the next review.
-- **Drop** a note that has sat alone for two reviews, or whose code path no longer exists.
-  A dropped note leaves no trace; the inbox is emptied at the end regardless.
+  so a human can schedule it; skip its interview, the notes are the spec. Once the
+  mechanism lands, the entry is deleted on the next review.
+- **Keep** a note that matches nothing yet and has no `Seen:` line. Add
+  `Seen: <today>` as its fifth line so the next review can pair it with a later note.
+- **Drop** a note that already carries a `Seen:` line and still matches nothing, or whose
+  code path no longer exists. A dropped note leaves no trace.
 
 ## 3. Prune the curated file
 
@@ -44,12 +56,12 @@ the cap, drop the oldest entry with the weakest evidence and say so in the PR.
 
 ## 4. Ship
 
-Empty the inbox down to its header. Then:
+Empty the inbox down to its header plus the notes kept in step 2. Then:
 
 ```bash
 git add .agents/memory && git commit -m "chore(memory): review $(date +%Y-%m-%d)"
 git push -u origin HEAD
-gh pr create --title "chore(memory): review $(date +%Y-%m-%d)" --body "<promoted: n, dropped: n, pruned: n, mechanisms filed: #...>"
+gh pr create --title "chore(memory): review $(date +%Y-%m-%d)" --body "<promoted: n, kept: n, dropped: n, pruned: n, mechanisms filed: #...>"
 gh pr view --json files -q '.files[].path' | grep -v '^\.agents/memory/' && exit 1   # memory only
 gh pr merge --squash --delete-branch "memory/$(date +%Y-%m-%d)"
 ```
@@ -61,6 +73,6 @@ file check prints anything, stop and leave the PR for a human.
 
 ```
 Memory review: <date>  PR: #N (merged | left open: <why>)
-Promoted: n  Dropped: n  Pruned: n  Mechanisms filed: <issues or none>
+Promoted: n  Kept: n  Dropped: n  Pruned: n  Mechanisms filed: <issues or none>
 Sections over cap: <names or none>
 ```
