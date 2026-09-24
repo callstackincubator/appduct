@@ -16,6 +16,9 @@ section into a versioned heading.
   to wait for a device, use `appduct ls --json` or `appduct_wait_for_session`.
 - **Fix: app events are no longer lost after about 128 tool calls.** Each device keeps its last
   256 app events (`eventBufferSize`) however many tool calls run in between.
+- **New: the daemon writes its own events to `~/.appduct/events.log`.** Session, link and tool-call
+  events land there as JSON lines for debugging Appduct, never your app's events; the file rotates to
+  `events.log.1` past `eventsLogMaxBytes` (default 10 MiB).
 
 ## 0.11.1 (2026-09-22)
 

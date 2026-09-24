@@ -289,13 +289,13 @@ This writes an unencrypted PEM private key (PKCS#8) to `<state-dir>/key.pem` by 
 
 ## Daemon lifecycle
 
-The daemon auto-starts the first time any CLI or MCP command needs it — you don't normally run `appduct daemon start` yourself. It writes state to `<state-dir>/` (`daemon.sock`, `daemon.pid`, `daemon.log`, `daemon.log.1`, `key.pem`, `config.json`, `audit/`), holds a single-instance lock via the pidfile, and runs independently of any one device's connection, so a reload or crash on the device side never costs you the daemon process.
+The daemon auto-starts the first time any CLI or MCP command needs it — you don't normally run `appduct daemon start` yourself. It writes state to `<state-dir>/` (`daemon.sock`, `daemon.pid`, `daemon.log`, `daemon.log.1`, `events.log`, `events.log.1`, `key.pem`, `config.json`, `audit/`), holds a single-instance lock via the pidfile, and runs independently of any one device's connection, so a reload or crash on the device side never costs you the daemon process.
 
 Use `appduct daemon status` to see what's running (version, pid, `wssPort`, pinned keys, live sessions, effective policy, and the audit log's retention window, file count, size, and failure counters) and `appduct daemon stop` to shut it down explicitly.
 
 Because the daemon outlives the CLI that started it, upgrading Appduct would otherwise leave the old daemon serving your commands. Every CLI/MCP process compares its version with the daemon's on its first command and replaces a stale daemon when nothing would be lost; when there is something at stake — connected sessions, or an unexpired link nobody has scanned yet — the command stops instead, naming both versions, until you run `appduct daemon stop` or pass `--daemon-restart`. A daemon newer than your CLI is left alone with a warning, so a project-local install never downgrades a global one's daemon.
 
-Neither log grows without bound: `audit/<YYYY-MM-DD>.jsonl` files older than `auditRetentionDays` (default 30) are pruned at daemon start and once a day after, and a `daemon.log` over `daemonLogMaxBytes` (default 10 MiB) is rotated to `daemon.log.1` when a daemon is next spawned. Both are `config.json` keys — see [`ARCHITECTURE.md` §3][architecture].
+No log grows without bound: `audit/<YYYY-MM-DD>.jsonl` files older than `auditRetentionDays` (default 30) are pruned at daemon start and once a day after, a `daemon.log` over `daemonLogMaxBytes` (default 10 MiB) is rotated to `daemon.log.1` when a daemon is next spawned, and `events.log` is rotated to `events.log.1` as soon as it passes `eventsLogMaxBytes` (default 10 MiB). `events.log` records the daemon's own events (links, sessions, tool registries and tool calls), one JSON line each, for debugging Appduct itself; your app's events are never written to it. All three are `config.json` keys — see [`ARCHITECTURE.md` §3][architecture].
 
 ## Release gate: `appduct doctor`
 
