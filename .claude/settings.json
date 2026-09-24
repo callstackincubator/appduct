@@ -33,7 +33,8 @@
       "Bash(gh pr review *)",
       "Bash(gh pr ready *)",
       "Bash(gh pr update-branch *)",
-      "Bash(gh api repos/*)",
+      "Bash(gh api repos/{owner}/{repo}/pulls/*)",
+      "Bash(gh api repos/{owner}/{repo}/issues/*)",
       "Bash(gh run list *)",
       "Bash(gh run view *)",
       "Bash(gh label list *)",
@@ -49,6 +50,9 @@
       "Bash(git reset --hard*)",
       "Bash(git branch -D *)",
       "Bash(gh release *)",
+      "Bash(gh api repos/*/merge*)",
+      "Bash(gh api repos/*/git/refs*)",
+      "Bash(gh api repos/*/releases*)",
       "Bash(gh repo delete *)",
       "Bash(npm publish*)"
     ]

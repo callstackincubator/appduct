@@ -24,15 +24,18 @@ Read the `steward-pr` section of `.agents/memory/LESSONS.md` before starting, pl
 
 ## 1. Select
 
-Without an argument, every open PR that is not a draft and carries the `work-issue` ledger:
+Without an argument, every open PR that is not a draft and whose ledger says `Ready: yes`.
+The PR template ships the `### Status` heading with `Ready: no`, so the heading alone would
+select every human PR opened from the template; `Ready: yes` is written only by
+`work-issue` step 5 or by a human handing a PR over.
 
 ```bash
-gh pr list --state open --json number,isDraft,body \
-  -q '.[] | select(.isDraft | not) | select(.body | contains("### Status")) | .number'
+gh pr list --state open --limit 100 --json number,isDraft,body \
+  -q '.[] | select(.isDraft | not) | select(.body | contains("### Status")) | select(.body | contains("Ready: yes")) | .number'
 ```
 
 With a PR number, that PR alone; when it does not qualify, report `skipped: <reason>`
-(`not open`, `draft`, `no ledger`) and stop. A draft belongs to its orchestrator: a stale
+(`not open`, `draft`, `no ledger`, `not ready`) and stop. A draft belongs to its orchestrator: a stale
 draft is an unfinished `work-issue` run, resumed by running `work-issue` on its issue. A PR
 without the ledger (a human's, dependabot's) is never touched.
 
@@ -54,7 +57,7 @@ Read review activity through REST, never GraphQL; cloud sessions allow only a pi
 GraphQL operations. Flags go after the path so the permission allowlist matches:
 
 ```bash
-gh api repos/{owner}/{repo}/pulls/<N>/comments --paginate   # review threads: id, in_reply_to_id, path, line, body
+gh api repos/{owner}/{repo}/pulls/<N>/comments --paginate   # review threads: id, in_reply_to_id, path, line, body; {owner}/{repo} literally, gh fills them
 gh api repos/{owner}/{repo}/pulls/<N>/reviews --paginate    # id, state, body, submitted_at
 gh api repos/{owner}/{repo}/issues/<N>/comments --paginate  # id, body, created_at
 ```
@@ -72,13 +75,13 @@ next PR. Otherwise get a workspace; the worktree may still exist from the `work-
 ```bash
 branch=<headRefName>
 dir=.worktrees/$branch; [ -d "$dir" ] || dir=$(.agents/scripts/worktree.sh "$branch")
-cd "$dir" && git fetch origin && git merge "origin/$branch" --ff-only
+cd "$dir" && git fetch origin && git merge origin/$branch --ff-only     # unquoted: the allowlist matches command text
 ```
 
 ## 3. Bring the branch up to date
 
 - `BEHIND`: `gh pr update-branch <N>`, then in the worktree `git fetch origin && git merge
-  "origin/$branch" --ff-only` so the local branch has the merge commit.
+  origin/$branch --ff-only` so the local branch has the merge commit.
 - `DIRTY`: in the worktree `git merge origin/main --no-edit`. A clean merge you push yourself
   with `git push origin "$branch"`. On conflicts, delegate to `implement-issue`: the worktree,
   the conflicting files from `git status`, "resolve the merge in progress keeping both sides'
