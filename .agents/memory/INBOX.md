@@ -18,11 +18,6 @@ One note per PR that hit friction, four lines:
   Would have prevented it: review-pr should check whether the PR author is the current gh user and, if so, post the verdict as a comment review saying "approve" instead of trying the approve event.
   Cost: review round
   Seen: 2026-09-24
-- 2026-09-24 #99 skill: implement-issue
-  What went wrong: the new integration test set NODE_TLS_REJECT_UNAUTHORIZED=0 and rejectUnauthorized: false, copied from older tests, which raised two high CodeQL alerts and a second review round.
-  Would have prevented it: a daemon integration test trusts the daemon's certificate via `ca: daemon.tls.current().certPem` and never disables TLS verification.
-  Cost: review round
-  mechanism: ESLint rule banning NODE_TLS_REJECT_UNAUTHORIZED / rejectUnauthorized: false in test files, filed as #104
 - 2026-09-24 #100 skill: work-issue
   What went wrong: device E2E could not run in the cloud session because the Linux container has no iOS simulator, so both slices waited for a human to run it locally.
   Would have prevented it: at the start, check for a simulator (xcrun, or an Android emulator with KVM) and, if there is none, ask the human up front to run e2e-device locally.
