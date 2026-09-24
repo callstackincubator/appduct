@@ -5,7 +5,8 @@
  * Fails when:
  *   - a skill in `.claude/skills/` has no row in the table;
  *   - a row names a skill found in neither `.claude/skills/` nor `skills/`;
- *   - a row's Model column differs from the skill's `model:` (`none` when it has none);
+ *   - a row's Model or Effort column differs from the skill's `model:` or `effort:` (`none`
+ *     when the key is absent);
  *   - a row's Forked column is `yes` and the skill lacks `context: fork`, or the reverse.
  *
  * Usage: node scripts/check-skill-models.mjs   (always checks this repository)
@@ -30,11 +31,11 @@ function tableRows() {
   return body.map((row) => Object.fromEntries(header.map((name, i) => [name, row[i] ?? ""])));
 }
 
-/** `model` and `context` from a SKILL.md's frontmatter, or undefined when a key is absent. */
+/** `model`, `effort` and `context` from a SKILL.md's frontmatter, undefined when a key is absent. */
 function frontmatter(path) {
   const block = readFileSync(path, "utf8").match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
   const value = (key) => block.match(new RegExp(`^${key}:\\s*(.+)$`, "m"))?.[1].trim();
-  return { model: value("model"), context: value("context") };
+  return { model: value("model"), effort: value("effort"), context: value("context") };
 }
 
 const errors = [];
@@ -54,15 +55,20 @@ for (const row of rows) {
     continue;
   }
   const path = `${dir}/${name}/SKILL.md`;
-  const { model, context } = frontmatter(join(ROOT, path));
-  const declaredModel = model ?? "none";
-  if (row.Model !== declaredModel) {
-    errors.push(`${path}: model is ${declaredModel}, AGENTS.md says ${row.Model || "nothing"}`);
+  const declared = frontmatter(join(ROOT, path));
+  for (const [key, column] of [
+    ["model", "Model"],
+    ["effort", "Effort"],
+  ]) {
+    const value = declared[key] ?? "none";
+    if (row[column] !== value) {
+      errors.push(`${path}: ${key} is ${value}, AGENTS.md says ${row[column] || "nothing"}`);
+    }
   }
-  const forked = context === "fork" ? "yes" : "no";
+  const forked = declared.context === "fork" ? "yes" : "no";
   if (row.Forked !== forked) {
     errors.push(
-      `${path}: context is ${context ?? "none"} (Forked ${forked}), AGENTS.md says ${row.Forked || "nothing"}`,
+      `${path}: context is ${declared.context ?? "none"} (Forked ${forked}), AGENTS.md says ${row.Forked || "nothing"}`,
     );
   }
 }
