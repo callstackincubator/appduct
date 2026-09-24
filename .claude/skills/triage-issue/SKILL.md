@@ -46,6 +46,8 @@ documented contract. State the question as the first line of the comment. Otherw
 **Rejected:** <hypothesis: why>, one line each
 **Fix:** <module; call or event; what the test asserts; what stays the same>
 **Risks:** <what else touches this path>
+
+-- agent: triage-issue
 ```
 
 ## Labels

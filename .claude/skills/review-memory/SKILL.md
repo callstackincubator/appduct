@@ -49,7 +49,9 @@ Empty the inbox down to its header. Then:
 ```bash
 git add .agents/memory && git commit -m "chore(memory): review $(date +%Y-%m-%d)"
 git push -u origin HEAD
-gh pr create --title "chore(memory): review $(date +%Y-%m-%d)" --body "<promoted: n, dropped: n, pruned: n, mechanisms filed: #...>"
+gh pr create --title "chore(memory): review $(date +%Y-%m-%d)" --body "<promoted: n, dropped: n, pruned: n, mechanisms filed: #...>
+
+-- agent: review-memory"
 gh pr view --json files -q '.files[].path' | grep -v '^\.agents/memory/' && exit 1   # memory only
 gh pr merge --squash --delete-branch "memory/$(date +%Y-%m-%d)"
 ```

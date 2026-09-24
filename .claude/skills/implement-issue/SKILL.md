@@ -35,7 +35,8 @@ them, each as an observable outcome a test can assert through a public API, an e
 a port fake's state or CLI output.
 
 If a criterion cannot be phrased that way, post the list as an issue comment with the open
-question under it, apply `status:blocked`, and stop. Do not guess.
+question under it and `-- agent: implement-issue` as its last line, apply `status:blocked`,
+and stop. Do not guess.
 
 Add one criterion of your own when the change is user-visible: the docs. Name the surfaces
 from the `writing-user-docs` skill's table (README, `docs/`, website, the shipped skill, CLI
@@ -68,7 +69,8 @@ gh pr create --draft --title "<type>: <issue title> (#$n)" --body-file <scratch>
 ```
 
 The PR body follows `.github/PULL_REQUEST_TEMPLATE.md`: the criteria table with the test
-that covers each, everything else marked pending.
+that covers each, everything else marked pending, and `-- agent: implement-issue` as the last
+line.
 
 ## 4. Green in checkpoints
 
