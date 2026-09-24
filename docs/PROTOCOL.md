@@ -398,12 +398,14 @@ types also establish these details:
   optional too.
 - `events.subscribe` includes `link_expired` (a pending link's TTL elapsed with no
   claim) and `tool_call_progress` (mirroring the wire message in §4).
-- `events.since` (issue #6) is the pull counterpart: it drains a per-session ring buffer
-  the daemon retains alongside the live `events.subscribe` fan-out, so a caller that only
-  finds out it wants to know "what happened?" after the fact (every MCP tool call, since
-  MCP is strictly request/response) doesn't need to have been subscribed in advance. Every
-  `EventNotification` carries a `seq`: a cursor that increases monotonically per session,
-  assigned at retention time. Pass the highest `seq` seen back as `since` on the next call
+- `events.since` (issue #6) is the pull counterpart for `app_event` only: it drains a
+  per-session ring buffer of the app's events that the daemon retains alongside the live
+  `events.subscribe` fan-out, so a caller that only finds out it wants to know "what
+  happened?" after the fact (every MCP tool call, since MCP is strictly request/response)
+  doesn't need to have been subscribed in advance. Every `EventNotification` carries a
+  `seq`: a cursor that increases monotonically per session, assigned to every
+  session-scoped event as it is emitted, so the retained app events' `seq`s can have gaps
+  where unretained kinds went by. Pass the highest `seq` seen back as `since` on the next call
   to resume without re-reading; a session-scoped event whose session hits a terminal state
   (`session_expired`/`session_revoked`) discards that session's buffer, matching "terminal
   states free the alias" (ARCHITECTURE.md §6) — there is no persisted history past that

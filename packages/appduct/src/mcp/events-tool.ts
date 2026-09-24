@@ -19,8 +19,6 @@
 
 import {
   RPC_METHODS,
-  EVENT_KINDS,
-  type EventKind,
   type EventNotification,
   type EventsSinceResult,
   type SessionsDescribeResult,
@@ -43,8 +41,6 @@ const MAX_WAIT_FOR_EVENT_TIMEOUT_MS = 25 * 60 * 1000;
  * within the idle window), but it gives a caller watching progress something to show. */
 const WAIT_FOR_EVENT_PROGRESS_INTERVAL_MS = 60_000;
 
-const KNOWN_EVENT_KINDS = new Set<string>(EVENT_KINDS);
-
 /** Server-side cap on `timeoutMs` (issue #6's "Cap timeoutMs server-side below the idle window
  * rather than trusting the caller") — a pure function so the cap's boundary behavior is
  * unit-testable without spinning up a daemon or actually waiting out either bound. */
@@ -55,8 +51,8 @@ export const clampWaitForEventTimeoutMs = (requestedMs: number | undefined): num
 export const EVENTS_TOOL_DESCRIPTOR = {
   name: EVENTS_TOOL_NAME,
   description:
-    "Drain events retained in the daemon's per-session ring buffer since a cursor — the pull " +
-    "counterpart to a live subscription, for checking what happened after calling a tool or " +
+    "Drain the events the app posted with postEvent(name, payload) that the daemon retained for a " +
+    "session since a cursor, for checking what the app reported after calling a tool or " +
     "triggering app behavior. With no selector, targets the sole active/suspended session. " +
     "Returns { events, cursor }; pass cursor back as since on the next call to avoid re-reading " +
     "events you've already seen. limit (if given) keeps the OLDEST events in the window and " +
@@ -67,7 +63,6 @@ export const EVENTS_TOOL_DESCRIPTOR = {
     properties: {
       selector: { type: "string" },
       since: { type: "integer", minimum: 0 },
-      kinds: { type: "array", items: { type: "string", enum: EVENT_KINDS } },
       limit: { type: "integer", exclusiveMinimum: 0 },
     },
     additionalProperties: false,
@@ -167,16 +162,16 @@ const asOptionalPositiveNumber = (value: unknown, field: string): number | undef
   return value;
 };
 
-const asOptionalEventKinds = (value: unknown): EventKind[] | undefined => {
-  if (value === undefined) {
-    return undefined;
+/** `kinds` was removed when these tools started returning app events only (issue #98). The
+ * handlers otherwise ignore unknown keys, so a caller still passing it is told rather than left
+ * wondering why its filter did nothing. */
+const rejectKinds = (args: Record<string, unknown>): void => {
+  if (args.kinds !== undefined) {
+    throw new McpBuiltinToolError(
+      "invalid_request",
+      '"kinds" is not supported: these tools return only the events the app posted with postEvent.',
+    );
   }
-
-  if (!Array.isArray(value) || !value.every((kind) => typeof kind === "string" && KNOWN_EVENT_KINDS.has(kind))) {
-    throw new McpBuiltinToolError("invalid_request", '"kinds" must be an array of known event kinds.');
-  }
-
-  return value as EventKind[];
 };
 
 type MatchPrimitive = string | number | boolean | null;
@@ -212,11 +207,11 @@ const asOptionalMatch = (value: unknown): Record<string, MatchPrimitive> | undef
 
 export const handleEventsTool = async (rawArgs: unknown, deps: EventsToolDeps): Promise<EventsSinceResult> => {
   const args = asRecord(rawArgs);
+  rejectKinds(args);
 
   return deps.call<EventsSinceResult>(RPC_METHODS.eventsSince, {
     selector: asOptionalString(args.selector, "selector"),
     since: asOptionalNonNegativeInteger(args.since, "since"),
-    kinds: asOptionalEventKinds(args.kinds),
     limit: asOptionalPositiveInteger(args.limit, "limit"),
   });
 };
@@ -257,6 +252,7 @@ export const handleWaitForEventTool = async (
   deps: WaitForEventToolDeps,
 ): Promise<WaitForEventToolResult> => {
   const args = asRecord(rawArgs);
+  rejectKinds(args);
 
   const selector = asOptionalString(args.selector, "selector");
   const name = asOptionalString(args.name, "name");
@@ -326,7 +322,6 @@ export const handleWaitForEventTool = async (
       const sinceResult = await stream.call<EventsSinceResult>(RPC_METHODS.eventsSince, {
         selector: sessionId,
         since,
-        kinds: ["app_event"],
       });
 
       // Merge the retained backlog with whatever arrived on the live channel while the two calls
@@ -358,7 +353,7 @@ export const handleWaitForEventTool = async (
       // (backlog's own scan already covers everything since.events + earlyEvents jointly saw), or —
       // if nothing was retained/arrived at all — `events.since`'s own cursor, which (per
       // `event-bus.ts`'s `since()`) already reflects the session's true high-water mark even when
-      // the `kinds` filter matched nothing.
+      // nothing was retained.
       const highestConsideredSeq = backlog.length > 0 ? backlog[backlog.length - 1]!.seq : sinceResult.cursor;
 
       return await new Promise<WaitForEventToolResult>((resolve, reject) => {

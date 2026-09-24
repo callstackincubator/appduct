@@ -297,10 +297,10 @@ export type EventNotification = {
 
 // --- events.since ---
 
-/** Pulls events retained in the daemon's per-session ring buffer (ARCHITECTURE.md §5) — the
- * request/response counterpart to `events.subscribe`'s push model, for callers (MCP tools, a
- * scripted `appduct events --since`) that ask "what happened?" after the fact instead of
- * listening live. */
+/** Pulls the app events (`app_event` only) retained in the daemon's per-session ring buffer
+ * (ARCHITECTURE.md §5) — the request/response counterpart to `events.subscribe`'s push model, for
+ * callers (MCP tools, a scripted `appduct events --since`) that ask "what did the app report?"
+ * after the fact instead of listening live. */
 export type EventsSinceParams = {
   /** Session id or alias; omitted selects the sole active/suspended session (same default as
    * `SessionSelectorParams`). */
@@ -308,9 +308,8 @@ export type EventsSinceParams = {
   /** Exclusive lower bound on `EventNotification.seq`; omitted returns the whole retained buffer
    * (oldest first, subject to `limit`). */
   since?: number;
-  kinds?: EventKind[];
-  /** Caps the number of events returned (newest-first truncation); omitted returns everything
-   * matching `since`/`kinds` up to the buffer's own retention limit. */
+  /** Caps the number of events returned (oldest kept); omitted returns everything after `since`
+   * up to the buffer's own retention limit. */
   limit?: number;
 };
 

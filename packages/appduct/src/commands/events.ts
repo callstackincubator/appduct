@@ -1,6 +1,7 @@
 /**
- * `appduct events` (ARCHITECTURE.md §10): subscribes to `events.subscribe` over a persistent
- * connection and streams notifications until interrupted (Ctrl-C) or the connection drops. This is
+ * `appduct events` (ARCHITECTURE.md §10): subscribes to `events.subscribe` for `app_event` only
+ * over a persistent connection and streams the app's own events until interrupted (Ctrl-C) or the
+ * connection drops. Appduct's lifecycle and tool-call kinds are not printed (issue #98). This is
  * the one command whose output isn't a single rendered `CliResult` — each event is written as it
  * arrives (NDJSON under `--json`, a human line otherwise) — so it plugs into `executeHostedCommand`
  * with a live reporter that suppresses the default one-shot bootstrap render (`cli/runner.ts`).
@@ -78,6 +79,7 @@ export const handleEventsCommand = async (
   try {
     await stream.call<EventsSubscribeResult>(RPC_METHODS.eventsSubscribe, {
       sessionSelector: options.selector,
+      kinds: ["app_event"],
     });
   } catch (error) {
     stream.close();

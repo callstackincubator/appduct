@@ -116,13 +116,15 @@ When a call fails, the error type comes from the app unchanged, for example `too
 
 ## Watch events
 
-Your app can post events with `postEvent`, and Appduct reports its own, such as a device connecting or a tool call finishing. To stream them:
+Your app can post events with `postEvent`, such as "checkout finished". To stream them:
 
 ```bash
 appduct events
 ```
 
 This keeps running until you stop it. To print what already happened and exit, pass the cursor from an earlier result with `--since <cursor>`. Add `--json` for one JSON object per line.
+
+Only your app's events are printed, not device connections or tool calls. To check that a device is connected, run `appduct ls`.
 
 ## Disconnect a device
 

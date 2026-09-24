@@ -950,9 +950,126 @@ describe("events.subscribe", () => {
     filtered.close();
     app.socket.close();
   });
+  test("a subscriber with kinds [session_claimed] still receives the claim live", async () => {
+    const { daemon, port } = await startTestDaemon();
+
+    const filtered = await openRpcConnection(daemon.paths.socketPath);
+    await filtered.call("events.subscribe", { kinds: ["session_claimed"] });
+
+    const app = await claimApp(daemon, port);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(filtered.notifications.map((n) => [n.kind, n.sessionId])).toEqual([["session_claimed", app.sessionId]]);
+
+    filtered.close();
+    app.socket.close();
+  });
+
+  test("a subscriber with kinds [tool_call_started, tool_call_progress] still receives both live", async () => {
+    const { daemon, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+    await snapshotTools(daemon, app, [{ name: "slow" }]);
+
+    const filtered = await openRpcConnection(daemon.paths.socketPath);
+    await filtered.call("events.subscribe", { kinds: ["tool_call_started", "tool_call_progress"] });
+
+    app.socket.on("message", (data) => {
+      const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+
+      if (msg.type === "tool_call") {
+        app.socket.send(JSON.stringify({ type: "tool_call_progress", session_id: app.sessionId, id: msg.id, progress: 0.5 }));
+        app.socket.send(JSON.stringify({ type: "tool_result", session_id: app.sessionId, id: msg.id, result: "ok" }));
+      }
+    });
+
+    const finished = waitForEvent(daemon, "tool_call_finished");
+    await rpcCall(daemon.paths.socketPath, "tools.call", { selector: app.alias, name: "slow", args: {} });
+    await finished;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(filtered.notifications.map((n) => n.kind)).toEqual(["tool_call_started", "tool_call_progress"]);
+
+    filtered.close();
+    app.socket.close();
+  });
 });
 
 describe("events.since", () => {
+  test("returns app_event only, never the session's lifecycle or tool-call events", async () => {
+    const { daemon, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+    await snapshotTools(daemon, app, [{ name: "echo" }]);
+
+    app.socket.on("message", (data) => {
+      const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+      if (msg.type === "tool_call") {
+        app.socket.send(JSON.stringify({ type: "tool_result", session_id: app.sessionId, id: msg.id, result: "ok" }));
+      }
+    });
+
+    const finished = waitForEvent(daemon, "tool_call_finished");
+    await rpcCall(daemon.paths.socketPath, "tools.call", { selector: app.alias, name: "echo", args: {} });
+    await finished;
+
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "after", ts: Date.now() }));
+    await emitted;
+
+    const since = (await rpcCall(daemon.paths.socketPath, "events.since", { selector: app.alias })) as {
+      events: Array<{ kind: string; data: { name: string } }>;
+    };
+    expect(since.events.map((event) => [event.kind, event.data.name])).toEqual([["app_event", "after"]]);
+
+    app.socket.close();
+  });
+
+  test("an older client passing kinds still gets app events only", async () => {
+    const { daemon, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "hello", ts: Date.now() }));
+    await emitted;
+
+    const since = (await rpcCall(daemon.paths.socketPath, "events.since", {
+      selector: app.alias,
+      kinds: ["session_claimed"],
+    })) as { events: Array<{ kind: string }> };
+    expect(since.events.map((event) => event.kind)).toEqual(["app_event"]);
+
+    app.socket.close();
+  });
+
+  test("an app event posted before eventBufferSize tool calls is still returned", async () => {
+    const { daemon, port } = await startTestDaemon({ eventBufferSize: 4 });
+    const app = await claimApp(daemon, port);
+    await snapshotTools(daemon, app, [{ name: "echo" }]);
+
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "before-calls", ts: Date.now() }));
+    await emitted;
+
+    app.socket.on("message", (data) => {
+      const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+      if (msg.type === "tool_call") {
+        app.socket.send(JSON.stringify({ type: "tool_result", session_id: app.sessionId, id: msg.id, result: "ok" }));
+      }
+    });
+
+    for (let i = 0; i < 4; i++) {
+      const finished = waitForEvent(daemon, "tool_call_finished");
+      await rpcCall(daemon.paths.socketPath, "tools.call", { selector: app.alias, name: "echo", args: {} });
+      await finished;
+    }
+
+    const since = (await rpcCall(daemon.paths.socketPath, "events.since", { selector: app.alias })) as {
+      events: Array<{ kind: string; data: { name: string } }>;
+    };
+    expect(since.events.map((event) => event.data.name)).toEqual(["before-calls"]);
+
+    app.socket.close();
+  });
+
   test("drains retained app_events with no live subscription, and cursor advances", async () => {
     const { daemon, port } = await startTestDaemon();
     const app = await claimApp(daemon, port);
@@ -1047,14 +1164,12 @@ describe("events.since", () => {
 
     const first = (await rpcCall(daemon.paths.socketPath, "events.since", {
       selector: app.alias,
-      kinds: ["app_event"],
       limit: 1,
     })) as { events: Array<{ data: { name: string } }>; cursor: number };
     expect(first.events.map((event) => event.data.name)).toEqual(["a"]);
 
     const second = (await rpcCall(daemon.paths.socketPath, "events.since", {
       selector: app.alias,
-      kinds: ["app_event"],
       since: first.cursor,
       limit: 1,
     })) as { events: Array<{ data: { name: string } }>; cursor: number };
@@ -1062,7 +1177,6 @@ describe("events.since", () => {
 
     const third = (await rpcCall(daemon.paths.socketPath, "events.since", {
       selector: app.alias,
-      kinds: ["app_event"],
       since: second.cursor,
       limit: 1,
     })) as { events: Array<{ data: { name: string } }> };

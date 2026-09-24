@@ -87,27 +87,6 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
-        "kinds": {
-          "items": {
-            "enum": [
-              "daemon_started",
-              "link_created",
-              "link_expired",
-              "session_claimed",
-              "session_suspended",
-              "session_resumed",
-              "session_revoked",
-              "session_expired",
-              "tools_changed",
-              "app_event",
-              "tool_call_started",
-              "tool_call_progress",
-              "tool_call_finished",
-            ],
-            "type": "string",
-          },
-          "type": "array",
-        },
         "limit": {
           "exclusiveMinimum": 0,
           "type": "integer",

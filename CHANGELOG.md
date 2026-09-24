@@ -11,6 +11,11 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Breaking: `appduct events`, `appduct_events` and `appduct_wait_for_event` show only the events
+  your app posts.** Device connections and tool calls no longer appear and `kinds` is rejected;
+  to wait for a device, use `appduct ls --json` or `appduct_wait_for_session`.
+- **Fix: app events are no longer lost after about 128 tool calls.** Each device keeps its last
+  256 app events (`eventBufferSize`) however many tool calls run in between.
 - **New: the daemon writes its own events to `~/.appduct/events.log`.** Session, link and tool-call
   events land there as JSON lines for debugging Appduct, never your app's events; the file rotates to
   `events.log.1` past `eventsLogMaxBytes` (default 10 MiB).

@@ -1536,7 +1536,7 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
     app.socket.close();
   }, 10_000);
 
-  test("appduct_events rejects a non-integer since/limit and an unknown kind", async () => {
+  test("appduct_events rejects a non-integer since and a zero limit", async () => {
     const { stateDir } = await startTestDaemon();
     const handle = await createMcpHandle(stateDir);
     const client = await connectInMemoryClient(handle);
@@ -1553,13 +1553,78 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
       CallToolResultSchema,
     );
     expect(zeroLimit.isError).toBe(true);
+  });
 
-    const unknownKind = await client.request(
-      { method: "tools/call", params: { name: "appduct_events", arguments: { kinds: ["not_a_real_kind"] } } },
+  test("appduct_events returns app_event only, never lifecycle or tool-call events", async () => {
+    const { daemon, stateDir, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+    await snapshotTools(daemon, app, [{ name: "echo" }]);
+
+    app.socket.on("message", (data) => {
+      const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+      if (msg.type === "tool_call") {
+        app.socket.send(JSON.stringify({ type: "tool_result", session_id: app.sessionId, id: msg.id, result: "ok" }));
+      }
+    });
+
+    const finished = waitForEvent(daemon, "tool_call_finished");
+    await rpcCall(daemon.paths.socketPath, "tools.call", { selector: app.alias, name: "echo", args: {} });
+    await finished;
+
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "greeting", ts: Date.now() }));
+    await emitted;
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const result = await client.request(
+      { method: "tools/call", params: { name: "appduct_events", arguments: {} } },
       CallToolResultSchema,
     );
-    expect(unknownKind.isError).toBe(true);
+    expect(result.isError).not.toBe(true);
+    const data = result.structuredContent as { events: Array<{ kind: string }> };
+    expect(data.events.map((event) => event.kind)).toEqual(["app_event"]);
+
+    app.socket.close();
   });
+
+  test("appduct_events and appduct_wait_for_event do not offer kinds and reject it with invalid_request", async () => {
+    const { daemon, stateDir, port } = await startTestDaemon();
+    const app = await claimApp(daemon, port);
+
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "ready", ts: Date.now() }));
+    await emitted;
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const listed = await client.request({ method: "tools/list", params: {} }, ListToolsResultSchema);
+    for (const name of ["appduct_events", "appduct_wait_for_event"]) {
+      const tool = listed.tools.find((candidate) => candidate.name === name)!;
+      expect(Object.keys(tool.inputSchema.properties ?? {})).not.toContain("kinds");
+    }
+
+    const events = await client.request(
+      { method: "tools/call", params: { name: "appduct_events", arguments: { kinds: ["app_event"] } } },
+      CallToolResultSchema,
+    );
+    expect(events.isError).toBe(true);
+    expect((events.content as Array<{ text: string }>)[0]!.text).toContain("invalid_request");
+
+    const wait = await client.request(
+      {
+        method: "tools/call",
+        params: { name: "appduct_wait_for_event", arguments: { name: "ready", kinds: ["app_event"], timeoutMs: 2000 } },
+      },
+      CallToolResultSchema,
+    );
+    expect(wait.isError).toBe(true);
+    expect((wait.content as Array<{ text: string }>)[0]!.text).toContain("invalid_request");
+
+    app.socket.close();
+  }, 10_000);
 });
 
 describe("mcp: appduct://sessions resource", () => {

@@ -42,7 +42,7 @@ That's the whole loop. There is no host process to start — `appduct` auto-spaw
 | `appduct tools [selector] [name] [--full] [--group <name>] [--filter <text>] [--limit <n>] [--offset <n>]` | list a session's tools (one call signature + description per line), or show one tool's full schema |
 | `appduct tools [selector] --groups` | list a session's tool groups with their tool counts |
 | `appduct invoke [selector] <tool> --input '<json>' [--timeout <ms>]` | call a tool |
-| `appduct events [selector] [--follow] [--since <cursor>]` | stream session/tool events (default), or one-shot pull everything retained since `<cursor>` (`--since`); `--json` emits NDJSON |
+| `appduct events [selector] [--follow] [--since <cursor>]` | stream the events the app posts with `postEvent` (default), or one-shot pull the ones retained since `<cursor>` (`--since`); `--json` emits NDJSON |
 | `appduct revoke [selector]` | revoke a session |
 | `appduct daemon run\|start\|stop\|status` | daemon lifecycle |
 | `appduct mcp [--scheme <s>]` | start a stdio MCP server proxying connected apps' tools to MCP clients |

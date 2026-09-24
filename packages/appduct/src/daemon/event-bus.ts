@@ -4,9 +4,10 @@
  * per-session retention ring buffer, and must never let a throwing subscriber take down the daemon
  * or another subscriber.
  *
- * Retention (issue #6): every session-scoped event (`sessionId` set), except the high-frequency
- * kinds in `EXCLUDED_FROM_RETENTION`, is appended to a per-session ring buffer with a
- * monotonically increasing `seq`, capped at `bufferSize` entries (oldest dropped first). A
+ * Retention (issue #6, #98): every session-scoped event gets a monotonically increasing per-session
+ * `seq`, but only `app_event` is appended to the per-session ring buffer, capped at `bufferSize`
+ * entries (oldest dropped first). Appduct's own kinds (lifecycle, tool calls) are fanned out live
+ * and never retained, so no number of tool calls can evict an app event. A
  * session's buffer is discarded the moment it emits a terminal event (`session_expired` /
  * `session_revoked`) — "terminal states free the alias" (sessions.ts) applies to retained events
  * too, matching "no persisted history" (ARCHITECTURE.md §3/§13) — or via an explicit `drop()` for
@@ -25,16 +26,8 @@ export type EventBusListener = (event: EventNotification) => void;
 /** Terminal event kinds whose arrival for a session discards that session's retained buffer. */
 const TERMINAL_EVENT_KINDS: ReadonlySet<EventKind> = new Set<EventKind>(["session_expired", "session_revoked"]);
 
-/** Fanned out live like any other event, but never appended to the retention buffer: a single
- * chatty `tools.call` can emit far more of these than `bufferSize` allows, which would otherwise
- * evict every retained `app_event` for the session — defeating the reason the buffer exists.
- * `tool_call_started`/`tool_call_finished` (one pair per call, not per progress tick) are still
- * retained. */
-const EXCLUDED_FROM_RETENTION: ReadonlySet<EventKind> = new Set<EventKind>(["tool_call_progress"]);
-
 export type EventsSinceQuery = {
   since?: number;
-  kinds?: EventKind[];
   limit?: number;
 };
 
@@ -102,7 +95,7 @@ export const createEventBus = (options: CreateEventBusOptions = {}): EventBus =>
           // the session is gone.
           buffers.delete(sessionId);
           cursors.delete(sessionId);
-        } else if (!EXCLUDED_FROM_RETENTION.has(notification.kind)) {
+        } else if (notification.kind === "app_event") {
           appendToBuffer(sessionId, notification);
         }
       }
@@ -127,17 +120,12 @@ export const createEventBus = (options: CreateEventBusOptions = {}): EventBus =>
       const sessionCursor = cursors.get(sessionId) ?? 0;
 
       // Never hand back the live buffer array itself — `emit()` keeps pushing into it after this
-      // call returns, and a caller that gets `events` by reference (the common case: no filter
-      // narrows it below) would see it mutate underneath it.
+      // call returns, and a caller that gets `events` by reference would see it mutate underneath
+      // it.
       let events = buffer.slice();
 
       if (query.since !== undefined) {
         events = events.filter((event) => event.seq > query.since!);
-      }
-
-      if (query.kinds !== undefined) {
-        const kinds = new Set(query.kinds);
-        events = events.filter((event) => kinds.has(event.kind));
       }
 
       if (query.limit !== undefined && events.length > query.limit) {
@@ -152,7 +140,7 @@ export const createEventBus = (options: CreateEventBusOptions = {}): EventBus =>
       // through a `limit`-truncated response with `since: cursor` always advances. Only when
       // nothing was returned (empty buffer, or every retained event was filtered out) does it fall
       // back to the session's true high-water mark, so an empty page still lets a caller skip past
-      // events it explicitly filtered out (by `kinds`) rather than re-fetching them forever.
+      // the unretained kinds' seqs rather than re-fetching from an older cursor forever.
       const cursor = events.length > 0 ? events[events.length - 1]!.seq : sessionCursor;
 
       return { events, cursor };
