@@ -18,7 +18,7 @@ useAppductTool({
   handler: async ({ items }) => ({ added: items }),
 });`;
 
-const invokeCode = `appduct invoke seed_cart --input '{"items":3}'`;
+const invokeCode = `appduct tools call seed_cart --input '{"items":3}'`;
 
 const testCode = `import { connect } from "appduct/client";
 
