@@ -33,10 +33,12 @@ Otherwise branch: `git switch -c "memory/$(date +%Y-%m-%d)"`.
   different PRs, or once when the cost was a wrong merge or a security miss. Merge the
   notes into one entry citing all PRs.
 - **Promote to General** only when it applies to every skill. Expect this to be rare.
-- **Mark for a mechanism** when the rule could be a lint rule or a test. Keep the entry
-  and add "mechanism: <what>" to it; file a `type:chore` issue via the `file-issue` skill
-  so a human can schedule it; skip its interview, the notes are the spec. Once the
-  mechanism lands, the entry is deleted on the next review.
+- **Mark for a mechanism** when the rule could be a lint rule or a test. File a
+  `type:chore` issue via the `file-issue` skill so a human can schedule it; skip its
+  interview, the notes are the spec. Then promote the note to its skill section even on a
+  single occurrence, with a third line `Mechanism: #<issue>`, and remove it from the inbox:
+  agents never read the inbox, and the entry covers the gap until the mechanism lands. Once
+  it lands, the entry is deleted on the next review.
 - **Keep** a note that matches nothing yet and has no `Seen:` line. Add
   `Seen: <today>` as its fifth line so the next review can pair it with a later note.
 - **Drop** a note that already carries a `Seen:` line and still matches nothing, or whose
