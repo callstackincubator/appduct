@@ -11,6 +11,8 @@ section into a versioned heading.
 
 ## Unreleased
 
+## 0.12.0 (2026-09-24)
+
 - **Breaking: `appduct events`, `appduct_events` and `appduct_wait_for_event` show only the events
   your app posts.** Device connections and tool calls no longer appear and `kinds` is rejected;
   to wait for a device, use `appduct ls --json` or `appduct_wait_for_session`.
