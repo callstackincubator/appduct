@@ -11,6 +11,10 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **New: the daemon writes its own events to `~/.appduct/events.log`.** Session, link and tool-call
+  events land there as JSON lines for debugging Appduct, never your app's events; the file rotates to
+  `events.log.1` past `eventsLogMaxBytes` (default 10 MiB).
+
 ## 0.11.1 (2026-09-22)
 
 - **Fix: an ungrouped tool reports `group: null` to every reader.** `appduct_describe_tool`

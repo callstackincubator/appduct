@@ -76,6 +76,8 @@ process, before the daemon it spawns exists. Layout:
 | `daemon.pid` | pidfile (single-instance lock) | `0600` |
 | `daemon.log` | daemon stdout/stderr when auto-spawned | `0600` |
 | `daemon.log.1` | previous `daemon.log`, kept by rotation (see below) | `0600` |
+| `events.log` | the daemon's own events, one JSON line each; every kind except `app_event` | `0600` |
+| `events.log.1` | previous `events.log`, kept by rotation (see below) | `0600` |
 | `key.pem` | default host private key (`appduct keygen` default output) | `0600` |
 | `config.json` | daemon configuration (port, grace, policy) | `0600` |
 | `audit/<YYYY-MM-DD>.jsonl` | append-only audit log | `0600` |
@@ -94,6 +96,7 @@ The daemon refuses to load a key file that is group/world-readable.
   "eventBufferSize": 256,
   "auditRetentionDays": 30,
   "daemonLogMaxBytes": 10485760,
+  "eventsLogMaxBytes": 10485760,
   "policy": { "default": "allow", "destructive": "allow" },
   "advertisedIp": null,
   "scheme": null,
@@ -146,6 +149,13 @@ only-when-no-sessions-are-live (§4, "Version drift").
   needs a lock held across spawn-and-ready rather than released at spawn. A rotation
   failure never blocks the spawn, and neither does a `daemon.log` mode that the
   filesystem refuses to set.
+- `eventsLogMaxBytes` (positive integer, default 10 MiB) bounds `events.log`. The daemon
+  appends every event it emits except `app_event` (§5) as one line, the `EventNotification`
+  as emitted, on a write queue. After each append, a file over the cap is renamed to
+  `events.log.1` (single backup, previous backup replaced), so `events.log` is never over
+  the cap once a write has settled. Unlike `daemon.log`, the daemon owns this file and
+  rotates it itself. A failed write is warned to stderr (so it lands in `daemon.log`) and
+  never thrown; `daemon.status` does not report the log.
 
 ## 4. Daemon lifecycle
 
