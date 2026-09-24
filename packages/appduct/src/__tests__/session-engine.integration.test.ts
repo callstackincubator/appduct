@@ -16,11 +16,6 @@ import { decodeBootstrap, type EventKind, type EventNotification } from "@appduc
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
-// Client pinning is the app's job (ARCHITECTURE.md task notes); tests skip it client-side. Under
-// Vitest runs these clients against a throwaway self-signed key, so the leaf-cert check is
-// disabled process-wide for this file.
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 const runningDaemons: RunningDaemon[] = [];
 const stateDirs: string[] = [];
 
@@ -99,9 +94,9 @@ const waitForEvent = (daemon: RunningDaemon, kind: EventKind): Promise<EventNoti
   });
 };
 
-const connectClient = (port: number): Promise<WebSocket> => {
+const connectClient = (daemon: RunningDaemon): Promise<WebSocket> => {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`wss://127.0.0.1:${port}`, { rejectUnauthorized: false });
+    const socket = new WebSocket(`wss://127.0.0.1:${daemon.listener.port()!}`, { ca: daemon.tls.current().certPem });
     socket.once("open", () => resolve(socket));
     socket.once("error", reject);
   });
@@ -150,7 +145,7 @@ describe("session engine: full lifecycle", () => {
 
     // --- device A: mint + claim ---
     const linkA = await createLinkAndDecode(daemon, port);
-    const socketA = await connectClient(port);
+    const socketA = await connectClient(daemon);
 
     const claimedA = waitForEvent(daemon, "session_claimed");
     socketA.send(
@@ -171,7 +166,7 @@ describe("session engine: full lifecycle", () => {
 
     // --- device B: distinct alias while A is still connected ---
     const linkB = await createLinkAndDecode(daemon, port);
-    const socketB = await connectClient(port);
+    const socketB = await connectClient(daemon);
     const claimedB = waitForEvent(daemon, "session_claimed");
     socketB.send(
       JSON.stringify({
@@ -216,7 +211,7 @@ describe("session engine: full lifecycle", () => {
     })) as { state: string };
     expect(describedSuspended.state).toBe("suspended");
 
-    const resumedSocket = await connectClient(port);
+    const resumedSocket = await connectClient(daemon);
     const resumed = waitForEvent(daemon, "session_resumed");
     resumedSocket.send(
       JSON.stringify({
@@ -252,7 +247,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     const { daemon, port } = await startTestDaemon();
     const link = await createLinkAndDecode(daemon, port);
 
-    const badSocket = await connectClient(port);
+    const badSocket = await connectClient(daemon);
     const closed = nextClose(badSocket);
     badSocket.send(
       JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: "wrong-token" }),
@@ -262,7 +257,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     expect(closeInfo.reason).toBe("invalid_token");
 
     // The link survives a single bad attempt: a correct claim still succeeds.
-    const goodSocket = await connectClient(port);
+    const goodSocket = await connectClient(daemon);
     goodSocket.send(
       JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: link.token }),
     );
@@ -281,7 +276,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     let lastClose: { code: number; reason: string } | undefined;
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const socket = await connectClient(port);
+      const socket = await connectClient(daemon);
       const closed = nextClose(socket);
       socket.send(
         JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: "wrong" }),
@@ -293,7 +288,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     expect(lastClose?.reason).toBe("claim_attempts_exceeded");
 
     // The link is now gone outright, even with the correct token.
-    const finalSocket = await connectClient(port);
+    const finalSocket = await connectClient(daemon);
     const finalClosed = nextClose(finalSocket);
     finalSocket.send(
       JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: link.token }),
@@ -314,7 +309,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     // SUSPENDED -> EXPIRED grace-window transition — ARCHITECTURE.md §5/§6).
     await waitForEvent(daemon, "link_expired");
 
-    const socket = await connectClient(port);
+    const socket = await connectClient(daemon);
     const closed = nextClose(socket);
     socket.send(
       JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: link.token }),
@@ -328,7 +323,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     const { daemon, port } = await startTestDaemon();
     const link = await createLinkAndDecode(daemon, port);
 
-    const socket = await connectClient(port);
+    const socket = await connectClient(daemon);
     socket.send(
       JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: link.token }),
     );
@@ -340,7 +335,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     await suspended;
 
     // Resume once to rotate the token...
-    const resumeSocket = await connectClient(port);
+    const resumeSocket = await connectClient(daemon);
     const resumed = waitForEvent(daemon, "session_resumed");
     resumeSocket.send(
       JSON.stringify({
@@ -358,7 +353,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     resumeSocket.close();
     await suspendedAgain;
 
-    const staleAttempt = await connectClient(port);
+    const staleAttempt = await connectClient(daemon);
     const staleClosed = nextClose(staleAttempt);
     staleAttempt.send(
       JSON.stringify({
@@ -377,7 +372,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     const { daemon, port } = await startTestDaemon();
     const link = await createLinkAndDecode(daemon, port);
 
-    const socket = await connectClient(port);
+    const socket = await connectClient(daemon);
     socket.send(
       JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: link.token }),
     );
@@ -397,8 +392,8 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
   });
 
   test("binary frame closes 1003", async () => {
-    const { port } = await startTestDaemon();
-    const socket = await connectClient(port);
+    const { daemon } = await startTestDaemon();
+    const socket = await connectClient(daemon);
     const closed = nextClose(socket);
     socket.send(Buffer.from([1, 2, 3]));
     const closeInfo = await closed;
@@ -406,16 +401,16 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
   });
 
   test("a frame over 256 KiB is rejected", async () => {
-    const { port } = await startTestDaemon();
-    const socket = await connectClient(port);
+    const { daemon } = await startTestDaemon();
+    const socket = await connectClient(daemon);
     const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
     socket.send(JSON.stringify({ type: "session_claim", padding: "x".repeat(300 * 1024) }));
     await closed;
   });
 
   test("malformed JSON closes 1008 invalid_json", async () => {
-    const { port } = await startTestDaemon();
-    const socket = await connectClient(port);
+    const { daemon } = await startTestDaemon();
+    const socket = await connectClient(daemon);
     const closed = nextClose(socket);
     socket.send("{ not json");
     const closeInfo = await closed;
@@ -424,9 +419,9 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
   });
 
   test("unclaimed socket idle past the pre-claim timeout closes 1008 pre_claim_timeout", async () => {
-    const { port } = await startTestDaemon();
+    const { daemon } = await startTestDaemon();
 
-    const socket = await connectClient(port);
+    const socket = await connectClient(daemon);
     const closed = nextClose(socket);
     const closeInfo = await closed;
     expect(closeInfo.code).toBe(1008);
@@ -437,7 +432,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     const { daemon, port } = await startTestDaemon();
     const link = await createLinkAndDecode(daemon, port);
 
-    const socket = await connectClient(port);
+    const socket = await connectClient(daemon);
     socket.send(
       JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: link.token }),
     );
@@ -454,7 +449,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     const { daemon, port } = await startTestDaemon();
     const link = await createLinkAndDecode(daemon, port);
 
-    const socket = await connectClient(port);
+    const socket = await connectClient(daemon);
     socket.send(
       JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: link.token }),
     );
@@ -480,7 +475,7 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
     const { daemon, port } = await startTestDaemon();
     const link = await createLinkAndDecode(daemon, port);
 
-    const socket = await connectClient(port);
+    const socket = await connectClient(daemon);
     socket.send(
       JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: link.token }),
     );
@@ -503,14 +498,14 @@ describe("session selectors", () => {
     });
 
     const linkA = await createLinkAndDecode(daemon, port);
-    const socketA = await connectClient(port);
+    const socketA = await connectClient(daemon);
     socketA.send(
       JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: linkA.sessionId, token: linkA.token }),
     );
     await nextMessage(socketA);
 
     const linkB = await createLinkAndDecode(daemon, port);
-    const socketB = await connectClient(port);
+    const socketB = await connectClient(daemon);
     socketB.send(
       JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: linkB.sessionId, token: linkB.token }),
     );
