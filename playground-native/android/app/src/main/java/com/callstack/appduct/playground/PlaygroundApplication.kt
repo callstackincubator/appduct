@@ -9,7 +9,7 @@ import org.json.JSONObject
 
 /**
  * Registers the same tool set as the Expo playground (`playground/app/(tabs)/index.tsx`) so the
- * two can be driven identically from `appduct tools`/`invoke` (docs/tasks/19-android-entry-points.md).
+ * two can be driven identically from `appduct tools ls`/`tools call` (docs/tasks/19-android-entry-points.md).
  * By the time [onCreate] runs, [com.callstack.appduct.AppductInitProvider] has
  * already captured this process's application `Context` and started lease recovery -- nothing
  * else needs to happen before [Appduct.register] works.

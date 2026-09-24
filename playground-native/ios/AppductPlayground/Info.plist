@@ -19,7 +19,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<!-- The deep-link scheme this playground registers itself for -- matches
-	     `appduct link --scheme appduct-native` and `Appduct.shared.handle($0)` wired in
+	     `appduct sessions link --scheme appduct-native` and `Appduct.shared.handle($0)` wired in
 	     `AppductPlaygroundApp.swift`'s `.onOpenURL`. -->
 	<key>CFBundleURLTypes</key>
 	<array>
@@ -33,7 +33,7 @@
 		</dict>
 	</array>
 	<!-- No AppductTrust/AppductCliPins here on purpose: this playground is the zero-config
-	     example (packages/native/ios/README.md), so it trusts whatever pin `appduct link` puts on
+	     example (packages/native/ios/README.md), so it trusts whatever pin `appduct sessions link` puts on
 	     the deep link for that session (`trust: "link"`, docs/SECURITY.md#trust-modes) -- unlike
 	     `playground/app.json`, which pins a fixture key for the Expo playground's repeatable CI. -->
 	<key>LSRequiresIPhoneOS</key>

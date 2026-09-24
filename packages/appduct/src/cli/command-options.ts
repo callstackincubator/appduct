@@ -26,8 +26,9 @@ export const parsePositiveIntegerOption = (value: unknown, flagName: string): nu
 };
 
 /** Parses a `cac`-provided option value into a non-negative integer (0 allowed, unlike
- * {@link parsePositiveIntegerOption}), or throws a clear `usage_error`. Used by `events --since`,
- * whose cursor `0` is a meaningful "everything retained" value, not an omission. */
+ * {@link parsePositiveIntegerOption}), or throws a clear `usage_error`. Used by `events since`'s
+ * `<cursor>` positional, whose value `0` is a meaningful "everything retained" value, not an
+ * omission. */
 export const parseNonNegativeIntegerOption = (value: unknown, flagName: string): number | undefined => {
   if (value === undefined) {
     return undefined;

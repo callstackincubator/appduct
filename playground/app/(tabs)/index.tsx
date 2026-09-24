@@ -18,7 +18,7 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 // records the scheme and the app ids `--open` needs.
 const CONNECT_COMMANDS = [
   "pnpm exec expo run:ios   # or: pnpm exec expo run:android",
-  "pnpm run playground:appduct -- link --open ios-sim   # or: --open android / --qr",
+  "pnpm run playground:appduct -- sessions link --open ios-sim   # or: --open android / --qr",
 ].join("\n");
 
 /** Delays `ms` without leaking a dangling timer past the call: each tool invocation owns its own. */
@@ -177,7 +177,7 @@ export default function ToolsScreen() {
           </View>
           <ThemedText type="caption" style={styles.cardHint}>
             Then drive tools from another terminal, via the same launcher: pnpm run
-            playground:appduct -- ls / tools / invoke sum --input
+            playground:appduct -- sessions ls / tools ls / tools call sum --input
             {" '{\"a\":1,\"b\":2}'"}.
           </ThemedText>
           <ThemedText type="caption" style={styles.cardHint}>
