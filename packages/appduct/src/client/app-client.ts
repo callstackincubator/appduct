@@ -209,7 +209,6 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
           selector: sessionId,
           since: options.since,
           limit: options.limit,
-          kinds: ["app_event"],
         });
 
         return {
@@ -292,7 +291,6 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
           const sinceResult = await stream.call<EventsSinceResult>(RPC_METHODS.eventsSince, {
             selector: sessionId,
             since: options.since,
-            kinds: ["app_event"],
           });
 
           // Merge the retained backlog with whatever arrived on the live channel while the two
@@ -329,8 +327,7 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
 
           // Nothing matched yet: resume live from the last event actually considered, or — if
           // nothing was retained/arrived at all — `events.since`'s own cursor, which already
-          // reflects the session's true high-water mark even when the `kinds` filter matched
-          // nothing.
+          // reflects the session's true high-water mark even when nothing was retained.
           const highestConsideredSeq = backlog.length > 0 ? backlog[backlog.length - 1]!.seq : sinceResult.cursor;
 
           unsubscribeClose = stream.onClose(() => {

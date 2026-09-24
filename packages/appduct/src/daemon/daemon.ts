@@ -58,7 +58,7 @@ import { ensureStateDir, getSocketPath, getStateDirPaths, type StateDirPaths } f
 import { systemTimers, type IntervalHandle, type TimerFns } from "./timers.js";
 import { createTlsManager, toAgentEndpoint, type TlsManager } from "./tls.js";
 
-/** Used to validate `events.subscribe`/`events.since`'s `kinds` filter. */
+/** Used to validate `events.subscribe`'s `kinds` filter. */
 const KNOWN_EVENT_KINDS: ReadonlySet<string> = new Set<EventKind>(EVENT_KINDS);
 
 /** Per-connection `events.subscribe` state, stashed in `RpcConnection.state`. */
@@ -328,17 +328,6 @@ const asEventsSinceParams = (params: unknown): EventsSinceParams => {
     throw new RpcApplicationError("invalid_request", '"since" must be a non-negative integer.');
   }
 
-  const kindsRaw = record.kinds;
-  let kinds: EventKind[] | undefined;
-
-  if (kindsRaw !== undefined) {
-    if (!Array.isArray(kindsRaw) || !kindsRaw.every((kind) => typeof kind === "string" && KNOWN_EVENT_KINDS.has(kind))) {
-      throw new RpcApplicationError("invalid_request", '"kinds" must be an array of known event kinds.');
-    }
-
-    kinds = kindsRaw as EventKind[];
-  }
-
   const limit = record.limit;
 
   if (limit !== undefined && (typeof limit !== "number" || !Number.isInteger(limit) || limit <= 0)) {
@@ -348,7 +337,6 @@ const asEventsSinceParams = (params: unknown): EventsSinceParams => {
   return {
     selector: selector as string | undefined,
     since: since as number | undefined,
-    kinds,
     limit: limit as number | undefined,
   };
 };
@@ -813,14 +801,16 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           return { ok: true };
         },
         [RPC_METHODS.eventsSince]: (params): EventsSinceResult => {
-          const { selector, since, kinds, limit } = asEventsSinceParams(params);
+          // Only `app_event` is ever retained (event-bus.ts); an older client still sending `kinds`
+          // has it ignored like any other unknown param.
+          const { selector, since, limit } = asEventsSinceParams(params);
           // Resolved the same way as every other selector-taking method (`sessions.describe`,
           // `tools.list`): defaults to the sole active/suspended session, errors on ambiguity, and
           // works for a suspended session too — a suspended app's already-retained events are still
           // fair game to drain.
           const resolved = activeSessionManager.describe(selector);
 
-          return activeEventBus.since(resolved.sessionId, { since, kinds, limit });
+          return activeEventBus.since(resolved.sessionId, { since, limit });
         },
       },
     });

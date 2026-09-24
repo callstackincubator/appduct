@@ -326,7 +326,6 @@ export const handleWaitForEventTool = async (
       const sinceResult = await stream.call<EventsSinceResult>(RPC_METHODS.eventsSince, {
         selector: sessionId,
         since,
-        kinds: ["app_event"],
       });
 
       // Merge the retained backlog with whatever arrived on the live channel while the two calls
@@ -358,7 +357,7 @@ export const handleWaitForEventTool = async (
       // (backlog's own scan already covers everything since.events + earlyEvents jointly saw), or —
       // if nothing was retained/arrived at all — `events.since`'s own cursor, which (per
       // `event-bus.ts`'s `since()`) already reflects the session's true high-water mark even when
-      // the `kinds` filter matched nothing.
+      // nothing was retained.
       const highestConsideredSeq = backlog.length > 0 ? backlog[backlog.length - 1]!.seq : sinceResult.cursor;
 
       return await new Promise<WaitForEventToolResult>((resolve, reject) => {
