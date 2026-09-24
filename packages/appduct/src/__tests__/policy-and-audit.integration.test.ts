@@ -25,8 +25,6 @@ import { getStateDirPaths } from "../daemon/state-dir.js";
 import { createMcpServer, type McpServerHandle } from "../mcp/server.js";
 import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 const runningDaemons: RunningDaemon[] = [];
 const stateDirs: string[] = [];
 const mcpHandles: McpServerHandle[] = [];
@@ -48,7 +46,6 @@ afterEach(async () => {
 type TestDaemon = {
   daemon: RunningDaemon;
   stateDir: string;
-  port: number;
 };
 
 const startTestDaemon = async (configOverrides: Record<string, unknown> = {}): Promise<TestDaemon> => {
@@ -58,10 +55,7 @@ const startTestDaemon = async (configOverrides: Record<string, unknown> = {}): P
   const daemon = await startDaemon({ stateDir });
   runningDaemons.push(daemon);
 
-  // The daemon's `config.json` asks for an OS-assigned port (`wssPort: 0`), so the real port is
-  // only knowable from the listener that bound it — never pre-picked, which is what used to race
-  // another vitest process for the same number.
-  return { daemon, stateDir, port: daemon.listener.port()! };
+  return { daemon, stateDir };
 };
 
 /** Removes `daemon` from the tracked list and shuts it down immediately — used mid-test so a
@@ -122,9 +116,12 @@ const waitForEvent = (daemon: RunningDaemon, kind: EventKind): Promise<EventNoti
   });
 };
 
-const connectClient = (port: number): Promise<WebSocket> => {
+/** The daemon's `config.json` asks for an OS-assigned port (`wssPort: 0`), so the real port is
+ * only knowable from the listener that bound it — never pre-picked, which is what used to race
+ * another vitest process for the same number. */
+const connectClient = (daemon: RunningDaemon): Promise<WebSocket> => {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`wss://127.0.0.1:${port}`, { rejectUnauthorized: false });
+    const socket = new WebSocket(`wss://127.0.0.1:${daemon.listener.port()!}`, { ca: daemon.tls.current().certPem });
     socket.once("open", () => resolve(socket));
     socket.once("error", reject);
   });
@@ -162,9 +159,9 @@ const createLinkAndDecode = async (daemon: RunningDaemon): Promise<{ sessionId: 
  * always slugifies to the deterministic alias `pixel-8` for the first session claimed with that
  * model (`sessions.ts`'s `slugifyDeviceModel`/`dedupeAlias`) — tests rely on that determinism to
  * pre-configure `policy.tools["pixel-8/<name>"]` overrides before any claim happens. */
-const claimApp = async (daemon: RunningDaemon, port: number, deviceModel = "Pixel 8"): Promise<ClaimedApp> => {
+const claimApp = async (daemon: RunningDaemon, deviceModel = "Pixel 8"): Promise<ClaimedApp> => {
   const link = await createLinkAndDecode(daemon);
-  const socket = await connectClient(port);
+  const socket = await connectClient(daemon);
 
   const claimed = waitForEvent(daemon, "session_claimed");
   socket.send(
@@ -234,8 +231,8 @@ const readAuditRecords = async (stateDir: string): Promise<AuditRecord[]> => {
 
 describe("policy: evaluate", () => {
   test("a destructive-hinted tool is denied under policy.destructive: deny, with no frame reaching the app", async () => {
-    const { daemon, port } = await startTestDaemon({ policy: { destructive: "deny" } });
-    const app = await claimApp(daemon, port);
+    const { daemon } = await startTestDaemon({ policy: { destructive: "deny" } });
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "deleteAll", annotations: { destructiveHint: true } }]);
 
     const received: Record<string, unknown>[] = [];
@@ -253,10 +250,10 @@ describe("policy: evaluate", () => {
   });
 
   test("a per-tool override beats the destructive category rule (deny-by-default, allow-by-override)", async () => {
-    const { daemon, port } = await startTestDaemon({
+    const { daemon } = await startTestDaemon({
       policy: { destructive: "deny", tools: { "pixel-8/deleteAll": "allow" } },
     });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const app = await claimApp(daemon, "Pixel 8");
     expect(app.alias).toBe("pixel-8");
     await snapshotTools(daemon, app, [{ name: "deleteAll", annotations: { destructiveHint: true } }]);
 
@@ -278,10 +275,10 @@ describe("policy: evaluate", () => {
   });
 
   test("a per-tool override also beats the default-allow rule (allow-by-default, deny-by-override)", async () => {
-    const { daemon, port } = await startTestDaemon({
+    const { daemon } = await startTestDaemon({
       policy: { tools: { "pixel-8/echo": "deny" } },
     });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     await expect(
@@ -292,8 +289,8 @@ describe("policy: evaluate", () => {
   });
 
   test("policy_denied carries a hint naming the config file", async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { destructive: "deny" } });
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon({ policy: { destructive: "deny" } });
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "deleteAll", annotations: { destructiveHint: true } }]);
 
     const paths = getStateDirPaths(stateDir);
@@ -359,8 +356,8 @@ describe("policy: prompt without elicitation", () => {
   };
 
   test('Claude Code without elicitation gets no requiresUserInteraction flag, and its "prompt" call is denied with reason no_consent_channel', async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     let toolCallFrames = 0;
@@ -405,8 +402,8 @@ describe("policy: prompt without elicitation", () => {
   });
 
   test('a legacy consent: "client" from an older MCP server is ignored: the call is denied and audited as no_consent_channel', async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     await expect(
@@ -429,8 +426,8 @@ describe("policy: prompt without elicitation", () => {
   });
 
   test("an unknown consent value is still rejected as an invalid request", async () => {
-    const { daemon, port } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     await expect(
@@ -447,8 +444,8 @@ describe("policy: prompt without elicitation", () => {
   });
 
   test('a "prompt" tool call from an MCP client without elicitation is denied with reason no_consent_channel', async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     const mcpHandle = await createMcpServer({
@@ -478,8 +475,8 @@ describe("policy: prompt without elicitation", () => {
   });
 
   test('a "prompt" tool call from the CLI (no consent channel) is denied with reason no_consent_channel', async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     await expect(
@@ -497,8 +494,8 @@ describe("policy: prompt without elicitation", () => {
   });
 
   test('policy "deny" is still denied for an MCP client', async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "deny" } } });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "deny" } } });
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     const mcpHandle = await createMcpServer({
@@ -527,8 +524,8 @@ describe("policy: prompt without elicitation", () => {
   });
 
   test('policy "allow" for an MCP client never fabricates consent in the audit record', async () => {
-    const { daemon, port, stateDir } = await startTestDaemon();
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     app.socket.on("message", (data) => {
@@ -578,8 +575,8 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
   };
 
   test('appduct_list_tools reports a "prompt" tool\'s policy, and nothing is flagged at listing time — consent is asked at call time', async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     const mcpHandle = await createMcpServer({ stateDir, spawn: () => { throw new Error("must not auto-spawn"); } });
@@ -599,8 +596,8 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
   });
 
   test('a "prompt" tool call accepted via elicitation proceeds, forwards the tool name/session alias/args in the prompt message, and is audited with consent: "elicitation"', async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     app.socket.on("message", (data) => {
@@ -640,8 +637,8 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
   });
 
   test('a "prompt" call accepted via elicitation that then errors still records consent: "elicitation"', async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/boom": "prompt" } } });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/boom": "prompt" } } });
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "boom" }]);
 
     app.socket.on("message", (data) => {
@@ -679,8 +676,8 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
   test.each(["decline", "cancel"] as const)(
     'a "prompt" tool call %s\'d via elicitation never reaches the app, and the agent gets an isError result naming it',
     async (action) => {
-      const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
-      const app = await claimApp(daemon, port, "Pixel 8");
+      const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+      const app = await claimApp(daemon, "Pixel 8");
       await snapshotTools(daemon, app, [{ name: "echo" }]);
 
       const receivedByApp: Record<string, unknown>[] = [];
@@ -719,8 +716,8 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
   );
 
   test("an elicitation request the client rejects as unsupported (despite declaring the capability) denies the call exactly like no channel at all — never treated as approval", async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     const mcpHandle = await createMcpServer({ stateDir, spawn: () => { throw new Error("must not auto-spawn"); } });
@@ -753,8 +750,8 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
   });
 
   test("an elicitation that times out denies the call with a decline-shaped result naming the timeout, without calling the daemon", async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     const receivedByApp: Record<string, unknown>[] = [];
@@ -798,8 +795,8 @@ describe("policy: prompt via MCP elicitation (issue #10)", () => {
 
 describe("audit: one line per tools.call attempt", () => {
   test("ok/error/denied outcomes are all recorded, args are never logged raw, and caller is attributed correctly", async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({ policy: { destructive: "deny" } });
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon({ policy: { destructive: "deny" } });
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [
       { name: "echo" },
       { name: "boom" },
@@ -899,8 +896,8 @@ describe("audit: one line per tools.call attempt", () => {
 
 describe("audit: cancelled outcome", () => {
   test("tools.cancel followed by the app's tool_cancelled reply audits as cancelled", async () => {
-    const { daemon, port, stateDir } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "slow" }]);
 
     app.socket.on("message", (data) => {
@@ -939,10 +936,10 @@ describe("audit: cancelled outcome", () => {
 
 describe("daemon.status: policy + audit surfacing", () => {
   test("daemon.status exposes the effective policy and the audit path/failedWrites counter", async () => {
-    const { daemon, port, stateDir } = await startTestDaemon({
+    const { daemon, stateDir } = await startTestDaemon({
       policy: { default: "allow", destructive: "deny", tools: { "pixel-8/echo": "allow" } },
     });
-    const app = await claimApp(daemon, port, "Pixel 8");
+    const app = await claimApp(daemon, "Pixel 8");
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     app.socket.on("message", (data) => {

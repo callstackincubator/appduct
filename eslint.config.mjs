@@ -68,6 +68,18 @@ export const LEGACY_MODULE_BOUNDARY = [
   "packages/appduct/src/__tests__/link-open.integration.test.ts",
 ];
 
+// Tests that switched off TLS verification before the ban. Each talks to a daemon running as a
+// CLI subprocess, whose certificate it never sees, so it has no `ca` to pass. Same deal as
+// above: remove when converted, never add.
+export const LEGACY_TLS_BYPASS = [
+  "packages/appduct/src/__tests__/cli-v2.integration.test.ts",
+  "packages/appduct/src/__tests__/e2e/app-client.ts",
+  "packages/appduct/src/__tests__/e2e/harness.ts",
+  "packages/appduct/src/__tests__/e2e/hostility.e2e.test.ts",
+  "packages/appduct/src/__tests__/events.integration.test.ts",
+  "packages/appduct/src/__tests__/exit-codes.integration.test.ts",
+];
+
 // Rule 1, modules. A module is a directory under a package's src that has an index.ts; that
 // file is its only import surface. Modules are discovered at lint time, so a directory becomes
 // one the moment it gains an index.ts and there is no list to keep in step.
@@ -113,6 +125,29 @@ const noNodeIoDynamicImport = {
   },
 };
 
+// A test that disables TLS verification passes against any certificate, so it cannot catch a
+// daemon serving the wrong one. Only tests are linted: on a TLS server, rejectUnauthorized is
+// about client certificates and false is the normal setting.
+const TLS_MESSAGE = "Trust the daemon's own certificate with `ca: daemon.tls.current().certPem` instead of switching off TLS verification.";
+const keyName = (node) => (node.type === "Identifier" ? node.name : node.type === "Literal" ? node.value : undefined);
+const noTlsBypass = {
+  meta: { type: "problem", docs: { description: "no disabling TLS verification in tests" }, schema: [], messages: { bypass: TLS_MESSAGE } },
+  create(context) {
+    const report = (node) => context.report({ node, messageId: "bypass" });
+    return {
+      Property(node) {
+        const key = node.computed ? undefined : keyName(node.key);
+        if (key === "NODE_TLS_REJECT_UNAUTHORIZED") report(node);
+        if (key === "rejectUnauthorized" && node.value.type === "Literal" && node.value.value === false) report(node);
+      },
+      AssignmentExpression(node) {
+        const target = node.left;
+        if (target.type === "MemberExpression" && keyName(target.property) === "NODE_TLS_REJECT_UNAUTHORIZED") report(node);
+      },
+    };
+  },
+};
+
 const moduleBoundary = {
   meta: {
     type: "problem",
@@ -148,7 +183,7 @@ export default [
   {
     files: SOURCE,
     languageOptions: { parser: tseslint.parser, ecmaVersion: 2024, sourceType: "module" },
-    plugins: { appduct: { rules: { "module-boundary": moduleBoundary, "no-node-io-dynamic-import": noNodeIoDynamicImport } } },
+    plugins: { appduct: { rules: { "module-boundary": moduleBoundary, "no-node-io-dynamic-import": noNodeIoDynamicImport, "no-tls-bypass": noTlsBypass } } },
   },
   {
     files: SOURCE,
@@ -164,5 +199,10 @@ export default [
     files: TESTS,
     ignores: LEGACY_VI_MOCK,
     rules: { "no-restricted-properties": VI_MOCK_RESTRICTION },
+  },
+  {
+    files: TESTS,
+    ignores: LEGACY_TLS_BYPASS,
+    rules: { "appduct/no-tls-bypass": "error" },
   },
 ];
