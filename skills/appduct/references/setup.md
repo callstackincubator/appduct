@@ -27,7 +27,7 @@ not do it as part of a first-time setup.
 5. Optional, for pinned trust: generate a TLS private key for the daemon with
    `appduct keygen` (non-interactive with `--out <path>`; writes `~/.appduct/key.pem`
    by default). Skipping this is fine — the daemon generates its own key on first start and
-   `appduct link` carries the fingerprint on the deep link.
+   `appduct sessions link` carries the fingerprint on the deep link.
 6. If you generated a key in step 5, add its `sha256/...` SPKI pin to the app
    configuration, in a `cliPins` array (plural — the native clients accept a pin *set*,
    which is what makes future rotation non-breaking). Configuring `cliPins` switches the
@@ -55,7 +55,7 @@ not do it as part of a first-time setup.
    *validated* against `expo.scheme` — it is not what the CLI reads. A zero-config app can
    skip the plugin entry entirely (`docs/SECURITY.md`, "Configuring trust").
 3. Make sure `expo.scheme` is set — it is both what registers the app for deep links and
-   what `appduct link` discovers automatically from `app.json`.
+   what `appduct sessions link` discovers automatically from `app.json`.
 4. Run `appduct init` in the app root. It records the scheme in
    `.appduct/config.json` and prints the MCP server entry to paste into an agent's
    config. Re-running it is always safe: it keeps the scheme already recorded, and only
@@ -108,10 +108,10 @@ For builds that leave your machine, replace link-carried trust with embedded pin
 - The app trusts the daemon's current pin — via `cliPins` for a pinned build, or via the
   link-carried pin when no `cliPins` are configured.
 - The app has at least one registered tool.
-- The app's deep-link scheme matches what `appduct link` resolves — run
-  `appduct link --json` in the app root and read the scheme off the deep link; the
+- The app's deep-link scheme matches what `appduct sessions link` resolves — run
+  `appduct sessions link --json` in the app root and read the scheme off the deep link; the
   error names every location it looked in if it cannot find one.
-- `appduct ls` (or `appduct_connect` + `appduct_wait_for_session` over MCP)
+- `appduct sessions ls` (or `appduct_connect` + `appduct_wait_for_session` over MCP)
   reaches `state: "active"` once the app opens the link.
 - Hardened builds only: the daemon's key is present and `0600`, and the app trusts its
   current pin in `cliPins`.

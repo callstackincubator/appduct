@@ -137,16 +137,16 @@ You don't need keys, certificates, or a config plugin for a first run, in any bu
 Run these from your app's root directory:
 
 ```bash
-appduct link --open ios-sim     # a booted iOS Simulator
-appduct link --open android     # an Android emulator or USB device
-appduct link --qr               # a physical device: scan the QR code with its camera
+appduct sessions link --open ios-sim     # a booted iOS Simulator
+appduct sessions link --open android     # an Android emulator or USB device
+appduct sessions link --qr               # a physical device: scan the QR code with its camera
 ```
 
 Then:
 
 ```bash
-appduct tools
-appduct invoke sum --input '{"a":2,"b":3}'
+appduct tools ls
+appduct tools call sum --input '{"a":2,"b":3}'
 ```
 
 A physical device must be on the same local network as your computer. For every way to connect, see [Connect a device](/appduct/guides/cli/#connect-a-device).
@@ -165,7 +165,7 @@ If your app handles incoming links itself (custom routing, an in-app QR scanner)
 
 ## Troubleshooting
 
-**`appduct tools` fails with `no_session`.** No device has connected yet. Run `appduct ls` to see sessions, then connect with `appduct link`.
+**`appduct tools ls` fails with `no_session`.** No device has connected yet. Run `appduct sessions ls` to see sessions, then connect with `appduct sessions link`.
 
 **The link opens the app, but it never connects.**
 - Check that the app imports `@appduct/react-native/auto`, or calls `connect()` itself.

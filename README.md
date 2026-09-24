@@ -37,7 +37,7 @@ The hook registers once per mount — re-rendering costs nothing, and the handle
 Call it from your terminal:
 
 ```bash
-appduct invoke seed_cart --input '{"items":3}'
+appduct tools call seed_cart --input '{"items":3}'
 ```
 
 Or hand it to an agent — see [Use it with an agent](#use-it-with-an-agent). The CLI and the MCP server both read your app's deep-link scheme from its project files — `app.json` in an Expo app, `Info.plist` on iOS, `build.gradle` on Android — so there's nothing to configure.

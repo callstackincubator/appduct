@@ -28,9 +28,9 @@ npm install -g appduct
 
 ### 2. Nothing to configure yet
 
-No key, no pins, and no config plugin are needed for a first run, in any build type. The daemon auto-generates a key on first start, and `appduct link` carries its `sha256/...` fingerprint on the deep link for the app to trust for that session.
+No key, no pins, and no config plugin are needed for a first run, in any build type. The daemon auto-generates a key on first start, and `appduct sessions link` carries its `sha256/...` fingerprint on the deep link for the app to trust for that session.
 
-Wire your deep-link scheme so the OS can open the app with that link. For an Expo app that's all: `appduct link` reads `expo.scheme` straight out of `app.json`. Otherwise (a dynamic `app.config.js`, which Appduct never executes, or bare React Native) name it with `appduct init --scheme <s>`, `--scheme`, or `APPDUCT_SCHEME` — the [CLI README](https://github.com/callstackincubator/appduct/blob/main/packages/appduct/README.md#the-deep-link-scheme) has the full resolution order. To make a build trust only pins you embedded ahead of time, see [Configuring trust](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#configuring-trust).
+Wire your deep-link scheme so the OS can open the app with that link. For an Expo app that's all: `appduct sessions link` reads `expo.scheme` straight out of `app.json`. Otherwise (a dynamic `app.config.js`, which Appduct never executes, or bare React Native) name it with `appduct init --scheme <s>`, `--scheme`, or `APPDUCT_SCHEME` — the [CLI README](https://github.com/callstackincubator/appduct/blob/main/packages/appduct/README.md#the-deep-link-scheme) has the full resolution order. To make a build trust only pins you embedded ahead of time, see [Configuring trust](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#configuring-trust).
 
 By default the native module ships in **debug** builds only: a release build has none, so the API is inert and `connect()` rejects with `appduct_disabled` (see [Build variants](https://github.com/callstackincubator/appduct/blob/main/docs/BUILD-VARIANTS.md)).
 
@@ -94,17 +94,17 @@ An agent picks a tool from one signature line and the first line of its descript
 `appduct` auto-spawns its daemon. `link` needs your app's deep-link scheme: pass `--scheme` (matching `expo.scheme`), or set `scheme` once in `~/.appduct/config.json`:
 
 ```bash
-appduct link --scheme myapp --qr
+appduct sessions link --scheme myapp --qr
 ```
 
 Scan the QR (or open the link) in the app, then list and invoke tools:
 
 ```bash
-appduct tools
-appduct invoke sum --input '{"a":2,"b":3}'
+appduct tools ls
+appduct tools call sum --input '{"a":2,"b":3}'
 ```
 
-Omit the session selector when only one session is active; pass an alias or session id when several are (`appduct ls`).
+Omit the session selector when only one session is active; pass an alias or session id when several are (`appduct sessions ls`).
 
 ## API reference
 
@@ -125,7 +125,7 @@ Omit the session selector when only one session is active; pass an alias or sess
 | `createToolGroup` | `(group)` → a `registerTool` that puts every tool it registers in `group`. |
 | `useAppductTool` | `(definition, deps?, { enabled? })`. Registers once per mount, re-registering only when the descriptor changes; `deps` overrides that derivation. `enabled` defaults to `true`; `false` never registers, and removes any registration that hook owns. |
 | `handler` | `(args, context)`. `context.signal` is an `AbortSignal`, aborted when the caller cancels or the connection drops mid-call. Forward it (`fetch(url, { signal })`), check `signal.aborted`, or listen for `"abort"` — ignoring it is fine, the handler replies normally. |
-| `postEvent` | `(name, payload?)` — pushes an app event, read by `appduct events` and the MCP event tools. |
+| `postEvent` | `(name, payload?)` — pushes an app event, read by `appduct events tail` and the MCP event tools. |
 | `addAppductListener` | `(kind, callback)` → `{ remove() }`. Kinds `"stateChange"`, `"sessionChange"`, `"error"` — the last one is a unified channel for bootstrap-parse, connect, socket, and tool-handler failures. |
 | `getRegisteredTools` | → `ToolDescriptor[]`, the current registry. |
 | `getAppductState` | → the client's connection state (`"idle"` with no session). |

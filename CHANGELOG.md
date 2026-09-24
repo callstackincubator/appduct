@@ -11,6 +11,10 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Breaking: the CLI commands are now noun-verb, with no aliases.** `ls`, `revoke`, `link`,
+  `tools` and `invoke` are gone — use `sessions ls|revoke|link`, `tools ls|describe|call`, and
+  `events tail|since <cursor>` instead; a removed command's error names its replacement.
+
 ## 0.12.0 (2026-09-24)
 
 - **Breaking: `appduct events`, `appduct_events` and `appduct_wait_for_event` show only the events

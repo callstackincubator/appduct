@@ -109,9 +109,9 @@ A SwiftUI app that uses `AppductCore` directly. Its scheme, `appduct-native`, is
 3. Connect and call a tool, from `playground-native/ios`:
 
    ```bash
-   appduct link --open ios-sim
-   appduct tools
-   appduct invoke sum --input '{"a":2,"b":3}'
+   appduct sessions link --open ios-sim
+   appduct tools ls
+   appduct tools call sum --input '{"a":2,"b":3}'
    ```
 
 </Steps>
@@ -134,10 +134,10 @@ A Jetpack Compose app that uses `com.callstack.appduct:core` directly. It builds
 2. Connect and call a tool, from inside `playground-native/`, where the scheme and app id are recorded:
 
    ```bash
-   appduct link --open android
-   appduct tools
-   appduct invoke sum --input '{"a":2,"b":3}'
-   appduct events
+   appduct sessions link --open android
+   appduct tools ls
+   appduct tools call sum --input '{"a":2,"b":3}'
+   appduct events tail
    ```
 
 </Steps>

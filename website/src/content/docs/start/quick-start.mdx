@@ -96,14 +96,14 @@ By the end of this page you'll have called a function inside your running app fr
    <Tabs syncKey="platform">
      <TabItem label="iOS">
        ```bash
-       appduct link --open ios-sim
+       appduct sessions link --open ios-sim
        ```
      </TabItem>
      <TabItem label="Android">
        Use your app's package name, `expo.android.package` in `app.json`:
 
        ```bash
-       appduct link --open android --app-id com.example.shop
+       appduct sessions link --open android --app-id com.example.shop
        ```
      </TabItem>
    </Tabs>
@@ -113,11 +113,11 @@ By the end of this page you'll have called a function inside your running app fr
 7. List the app's tools, then call one:
 
    ```bash
-   appduct tools
-   appduct invoke seed_cart --input '{"items":3}'
+   appduct tools ls
+   appduct tools call seed_cart --input '{"items":3}'
    ```
 
-   `appduct tools` prints one line per tool, such as `seed_cart(items: number)`. `appduct invoke` prints what the handler returned: `{"added":3}`.
+   `appduct tools ls` prints one line per tool, such as `seed_cart(items: number)`. `appduct tools call` prints what the handler returned: `{"added":3}`.
 
 </Steps>
 
@@ -141,13 +141,13 @@ Run `appduct init --ios-app-id com.example.shop --android-app-id com.example.sho
 
 ## If something goes wrong
 
-**`appduct link` says it can't find a scheme.** You ran it outside the app root, or your app uses a dynamic `app.config.js`, which Appduct never runs. Pass `--scheme myapp`, or run `appduct init --scheme myapp` once.
+**`appduct sessions link` says it can't find a scheme.** You ran it outside the app root, or your app uses a dynamic `app.config.js`, which Appduct never runs. Pass `--scheme myapp`, or run `appduct init --scheme myapp` once.
 
 **`--open android` fails before doing anything.** It needs the installed app's package name. Pass `--app-id`, or record it with `appduct init --android-app-id`.
 
-**The app opens but `appduct tools` says there's no session.** Check that the app imports `@appduct/react-native/auto`, and that you rebuilt after installing the package. In Expo Go, or a release build, Appduct is inactive.
+**The app opens but `appduct tools ls` says there's no session.** Check that the app imports `@appduct/react-native/auto`, and that you rebuilt after installing the package. In Expo Go, or a release build, Appduct is inactive.
 
-**`appduct invoke` fails with `tool_not_found`.** The component that registers the tool isn't mounted. Tools exist only while their component is mounted.
+**`appduct tools call` fails with `tool_not_found`.** The component that registers the tool isn't mounted. Tools exist only while their component is mounted.
 
 ## Next steps
 

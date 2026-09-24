@@ -7,7 +7,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 // Side-effect entry (ARCHITECTURE.md §11): installs the default deep-link bootstrap listener on
-// import, so opening the host's bootstrap link (QR / `appduct link --open`) is enough to start
+// import, so opening the host's bootstrap link (QR / `appduct sessions link --open`) is enough to start
 // a session. `require("@appduct/react-native/auto")` would install it lazily instead.
 import "@appduct/react-native/auto";
 

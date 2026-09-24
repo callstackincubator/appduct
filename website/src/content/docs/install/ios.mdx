@@ -139,12 +139,12 @@ This page adds Appduct to a plain iOS app, with no React Native or Expo. You reg
 Build and run the **Debug** configuration on a simulator, then, from your project directory:
 
 ```bash
-appduct link --open ios-sim
-appduct tools
-appduct invoke seed_cart --input '{"items":3}'
+appduct sessions link --open ios-sim
+appduct tools ls
+appduct tools call seed_cart --input '{"items":3}'
 ```
 
-For a physical device, run `appduct link --qr` and scan the code with the phone's camera. The phone must be on the same local network as your Mac. See [Connect a device](/appduct/guides/cli/#connect-a-device) for other options.
+For a physical device, run `appduct sessions link --qr` and scan the code with the phone's camera. The phone must be on the same local network as your Mac. See [Connect a device](/appduct/guides/cli/#connect-a-device) for other options.
 
 The app restores its session on its own after a short network drop. If the app process is killed, connect again with a new link.
 
@@ -195,7 +195,7 @@ To tell a test or agent that something happened, post an event. It throws unless
 try await Appduct.shared.postEvent("checkout_completed", payload: ["orderId": "ord_4821"])
 ```
 
-Read events with `appduct events`, or wait for one from a test. See [Wait for app events](/appduct/guides/cli/#watch-events).
+Read events with `appduct events tail`, or wait for one from a test. See [Wait for app events](/appduct/guides/cli/#watch-events).
 
 ## Ship Appduct in a Release build
 
@@ -228,9 +228,9 @@ appduct doctor build/Shop.app --assert-present   # a build that should
 
 ## Troubleshooting
 
-**`handle(_:)` always returns `false`.** The URL doesn't carry an Appduct link. Check that the scheme in `Info.plist` matches what `appduct link` used, and that you pass the URL you received, unchanged.
+**`handle(_:)` always returns `false`.** The URL doesn't carry an Appduct link. Check that the scheme in `Info.plist` matches what `appduct sessions link` used, and that you pass the URL you received, unchanged.
 
-**A tool call never reaches the handler.** Check that `Appduct.shared.state` is `.active`, and that `appduct tools` lists the tool's name. Calls to an unregistered name fail with `tool_not_found`.
+**A tool call never reaches the handler.** Check that `Appduct.shared.state` is `.active`, and that `appduct tools ls` lists the tool's name. Calls to an unregistered name fail with `tool_not_found`.
 
 **A Release build still connects.** You enabled `AlwaysEnabled` or removed the CocoaPods restriction. Run `appduct doctor` on the artifact to confirm what shipped.
 

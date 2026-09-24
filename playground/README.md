@@ -77,7 +77,7 @@ Tap **Send playground_ping** on the Status tab while `events --follow` is runnin
 
 With a session active, trigger a Metro reload (press `r` in the Metro terminal, or shake the
 device and choose Reload). The Status tab should show `reconnecting` then `active` again with the
-**same alias**—no new `appduct link` needed. Keep the native app process alive: the resume
+**same alias**—no new `appduct sessions link` needed. Keep the native app process alive: the resume
 lease exists only in native process memory, so killing/relaunching the app requires a new link.
 The daemon-side session grace window (`graceSeconds` in `config.json`) starts when the transport
 suspends/disconnects.

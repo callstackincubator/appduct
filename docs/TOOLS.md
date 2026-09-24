@@ -115,7 +115,7 @@ Because exportable schemas are compared by their *exported* JSON Schema, the reg
 
 ## Group tools in a large app
 
-Once your app registers more tools than fit on a screen, give each one a `group`. An agent then runs `appduct tools --groups` to see your app's areas, and `appduct tools --group cart` to list one of them, instead of guessing words to `--filter` on.
+Once your app registers more tools than fit on a screen, give each one a `group`. An agent then runs `appduct tools ls --groups` to see your app's areas, and `appduct tools ls --group cart` to list one of them, instead of guessing words to `--filter` on.
 
 ```ts
 useAppductTool({
@@ -127,7 +127,7 @@ useAppductTool({
 });
 ```
 
-A group is a top-level name (`cart`) or one subgroup below it (`checkout/payment`). Each part uses the same characters as a tool name (letters, digits, `_` and `-`, at most 64). Nothing deeper than one subgroup is allowed. Add a subgroup only when a group itself outgrows a screen: `appduct tools --group checkout` lists `checkout` together with every `checkout/...` subgroup, and `--group checkout/payment` lists only that subgroup.
+A group is a top-level name (`cart`) or one subgroup below it (`checkout/payment`). Each part uses the same characters as a tool name (letters, digits, `_` and `-`, at most 64). Nothing deeper than one subgroup is allowed. Add a subgroup only when a group itself outgrows a screen: `appduct tools ls --group checkout` lists `checkout` together with every `checkout/...` subgroup, and `--group checkout/payment` lists only that subgroup.
 
 To register several tools in one group without repeating its name, bind it once with `createToolGroup`:
 
@@ -140,13 +140,13 @@ registerCartTool({ name: "add_item", description: "Add a product to the cart", h
 registerCartTool({ name: "clear_cart", description: "Remove every item from the cart", handler: clearCart });
 ```
 
-A malformed group (`"checkout/"`, `"a/b/c"`, `"check out"`) makes the registration throw, like a malformed tool name. Groups only change how tools are listed, by `appduct tools` and by `appduct_list_tools` over MCP. They don't change tool names or how tools are called.
+A malformed group (`"checkout/"`, `"a/b/c"`, `"check out"`) makes the registration throw, like a malformed tool name. Groups only change how tools are listed, by `appduct tools ls` and by `appduct_list_tools` over MCP. They don't change tool names or how tools are called.
 
 ## Make the input schema accept an object
 
 A tool call always passes its arguments as a JSON object. An `inputSchema` whose root type is something else — `z.string()`, `z.number()`, `z.array(...)` — can never be satisfied, and registering one logs a dev warning naming the tool. Wrap the value instead: `inputSchema: z.object({ sku: z.string() })` rather than `z.string()`.
 
-Unions and intersections of objects work: `z.union([...])`, `z.discriminatedUnion(...)` and `z.intersection(a, b)` export with no root `type`, and an object argument can still match one of their branches. The one-line signature in `appduct tools` shows their arguments as `(...)`, though, so an agent has to read the full schema (`appduct tools <name>`, or `appduct_describe_tool` over MCP) before it can call them. A single `z.object(...)` gives agents named arguments straight from the listing.
+Unions and intersections of objects work: `z.union([...])`, `z.discriminatedUnion(...)` and `z.intersection(a, b)` export with no root `type`, and an object argument can still match one of their branches. The one-line signature in `appduct tools ls` shows their arguments as `(...)`, though, so an agent has to read the full schema (`appduct tools describe <name>`, or `appduct_describe_tool` over MCP) before it can call them. A single `z.object(...)` gives agents named arguments straight from the listing.
 
 `outputSchema` has no such limit. A result can be any JSON value, and agents see the schema exactly as you wrote it.
 
@@ -166,14 +166,14 @@ useAppductTool(
 );
 ```
 
-That deadline is enforced end to end: the app aborts the handler's `signal` at it, and it also travels to the daemon as the descriptor's `timeout_ms`, so an agent calling the tool over MCP (or `appduct invoke` with no `--timeout`) gets the same budget instead of a `tool_timeout` at 10 seconds.
+That deadline is enforced end to end: the app aborts the handler's `signal` at it, and it also travels to the daemon as the descriptor's `timeout_ms`, so an agent calling the tool over MCP (or `appduct tools call` with no `--timeout`) gets the same budget instead of a `tool_timeout` at 10 seconds.
 
-The SDK clamps the value to `[1_000, 600_000]` ms before either timer is set, so the handler's abort timer and the daemon's call deadline are always the same number (a value outside that range is clamped with a dev warning). A caller that passes its own timeout (`appduct invoke --timeout`, `app.call(name, args, { timeoutMs })`) can only **shorten** the deadline, never extend it past this one — the app aborts the handler at its own timer regardless, so for a tool that declares nothing, a caller asking for 60 seconds still gets the app's 10-second default. That app-side fallback is fixed natively (`AppductClient`'s own `defaultToolTimeoutMs`, `APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`) and JS cannot override it — `createAppductClient`'s options are empty, and the TurboModule spec has no channel for it. Declare `timeoutMs` per tool when a call needs longer than the default.
+The SDK clamps the value to `[1_000, 600_000]` ms before either timer is set, so the handler's abort timer and the daemon's call deadline are always the same number (a value outside that range is clamped with a dev warning). A caller that passes its own timeout (`appduct tools call --timeout`, `app.call(name, args, { timeoutMs })`) can only **shorten** the deadline, never extend it past this one — the app aborts the handler at its own timer regardless, so for a tool that declares nothing, a caller asking for 60 seconds still gets the app's 10-second default. That app-side fallback is fixed natively (`AppductClient`'s own `defaultToolTimeoutMs`, `APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`) and JS cannot override it — `createAppductClient`'s options are empty, and the TurboModule spec has no channel for it. Declare `timeoutMs` per tool when a call needs longer than the default.
 
 ## Designing tools for agents
 
 Everything above is mechanics. This section is about the reader: the agent that runs
-`appduct tools` (or `appduct_list_tools` over MCP) and has to pick and call a tool from a listing
+`appduct tools ls` (or `appduct_list_tools` over MCP) and has to pick and call a tool from a listing
 like
 
 ```
@@ -271,7 +271,7 @@ registerTool({
 });
 ```
 
-**Read it back.** Once the tools are registered, connect a device and run `appduct tools`. That
+**Read it back.** Once the tools are registered, connect a device and run `appduct tools ls`. That
 listing is exactly what the calling agent sees: fix any `...` in a signature (a schema shape the
 renderer cannot summarize, usually a root union), any tool without `-> { ... }`, and any description
 whose first line does not say what the tool needs. The [playground's tools](../playground/app/(tabs)/index.tsx)

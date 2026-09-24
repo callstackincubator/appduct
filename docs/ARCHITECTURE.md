@@ -112,7 +112,7 @@ without an operator hand-picking a port for each (the test suite's daemons all r
 Any other value must be a port number in `1..65535`.
 
 `advertisedIp` overrides auto-detection of the address advertised in minted bootstrap
-payloads. `scheme` is the deep-link URI scheme composed into `appduct link`'s output
+payloads. `scheme` is the deep-link URI scheme composed into `appduct sessions link`'s output
 when `--scheme` is not passed (§10) — set it once here instead of on every invocation.
 Unlike `scheme`, the app id `--open android`/`--open ios-device` need (issue #63) has no
 home in this file: it lives only in a project `.appduct/config.json`'s `appId.<platform>`
@@ -301,7 +301,7 @@ tool does not buy it sixty seconds. Extending a tool's budget is the app's decis
 by declaring `timeoutMs` on the registration.
 
 Callers that hold their own transport watchdog over a `tools.call` (the MCP server,
-`appduct invoke`, `appduct/client`) must size it from the same arithmetic —
+`appduct tools call`, `appduct/client`) must size it from the same arithmetic —
 `deriveCallTransportTimeoutMs` (`daemon/calls.ts`) is that clamp plus 5 000 ms of slack —
 so the daemon's `tool_timeout` always arrives first and the real error type reaches the
 caller instead of a generic transport failure. A caller that knows the effective deadline
@@ -337,7 +337,7 @@ after it), falling back to the session's true high-water mark only when nothing 
 returned, so an empty page still lets a caller skip past the unretained kinds' `seq`s
 rather than re-scanning from an older cursor. `selector` defaults the same way as every
 other selector-taking method (§ above). The readers built on it — `appduct_events`,
-`appduct_wait_for_event`, `appduct events` (whose live mode subscribes with
+`appduct_wait_for_event`, `appduct events tail` (whose live mode subscribes with
 `kinds: ["app_event"]`) and the client SDK — therefore only ever show `app_event`; the
 internal consumers that need Appduct's own kinds (`appduct_wait_for_session`,
 `waitForSession`, `appduct_call_tool`'s `callId` and progress tracking) use
@@ -481,12 +481,12 @@ proxies daemon RPC (auto-spawning the daemon like any client):
 
 - `tools/list` is a fixed set of built-in tools. The app's tools are never listed as MCP
   tools of their own; an agent reaches them through three built-ins that mirror the CLI (§10):
-  `appduct_list_tools` (`appduct tools`: one-line signatures from `renderToolSignature`, each
+  `appduct_list_tools` (`appduct tools ls`: one-line signatures from `renderToolSignature`, each
   tool's `group` (`null` for an ungrouped tool, as in the summary) and effective policy, with
   `group`/`filter`/`limit`/`offset` passed through to
   `tools.list`, `limit` defaulting to 50, and the daemon's whole-registry `groups` summary on
-  every result), `appduct_describe_tool` (`appduct tools <name>`: the whole descriptor, `group`
-  included), and `appduct_call_tool` (`appduct invoke`: `{ selector?, name, args?, timeoutMs? }`).
+  every result), `appduct_describe_tool` (`appduct tools describe <name>`: the whole descriptor,
+  `group` included), and `appduct_call_tool` (`appduct tools call`: `{ selector?, name, args?, timeoutMs? }`).
   `timeoutMs` can only shorten the tool's own deadline, since the `tool_call` frame carries no
   deadline and the app stops the handler at its declared one (`docs/PROTOCOL.md` §5); a longer value, or one outside
   1000–600000 ms, is rejected rather than clamped. A client cancel that arrives while the consent
@@ -546,7 +546,20 @@ owns no keys. Every command is one RPC call plus formatting, which is why the CL
 server can't drift in behavior: they are the same calls.
 
 The per-command reference lives in the [`appduct` package README](../packages/appduct/README.md),
-which is where it stays current. `appduct tools`'s human listing renders each tool through
+which is where it stays current. Every command is `appduct <noun> <verb> [selector] [args]`
+(issue #96): `sessions ls|revoke|link`, `tools ls|describe|call`, `events tail|since`, with
+`daemon run|start|stop|status` as the model this was generalized from — `init`, `keygen`, `doctor`
+and `mcp` stay one-verb nouns. This is a clean break with no aliases (pre-1.0): a removed
+top-level word (`ls`, `revoke`, `link`, `invoke`) is a usage error naming its replacement
+(`dispatch.ts`'s `REMOVED_COMMANDS`), and a bare noun or an unrecognized verb is a usage error
+naming that noun's verbs, exactly like a bare `daemon` already does. `cac` matches only a
+command's first word and builds its boolean/string flag table from that command's own declared
+options, so each noun in `create-cli.ts` declares every option any of its verbs uses — otherwise a
+boolean flag ahead of a positional (`tools ls --full <selector>`) would swallow it as that flag's
+value. `routes/sessions/`, `routes/tools/` and `routes/events/` are routers exactly like
+`routes/daemon/`, one route module per verb.
+
+`appduct tools ls`'s human listing renders each tool through
 `@appduct/shared`'s `renderToolSignature` (a one-line call signature derived from the tool's JSON
 Schema) rather than printing the raw schema, so it stays cheap to read against an app that
 registers hundreds of tools. Once any tool declares a `group` (PROTOCOL.md §5), that listing prints
@@ -555,8 +568,8 @@ under `(ungrouped)`), and its "Showing n of total" footer names the top-level gr
 counts so an agent narrows with `--group <name>` rather than guessing a `--filter`. `--group` is
 `tools.list`'s `group` param, filtered daemon-side like `--filter`; `--groups` prints only the
 `groups` summary (subgroups indented under their parent). Both are listing-only flags, a usage
-error next to a tool `<name>`, and a malformed `--group` is a usage error before the daemon is
-asked. Global flags (`cli/global-flags.ts`'s declarative table): `--json`
+error next to `tools describe`'s `<name>`, and a malformed `--group` is a usage error before the
+daemon is asked. Global flags (`cli/global-flags.ts`'s declarative table): `--json`
 (machine output, NDJSON for streams; compact by default), `--pretty` (indent `--json` output and
 embedded JSON values, never NDJSON lines), `--verbose` (include the `meta` block — omitted by
 default in both human and `--json` output), `--no-color`, `--state-dir`, `--daemon-restart` (force
@@ -643,7 +656,7 @@ deferred to `appduct_connect`, which reports `invalid_request` naming every loca
 resolution *error* (an invalid `--scheme`, a malformed `app.json`) is additionally written to
 stderr at startup — never stdout, which carries MCP protocol frames only.
 
-`appduct invoke`: a SIGINT while the call is still pending cancels it (§5's
+`appduct tools call`: a SIGINT while the call is still pending cancels it (§5's
 `tools.cancel`, via the RPC connection dropping) rather than leaving the app-side handler
 running for a caller that has already exited; the process then exits reporting
 `tool_cancelled`.

@@ -7,7 +7,10 @@ sidebar:
 
 For task-based instructions, see [Use the CLI](/appduct/guides/cli/). Run `appduct <command> --help` for a command's flags on your installed version.
 
-Commands that target a device take an optional `[selector]`: a session alias or id from `appduct ls`. Leave it out when exactly one device is connected.
+Every command is `appduct <noun> <verb> [selector] [args]` — `sessions`, `tools`, and `events`
+each work like `appduct daemon run|start|stop|status` already does. Commands that target a device
+take an optional `[selector]`: a session alias or id from `appduct sessions ls`. Leave it out when
+exactly one device is connected.
 
 ## Commands
 
@@ -24,7 +27,11 @@ Sets up the current app directory: writes `.appduct/config.json` (mode `0600`) a
 
 A plain re-run keeps the recorded scheme and adds a note if your project files now declare a different one.
 
-### `appduct link`
+### `appduct sessions ls`
+
+Lists sessions with alias, state, device, and tool count.
+
+### `appduct sessions link`
 
 Creates a one-time connection link and prints it.
 
@@ -50,13 +57,13 @@ Without `--device`, each target requires exactly one candidate and lists them ot
 
 The link has the form `<scheme>:///?appduct=<payload>&pin=<sha256/...>`. Pass it on whole.
 
-### `appduct ls`
+### `appduct sessions revoke [selector]`
 
-Lists sessions with alias, state, device, and tool count.
+Ends one session and frees its alias.
 
-### `appduct tools [selector] [name]`
+### `appduct tools ls [selector]`
 
-Lists a device's tools as one-line signatures, or shows one tool's full schema when you pass `name`.
+Lists a device's tools as one-line signatures.
 
 | Flag | Description |
 | --- | --- |
@@ -67,11 +74,15 @@ Lists a device's tools as one-line signatures, or shows one tool's full schema w
 | `--offset <n>` | Skip the first `n` tools of the name-sorted list. |
 | `--full` | Print full schemas for every listed tool. |
 
-`--groups`, `--group`, `--filter`, `--limit`, and `--offset` can't be combined with `name`. With `--json`, the listing is `{ tools, total, groups }`, where `total` counts matches before `--limit` and `--offset`. Every listed tool carries a `group` — its group name, or `null` when it has none, which is also how `groups` spells its ungrouped row.
+With `--json`, the listing is `{ tools, total, groups }`, where `total` counts matches before `--limit` and `--offset`. Every listed tool carries a `group` — its group name, or `null` when it has none, which is also how `groups` spells its ungrouped row.
 
 Signature syntax: `name: type` for a required argument, `name?: type` for an optional one, `= value` for a default, `-> type` for the result. `...` marks a part the signature can't summarize. `[prompt]` or `[deny]` marks a tool whose policy isn't `"allow"`.
 
-### `appduct invoke [selector] <tool>`
+### `appduct tools describe [selector] <name>`
+
+Shows one tool's full schema. `--groups`, `--group`, `--filter`, `--limit`, and `--offset` are `tools ls`-only flags and can't be combined with `describe`.
+
+### `appduct tools call [selector] <name>`
 
 Calls a tool.
 
@@ -82,22 +93,21 @@ Calls a tool.
 
 Ctrl-C cancels the call in the app.
 
-### `appduct events [selector]`
+### `appduct events tail [selector]`
 
 Streams the events your app posts with `postEvent` until you stop it. With `--json`, prints one JSON object per line, each with `kind: "app_event"`.
 
 | Flag | Description |
 | --- | --- |
-| `--since <cursor>` | Print the app events retained since this cursor, then exit. |
 | `--follow` | Accepted for readability; streaming is the default. |
 
-Device connections and tool calls are not printed. To see when a device connects, use `appduct ls`.
+Device connections and tool calls are not printed. To see when a device connects, use `appduct sessions ls`.
 
 Each device keeps its last 256 app events (`eventBufferSize`), however many tool calls run in between. They're discarded when the session ends.
 
-### `appduct revoke [selector]`
+### `appduct events since [selector] <cursor>`
 
-Ends one session and frees its alias.
+Prints the app events retained since `<cursor>`, then exits. With `--json`, prints one JSON object per event line plus a trailing `{ "cursor": n }` line to resume from.
 
 ### `appduct mcp`
 
@@ -107,7 +117,7 @@ Starts an MCP server over stdio. See [MCP tools](#mcp-tools).
 | --- | --- |
 | `--scheme <scheme>` | Scheme for `appduct_connect`. |
 
-Unlike `link`, it starts even when no scheme is found; only `appduct_connect` fails.
+Unlike `sessions link`, it starts even when no scheme is found; only `appduct_connect` fails.
 
 ### `appduct doctor <artifact>`
 
@@ -178,7 +188,7 @@ With `--json`, the error's `type` field names the exact error. See [Error types]
 
 ## Scheme resolution
 
-`link`, `mcp`, `appduct_connect`, and `appduct/client`'s `link()` use the first of:
+`sessions link`, `mcp`, `appduct_connect`, and `appduct/client`'s `link()` use the first of:
 
 1. `--scheme` (or the `scheme` option).
 2. `APPDUCT_SCHEME`.

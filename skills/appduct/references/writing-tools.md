@@ -1,7 +1,7 @@
 # Writing Appduct tools
 
 Read this when the task is to register tools in an app, or to review the tools it already has.
-The tools you write are what a calling agent sees in `appduct tools`; write them for that reader.
+The tools you write are what a calling agent sees in `appduct tools ls`; write them for that reader.
 
 ## Register a tool
 
@@ -120,7 +120,7 @@ registerTool({
 });
 ```
 
-**Read it back.** After registering, connect a device and run `appduct tools` (or
+**Read it back.** After registering, connect a device and run `appduct tools ls` (or
 `appduct_list_tools`). Fix any `...` in a signature, any tool without `-> { ... }`, and any
 description whose first line does not say what the tool needs. That listing is exactly what the
 calling agent gets.

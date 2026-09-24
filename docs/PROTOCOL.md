@@ -28,7 +28,7 @@ socket, and each gets its own session.
 Deep link shape: `<scheme>:///?appduct=<base64url-no-padding>&pin=<sha256/...>`. The
 `appduct` payload is unchanged from v1; `pin` is a separate, percent-encoded query param
 carrying the daemon's SPKI fingerprint (see `docs/ARCHITECTURE.md` §8), appended by both
-`appduct link` and `appduct_connect`. **Anything reading the payload must stop at the
+`appduct sessions link` and `appduct_connect`. **Anything reading the payload must stop at the
 `&`** — slicing to the end of the string swallows the pin and corrupts the blob.
 
 The `appduct` query value decodes to this binary layout — all multi-byte integers
@@ -54,13 +54,13 @@ endpoint and brackets IPv6 literals: `wss://[fd00::1]:8443` vs. `wss://192.168.1
 
 ### Delivery paths
 
-1. **Emulator/simulator fast path** (`appduct link --open android|ios-sim`, or the MCP
+1. **Emulator/simulator fast path** (`appduct sessions link --open android|ios-sim`, or the MCP
    `appduct_connect` tool's `target` argument): the daemon mints the link with the
    advertised address forced to `127.0.0.1`, `adb reverse`/`simctl openurl` delivers it —
    no human, fully scriptable. `android` additionally names the app explicitly (`adb shell am
    start ... -p <app-id>`, issue #63): without it, more than one installed app declaring the
    same scheme pops an "Open with" chooser that `am start` still reports as success.
-2. **Physical device on LAN**: printed deep link + QR (`appduct link --qr`).
+2. **Physical device on LAN**: printed deep link + QR (`appduct sessions link --qr`).
 3. **Physical iOS device, experimental** (`--open ios-device` / `target: "ios-device"`,
    issue #31): `xcrun devicectl device process launch --device <udid> --payload-url <link>
    <app-id>` hands the link to an installed, dev-signed app on a connected iOS 17+ device
@@ -238,7 +238,7 @@ message existed.
 ```
 
 Guard: `isEventMessage`. Emitted by `postEvent(name, payload?)` on the React Native
-client; surfaced daemon-side as an `app_event` (`events.subscribe`, `appduct events`) and
+client; surfaced daemon-side as an `app_event` (`events.subscribe`, `appduct events tail`) and
 retained per-session (`events.since`, §8) so a request/response caller (an MCP client, a script)
 can ask "what happened?" after the fact instead of only listening live.
 
@@ -262,7 +262,7 @@ the tool, without `input_schema`/`output_schema`, so agents see a shapeless (`{}
 the app-side SDK throws on that in development rather than letting it ship silently. The
 daemon never inspects a schema's internals — only that it is a JSON object.
 
-`annotations` are shown to agents as-is (`appduct tools <name>`, `appduct_describe_tool` over
+`annotations` are shown to agents as-is (`appduct tools describe <name>`, `appduct_describe_tool` over
 MCP) and drive the daemon's policy engine
 (`docs/ARCHITECTURE.md` §12):
 `destructiveHint: true` routes a call through `policy.destructive` instead of
@@ -280,11 +280,11 @@ is snake_case here like every other protocol-defined descriptor field, while the
 layers. A camelCase key on this descriptor is an unknown extra, not a deadline. It is the app's *explicit* per-tool value only —
 never an app-wide default such as `defaultToolTimeoutMs`. Older apps omit the field
 entirely and keep the daemon's 10 s default, so it is safe to add in either direction. It
-is a daemon-side scheduling hint; agents see it through `appduct tools <name>` and
+is a daemon-side scheduling hint; agents see it through `appduct tools describe <name>` and
 `appduct_describe_tool`.
 
 `group` puts the tool in an app-declared group so an agent can list a large registry one
-area at a time (`tools.list`'s `group` param, `appduct tools --group`). It is a single string
+area at a time (`tools.list`'s `group` param, `appduct tools ls --group`). It is a single string
 of one or two `/`-separated segments, each matching the name pattern
 `^[a-zA-Z0-9_-]{1,64}$`: a top-level group (`checkout`) or a subgroup (`checkout/payment`),
 nothing deeper. As one pattern: `^[a-zA-Z0-9_-]{1,64}(/[a-zA-Z0-9_-]{1,64})?$`, matched against
@@ -327,7 +327,7 @@ entries.
   `crypto.timingSafeEqual` and is single-use — consumed on a successful claim, and
   invalidated outright after 5 failed claim attempts against that `sessionId`.
 - `PENDING → DISCARDED`: the link's TTL elapsed before a claim; cheap, re-issue with
-  `appduct link` (or `appduct_connect`) again.
+  `appduct sessions link` (or `appduct_connect`) again.
 - `PENDING → ACTIVE`: a successful `session_claim`. The daemon issues a `resume_token` in
   the `session_ack`.
 - `ACTIVE → SUSPENDED`: socket close, socket error, or two missed keepalive pongs. Tool
@@ -339,7 +339,7 @@ entries.
   app is expected to re-send a full `tool_registry_snapshot` right after (§4) — the
   daemon treats it as authoritative and discards whatever it retained across the gap.
 - `SUSPENDED → EXPIRED`: `graceSeconds` elapsed with no successful resume.
-- Any state → `REVOKED`: `sessions.revoke` (CLI `appduct revoke`, or the equivalent
+- Any state → `REVOKED`: `sessions.revoke` (CLI `appduct sessions revoke`, or the equivalent
   RPC call). Terminal states (`DISCARDED`, `EXPIRED`, `REVOKED`) free the session's alias
   for reuse by a future session.
 - There is no cap on concurrent sessions; every session shares the one `wss://` listener.

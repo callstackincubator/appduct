@@ -25,7 +25,7 @@ This page explains what happens between your terminal and your app, as far as it
 
 ## How a device connects
 
-1. `appduct link` (or `appduct_connect`) asks the background service for a **pending session** and gets back a link: `<scheme>:///?appduct=<payload>&pin=<fingerprint>`. The payload holds your computer's address and port, a session id, a one-time token, and an expiry time.
+1. `appduct sessions link` (or `appduct_connect`) asks the background service for a **pending session** and gets back a link: `<scheme>:///?appduct=<payload>&pin=<fingerprint>`. The payload holds your computer's address and port, a session id, a one-time token, and an expiry time.
 2. The link reaches the app: through `adb` or the simulator, or as a QR code you scan.
 3. The app opens an encrypted connection to the address in the link and checks your computer's key against its pins, or, with no pins, against the fingerprint in the link. See [Security](/appduct/guides/security/#choose-what-a-build-trusts).
 4. The app sends the token. If it matches, the session becomes **active**, gets an alias based on the device model (like `pixel-8`), and the app sends its tool list.
@@ -44,11 +44,11 @@ A link can be used once and expires after 5 minutes (`linkTtlSeconds`). Five wro
 | Disconnected for more than 10 minutes (`graceSeconds`) | The session expires. Connect again with a new link. |
 | App process killed or relaunched | The session can't resume: resume credentials are kept only in memory. Connect again. |
 | Background service stopped or restarted | Every session ends. Connect devices again. |
-| `appduct revoke` | That session ends immediately. |
+| `appduct sessions revoke` | That session ends immediately. |
 
 While a session is disconnected, its alias and tool list are kept, and calls fail fast with `session_suspended`. After a resume, the app sends its full tool list again.
 
-Session states: **pending** (link created) → **active** → **suspended** (disconnected) → **active** again, or **expired**. A link nobody opened in time is **discarded**. `appduct revoke` moves any session to **revoked**. Ending a session frees its alias for the next device.
+Session states: **pending** (link created) → **active** → **suspended** (disconnected) → **active** again, or **expired**. A link nobody opened in time is **discarded**. `appduct sessions revoke` moves any session to **revoked**. Ending a session frees its alias for the next device.
 
 ## How a call runs
 
@@ -66,7 +66,7 @@ Session states: **pending** (link created) → **active** → **suspended** (dis
 
 ### Cancellation
 
-A call is cancelled when the caller goes away: Ctrl-C on `appduct invoke`, an MCP client cancelling a request, or a test process exiting. The app then aborts the handler's `signal`. A handler that ignores the signal runs to the end anyway. After a timeout, whatever it returns is ignored.
+A call is cancelled when the caller goes away: Ctrl-C on `appduct tools call`, an MCP client cancelling a request, or a test process exiting. The app then aborts the handler's `signal`. A handler that ignores the signal runs to the end anyway. After a timeout, whatever it returns is ignored.
 
 ## Events
 

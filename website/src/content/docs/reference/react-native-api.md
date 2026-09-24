@@ -117,7 +117,7 @@ Returns the tool descriptors currently registered, for example to show them in y
 await postEvent("checkout_completed", { orderId: "ord_4821" });
 ```
 
-Sends an app event to connected callers (`appduct events`, `appduct_wait_for_event`, `app.waitForEvent`). Dropped, with a warning in development, when no session is connected.
+Sends an app event to connected callers (`appduct events tail`, `appduct_wait_for_event`, `app.waitForEvent`). Dropped, with a warning in development, when no session is connected.
 
 ### `addAppductListener`
 

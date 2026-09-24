@@ -17,44 +17,48 @@ The `appduct` package is the operator/agent side of Appduct: a CLI and an MCP se
 
 ```bash
 npm install -g appduct
-appduct link --scheme myapp --qr
+appduct sessions link --scheme myapp --qr
 ```
 
-`link` needs your app's deep-link scheme: pass `--scheme` (the app's `expo.scheme`, or its bare-RN equivalent), or set `"scheme"` once in `~/.appduct/config.json` and omit the flag. Without either, the command exits with a usage error.
+`sessions link` needs your app's deep-link scheme: pass `--scheme` (the app's `expo.scheme`, or its bare-RN equivalent), or set `"scheme"` once in `~/.appduct/config.json` and omit the flag. Without either, the command exits with a usage error.
 
 Scan the QR (or open the deep link) in an Appduct-enabled app, then:
 
 ```bash
-appduct tools
-appduct invoke sum --input '{"a":2,"b":3}'
+appduct tools ls
+appduct tools call sum --input '{"a":2,"b":3}'
 ```
 
 That's the whole loop. There is no host process to start — `appduct` auto-spawns its daemon the first time any command needs it.
 
 ## Commands
 
+Every command is `appduct <noun> <verb> [selector] [args]`, the same shape as `appduct daemon run|start|stop|status`:
+
 | Command | Role |
 | --- | --- |
 | `appduct init [--scheme <s>] [--ios-app-id <id>] [--android-app-id <id>] [--force]` | set up an app directory: write `.appduct/config.json`, print the MCP snippet |
 | `appduct keygen [--out <path>] [--force]` | generate a daemon private key, print its app pin |
-| `appduct link [--ttl <s>] [--qr] [--open android\|ios-sim\|ios-device] [--device <id>] [--app-id <id>] [--scheme <s>]` | mint a pending session and print its deep link |
-| `appduct ls` | list sessions: alias, state, device, tool count |
-| `appduct tools [selector] [name] [--full] [--group <name>] [--filter <text>] [--limit <n>] [--offset <n>]` | list a session's tools (one call signature + description per line), or show one tool's full schema |
-| `appduct tools [selector] --groups` | list a session's tool groups with their tool counts |
-| `appduct invoke [selector] <tool> --input '<json>' [--timeout <ms>]` | call a tool |
-| `appduct events [selector] [--follow] [--since <cursor>]` | stream the events the app posts with `postEvent` (default), or one-shot pull the ones retained since `<cursor>` (`--since`); `--json` emits NDJSON |
-| `appduct revoke [selector]` | revoke a session |
+| `appduct sessions ls` | list sessions: alias, state, device, tool count |
+| `appduct sessions link [--ttl <s>] [--qr] [--open android\|ios-sim\|ios-device] [--device <id>] [--app-id <id>] [--scheme <s>]` | mint a pending session and print its deep link |
+| `appduct sessions revoke [selector]` | revoke a session |
+| `appduct tools ls [selector] [--full] [--group <name>] [--filter <text>] [--limit <n>] [--offset <n>]` | list a session's tools (one call signature + description per line) |
+| `appduct tools ls [selector] --groups` | list a session's tool groups with their tool counts |
+| `appduct tools describe [selector] <name>` | show one tool's full schema |
+| `appduct tools call [selector] <name> --input '<json>' [--timeout <ms>]` | call a tool |
+| `appduct events tail [selector] [--follow]` | stream the events the app posts with `postEvent`; `--json` emits NDJSON |
+| `appduct events since [selector] <cursor>` | one-shot pull the events retained since `<cursor>`; `--json` emits NDJSON |
 | `appduct daemon run\|start\|stop\|status` | daemon lifecycle |
 | `appduct mcp [--scheme <s>]` | start a stdio MCP server proxying connected apps' tools to MCP clients |
 | `appduct doctor <artifact> [--assert-present\|--assert-absent]` | release-gate step: report or assert whether a built `.app`/`.ipa`/`.apk`/`.aab` contains Appduct |
 
-Every command that targets a session accepts an optional `selector` (a session id or an alias from `appduct ls`); omit it when exactly one session is active. Global flags: `--json` (machine-readable output; compact by default, one line), `--pretty` (indent `--json` output, and JSON values embedded in human output, 2 spaces — never NDJSON event lines), `--verbose` (include the `meta` block — `command`, `timestamp`, `duration_ms` — omitted by default in both human and `--json` output), `--no-color`, `--state-dir <path>` (default `~/.appduct`), `--daemon-restart` (on a daemon/CLI version mismatch, restart the daemon even though that drops live sessions and unclaimed links — `APPDUCT_DAEMON_RESTART=1` and `config.json`'s `restartDaemonOnVersionMismatch` do the same for every command, and `--no-daemon-restart` overrules both for one). Run `appduct <command> --help` for the exact flags of any command.
+Every command that targets a session accepts an optional `selector` (a session id or an alias from `appduct sessions ls`); omit it when exactly one session is active. Global flags: `--json` (machine-readable output; compact by default, one line), `--pretty` (indent `--json` output, and JSON values embedded in human output, 2 spaces — never NDJSON event lines), `--verbose` (include the `meta` block — `command`, `timestamp`, `duration_ms` — omitted by default in both human and `--json` output), `--no-color`, `--state-dir <path>` (default `~/.appduct`), `--daemon-restart` (on a daemon/CLI version mismatch, restart the daemon even though that drops live sessions and unclaimed links — `APPDUCT_DAEMON_RESTART=1` and `config.json`'s `restartDaemonOnVersionMismatch` do the same for every command, and `--no-daemon-restart` overrules both for one). Run `appduct <noun> --help` for the exact flags any of its verbs takes.
 
-`--timeout` on `invoke` is clamped to 1,000–600,000 ms and can only **shorten** the deadline, never extend it past the app's own timer: the app aborts the handler at the tool's declared `timeoutMs`, or 10 seconds for a tool that declares none, regardless of what the caller asks for. If a tool needs more room, declare `timeoutMs` on its registration.
+`--timeout` on `tools call` is clamped to 1,000–600,000 ms and can only **shorten** the deadline, never extend it past the app's own timer: the app aborts the handler at the tool's declared `timeoutMs`, or 10 seconds for a tool that declares none, regardless of what the caller asks for. If a tool needs more room, declare `timeoutMs` on its registration.
 
-### `appduct tools`: a signature per tool
+### `appduct tools ls`: a signature per tool
 
-`appduct tools` prints one call signature plus a one-line description per tool, not the full schema — cheap to read even against an app that registers hundreds of tools:
+`appduct tools ls` prints one call signature plus a one-line description per tool, not the full schema — cheap to read even against an app that registers hundreds of tools:
 
 ```
 Tools
@@ -63,16 +67,16 @@ Tools
   set_flag(name: "dark_mode" | "new_checkout", enabled: bool)  [prompt]
     Toggle a feature flag.
 
-Run `appduct tools <name>` for a tool's full schema.
+Run `appduct tools describe <name>` for a tool's full schema.
 ```
 
-A signature is derived straight from the tool's JSON Schema: required params are `name: type`, optional ones `name?: type` (with `= <default>` when the schema declares a short one), and `-> type` is the result when the tool declares an `output_schema`. `...` anywhere means the schema shape wasn't one this renderer could summarize — the tool's full schema (`appduct tools <name>`) still has it. A `[prompt]`/`[deny]` tag follows a tool whose effective policy isn't `"allow"`.
+A signature is derived straight from the tool's JSON Schema: required params are `name: type`, optional ones `name?: type` (with `= <default>` when the schema declares a short one), and `-> type` is the result when the tool declares an `output_schema`. `...` anywhere means the schema shape wasn't one this renderer could summarize — the tool's full schema (`appduct tools describe <name>`) still has it. A `[prompt]`/`[deny]` tag follows a tool whose effective policy isn't `"allow"`.
 
-Use `--filter <text>` to narrow the listing to tools whose name or description contains `<text>` (case-insensitive), and `--limit <n>`/`--offset <n>` to page through it; a truncated listing prints a trailing `Showing n of total tools (offset o). Narrow with --filter <text> or page with --offset <n>.` line so you know more were left out. `appduct tools --json` returns `{ tools, total, groups }` — `total` is the count after `--group`/`--filter` but before `--limit`/`--offset`. `appduct tools <name>` (a single tool) is unaffected by any of this and always returns the bare tool descriptor; passing `--group`, `--groups`, `--filter`, `--limit` or `--offset` with a `<name>` is a usage error.
+Use `--filter <text>` to narrow the listing to tools whose name or description contains `<text>` (case-insensitive), and `--limit <n>`/`--offset <n>` to page through it; a truncated listing prints a trailing `Showing n of total tools (offset o). Narrow with --filter <text> or page with --offset <n>.` line so you know more were left out. `appduct tools ls --json` returns `{ tools, total, groups }` — `total` is the count after `--group`/`--filter` but before `--limit`/`--offset`. `appduct tools describe <name>` (a single tool) is unaffected by any of this and always returns the bare tool descriptor; passing `--group`, `--groups`, `--filter`, `--limit` or `--offset` with `describe` is a usage error.
 
 ### Tool groups
 
-When the app puts its tools in groups ([`docs/TOOLS.md`](../../docs/TOOLS.md#group-tools-in-a-large-app)), `appduct tools` lists them under group headings, with subgroups indented under their parent and ungrouped tools last:
+When the app puts its tools in groups ([`docs/TOOLS.md`](../../docs/TOOLS.md#group-tools-in-a-large-app)), `appduct tools ls` lists them under group headings, with subgroups indented under their parent and ungrouped tools last:
 
 ```
 Tools
@@ -93,23 +97,23 @@ Tools
 On a large app, start with `--groups` to see what there is, then list one group:
 
 ```
-$ appduct tools --groups
+$ appduct tools ls --groups
 Groups
   cart                12
   checkout             8
     checkout/payment   3
   (ungrouped)          2
 
-22 tools in total. Run `appduct tools --group <name>` to list one group's tools.
+22 tools in total. Run `appduct tools ls --group <name>` to list one group's tools.
 
-$ appduct tools --group checkout
+$ appduct tools ls --group checkout
 ```
 
 `--group checkout` lists `checkout` and all of its subgroups; `--group checkout/payment` lists only that subgroup. Matching is by whole name and case-sensitive, so `--group checkout` never matches a `checkoutx` group. `--group` combines with `--filter`, `--limit` and `--offset`. When a listing without `--group` is cut short, the footer names the top-level groups to narrow to: `Showing 5 of 22 tools (offset 0). Narrow with --group <name> (groups: cart 12, checkout 8) or --filter <text>, or page with --offset <n>.` A group that is not one or two `/`-separated names of letters, digits, `_` and `-` (for example `checkout/` or `a/b/c`) is a usage error. With `--json`, each tool carries its `group` — `null` for an ungrouped tool, exactly the value `groups` uses for its own ungrouped row — and `groups` lists every group with its count, whatever `--group` or `--filter` you passed.
 
 ### The deep-link scheme
 
-`appduct link`, `appduct mcp`, and the MCP `appduct_connect` tool all resolve the scheme the same way, first match wins:
+`appduct sessions link`, `appduct mcp`, and the MCP `appduct_connect` tool all resolve the scheme the same way, first match wins:
 
 1. `--scheme <s>`
 2. the `APPDUCT_SCHEME` environment variable
@@ -164,17 +168,17 @@ It needs all of:
 - **iOS 17 or newer** on the device, and **Xcode 15 or newer** on the host (`devicectl` doesn't exist before that). For iOS 16 and below, use the QR/deep-link flow instead.
 - The device **paired and trusted** by this Mac, with **Developer Mode** enabled on it (Settings → Privacy & Security → Developer Mode).
 - A **development-signed build of your app already installed** — `devicectl` launches an installed app, it doesn't install one.
-- The phone and this machine **on the same network**, reachable at the address the link advertises. `appduct link` prints it on its `Endpoint` line (`--json`: `endpoint.address`); `advertisedIp` in `config.json` overrides detection. If no routable address is found, detection falls back to `127.0.0.1` — which a phone can't reach — so `ios-device` refuses to deliver such a link and tells you to set `advertisedIp`.
+- The phone and this machine **on the same network**, reachable at the address the link advertises. `appduct sessions link` prints it on its `Endpoint` line (`--json`: `endpoint.address`); `advertisedIp` in `config.json` overrides detection. If no routable address is found, detection falls back to `127.0.0.1` — which a phone can't reach — so `ios-device` refuses to deliver such a link and tells you to set `advertisedIp`.
 - The app's **bundle id** — see [Delivering the link to a device](#delivering-the-link-to-a-device) for how to supply it.
 
 ```bash
-appduct link --scheme myapp --open ios-device --app-id com.example.myapp
+appduct sessions link --scheme myapp --open ios-device --app-id com.example.myapp
 ```
 
 Two things worth knowing before you rely on this:
 
 - **What happens when the app is already running hasn't been verified on hardware.** If delivery to an already-running app does nothing, pass **`--relaunch`** (`relaunch: true` over MCP) — it kills the running instance first. Appduct copes with the restart either way; a delivered link supersedes a held session.
-- **A physical iPhone is never auto-detected.** `appduct_connect` called without a `target` only considers booted simulators and attached Android devices, and `appduct link` without `--open` doesn't look for a device at all — a paired iPhone is often someone's personal phone, so it has to be asked for explicitly.
+- **A physical iPhone is never auto-detected.** `appduct_connect` called without a `target` only considers booted simulators and attached Android devices, and `appduct sessions link` without `--open` doesn't look for a device at all — a paired iPhone is often someone's personal phone, so it has to be asked for explicitly.
 
 ## MCP setup (Claude Code, Cursor, and similar)
 
@@ -208,11 +212,11 @@ Once configured, an agent reaches the connected app's tools through three built-
 
 | Tool | Does what | CLI equivalent |
 | --- | --- | --- |
-| `appduct_list_tools` | Lists the app's tools as one-line signatures, with each tool's group and policy, plus the app's groups with counts. Returns 50 at a time unless given `limit`; takes `group`, `filter` and `offset`. | `appduct tools` |
-| `appduct_describe_tool` | Shows one tool's full input and output schema. | `appduct tools <name>` |
-| `appduct_call_tool` | Calls a tool by `name` with `args`, with progress and errors preserved. | `appduct invoke` |
+| `appduct_list_tools` | Lists the app's tools as one-line signatures, with each tool's group and policy, plus the app's groups with counts. Returns 50 at a time unless given `limit`; takes `group`, `filter` and `offset`. | `appduct tools ls` |
+| `appduct_describe_tool` | Shows one tool's full input and output schema. | `appduct tools describe <name>` |
+| `appduct_call_tool` | Calls a tool by `name` with `args`, with progress and errors preserved. | `appduct tools call` |
 
-The app's tools don't show up as MCP tools of their own. An app with hundreds of tools still adds only these three to the agent's tool list, and that list doesn't change when tools register or a device connects. With more than one device connected, each of the three needs `selector`: the session alias or id from `appduct ls`.
+The app's tools don't show up as MCP tools of their own. An app with hundreds of tools still adds only these three to the agent's tool list, and that list doesn't change when tools register or a device connects. With more than one device connected, each of the three needs `selector`: the session alias or id from `appduct sessions ls`.
 
 Your MCP client asks permission for `appduct_call_tool` as a single tool, so choosing "always allow" there approves every tool the app registers, destructive ones included. To keep a person approving those calls, set `policy.destructive` to `"prompt"` in the state directory's `config.json`. Each call to a tool marked `destructiveHint` then shows an approval prompt in clients that support it, and is denied in clients that don't. A destructive tool without that annotation falls under `policy.default` instead.
 
@@ -224,7 +228,7 @@ The other two give an agent a pull surface over `postEvent()`-pushed app events:
 
 ## Test runners: `appduct/client`
 
-A thin typed wrapper over the same daemon RPC the CLI and MCP server use — for a Jest/Vitest/Detox spec that drives a running app without spawning `appduct invoke ... --json` and parsing stdout:
+A thin typed wrapper over the same daemon RPC the CLI and MCP server use — for a Jest/Vitest/Detox spec that drives a running app without spawning `appduct tools call ... --json` and parsing stdout:
 
 ```ts
 import { connect } from "appduct/client";
@@ -275,7 +279,7 @@ For everything else, the package exports `runCli` and the command handlers from 
 
 ## Keys and pins
 
-You can skip this entirely while your app has no `cliPins` configured — the zero-config default, in any build type. The daemon auto-generates its own `key.pem` the first time it starts if one isn't already there (mode `0600`) and prints its `sha256/...` fingerprint on that first run; `appduct link` carries that fingerprint on the deep link for the app to pick up. See [`docs/SECURITY.md`][security]'s "Trust modes" for what that does and doesn't protect.
+You can skip this entirely while your app has no `cliPins` configured — the zero-config default, in any build type. The daemon auto-generates its own `key.pem` the first time it starts if one isn't already there (mode `0600`) and prints its `sha256/...` fingerprint on that first run; `appduct sessions link` carries that fingerprint on the deep link for the app to pick up. See [`docs/SECURITY.md`][security]'s "Trust modes" for what that does and doesn't protect.
 
 For a build that should trust only a key you embedded ahead of time, generate one explicitly:
 
@@ -285,7 +289,7 @@ appduct keygen
 
 This writes an unencrypted PEM private key (PKCS#8) to `<state-dir>/key.pem` by default (override with `--out`; add `--force` to overwrite) and prints the exact `sha256/...` SPKI fingerprint your app should place into `cliPins`. It runs non-interactively, so it's safe to call from CI or a setup script.
 
-`appduct link`'s deep link is `<scheme>:///?appduct=<payload>&pin=<sha256/...>`. The `appduct` param is the binary v2 bootstrap payload (address, session id, token, expiry); `pin` is a separate, out-of-band query param carrying the daemon's current SPKI fingerprint for apps that want to pick it up. An app build with embedded `cliPins` ignores `pin` outright — embedded pins always win, in every build type. A build with no embedded pins trusts it for that one session.
+`appduct sessions link`'s deep link is `<scheme>:///?appduct=<payload>&pin=<sha256/...>`. The `appduct` param is the binary v2 bootstrap payload (address, session id, token, expiry); `pin` is a separate, out-of-band query param carrying the daemon's current SPKI fingerprint for apps that want to pick it up. An app build with embedded `cliPins` ignores `pin` outright — embedded pins always win, in every build type. A build with no embedded pins trusts it for that one session.
 
 ## Daemon lifecycle
 

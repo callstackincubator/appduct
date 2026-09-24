@@ -3,7 +3,7 @@
 A plain SwiftUI app -- no React Native, no Expo -- that consumes `AppductCore`
 (`packages/native/ios`) directly through the `Appduct` facade
 (`packages/native/ios/Sources/AppductCore/Real/AppductAPI.swift`). It registers the same five
-tools the Expo playground (`playground/`) registers, so `appduct tools` reports an equivalent
+tools the Expo playground (`playground/`) registers, so `appduct tools ls` reports an equivalent
 surface regardless of which playground app answered the link.
 
 See [`packages/native/ios/README.md`](../../packages/native/ios/README.md) for the SDK itself;
@@ -31,9 +31,9 @@ xcrun simctl launch booted com.callstack.appduct.playgroundnative
 
 # 3. Point the CLI at it. playground-native/.appduct/config.json records the app's
 #    `appduct-native` URL scheme, so no --scheme is needed.
-appduct link --open ios-sim
-appduct tools
-appduct invoke sum --input '{"a":2,"b":3}'
+appduct sessions link --open ios-sim
+appduct tools ls
+appduct tools call sum --input '{"a":2,"b":3}'
 ```
 
 Opening the project in Xcode (`open AppductPlayground.xcodeproj`) and hitting Run works exactly
@@ -79,5 +79,5 @@ appduct doctor path/to/Release-iphonesimulator/AppductPlayground.app --assert-ab
   button that calls `Appduct.shared.postEvent(...)`, and the activity log.
 - `AppductPlayground/Info.plist` -- declares the `appduct-native` URL scheme
   (`CFBundleURLTypes`). No `AppductTrust`/`AppductCliPins` keys: this playground is the
-  zero-config example, so it trusts whatever pin `appduct link` puts on the deep link for that
+  zero-config example, so it trusts whatever pin `appduct sessions link` puts on the deep link for that
   session (`trust: "link"`) -- see [`docs/SECURITY.md`](../../docs/SECURITY.md#trust-modes).
