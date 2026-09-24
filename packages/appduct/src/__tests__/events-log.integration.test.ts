@@ -17,8 +17,6 @@ import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import { getStateDirPaths } from "../daemon/state-dir.js";
 import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 const runningDaemons: RunningDaemon[] = [];
 const stateDirs: string[] = [];
 
@@ -104,7 +102,7 @@ const claimApp = async (daemon: RunningDaemon): Promise<App> => {
   const link = decodeBootstrap(minted.deepLinkPayload)!;
 
   const socket = await new Promise<WebSocket>((resolve, reject) => {
-    const ws = new WebSocket(`wss://127.0.0.1:${daemon.listener.port()!}`, { rejectUnauthorized: false });
+    const ws = new WebSocket(`wss://127.0.0.1:${daemon.listener.port()!}`, { ca: daemon.tls.current().certPem });
     ws.once("open", () => resolve(ws));
     ws.once("error", reject);
   });

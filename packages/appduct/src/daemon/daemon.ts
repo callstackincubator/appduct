@@ -97,6 +97,8 @@ export type RunningDaemon = {
   startedAt: Date;
   server: RpcServer;
   listener: DaemonListener;
+  /** The host certificate the listener serves, so an in-process client can trust it. */
+  tls: TlsManager;
   eventBus: EventBus;
   /** Resolves once graceful teardown (sockets closed, RPC/listener closed, pidfile released) completes. */
   exited: Promise<void>;
@@ -414,6 +416,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
   let pidfile: PidfileHandle | undefined;
   let server: RpcServer | undefined;
   let listener: DaemonListener | undefined;
+  let tlsManager: TlsManager | undefined;
   let sessionManager: SessionManager | undefined;
   let callsManager: CallsManager | undefined;
   let eventBus: EventBus | undefined;
@@ -479,6 +482,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
       ((): ReturnType<typeof detectAdvertisedAddress> => detectAdvertisedAddress({ override: config.advertisedIp }));
 
     const tls = await createTlsManager({ keyPath: config.keyPath, detectAddress, warn: options.warn });
+    tlsManager = tls;
 
     sessionManager = createSessionManager({
       graceSeconds: config.graceSeconds,
@@ -878,6 +882,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
     startedAt,
     server,
     listener,
+    tls: tlsManager,
     eventBus,
     exited,
     shutdown,
