@@ -146,10 +146,11 @@ export type LinkCommandData = {
   target?: OpenTarget;
 };
 
-/** `appduct ls`: `sessions.list` passthrough, verbatim (ARCHITECTURE.md §10: "--json passthrough"). */
+/** `appduct sessions ls`: `sessions.list` passthrough, verbatim (ARCHITECTURE.md §10: "--json
+ * passthrough"). */
 export type LsCommandData = SessionSummary[];
 
-/** `appduct tools`'s listing form: the daemon's `tools.list` result, plus the `--group`/`--filter`/
+/** `appduct tools ls`'s listing form: the daemon's `tools.list` result, plus the `--group`/`--filter`/
  * `--limit`/`--offset` inputs that produced it (only the ones actually given — echoed so `--json` and the
  * human renderer's "Showing n of total" line can report what was asked for without threading the
  * CLI options through separately). */
@@ -160,26 +161,28 @@ export type ToolsListing = ToolsListResult & {
   filter?: string;
 };
 
-/** `appduct tools --groups`: the daemon's `groups` summary alone, plus the registry's size. */
+/** `appduct tools ls --groups`: the daemon's `groups` summary alone, plus the registry's size. */
 export type ToolGroupsListing = {
   groups: ToolGroupSummary[];
   /** Every tool in the session, grouped or not. */
   total: number;
 };
 
-/** `appduct tools`: a listing, a groups summary (`--groups`), or a single entry when a tool name
- * resolved to a detail lookup. The detail form is the daemon's own listing entry, picked out of
- * `tools.list` — not a registration, so its `group` is `null` for an ungrouped tool. */
+/** `appduct tools ls`/`appduct tools describe`: a listing, a groups summary (`--groups`), or a
+ * single entry when `describe`'s `<name>` resolved to a tool. The detail form is the daemon's own
+ * listing entry, picked out of `tools.list` — not a registration, so its `group` is `null` for an
+ * ungrouped tool. */
 export type ToolsCommandData = ToolsListing | ToolGroupsListing | ToolsListEntry;
 
-/** `appduct invoke`: the tool's raw result payload, printed as-is. */
+/** `appduct tools call`: the tool's raw result payload, printed as-is. */
 export type InvokeCommandData = unknown;
 
 export type RevokeCommandData = {
   ok: true;
 };
 
-/** A single `appduct events` line, in both human and NDJSON (`--json`) rendering. */
+/** A single `appduct events tail`/`appduct events since` line, in both human and NDJSON
+ * (`--json`) rendering. */
 export type EventsCommandLine = EventNotification;
 
 export type DaemonRunCommandData = {

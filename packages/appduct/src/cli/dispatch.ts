@@ -29,25 +29,45 @@ const isEnvTruthy = (value: string | undefined): boolean => {
 };
 
 /**
+ * Issue #96's clean break: `ls`, `revoke`, `link` and `invoke` no longer exist as top-level
+ * commands, each replaced by a verb under `sessions`/`tools`. There are no aliases (we are
+ * pre-1.0) — a removed word is an ordinary usage error, just one that names its replacement
+ * instead of only saying "unknown command", so an agent working from an old prompt corrects
+ * itself in one step.
+ */
+const REMOVED_COMMANDS: Readonly<Record<string, string>> = {
+  ls: "sessions ls",
+  revoke: "sessions revoke",
+  link: "sessions link",
+  invoke: "tools call",
+};
+
+const rootUnknownCommandError = (word: string | undefined): Error => {
+  if (word !== undefined && Object.hasOwn(REMOVED_COMMANDS, word)) {
+    return usageError(`Unknown command "${word}"; use "appduct ${REMOVED_COMMANDS[word]}".`);
+  }
+
+  return unknownCommandError(word);
+};
+
+/**
  * One entry per command `create-cli.ts` registers. Each loader is a dynamic `import()` so the
  * route — and its command handler, and that handler's dependencies — is only evaluated when the
- * command runs. `daemon` is a router of its own (`routes/daemon/index.ts`), one level down.
+ * command runs. `daemon`, `sessions`, `tools` and `events` are routers of their own
+ * (`routes/<noun>/index.ts`), one level down.
  */
 const rootRouter = createRouter(
   {
     init: () => import("./routes/init.js"),
     keygen: () => import("./routes/keygen.js"),
-    link: () => import("./routes/link.js"),
-    ls: () => import("./routes/ls.js"),
-    tools: () => import("./routes/tools.js"),
-    invoke: () => import("./routes/invoke.js"),
-    revoke: () => import("./routes/revoke.js"),
-    events: () => import("./routes/events.js"),
+    sessions: () => import("./routes/sessions/index.js"),
+    tools: () => import("./routes/tools/index.js"),
+    events: () => import("./routes/events/index.js"),
     mcp: () => import("./routes/mcp.js"),
     doctor: () => import("./routes/doctor.js"),
     daemon: () => import("./routes/daemon/index.js"),
   },
-  { unknown: unknownCommandError },
+  { unknown: rootUnknownCommandError },
 );
 
 export const runCli = async (argv: string[], options: RunCliOptions = {}): Promise<number> => {
@@ -93,7 +113,10 @@ export const runCli = async (argv: string[], options: RunCliOptions = {}): Promi
       return executeCommand(
         "cli",
         () => {
-          throw usageError(`Unknown command "${parsedArgs[0]}".`);
+          // A removed top-level word (`ls`, `revoke`, `link`, `invoke` — issue #96) never matches
+          // any `cac`-registered command at all, so it lands here rather than in `rootRouter`'s own
+          // `unknown` handler; the same replacement map applies either way.
+          throw rootUnknownCommandError(parsedArgs[0]);
         },
         {
           flags,

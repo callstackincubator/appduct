@@ -1045,7 +1045,7 @@ export type DaemonStream = {
   /** Subscribes to server→client `"event"` notifications; returns an unsubscribe function. */
   onNotification: (callback: (payload: unknown) => void) => () => void;
   /** Fires once when the underlying socket closes (daemon gone, stop(), etc.); returns an
-   * unsubscribe function. Lets long-lived stream consumers (e.g. `appduct events`) end
+   * unsubscribe function. Lets long-lived stream consumers (e.g. `appduct events tail`) end
    * gracefully instead of hanging once the connection is no longer usable. */
   onClose: (callback: () => void) => () => void;
   close: () => void;

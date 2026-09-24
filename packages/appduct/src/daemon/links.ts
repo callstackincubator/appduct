@@ -64,7 +64,7 @@ export type PendingLinkRegistry = {
 
 const generateSessionId = (): string => {
   // Re-rolled if it starts with "-": v1 ids starting with "-" broke CLI flag parsing
-  // (e.g. `appduct tools -abc123...` was parsed as a flag, not a selector).
+  // (e.g. `appduct tools ls -abc123...` was parsed as a flag, not a selector).
   let candidate = randomBytes(SESSION_ID_BYTES).toString("base64url");
 
   while (candidate.startsWith("-")) {

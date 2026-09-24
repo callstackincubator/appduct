@@ -120,31 +120,6 @@ export const splitOptionalSelector = (args: readonly string[], commandUsage: str
 };
 
 /**
- * Splits the positional args of a command shaped `<command> [selector] [target]` (`tools [selector]
- * [name]`): with 2 args, `(selector, target)`; with 1, the single arg is ambiguous between "the
- * selector" and "the target with the selector omitted" — the caller resolves that (see
- * `commands/tools.ts`), so it comes back unlabeled here as `selectorOrTarget`.
- */
-export const splitOptionalSelectorAndTarget = (
-  args: readonly string[],
-  commandUsage: string,
-): { selector?: string; target?: string; selectorOrTarget?: string } => {
-  if (args.length > 2) {
-    throw usageError(`Usage: ${commandUsage} (too many arguments).`);
-  }
-
-  if (args.length === 2) {
-    return { selector: args[0], target: args[1] };
-  }
-
-  if (args.length === 1) {
-    return { selectorOrTarget: args[0] };
-  }
-
-  return {};
-};
-
-/**
  * Parses the JSON payload for `invoke --input`; never throws a raw `SyntaxError` at the CLI
  * boundary. A missing flag is a usage error (nothing was given); a present-but-unparseable or
  * wrong-shaped value is a validation error (something was given, and it's invalid).

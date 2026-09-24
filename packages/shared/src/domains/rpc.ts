@@ -299,7 +299,7 @@ export type EventNotification = {
 
 /** Pulls the app events (`app_event` only) retained in the daemon's per-session ring buffer
  * (ARCHITECTURE.md §5) — the request/response counterpart to `events.subscribe`'s push model, for
- * callers (MCP tools, a scripted `appduct events --since`) that ask "what did the app report?"
+ * callers (MCP tools, a scripted `appduct events since`) that ask "what did the app report?"
  * after the fact instead of listening live. */
 export type EventsSinceParams = {
   /** Session id or alias; omitted selects the sole active/suspended session (same default as

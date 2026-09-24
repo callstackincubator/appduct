@@ -308,7 +308,7 @@ export type AppductToolDefinition<
    * "timeout")`; a later result from the same invocation is ignored.
    *
    * Declared here it also travels on the tool descriptor and becomes the daemon's default deadline
-   * for this tool, so a caller that passes no timeout of its own (an MCP agent, `appduct invoke`
+   * for this tool, so a caller that passes no timeout of its own (an MCP agent, `appduct tools call`
    * with no `--timeout`) gets the same budget instead of the daemon's 10 s. Must be a positive
    * integer to make that trip — anything else stays app-side only, with a dev warning. The
    * client-wide `defaultToolTimeoutMs` is deliberately never sent.
@@ -317,7 +317,7 @@ export type AppductToolDefinition<
   /**
    * The group this tool belongs to: a top-level group (`"checkout"`) or a subgroup
    * (`"checkout/payment"`) — one or two `/`-separated segments, each `[a-zA-Z0-9_-]{1,64}`.
-   * Agents list a large app's tools one group at a time (`appduct tools --groups`, then
+   * Agents list a large app's tools one group at a time (`appduct tools ls --groups`, then
    * `--group checkout`, which includes `checkout/*`). Optional; an ungrouped tool is listed under
    * `(ungrouped)`. A malformed group makes registration throw, like a malformed `name`.
    * `createToolGroup("checkout")` binds it for a whole feature module.

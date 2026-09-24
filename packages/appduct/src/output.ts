@@ -41,9 +41,11 @@ export type RenderOptions = {
    * (which is only attached under `--verbose`). Defaults to the wall clock when omitted, matching
    * the pre-`--verbose` fallback behavior for a caller that doesn't care (e.g. non-`ls` tests). */
   now?: Date;
-  /** `link`-only: also render the deep link as terminal QR art (never affects `--json` output). */
+  /** `sessions link`-only: also render the deep link as terminal QR art (never affects `--json`
+   * output). */
   qr?: boolean;
-  /** `tools`-only: render full schemas/annotations for every listed tool, not just name+description. */
+  /** `tools ls`-only: render full schemas/annotations for every listed tool, not just
+   * name+description. */
   full?: boolean;
 };
 
@@ -152,14 +154,9 @@ const renderLsData = (colors: ColorPalette, data: LsCommandData, now: Date): str
   ];
 };
 
-/** `renderToolsData` distinguishes the listing form of `ToolsCommandData` (`ToolsListing`, which
- * carries `tools`/`total`) from the bare single-tool detail form purely by shape — a single entry
- * never has a `tools` array of its own, so this never misclassifies either one. */
-const isToolsListing = (data: ToolsCommandData): data is ToolsListing => {
-  return typeof data === "object" && data !== null && Array.isArray((data as ToolsListing).tools);
-};
-
-/** `--groups`' form: a `groups` array and no `tools` array (a listing carries both). */
+/** `--groups`' form: a `groups` array and no `tools` array (a listing carries both). Distinguishes
+ * `tools ls`'s two shapes — `tools describe`'s bare detail never reaches this (`renderToolDetail`
+ * is called directly for it by `renderSuccessData`'s `"tools describe"` case). */
 const isToolGroupsListing = (data: ToolsCommandData): data is ToolGroupsListing => {
   return (
     typeof data === "object" &&
@@ -197,7 +194,7 @@ const renderEmptyToolsLine = (data: ToolsListing): string => {
     // Never "No tools registered" for an empty group: the registry may well have tools, just not
     // in this group (a typo, or the wrong case — matching is case-sensitive).
     const match = data.filter === undefined ? "" : ` match ${JSON.stringify(data.filter)}`;
-    return `  No tools in group ${JSON.stringify(data.group)}${match}. Run \`appduct tools --groups\` to see the session's groups.`;
+    return `  No tools in group ${JSON.stringify(data.group)}${match}. Run \`appduct tools ls --groups\` to see the session's groups.`;
   }
 
   return data.filter === undefined ? "  No tools registered." : `  No tools match ${JSON.stringify(data.filter)}.`;
@@ -330,7 +327,7 @@ const renderToolSummaryTable = (colors: ColorPalette, data: ToolsListing): strin
       : data.tools.flatMap((tool) => renderToolSummaryLines(tool, "  "))),
     ...renderTruncationLine(data),
     "",
-    "Run `appduct tools <name>` for a tool's full schema.",
+    "Run `appduct tools describe <name>` for a tool's full schema.",
   ];
 };
 
@@ -374,7 +371,7 @@ const renderToolsFullListing = (colors: ColorPalette, data: ToolsListing, flags:
   ];
 };
 
-/** `appduct tools --groups`: every group with its tool count, subgroups indented under their
+/** `appduct tools ls --groups`: every group with its tool count, subgroups indented under their
  * parent, ungrouped last — in the daemon's `groups` order, which already puts a parent right
  * before its subgroups. */
 const renderToolGroups = (colors: ColorPalette, data: ToolGroupsListing): string[] => {
@@ -398,22 +395,21 @@ const renderToolGroups = (colors: ColorPalette, data: ToolGroupsListing): string
     ...data.groups.map((entry) => `  ${label(entry).padEnd(width)}  ${String(entry.total).padStart(countWidth)}`),
     "",
     `${data.total} tool${data.total === 1 ? "" : "s"} in total. ` +
-      (hasAnyGroup(data.groups) ? "Run `appduct tools --group <name>` to list one group's tools." : "No tool declares a group."),
+      (hasAnyGroup(data.groups) ? "Run `appduct tools ls --group <name>` to list one group's tools." : "No tool declares a group."),
   ];
 };
 
-const renderToolsData = (
+/** `appduct tools ls`'s two shapes: a `--groups` summary, or a listing (compact or `--full`). Never
+ * called with a bare tool detail — that is `tools describe`'s own shape (`renderToolDetail`,
+ * called directly by `renderSuccessData`'s `"tools describe"` case). */
+const renderToolsListData = (
   colors: ColorPalette,
-  data: ToolsCommandData,
+  data: ToolsListing | ToolGroupsListing,
   flags: GlobalFlags,
   full?: boolean,
 ): string[] => {
   if (isToolGroupsListing(data)) {
     return renderToolGroups(colors, data);
-  }
-
-  if (!isToolsListing(data)) {
-    return renderToolDetail(colors, data, flags);
   }
 
   return full ? renderToolsFullListing(colors, data, flags) : renderToolSummaryTable(colors, data);
@@ -645,15 +641,17 @@ const renderSuccessData = (colors: ColorPalette, command: string, data: unknown,
       return renderInitData(colors, data as InitCommandData, flags);
     case "keygen":
       return renderKeygenData(colors, data as KeygenCommandData, flags);
-    case "link":
+    case "sessions link":
       return renderLinkData(colors, data as LinkCommandData, flags, options.qr);
-    case "ls":
+    case "sessions ls":
       return renderLsData(colors, data as LsCommandData, options.now ?? new Date());
-    case "tools":
-      return renderToolsData(colors, data as ToolsCommandData, flags, options.full);
-    case "invoke":
+    case "tools ls":
+      return renderToolsListData(colors, data as ToolsListing | ToolGroupsListing, flags, options.full);
+    case "tools describe":
+      return renderToolDetail(colors, data as ListedToolDescriptor, flags);
+    case "tools call":
       return renderInvokeData(colors, data as InvokeCommandData, flags);
-    case "revoke":
+    case "sessions revoke":
       return renderRevokeData(colors, data as RevokeCommandData);
     case "daemon run":
       return renderDaemonRunData(colors, data as DaemonRunCommandData, flags);
@@ -726,7 +724,8 @@ export const renderResult = (
   };
 };
 
-/** Renders one `appduct events` line: NDJSON under `--json`, a compact human line otherwise. */
+/** Renders one `appduct events tail`/`appduct events since` line: NDJSON under `--json`, a
+ * compact human line otherwise. */
 export const renderEventLine = (event: EventNotification, flags: GlobalFlags): string => {
   if (flags.json) {
     // NDJSON is one object per line by contract (a streaming consumer reads it line-by-line, and
@@ -742,7 +741,7 @@ export const renderEventLine = (event: EventNotification, flags: GlobalFlags): s
   return `${colors.dim(timestamp)} ${colors.green(event.kind)}${target ? ` ${target}` : ""}${dataSuffix}`;
 };
 
-/** Renders the trailing cursor line for `appduct events --since` (issue #6): NDJSON under
+/** Renders the trailing cursor line for `appduct events since` (issue #6): NDJSON under
  * `--json` so a scripted caller can parse the resume point without maxing `seq` over the printed
  * events (impossible when the response is empty), a human note otherwise. */
 export const renderEventsCursorLine = (cursor: number, flags: GlobalFlags): string => {

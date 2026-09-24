@@ -1,5 +1,5 @@
 /**
- * `appduct link` (ARCHITECTURE.md §10, §8): CLI-flag validation (`--open`/`--device`'s
+ * `appduct sessions link` (ARCHITECTURE.md §10, §8): CLI-flag validation (`--open`/`--device`'s
  * CLI-specific error wording) around the shared `mintLink` core (`../link.ts`), which both this
  * command and `appduct/client`'s `link()` use so the deep-link shape can't drift between them.
  */

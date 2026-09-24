@@ -1,5 +1,5 @@
 /**
- * `appduct invoke` (ARCHITECTURE.md §10): `tools.call` round trip. Failures propagate as-is
+ * `appduct tools call` (ARCHITECTURE.md §10): `tools.call` round trip. Failures propagate as-is
  * (`DaemonRpcError`, preserving `error.data.type` verbatim) — `errors.ts`'s `toCliError` is what
  * renders `error.type` as the app's wire error type end-to-end, not this module's job.
  */

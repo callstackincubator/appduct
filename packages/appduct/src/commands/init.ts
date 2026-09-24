@@ -134,7 +134,7 @@ const readExistingConfig = async (path: string): Promise<Record<string, unknown>
  *
  * A hand-edited `"scheme": "myapp://"` must not be adopted and echoed back into `mcpServerEntry`
  * as though it were usable — every consumer of that entry would compose an unopenable link, and
- * `appduct link` would reject the very value `init` just blessed.
+ * `appduct sessions link` would reject the very value `init` just blessed.
  *
  * But it is only fatal when the run would go on to *keep* that value: `replaceable` says a
  * `--scheme` or `--force` is about to overwrite it anyway, and refusing then would make the
@@ -456,13 +456,13 @@ export const handleInitCommand = async (
         `Add the Appduct MCP server entry to your agent's MCP config. "--scheme ${scheme}" keeps ` +
           `that entry self-contained; ${SCHEME_ENV_VAR} and this ${PROJECT_CONFIG_RELATIVE_PATH} ` +
           "work too.",
-        "With the app running, pair a device: `appduct link --open ios-sim` (or `--open android`).",
+        "With the app running, pair a device: `appduct sessions link --open ios-sim` (or `--open android`).",
         ...(origin === undefined ? [] : [`Scheme "${scheme}" was read from ${origin}.`]),
         ...(iosAppId === undefined && androidAppId === undefined
           ? [
               "Delivering to a physical iPhone (`--open ios-device`) or an Android device/emulator " +
                 "(`--open android`) needs the installed app's id: run `appduct init --ios-app-id " +
-                "<id> --android-app-id <id>`, or pass --app-id on `appduct link`.",
+                "<id> --android-app-id <id>`, or pass --app-id on `appduct sessions link`.",
             ]
           : []),
         `This file is safe to commit — it holds only "scheme" and "appId". Do not point --state-dir ` +

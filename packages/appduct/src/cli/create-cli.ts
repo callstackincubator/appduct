@@ -42,55 +42,51 @@ export const createCli = () => {
     .option("--out <path>", "Destination path (default: <state-dir>/key.pem).")
     .option("--force", "Overwrite an existing key at the destination path.");
 
+  // cac only matches a command's first word against argv[0] and builds its boolean/string table
+  // from that command's own declared options (ARCHITECTURE.md §10 "CLI surface"), so each noun
+  // below declares every option any of its verbs uses — otherwise a boolean flag ahead of a
+  // positional (`sessions link --qr --open ios-sim`) would swallow it as that flag's value.
   cli
-    .command("link", "Mint a pending session and print its deep link.")
-    .option("--ttl <seconds>", "Link time-to-live in seconds (default: from config.json).")
-    .option("--qr", "Also render the deep link as a terminal QR code.")
+    .command("sessions [...args]", "Manage Appduct sessions: ls, revoke, or link.")
+    .option("--ttl <seconds>", "link: time-to-live in seconds (default: from config.json).")
+    .option("--qr", "link: also render the deep link as a terminal QR code.")
     .option(
       "--scheme <scheme>",
-      "Deep-link URI scheme (also: APPDUCT_SCHEME; default: .appduct/config.json, then " +
+      "link: deep-link URI scheme (also: APPDUCT_SCHEME; default: .appduct/config.json, then " +
         "app.json's \"expo.scheme\", then the Android/iOS project files in <cwd>).",
     )
     .option(
       "--open <target>",
-      "Deliver the link automatically via adb/simctl/devicectl (android|ios-sim|ios-device; ios-device is experimental).",
+      "link: deliver the link automatically via adb/simctl/devicectl (android|ios-sim|ios-device; ios-device is experimental).",
     )
-    .option("--device <id>", "adb serial, simulator udid or paired-device udid to target when --open is ambiguous.")
+    .option("--device <id>", "link: adb serial, simulator udid or paired-device udid to target when --open is ambiguous.")
     .option(
       "--app-id <id>",
-      "Installed app id for --open android/ios-device (default: .appduct/config.json's \"appId.<platform>\").",
+      "link: installed app id for --open android/ios-device (default: .appduct/config.json's \"appId.<platform>\").",
     )
     .option(
       "--relaunch",
-      "With --open ios-device, terminate a running instance first (try this if delivery to an already-running app does nothing).",
+      "link: with --open ios-device, terminate a running instance first (try this if delivery to an already-running app does nothing).",
     );
 
-  cli.command("ls", "List Appduct sessions.");
-
   cli
-    .command("tools [selector] [name]", "List a session's tools, or show one tool's full schema.")
-    .option("--full", "Render full schemas/annotations for every listed tool.")
-    .option("--group <name>", "Only tools in this group (\"checkout\" includes \"checkout/payment\").")
-    .option("--groups", "List the session's groups with tool counts instead of its tools.")
-    .option("--filter <text>", "Only tools whose name or description contains this text (case-insensitive).")
-    .option("--limit <n>", "Show at most n tools.")
-    .option("--offset <n>", "Skip the first n tools of the sorted list.");
-
-  cli
-    .command("invoke [selector] [tool]", "Call a tool on a session.")
-    .option("--input <json>", "Tool input arguments as a JSON object.")
+    .command("tools [...args]", "List a session's tools, describe one, or call one: ls, describe, or call.")
+    .option("--full", "ls: render full schemas/annotations for every listed tool.")
+    .option("--group <name>", "ls: only tools in this group (\"checkout\" includes \"checkout/payment\").")
+    .option("--groups", "ls: list the session's groups with tool counts instead of its tools.")
+    .option("--filter <text>", "ls: only tools whose name or description contains this text (case-insensitive).")
+    .option("--limit <n>", "ls: show at most n tools.")
+    .option("--offset <n>", "ls: skip the first n tools of the sorted list.")
+    .option("--input <json>", "call: tool input arguments as a JSON object.")
     .option(
       "--timeout <ms>",
-      "Call timeout in milliseconds. Shortens the deadline; it cannot extend one past the app's " +
-        "own timer, which is the tool's declared timeoutMs (else 10000).",
+      "call: call timeout in milliseconds. Shortens the deadline; it cannot extend one past the " +
+        "app's own timer, which is the tool's declared timeoutMs (else 10000).",
     );
 
   cli
-    .command("events [selector]", "Stream the events the app posts until interrupted.")
-    .option("--follow", "Accepted for script readability; the default behavior already follows.")
-    .option("--since <cursor>", "One-shot: print the app events retained since this cursor instead of streaming live.");
-
-  cli.command("revoke [selector]", "Revoke a session.");
+    .command("events [...args]", "Stream the app's events, or replay them since a cursor: tail or since.")
+    .option("--follow", "tail: accepted for script readability; the default behavior already follows.");
 
   cli
     .command("mcp", "Start a stdio MCP server that gives MCP clients access to connected apps' tools.")
