@@ -66,6 +66,16 @@ outcome. Plain everyday English, colleague to colleague. Say only what bears on 
 hand; skip what you checked and found fine unless it changes a decision. No filler, no hedging,
 no restating the question. Commit subjects: conventional prefix, imperative, under 72 chars.
 
+Everything an agent posts to GitHub (issue body or comment, PR body, review, review comment)
+ends with one trailer line naming the skill that posted it:
+
+```
+-- agent: <skill-name>
+```
+
+The `steward-pr` skill tells agent activity from human activity by that line, whatever login
+posted it. Editing a body someone else wrote keeps its trailer.
+
 ## Skills
 
 Load the skill before starting the matching task. They live in `.claude/skills/`.
@@ -84,4 +94,5 @@ Load the skill before starting the matching task. They live in `.claude/skills/`
 | Cutting a release | `cut-release` |
 | Curating agent memory (weekly, or when the inbox has notes) | `review-memory` |
 | Taking an issue from `status:ready` to a reviewed, tested PR | `work-issue` (orchestrator) |
+| Watching open agent PRs: keeping them mergeable, green and answered until a human merges | `steward-pr` |
 | Driving an Appduct-enabled app as a user of Appduct | `appduct` (in `skills/`) |

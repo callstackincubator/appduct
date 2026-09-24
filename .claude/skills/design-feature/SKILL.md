@@ -48,9 +48,9 @@ Keep it under 500 words. A signature is worth a paragraph.
 
 ## 4. Post it and wait
 
-Post the design as one issue comment headed `## Design`. Move the issue to
-`status:blocked` with the first line "Question: approve this design?". Stop. Do not file
-slices yet.
+Post the design as one issue comment headed `## Design`, ending with the line
+`-- agent: design-feature`. Move the issue to `status:blocked` with the first line
+"Question: approve this design?". Stop. Do not file slices yet.
 
 ## 5. After approval
 

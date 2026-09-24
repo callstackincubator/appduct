@@ -94,7 +94,7 @@ criteria table and pick the ones a device can observe. Capture command and outpu
 
 ## Record
 
-Fill the PR's "E2E evidence" section:
+Fill the PR's "E2E evidence" section, keeping the body's `-- agent:` trailer as its last line:
 
 ```bash
 gh pr edit <N> --body-file <updated body>

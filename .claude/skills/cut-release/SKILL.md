@@ -47,7 +47,9 @@ Read the `cut-release` section of `.agents/memory/LESSONS.md` before starting, p
    ```bash
    git switch -c "release/v$v" && git add -A && git commit -m "release: v$v"
    git push -u origin "release/v$v"
-   gh pr create --title "release: v$v" --body "$(sed -n "/^## $v/,/^## /p" CHANGELOG.md | sed '$d')"
+   gh pr create --title "release: v$v" --body "$(sed -n "/^## $v/,/^## /p" CHANGELOG.md | sed '$d')
+
+   -- agent: cut-release"
    ```
 
 Stop. Report the PR number, the version and the changelog section.

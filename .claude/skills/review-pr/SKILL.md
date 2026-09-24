@@ -92,7 +92,8 @@ gh pr review <N> --comment --body "<summary>"           # should-fix only
 gh pr review <N> --approve --body "<summary>"           # nothing above nit
 ```
 
-The summary is three lines at most: verdict with counts, which spec was used, the one thing
+The summary and every inline comment end with the line `-- agent: review-pr`, in a dry run
+too. The summary is three lines at most: verdict with counts, which spec was used, the one thing
 to fix first. Do not list what you checked and found fine.
 
 ## Report

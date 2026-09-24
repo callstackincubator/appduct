@@ -40,7 +40,8 @@ gh issue list --state all --search "<three or four words>" --limit 10
 gh issue list --state all --search "<literal identifier>" --limit 10
 ```
 
-If one exists, comment on it with what you have and report its number.
+If one exists, comment on it with what you have, ending with `-- agent: file-issue`, and
+report its number.
 
 ## 3. Write it
 
@@ -71,7 +72,8 @@ missing`):
 ### Alternatives considered   one line each, or "none"
 ```
 
-Write the body to the session scratch directory, not into the repo.
+End the body with the line `-- agent: file-issue`. Write it to the session scratch
+directory, not into the repo.
 
 ## 4. Size it and create it
 

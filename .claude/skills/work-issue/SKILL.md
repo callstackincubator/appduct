@@ -49,7 +49,8 @@ Each prompt has the same shape: the issue number, the branch, the one thing to d
    it fails, delegate the failure to `implement-issue` with the evidence pasted in, then
    re-run E2E. At most two rounds.
 5. **Ready.** `gh pr ready <M>`, then update the PR body's status lines. Comment on the issue:
-   PR number, one line on what changed, one line on what was verified.
+   PR number, one line on what changed, one line on what was verified, then the trailer
+   `-- agent: work-issue`.
 6. **Friction gate.** If any of these happened, append one note to `.agents/memory/INBOX.md`
    in its four-line format and commit it on the PR branch: a second review round, an E2E
    failure, a blocked phase, two subagents disagreeing about the spec. The note names the
@@ -60,12 +61,13 @@ Each prompt has the same shape: the issue number, the branch, the one thing to d
 
 When a loop limit is hit, when two subagents disagree about the spec, or when a report says
 something that contradicts the issue, stop. Post one comment on the issue with what is stuck,
-what you tried, and the decision needed. Apply `status:blocked`. Leave the draft PR as is.
+what you tried, and the decision needed, ending with `-- agent: work-issue`. Apply
+`status:blocked`. Leave the draft PR as is.
 
 ## 4. Keep the ledger current
 
 After each phase, update the PR body's status section so a fresh session can resume from
-GitHub alone:
+GitHub alone. The body's `-- agent:` trailer stays its last line:
 
 ```
 ### Status
