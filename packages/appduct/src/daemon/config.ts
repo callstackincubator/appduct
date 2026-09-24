@@ -40,7 +40,7 @@ export type AppductConfig = {
   graceSeconds: number;
   linkTtlSeconds: number;
   keepaliveIntervalSeconds: number;
-  /** Max retained `app_event`/etc. events per session (ARCHITECTURE.md §5's `events.since`
+  /** Max retained `app_event`s per session (ARCHITECTURE.md §5's `events.since`
    * retention buffer); default 256. */
   eventBufferSize: number;
   /** Days of `audit/<YYYY-MM-DD>.jsonl` history to keep; files older than this are pruned on

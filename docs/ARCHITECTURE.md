@@ -114,7 +114,7 @@ when `--scheme` is not passed (§10) — set it once here instead of on every in
 Unlike `scheme`, the app id `--open android`/`--open ios-device` need (issue #63) has no
 home in this file: it lives only in a project `.appduct/config.json`'s `appId.<platform>`
 (§10), never in the state directory's `config.json` — see `resolveAppId` in `scheme.ts`.
-`eventBufferSize` caps the per-session `events.since` retention buffer (§5).
+`eventBufferSize` caps the per-session `events.since` retention buffer of `app_event`s (§5).
 `restartDaemonOnVersionMismatch` makes version-drift restarts unconditional rather than
 only-when-no-sessions-are-live (§4, "Version drift").
 
@@ -268,7 +268,7 @@ Methods:
 | `tools.call` | `{ selector?, name, args, timeoutMs?, caller?: "cli" \| "mcp", consent?: "elicitation" }` | `{ result, callId }` on success — `callId` lets a caller with several in-flight calls match `tool_call_progress`/`tool_call_finished` events back to this call; JSON-RPC error with `data.type` preserving the wire error type on failure. `caller` attributes the audit record (§12); `consent` is the MCP server's evidence of a `"prompt"`-policy human gate (§12) — `"elicitation"` after the client accepted an elicitation prompt, absent otherwise (including for the CLI). |
 | `tools.cancel` | `{ selector?, callId, reason? }` | `{ cancelled: boolean }` — sends `tool_cancel` (§7) to the app for a still-pending call; `false` for an unknown/already-finished `callId` or no active socket (a no-op, not an error) |
 | `events.subscribe` | `{ sessionSelector?, kinds? }` | `{ ok: true }`, then `event` notifications on this connection |
-| `events.since` | `{ selector?, since?, kinds?, limit? }` | `{ events: EventNotification[], cursor }` — pull counterpart to `events.subscribe`, draining the per-session retention buffer described below |
+| `events.since` | `{ selector?, since?, limit? }` | `{ events: EventNotification[], cursor }` — pull counterpart to `events.subscribe` for `app_event` only, draining the per-session retention buffer described below. An older client's `kinds` is ignored like any unknown param |
 
 `SessionSummary`: `{ sessionId, alias, state, device: { manufacturer?, model?, os? },
 createdAt, claimedAt?, suspendedAt?, toolCount }`.
@@ -314,19 +314,24 @@ of `daemon_started`, `link_created`, `link_expired`, `session_claimed`,
 `tool_call_finished`. `seq` is a per-session cursor (§ below); daemon-wide events (no
 `sessionId`) carry `seq: 0` and are never retained.
 
-**Event retention (issue #6):** alongside the live `events.subscribe` fan-out, the daemon
-keeps a per-session ring buffer of the last `eventBufferSize` events (`config.json`,
-default 256; `tool_call_progress` is excluded — a single chatty call can emit far more of
-these than the buffer holds, which would otherwise evict every retained `app_event`),
-each stamped with a `seq` that increases monotonically per session. `events.since` drains
-it — `since` is an exclusive lower bound on `seq`, `kinds` filters by event kind, `limit`
-caps the response to the **oldest** N so paging forward with the returned `cursor` never
-skips anything; the result's `cursor` is the `seq` of the last event actually **returned**
-(so `since: cursor` on the next call resumes right after it), falling back to the session's
-true high-water mark only when nothing was returned (an empty buffer, or every retained
-event was filtered out by `kinds`) so an empty page still lets a caller skip past events it
-explicitly excluded rather than re-scanning them forever. `selector` defaults the same way
-as every other selector-taking method (§ above). A session's buffer is discarded the
+**Event retention (issue #6, #98):** alongside the live `events.subscribe` fan-out, which
+carries every kind and honours its `kinds` filter, the daemon keeps a per-session ring buffer
+of the last `eventBufferSize` **`app_event`s** (`config.json`, default 256). Every other kind is
+delivered live only and never retained, so no number of tool calls or lifecycle transitions
+can evict an app event. Every session-scoped event is still stamped with a `seq` that
+increases monotonically per session. `events.since` drains the buffer — `since` is an
+exclusive lower bound on `seq`, `limit` caps the response to the **oldest** N so paging
+forward with the returned `cursor` never skips anything; the result's `cursor` is the `seq`
+of the last event actually **returned** (so `since: cursor` on the next call resumes right
+after it), falling back to the session's true high-water mark only when nothing was
+returned, so an empty page still lets a caller skip past the unretained kinds' `seq`s
+rather than re-scanning from an older cursor. `selector` defaults the same way as every
+other selector-taking method (§ above). The readers built on it — `appduct_events`,
+`appduct_wait_for_event`, `appduct events` (whose live mode subscribes with
+`kinds: ["app_event"]`) and the client SDK — therefore only ever show `app_event`; the
+internal consumers that need Appduct's own kinds (`appduct_wait_for_session`,
+`waitForSession`, `appduct_call_tool`'s `callId` and progress tracking) use
+`events.subscribe` with an explicit `kinds` filter. A session's buffer is discarded the
 instant it hits a terminal event (`session_expired`/`session_revoked`) — matching "terminal
 states free the alias" (§6) — the terminal event itself is still delivered live, just never
 retained; an unclaimed pending link's buffer is discarded the same way when it's
@@ -513,7 +518,8 @@ proxies daemon RPC (auto-spawning the daemon like any client):
   finds no simulator knows the option exists rather than defaulting to a QR nobody scans.
 - Two more built-in tools, `appduct_events` and `appduct_wait_for_event` (issue #6),
   give an agent a pull surface over `postEvent()`-pushed `app_event`s: `appduct_events`
-  is a thin proxy over `events.since`; `appduct_wait_for_event` blocks for a matching
+  is a thin proxy over `events.since`, and both reject a `kinds` argument with
+  `invalid_request`; `appduct_wait_for_event` blocks for a matching
   event, draining the retained buffer for an already-arrived match before falling back to
   a live wait — closing the same race `appduct_wait_for_session` doesn't have to worry
   about (a session is either claimed or not, but an event can fire between "the agent

@@ -34,8 +34,8 @@ the iOS `Info.plist`/`project.yml`). No key, pin or config file is needed for a 
   on a TTY.
 
 Then wait for the app to claim the session: poll `appduct ls --json` until the session shows
-`"state": "active"`, or run `appduct events <sessionId> --json` and stop at `session_claimed`
-(`data.sessionId` from `link --json`). The link expires after 5 minutes and works once.
+`"state": "active"`, or over MCP call `appduct_wait_for_session` with `data.sessionId` from
+`link --json`. The link expires after 5 minutes and works once.
 
 **Scheme not found.** Pass `--scheme <s>` (or set `APPDUCT_SCHEME`) when you are not in the app
 root or the project uses a dynamic `app.config.js`, which Appduct never executes. `appduct init
@@ -65,7 +65,7 @@ device and delivers the link there. On `delivered: true`, call
 | `appduct ls` | sessions: alias, state, device, tool count |
 | `appduct tools [selector] [name] [--groups] [--group <g>] [--filter <text>] [--limit <n>] [--offset <n>] [--full]` | list tools, or one tool's full schema and annotations |
 | `appduct invoke [selector] <tool> --input '<json>' [--timeout <ms>]` | call a tool; `--input` is required and must be a JSON object |
-| `appduct events [selector] [--since <cursor>]` | stream `session_claimed`, `session_suspended`, `session_resumed`, `session_revoked`, `tools_changed`, `app_event`, and tool-call events; `--since` pulls what is retained since a cursor and exits; `--json` emits NDJSON |
+| `appduct events [selector] [--since <cursor>]` | stream the events the app posts with `postEvent` (`app_event` only); `--since` pulls the ones retained since a cursor and exits; `--json` emits NDJSON |
 | `appduct revoke [selector]` | end one session without touching the daemon or other sessions |
 | `appduct link [--open …] [--app-id <id>] [--device <id>] [--qr] [--scheme <s>] [--ttl <s>]` | mint a session and its deep link |
 | `appduct init [--scheme <s>] [--android-app-id <id>] [--ios-app-id <id>] [--force]` | record scheme and app ids in `.appduct/config.json`; prints the MCP server entry; safe to re-run |

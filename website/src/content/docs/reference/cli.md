@@ -84,16 +84,16 @@ Ctrl-C cancels the call in the app.
 
 ### `appduct events [selector]`
 
-Streams events until you stop it. With `--json`, prints one JSON object per line.
+Streams the events your app posts with `postEvent` until you stop it. With `--json`, prints one JSON object per line, each with `kind: "app_event"`.
 
 | Flag | Description |
 | --- | --- |
-| `--since <cursor>` | Print events retained since this cursor, then exit. |
+| `--since <cursor>` | Print the app events retained since this cursor, then exit. |
 | `--follow` | Accepted for readability; streaming is the default. |
 
-Event kinds: `daemon_started`, `link_created`, `link_expired`, `session_claimed`, `session_suspended`, `session_resumed`, `session_revoked`, `session_expired`, `tools_changed`, `app_event`, `tool_call_started`, `tool_call_progress`, `tool_call_finished`.
+Device connections and tool calls are not printed. To see when a device connects, use `appduct ls`.
 
-Each device keeps its last 256 events (`eventBufferSize`), not counting progress events. They're discarded when the session ends.
+Each device keeps its last 256 app events (`eventBufferSize`), however many tool calls run in between. They're discarded when the session ends.
 
 ### `appduct revoke [selector]`
 
@@ -240,7 +240,7 @@ Default location `~/.appduct/config.json`. Every key is optional. Read when the 
 | `appduct_call_tool` | `selector?`, `name`, `args?`, `timeoutMs?` (1,000–600,000; can only shorten) | The tool's result |
 | `appduct_connect` | `target?` (`android`, `ios-sim`, `ios-device`, `none`), `device?`, `appId?`, `relaunch?`, `ttlSeconds?` | `{ sessionId, delivered: true }`, or a `qr`, `deepLink`, and `instructions` for a person |
 | `appduct_wait_for_session` | `sessionId`, `timeoutMs?` | Resolves when the device connects |
-| `appduct_events` | `selector?`, `since?`, `kinds?`, `limit?` | `{ events, cursor }` |
+| `appduct_events` | `selector?`, `since?`, `limit?` | `{ events, cursor }` with the app's events |
 | `appduct_wait_for_event` | `selector?`, `name`, `match?`, `since?`, `timeoutMs?` (default 120,000; max 1,500,000) | The matching event |
 
 Unknown arguments are rejected. A tool with policy `"prompt"` asks for approval through MCP elicitation.
