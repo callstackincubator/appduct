@@ -21,3 +21,7 @@ One note per PR that hit friction, four lines:
   What went wrong: the new integration test set NODE_TLS_REJECT_UNAUTHORIZED=0 and rejectUnauthorized: false, copied from older tests, which raised two high CodeQL alerts and a second review round.
   Would have prevented it: a daemon integration test trusts the daemon's certificate via `ca: daemon.tls.current().certPem` and never disables TLS verification.
   Cost: review round
+- 2026-09-24 #100 skill: work-issue
+  What went wrong: device E2E could not run in the cloud session because the Linux container has no iOS simulator, so both slices waited for a human to run it locally.
+  Would have prevented it: at the start, check for a simulator (xcrun, or an Android emulator with KVM) and, if there is none, ask the human up front to run e2e-device locally.
+  Cost: blocked
