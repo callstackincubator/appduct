@@ -2,6 +2,7 @@
 name: triage-issue
 description: Triage a bug report - rank hypotheses, verify the top three by static analysis, name the root cause with path and line, and propose a module-level fix. Sets the status label. Use when asked to triage, investigate or diagnose a bug, or when a type:bug issue carries status:needs-triage. Features are not triaged; they go through file-issue and design-feature.
 model: opus
+effort: high
 context: fork
 ---
 

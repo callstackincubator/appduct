@@ -12,8 +12,9 @@ not about file contents.
 
 Delegating: in Claude Code, invoke the stage's skill with the Skill tool and pass the task as
 its arguments. Each stage skill is forked (`context: fork` in `AGENTS.md`'s Skills table), so it
-runs in its own subagent on its own model and hands back only its report. Never start an agent
-that then loads the skill, and never pass a model: either one overrides the skill's model. In
+runs in its own subagent on its own model and effort and hands back only its report. Never
+start an agent that then loads the skill, and never pass a model: either one overrides the
+skill's frontmatter. In
 OpenCode, use the task tool with a prompt that names the skill to load; there every stage runs
 on the session model.
 

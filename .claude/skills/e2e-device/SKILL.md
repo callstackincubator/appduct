@@ -2,6 +2,7 @@
 name: e2e-device
 description: Build and run a playground app on an iOS simulator or Android emulator, connect it to this repo's Appduct daemon and drive it through the CLI - a smoke pass over the five demo tools plus the calls that prove a specific change works. Use when a PR needs device E2E evidence, when asked to test on a simulator, or when a work-issue orchestrator delegates E2E.
 model: sonnet
+effort: low
 context: fork
 ---
 

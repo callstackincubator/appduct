@@ -2,6 +2,7 @@
 name: implement-issue
 description: Implement a GitHub issue tests-first - take the acceptance criteria from the issue, write red tests against the public API, commit them, open a draft PR, then implement in checkpoint commits until green, with user-facing docs as one of the criteria. Use when asked to implement, build or fix something tracked as an issue, or when a work-issue orchestrator delegates implementation.
 model: sonnet
+effort: medium
 context: fork
 ---
 
