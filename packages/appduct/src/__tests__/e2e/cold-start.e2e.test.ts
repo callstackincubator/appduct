@@ -47,7 +47,7 @@ describe("e2e: cold start", () => {
       // link: mints a pending session. This is the first command to touch the daemon, so it is the
       // one that auto-spawns it (ARCHITECTURE.md §4).
       const linkResult = await runCliJson<{ sessionId: string; deepLink: string; endpoint: { port: number } }>(
-        ["link", "--ttl", "60"],
+        ["sessions", "link", "--ttl", "60"],
         stateDir,
       );
       expect(linkResult.ok).toBe(true);
@@ -82,7 +82,7 @@ describe("e2e: cold start", () => {
       await toolsChanged;
 
       // ls: the claimed session shows up ACTIVE with its device metadata and tool count.
-      const lsResult = await runCliJson<Array<{ alias: string; state: string; toolCount: number }>>(["ls"], stateDir);
+      const lsResult = await runCliJson<Array<{ alias: string; state: string; toolCount: number }>>(["sessions", "ls"], stateDir);
       expect(lsResult.ok).toBe(true);
       expect(lsResult.data).toHaveLength(1);
       expect(lsResult.data![0]!.alias).toBe(alias);
@@ -90,7 +90,7 @@ describe("e2e: cold start", () => {
       expect(lsResult.data![0]!.toolCount).toBe(1);
 
       // tools: list, then detail by name.
-      const toolsList = await runCliJson<{ tools: Array<{ name: string }>; total: number }>(["tools", alias], stateDir);
+      const toolsList = await runCliJson<{ tools: Array<{ name: string }>; total: number }>(["tools", "ls", alias], stateDir);
       expect(toolsList.ok).toBe(true);
       expect(toolsList.data!.tools.map((tool) => tool.name)).toEqual(["echo"]);
       expect(toolsList.data!.total).toBe(1);
@@ -99,7 +99,7 @@ describe("e2e: cold start", () => {
       app.answerCalls((call) => ({ result: { echoed: (call.args as Record<string, unknown>).text } }));
 
       const invokeResult = await runCliJson(
-        ["invoke", alias, "echo", "--input", JSON.stringify({ text: "hello" })],
+        ["tools", "call", alias, "echo", "--input", JSON.stringify({ text: "hello" })],
         stateDir,
       );
       expect(invokeResult.ok).toBe(true);
@@ -107,12 +107,12 @@ describe("e2e: cold start", () => {
 
       // revoke: the session disappears from ls, and the app's socket is closed with code 1000.
       const revokeClosed = app.waitForClose();
-      const revokeResult = await runCliJson(["revoke", alias], stateDir);
+      const revokeResult = await runCliJson(["sessions", "revoke", alias], stateDir);
       expect(revokeResult.ok).toBe(true);
       const closeInfo = await revokeClosed;
       expect(closeInfo.code).toBe(1000);
 
-      const finalLs = await runCliJson<unknown[]>(["ls"], stateDir);
+      const finalLs = await runCliJson<unknown[]>(["sessions", "ls"], stateDir);
       expect(finalLs.ok).toBe(true);
       expect(finalLs.data).toEqual([]);
 

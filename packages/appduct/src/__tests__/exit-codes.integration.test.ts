@@ -1,7 +1,7 @@
 /**
- * An `exit-codes` test suite for the v2 commands: the v1 suite's convention of asserting exact
- * codes per failure class is worth reproducing. Each case here is a real CLI subprocess against a
- * real daemon, asserting both the exit code and the JSON error's `type`.
+ * An `exit-codes` test suite for the noun-verb commands (issue #96): the v1 suite's convention of
+ * asserting exact codes per failure class is worth reproducing. Each case here is a real CLI
+ * subprocess against a real daemon, asserting both the exit code and the JSON error's `type`.
  */
 
 import path from "node:path";
@@ -65,7 +65,7 @@ const runCli = (args: string[], stateDir: string) => {
   };
 };
 
-describe("exit codes: v2 command surface", () => {
+describe("exit codes: noun-verb command surface", () => {
   test("usage_error (64): an unknown command", async () => {
     const stateDir = await makeTempStateDir();
     const { exitCode, payload } = runCli(["not-a-real-command"], stateDir);
@@ -74,9 +74,9 @@ describe("exit codes: v2 command surface", () => {
     expect(payload.error.type).toBe("usage_error");
   });
 
-  test("usage_error (64): events --since combined with --follow", async () => {
+  test("usage_error (64): events since with a non-numeric cursor", async () => {
     const stateDir = await makeTempStateDir();
-    const { exitCode, payload } = runCli(["events", "--since", "0", "--follow"], stateDir);
+    const { exitCode, payload } = runCli(["events", "since", "not-a-number"], stateDir);
 
     expect(exitCode).toBe(64);
     expect(payload.error.type).toBe("usage_error");
@@ -94,9 +94,9 @@ describe("exit codes: v2 command surface", () => {
     expect(second.payload.error.type).toBe("usage_error");
   });
 
-  test("validation_error (65): invoke --input is not valid JSON", async () => {
+  test("validation_error (65): tools call --input is not valid JSON", async () => {
     const stateDir = await makeTempStateDir();
-    const { exitCode, payload } = runCli(["invoke", "some-tool", "--input", "{not-json"], stateDir);
+    const { exitCode, payload } = runCli(["tools", "call", "some-tool", "--input", "{not-json"], stateDir);
 
     expect(exitCode).toBe(65);
     expect(payload.error.type).toBe("validation_error");
@@ -112,14 +112,14 @@ describe("exit codes: v2 command surface", () => {
 
   test("session_error (71): no_session when no device has ever connected", async () => {
     const stateDir = await makeTempStateDir();
-    const { exitCode, payload } = runCli(["ls"], stateDir);
+    const { exitCode, payload } = runCli(["sessions", "ls"], stateDir);
     expect(exitCode).toBe(0);
     expect(payload.data).toEqual([]);
 
     const status = runCli(["daemon", "status"], stateDir);
     daemonPids.push(status.payload.data.daemon.pid);
 
-    const revokeResult = runCli(["revoke"], stateDir);
+    const revokeResult = runCli(["sessions", "revoke"], stateDir);
     expect(revokeResult.exitCode).toBe(71);
     expect(revokeResult.payload.error.type).toBe("no_session");
   });
@@ -129,13 +129,13 @@ describe("exit codes: v2 command surface", () => {
     const status = runCli(["daemon", "status"], stateDir);
     daemonPids.push(status.payload.data.daemon.pid);
 
-    const { exitCode, payload } = runCli(["invoke", "no-such-alias", "some-tool", "--input", "{}"], stateDir);
+    const { exitCode, payload } = runCli(["tools", "call", "no-such-alias", "some-tool", "--input", "{}"], stateDir);
 
     expect(exitCode).toBe(71);
     expect(payload.error.type).toBe("unknown_session");
   });
 
-  test("tool_error (72): invoke a name not registered on a real, claimed session", async () => {
+  test("tool_error (72): call a name not registered on a real, claimed session", async () => {
     const stateDir = await makeTempStateDir();
 
     const status = runCli(["daemon", "status"], stateDir);
@@ -145,7 +145,7 @@ describe("exit codes: v2 command surface", () => {
     const port = status.payload.data.daemon.wss_port as number;
     expect(port).toBeGreaterThan(0);
 
-    const linkResult = runCli(["link", "--scheme", "appduct-exit-codes"], stateDir);
+    const linkResult = runCli(["sessions", "link", "--scheme", "appduct-exit-codes"], stateDir);
     expect(linkResult.exitCode).toBe(0);
 
     // The deep link is `<scheme>:///?appduct=<payload>&pin=<spki-pin>` (commit 9c73849 added
@@ -188,7 +188,7 @@ describe("exit codes: v2 command surface", () => {
     const alias = ack.alias as string;
 
     const { exitCode, payload: invokeError } = runCli(
-      ["invoke", alias, "does-not-exist", "--input", "{}"],
+      ["tools", "call", alias, "does-not-exist", "--input", "{}"],
       stateDir,
     );
 

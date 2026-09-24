@@ -60,15 +60,15 @@ describe("global flags (no daemon required)", () => {
  */
 describe("route argument errors render as usage errors (no daemon required)", () => {
   test.each([
-    [["tools", "--limit", "0"], /"--limit" must be a positive integer/u],
-    [["tools", "--limit", "-1"], /"--limit" must be a positive integer/u],
-    [["tools", "--offset", "abc"], /"--offset" must be a non-negative integer/u],
-    [["tools", "--filter"], /"--filter" requires a value/u],
-    [["tools", "a", "b", "c"], /Usage/u],
-    [["invoke"], /Usage/u],
-    [["revoke", "a", "b"], /Usage/u],
-    [["events", "a", "b"], /Usage/u],
-    [["events", "--since", "-1"], /"--since" must be a non-negative integer/u],
+    [["tools", "ls", "--limit", "0"], /"--limit" must be a positive integer/u],
+    [["tools", "ls", "--limit", "-1"], /"--limit" must be a positive integer/u],
+    [["tools", "ls", "--offset", "abc"], /"--offset" must be a non-negative integer/u],
+    [["tools", "ls", "--filter"], /"--filter" requires a value/u],
+    [["tools", "ls", "a", "b", "c"], /Usage/u],
+    [["tools", "call"], /Usage/u],
+    [["sessions", "revoke", "a", "b"], /Usage/u],
+    [["events", "tail", "a", "b"], /Usage/u],
+    [["events", "since", "a", "-1"], /"<cursor>" must be a non-negative integer/u],
   ])("%j", async (argv, message) => {
     const result = await runCliWithCapture([...argv, "--json", "--state-dir", "/nonexistent-appduct-state"]);
 

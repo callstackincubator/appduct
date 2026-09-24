@@ -52,7 +52,7 @@ describe("e2e: daemon restart", () => {
       // The next command has nothing listening at the stale socket path: it must auto-spawn a fresh
       // daemon rather than fail (ARCHITECTURE.md §4: "a stale socket file with a dead pid is
       // unlinked before spawning").
-      const lsResult = await runCliJson<unknown[]>(["ls"], stateDir);
+      const lsResult = await runCliJson<unknown[]>(["sessions", "ls"], stateDir);
       expect(lsResult.ok).toBe(true);
       // The old session does not survive daemon death (documented behavior, not a bug).
       expect(lsResult.data).toEqual([]);

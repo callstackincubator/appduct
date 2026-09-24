@@ -34,7 +34,7 @@ describe("output rendering", () => {
         },
       },
       {
-        command: "tools",
+        command: "tools ls",
         flags: flags(),
       },
     );
@@ -84,7 +84,7 @@ describe("output rendering", () => {
           total: 2,
         },
       },
-      { command: "tools", flags: flags() },
+      { command: "tools ls", flags: flags() },
     );
 
     expect(rendered.stdout).toBe(
@@ -95,7 +95,7 @@ describe("output rendering", () => {
         '  set_flag(name: "dark_mode" | "new_checkout", enabled: bool)  [prompt]',
         "    Toggle a feature flag.",
         "",
-        "Run `appduct tools <name>` for a tool's full schema.",
+        "Run `appduct tools describe <name>` for a tool's full schema.",
         "",
       ].join("\n"),
     );
@@ -112,7 +112,7 @@ describe("output rendering", () => {
           limit: 1,
         },
       },
-      { command: "tools", flags: flags() },
+      { command: "tools ls", flags: flags() },
     ).stdout ?? "";
 
     expect(rendered).toContain(
@@ -135,7 +135,7 @@ describe("output rendering", () => {
           groups: [topLevel[0], { group: "g00/sub", total: 1 }, ...topLevel.slice(1)],
         },
       },
-      { command: "tools", flags: flags() },
+      { command: "tools ls", flags: flags() },
     ).stdout ?? "";
 
     expect(rendered).toContain(
@@ -148,7 +148,7 @@ describe("output rendering", () => {
   test("tools list output with a filter and no matches says so", () => {
     const rendered = renderResult(
       { ok: true, data: { tools: [], total: 0, filter: "nope" } },
-      { command: "tools", flags: flags() },
+      { command: "tools ls", flags: flags() },
     ).stdout ?? "";
 
     expect(rendered).toContain('No tools match "nope".');
@@ -157,11 +157,11 @@ describe("output rendering", () => {
   test("tools list output with no tools and no filter keeps the original message", () => {
     const rendered = renderResult(
       { ok: true, data: { tools: [], total: 0 } },
-      { command: "tools", flags: flags() },
+      { command: "tools ls", flags: flags() },
     ).stdout ?? "";
 
     expect(rendered).toContain("No tools registered.");
-    expect(rendered).not.toContain("Run `appduct tools <name>`");
+    expect(rendered).not.toContain("Run `appduct tools describe <name>`");
   });
 
   test("a description longer than 120 characters is cut with a trailing ellipsis", () => {
@@ -172,7 +172,7 @@ describe("output rendering", () => {
           ok: true,
           data: { tools: [{ name: "verbose", description: longDescription, policy: "allow" }], total: 1 },
         },
-        { command: "tools", flags: flags() },
+        { command: "tools ls", flags: flags() },
       ).stdout ?? "";
 
     const descriptionLine = rendered.split("\n").find((line) => line.startsWith("    A."));
@@ -185,7 +185,7 @@ describe("output rendering", () => {
     const rendered =
       renderResult(
         { ok: true, data: { tools: [{ name: "ping", description: "Health check.", policy: "allow" }], total: 1 } },
-        { command: "tools", flags: flags() },
+        { command: "tools ls", flags: flags() },
       ).stdout ?? "";
 
     expect(rendered).toContain("  ping()");
@@ -208,13 +208,13 @@ describe("output rendering", () => {
           offset: 0,
         },
       },
-      { command: "tools", flags: flags(), full: true },
+      { command: "tools ls", flags: flags(), full: true },
     ).stdout ?? "";
 
     expect(rendered).toContain("Tool: echo");
     expect(rendered).toMatch(/Signature\s+echo\(text\?: string\)/);
     expect(rendered).toContain("Showing 1 of 3 tools (offset 0).");
-    expect(rendered).not.toContain("Run `appduct tools <name>`");
+    expect(rendered).not.toContain("Run `appduct tools describe <name>`");
   });
 
   test("tools detail shows a declared timeout_ms, and no timeout line when the tool declares none", () => {
@@ -228,7 +228,7 @@ describe("output rendering", () => {
             ...(timeoutMs !== undefined ? { timeout_ms: timeoutMs } : {}),
           },
         },
-        { command: "tools", flags: flags() },
+        { command: "tools describe", flags: flags() },
       ).stdout;
 
     expect(renderDetail(60_000)).toContain("Timeout (ms)  60000");
@@ -249,7 +249,7 @@ describe("output rendering", () => {
             group,
           },
         },
-        { command: "tools", flags: flags() },
+        { command: "tools describe", flags: flags() },
       ).stdout;
 
     expect(renderDetail("checkout/payment")).toMatch(/Group\s+checkout\/payment/);
@@ -269,7 +269,7 @@ describe("output rendering", () => {
         },
       },
       {
-        command: "tools",
+        command: "tools describe",
         flags: flags(),
       },
     );
@@ -290,7 +290,7 @@ describe("output rendering", () => {
         },
       },
       {
-        command: "link",
+        command: "sessions link",
         flags: flags(),
       },
     );
@@ -311,7 +311,7 @@ describe("output rendering", () => {
         },
       },
       {
-        command: "link",
+        command: "sessions link",
         flags: flags({ json: true }),
         qr: true,
       },
@@ -346,7 +346,7 @@ describe("output rendering", () => {
         ],
       },
       {
-        command: "ls",
+        command: "sessions ls",
         flags: flags(),
         now: FIXED_NOW,
       },
@@ -362,7 +362,7 @@ describe("output rendering", () => {
         data: [],
       },
       {
-        command: "ls",
+        command: "sessions ls",
         flags: flags(),
         now: FIXED_NOW,
       },
@@ -396,7 +396,7 @@ describe("output rendering", () => {
         data: { echoed: "hello" },
       },
       {
-        command: "invoke",
+        command: "tools call",
         flags: flags(),
       },
     );
@@ -410,11 +410,11 @@ describe("output rendering", () => {
       data: { echoed: { nested: { value: true } } },
     };
 
-    const compact = renderResult(result, { command: "invoke", flags: flags() }).stdout ?? "";
+    const compact = renderResult(result, { command: "tools call", flags: flags() }).stdout ?? "";
     expect(compact).toContain('{"nested":{"value":true}}');
     expect(compact).toBe("Result\n{\"echoed\":{\"nested\":{\"value\":true}}}\n");
 
-    const pretty = renderResult(result, { command: "invoke", flags: flags({ pretty: true }) }).stdout ?? "";
+    const pretty = renderResult(result, { command: "tools call", flags: flags({ pretty: true }) }).stdout ?? "";
     expect(pretty).toContain('"nested": {');
     expect(pretty).toContain('"value": true');
   });
@@ -432,7 +432,7 @@ describe("output rendering", () => {
         },
       },
       {
-        command: "invoke",
+        command: "tools call",
         flags: flags(),
       },
     );
@@ -450,7 +450,7 @@ describe("output rendering", () => {
         },
       },
       {
-        command: "invoke",
+        command: "tools call",
         flags: flags({ json: true }),
       },
     );
@@ -461,11 +461,11 @@ describe("output rendering", () => {
   });
 
   test("the Meta block renders (human and --json) exactly when the result carries meta", () => {
-    const meta = { command: "invoke", timestamp: FIXED_NOW.toISOString(), duration_ms: 4 };
+    const meta = { command: "tools call", timestamp: FIXED_NOW.toISOString(), duration_ms: 4 };
 
     const human = renderResult(
       { ok: true, data: { echoed: "hi" }, meta },
-      { command: "invoke", flags: flags() },
+      { command: "tools call", flags: flags() },
     ).stdout;
     expect(human).toContain("Meta");
     expect(human).toContain(`Command: ${meta.command}`);
@@ -474,13 +474,13 @@ describe("output rendering", () => {
 
     const humanNoMeta = renderResult(
       { ok: true, data: { echoed: "hi" } },
-      { command: "invoke", flags: flags() },
+      { command: "tools call", flags: flags() },
     ).stdout;
     expect(humanNoMeta).not.toContain("Meta");
 
     const json = renderResult(
       { ok: true, data: { echoed: "hi" }, meta },
-      { command: "invoke", flags: flags({ json: true }) },
+      { command: "tools call", flags: flags({ json: true }) },
     ).stdout ?? "";
     expect(JSON.parse(json).meta).toEqual(meta);
   });
@@ -535,11 +535,11 @@ describe("output rendering", () => {
   test("--json output is a single line by default, and indented under --pretty", () => {
     const result = { ok: true as const, data: { a: 1, b: { c: 2 } } };
 
-    const compact = renderResult(result, { command: "invoke", flags: flags({ json: true }) }).stdout ?? "";
+    const compact = renderResult(result, { command: "tools call", flags: flags({ json: true }) }).stdout ?? "";
     expect(compact.replace(/\n$/u, "").split("\n")).toHaveLength(1);
     expect(JSON.parse(compact)).toEqual(result);
 
-    const pretty = renderResult(result, { command: "invoke", flags: flags({ json: true, pretty: true }) }).stdout ?? "";
+    const pretty = renderResult(result, { command: "tools call", flags: flags({ json: true, pretty: true }) }).stdout ?? "";
     expect(pretty.split("\n").length).toBeGreaterThan(1);
     expect(JSON.parse(pretty)).toEqual(result);
   });

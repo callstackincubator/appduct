@@ -6,7 +6,6 @@ import {
   parsePositiveIntegerOption,
   readTextOption,
   splitOptionalSelector,
-  splitOptionalSelectorAndTarget,
   splitSelectorAndRequiredTarget,
 } from "../cli/command-options.js";
 
@@ -97,58 +96,37 @@ describe("parseJsonInputOption", () => {
   });
 });
 
-describe("splitSelectorAndRequiredTarget (invoke [selector] <tool>)", () => {
+describe("splitSelectorAndRequiredTarget (tools call [selector] <name> / tools describe [selector] <name> / events since [selector] <cursor>)", () => {
   test("one arg: no selector, target is the sole arg", () => {
-    expect(splitSelectorAndRequiredTarget(["echo"], "invoke")).toEqual({ target: "echo" });
+    expect(splitSelectorAndRequiredTarget(["echo"], "tools call")).toEqual({ target: "echo" });
   });
 
   test("two args: selector then target", () => {
-    expect(splitSelectorAndRequiredTarget(["pixel-8", "echo"], "invoke")).toEqual({
+    expect(splitSelectorAndRequiredTarget(["pixel-8", "echo"], "tools call")).toEqual({
       selector: "pixel-8",
       target: "echo",
     });
   });
 
   test("zero args: usage error (target is required)", () => {
-    expect(() => splitSelectorAndRequiredTarget([], "invoke")).toThrow(/Usage/u);
+    expect(() => splitSelectorAndRequiredTarget([], "tools call")).toThrow(/Usage/u);
   });
 
   test("three or more args: usage error", () => {
-    expect(() => splitSelectorAndRequiredTarget(["a", "b", "c"], "invoke")).toThrow(/Usage/u);
+    expect(() => splitSelectorAndRequiredTarget(["a", "b", "c"], "tools call")).toThrow(/Usage/u);
   });
 });
 
-describe("splitOptionalSelector (revoke [selector] / events [selector])", () => {
+describe("splitOptionalSelector (sessions revoke [selector] / events tail [selector])", () => {
   test("zero args", () => {
-    expect(splitOptionalSelector([], "revoke")).toEqual({ selector: undefined });
+    expect(splitOptionalSelector([], "sessions revoke")).toEqual({ selector: undefined });
   });
 
   test("one arg", () => {
-    expect(splitOptionalSelector(["pixel-8"], "revoke")).toEqual({ selector: "pixel-8" });
+    expect(splitOptionalSelector(["pixel-8"], "sessions revoke")).toEqual({ selector: "pixel-8" });
   });
 
   test("two or more args: usage error", () => {
-    expect(() => splitOptionalSelector(["a", "b"], "revoke")).toThrow(/Usage/u);
-  });
-});
-
-describe("splitOptionalSelectorAndTarget (tools [selector] [name])", () => {
-  test("zero args", () => {
-    expect(splitOptionalSelectorAndTarget([], "tools")).toEqual({});
-  });
-
-  test("one arg: ambiguous, comes back as selectorOrTarget", () => {
-    expect(splitOptionalSelectorAndTarget(["echo"], "tools")).toEqual({ selectorOrTarget: "echo" });
-  });
-
-  test("two args: selector then target, unambiguous", () => {
-    expect(splitOptionalSelectorAndTarget(["pixel-8", "echo"], "tools")).toEqual({
-      selector: "pixel-8",
-      target: "echo",
-    });
-  });
-
-  test("three or more args: usage error", () => {
-    expect(() => splitOptionalSelectorAndTarget(["a", "b", "c"], "tools")).toThrow(/Usage/u);
+    expect(() => splitOptionalSelector(["a", "b"], "sessions revoke")).toThrow(/Usage/u);
   });
 });

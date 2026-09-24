@@ -134,6 +134,6 @@ exports[`output rendering > tools list output stays structured 1`] = `
   echo(...) -> ...
     Echo a payload on the connected device.
 
-Run \`appduct tools <name>\` for a tool's full schema.
+Run \`appduct tools describe <name>\` for a tool's full schema.
 "
 `;

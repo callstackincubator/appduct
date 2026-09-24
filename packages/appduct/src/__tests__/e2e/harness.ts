@@ -224,12 +224,12 @@ export const decodeDeepLink = (deepLink: string): DecodedLink => {
   return { sessionId: decoded.sessionId, token: decoded.token, port: decoded.port };
 };
 
-/** Mints a link through a real `appduct link` CLI subprocess and decodes it. */
+/** Mints a link through a real `appduct sessions link` CLI subprocess and decodes it. */
 export const mintLink = async (
   stateDir: string,
   options: { ttlSeconds?: number } = {},
 ): Promise<DecodedLink> => {
-  const args = ["link"];
+  const args = ["sessions", "link"];
 
   if (options.ttlSeconds !== undefined) {
     args.push("--ttl", String(options.ttlSeconds));
@@ -238,7 +238,7 @@ export const mintLink = async (
   const result = await runCliJson<{ deepLink: string }>(args, stateDir);
 
   if (!result.ok || !result.data) {
-    throw new Error(`"link" failed: ${JSON.stringify(result)}`);
+    throw new Error(`"sessions link" failed: ${JSON.stringify(result)}`);
   }
 
   return decodeDeepLink(result.data.deepLink);

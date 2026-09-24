@@ -1,5 +1,5 @@
 /**
- * E2E scenario: events. `appduct events --json` streams NDJSON; this drives the full session
+ * E2E scenario: events. `appduct events tail --json` streams NDJSON; this drives the full session
  * lifecycle (claim, tool registration, an app event, a tool call, a second app event) through a real
  * CLI subprocess and fake app client and asserts the subscriber prints the app's own events only.
  */
@@ -23,7 +23,7 @@ afterEach(cleanupAfterEach);
 
 type CapturedLine = { kind: string; sessionId?: string; alias?: string; ts: string; data: unknown };
 
-/** Reads NDJSON lines from a spawned `events --json` subprocess's stdout as they arrive. */
+/** Reads NDJSON lines from a spawned `events tail --json` subprocess's stdout as they arrive. */
 const collectLines = (proc: ReturnType<typeof spawnCli>): { lines: CapturedLine[]; stop: () => void } => {
   const lines: CapturedLine[] = [];
   let buffered = "";
@@ -69,7 +69,7 @@ const waitForAppEventLines = async (lines: CapturedLine[], count: number, timeou
   }
 };
 
-describe("e2e: events --json", () => {
+describe("e2e: events tail --json", () => {
   test(
     "prints only the app's own events across claim, tool registration and a tool call",
     async () => {
@@ -80,7 +80,7 @@ describe("e2e: events --json", () => {
       const port = await daemonWssPort(stateDir);
       const pinnedKeys = await fetchPinnedKeys(stateDir);
 
-      const eventsProcess = spawnCli(["events", "--json"], stateDir);
+      const eventsProcess = spawnCli(["events", "tail", "--json"], stateDir);
       const { lines, stop } = collectLines(eventsProcess);
 
       // The subscriber must be attached before the claim fires, or the lifecycle events this test
@@ -99,7 +99,7 @@ describe("e2e: events --json", () => {
       await waitForAppEventLines(lines, 1);
 
       app.answerCalls(() => ({ result: "ok" }));
-      const invokeResult = await runCliJson(["invoke", alias, "echo", "--input", "{}"], stateDir);
+      const invokeResult = await runCliJson(["tools", "call", alias, "echo", "--input", "{}"], stateDir);
       expect(invokeResult.ok).toBe(true);
 
       app.emitEvent("second", { n: 2 });

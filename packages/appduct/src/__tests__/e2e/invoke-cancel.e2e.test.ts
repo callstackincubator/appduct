@@ -1,5 +1,5 @@
 /**
- * E2E scenario: `appduct invoke` + SIGINT (issue #9). SIGINT during an in-flight `tools.call`
+ * E2E scenario: `appduct tools call` + SIGINT (issue #9). SIGINT during an in-flight `tools.call`
  * must cancel the call rather than leave it running unowned in the app — this drives a real CLI
  * subprocess against a real daemon and fake app-client, the same harness as `events.e2e.test.ts`.
  */
@@ -20,7 +20,7 @@ import {
 
 afterEach(cleanupAfterEach);
 
-describe("e2e: appduct invoke + SIGINT", () => {
+describe("e2e: appduct tools call + SIGINT", () => {
   test(
     "SIGINT cancels the in-flight call: the app receives tool_cancel and the CLI exits non-zero as tool_cancelled",
     async () => {
@@ -43,7 +43,7 @@ describe("e2e: appduct invoke + SIGINT", () => {
       const gotToolCall = app.waitForToolCall();
       const gotToolCancel = app.waitForToolCancel();
 
-      const invokeProcess = spawnCli(["invoke", alias, "slow", "--input", "{}", "--json"], stateDir);
+      const invokeProcess = spawnCli(["tools", "call", alias, "slow", "--input", "{}", "--json"], stateDir);
       // Drain stderr so the child never blocks on a full pipe buffer; stdout is collected below.
       invokeProcess.stderr.resume();
       const stdoutChunks: Buffer[] = [];

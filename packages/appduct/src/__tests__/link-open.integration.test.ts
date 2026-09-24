@@ -1,5 +1,5 @@
 /**
- * `appduct link --open android|ios-sim|ios-device` (ARCHITECTURE.md §8 delivery path
+ * `appduct sessions link --open android|ios-sim|ios-device` (ARCHITECTURE.md §8 delivery path
  * 1). Two layers are tested here against a real daemon over its actual UDS control socket (no
  * mocking the RPC layer, matching the pattern in session-engine.integration.test.ts):
  *
@@ -480,7 +480,7 @@ describe("client link({ target: \"ios-device\" })", () => {
     const exec = devicectlExec(calls, [{ udid: "00008030-AAAA", name: "My iPhone" }]);
 
     // `appduct/client`'s `link()` is what a test's globalSetup calls; it must not drift from
-    // `appduct link` (both go through `mintLink`, and this is the test that says so).
+    // `appduct sessions link` (both go through `mintLink`, and this is the test that says so).
     const { link } = await import("../client/bootstrap.js");
     const result = await link({ stateDir, target: "ios-device", appId: APP_ID, exec, autoSpawn: false });
 

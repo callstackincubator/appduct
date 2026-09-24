@@ -52,12 +52,12 @@ describe("e2e: churn", () => {
       app.dropSocket();
       await suspended;
 
-      const suspendedLs = await runCliJson<Array<{ alias: string; state: string }>>(["ls"], stateDir);
+      const suspendedLs = await runCliJson<Array<{ alias: string; state: string }>>(["sessions", "ls"], stateDir);
       expect(suspendedLs.ok).toBe(true);
       expect(suspendedLs.data).toEqual([expect.objectContaining({ alias, state: "suspended" })]);
 
       // A call against a SUSPENDED session fails fast with session_suspended, not a timeout.
-      const failedInvoke = await runCliJson(["invoke", alias, "echo", "--input", "{}"], stateDir);
+      const failedInvoke = await runCliJson(["tools", "call", alias, "echo", "--input", "{}"], stateDir);
       expect(failedInvoke.ok).toBe(false);
       expect(failedInvoke.error?.type).toBe("session_suspended");
 
@@ -70,7 +70,7 @@ describe("e2e: churn", () => {
       await events.waitFor("tools_changed");
 
       app.answerCalls(() => ({ result: "ok-after-resume" }));
-      const resumedInvoke = await runCliJson(["invoke", alias, "echo", "--input", "{}"], stateDir);
+      const resumedInvoke = await runCliJson(["tools", "call", alias, "echo", "--input", "{}"], stateDir);
       expect(resumedInvoke.ok).toBe(true);
       expect(resumedInvoke.data).toBe("ok-after-resume");
 
@@ -82,7 +82,7 @@ describe("e2e: churn", () => {
       const expired = events.waitFor("session_expired");
       await expired;
 
-      const afterExpiryLs = await runCliJson<unknown[]>(["ls"], stateDir);
+      const afterExpiryLs = await runCliJson<unknown[]>(["sessions", "ls"], stateDir);
       expect(afterExpiryLs.ok).toBe(true);
       expect(afterExpiryLs.data).toEqual([]);
 

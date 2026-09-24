@@ -31,7 +31,7 @@ describe("CLI integration", () => {
     }
   });
 
-  test("help lists exactly the v2 command surface (ARCHITECTURE.md §10)", () => {
+  test("help lists exactly the noun-verb command surface (ARCHITECTURE.md §10, issue #96)", () => {
     const command = runCliBinary(["--help"]);
 
     expect(command.exitCode).toBe(0);
@@ -47,18 +47,16 @@ describe("CLI integration", () => {
       .filter((line) => line.trim().length > 0)
       .map((line) => line.trim().split(/\s{2,}/u)[0]);
 
-    // Exactly the v2 command surface (ARCHITECTURE.md §10, plus `mcp` from §9) — v1's
-    // `host`/`connect`/`session` commands must never resurface here.
+    // Exactly the noun-verb command surface (ARCHITECTURE.md §10, plus `mcp` from §9): `ls`,
+    // `revoke`, `link` and `invoke` no longer exist as top-level commands (issue #96), and v1's
+    // `host`/`connect`/`session` commands must never resurface here either.
     expect(new Set(commandNames)).toEqual(
       new Set([
         "init",
         "keygen",
-        "link",
-        "ls",
-        "tools [selector] [name]",
-        "invoke [selector] [tool]",
-        "events [selector]",
-        "revoke [selector]",
+        "sessions [...args]",
+        "tools [...args]",
+        "events [...args]",
         "mcp",
         "doctor <artifact>",
         "daemon [action]",
@@ -94,22 +92,24 @@ describe("CLI integration", () => {
     expect(keygenHelp).toContain("--out");
     expect(keygenHelp).toContain("--force");
 
-    const linkHelp = helpFor("link");
-    expect(linkHelp).toContain("--ttl");
-    expect(linkHelp).toContain("--qr");
-    expect(linkHelp).toContain("--scheme");
-    expect(linkHelp).toContain("--open");
-    expect(linkHelp).toContain("--device");
-    expect(linkHelp).toContain("--app-id");
-    expect(linkHelp).toContain("--relaunch");
-    expect(linkHelp).toContain("ios-device");
+    // `sessions` declares every flag any of its verbs uses (`link`'s, since `ls`/`revoke` take
+    // none), so `--help` on the noun lists them regardless of which verb is typed (issue #96).
+    const sessionsHelp = helpFor("sessions");
+    expect(sessionsHelp).toContain("--ttl");
+    expect(sessionsHelp).toContain("--qr");
+    expect(sessionsHelp).toContain("--scheme");
+    expect(sessionsHelp).toContain("--open");
+    expect(sessionsHelp).toContain("--device");
+    expect(sessionsHelp).toContain("--app-id");
+    expect(sessionsHelp).toContain("--relaunch");
+    expect(sessionsHelp).toContain("ios-device");
 
     // `--app-id` has to survive cac's camelCasing all the way into `handleLinkCommand`, and a
     // flag that quietly parsed to `undefined` would look identical to one that was never passed:
-    // `link --open ios-sim --app-id ...` would then mint and deliver instead of erroring. The
-    // validation runs before any daemon contact, so this needs no state dir beyond an empty one.
+    // `sessions link --open ios-sim --app-id ...` would then mint and deliver instead of erroring.
+    // The validation runs before any daemon contact, so this needs no state dir beyond an empty one.
     const misplacedAppId = runCliBinary(
-      ["link", "--open", "ios-sim", "--app-id", "com.example.playground", "--json"],
+      ["sessions", "link", "--open", "ios-sim", "--app-id", "com.example.playground", "--json"],
       { stateDir: path.join(tmpdir(), "appduct-app-id-flag-nonexistent") },
     );
     expect(misplacedAppId.exitCode).not.toBe(0);
@@ -118,12 +118,11 @@ describe("CLI integration", () => {
       /--app-id.{0,4} only applies with .{0,4}--open android.{0,4} or .{0,4}--open ios-device/u,
     );
 
+    // `tools` declares every flag any of its verbs uses (`ls`'s and `call`'s).
     const toolsHelp = helpFor("tools");
     expect(toolsHelp).toContain("--full");
-
-    const invokeHelp = helpFor("invoke");
-    expect(invokeHelp).toContain("--input");
-    expect(invokeHelp).toContain("--timeout");
+    expect(toolsHelp).toContain("--input");
+    expect(toolsHelp).toContain("--timeout");
 
     const eventsHelp = helpFor("events");
     expect(eventsHelp).toContain("--follow");

@@ -1,7 +1,7 @@
 /**
  * Policy/audit: destructive-deny + audit line assertions, driven through the real CLI subprocess
  * (a separate unit suite exercises the same policy/audit engine directly against the daemon's UDS
- * RPC; this drives the identical policy decision through `appduct invoke`).
+ * RPC; this drives the identical policy decision through `appduct tools call`).
  */
 
 import { readFile } from "node:fs/promises";
@@ -48,7 +48,7 @@ const waitForBothAuditRecords = async (stateDir: string): Promise<AuditRecord[]>
 
 describe("e2e: policy and audit", () => {
   test(
-    "a destructive-hinted tool is denied by policy via `appduct invoke`, and every attempt is audited without raw args",
+    "a destructive-hinted tool is denied by policy via `appduct tools call`, and every attempt is audited without raw args",
     async () => {
       const { stateDir } = await makeTempStateDir({ policy: { destructive: "deny" } });
       await ensureDaemon(stateDir);
@@ -75,12 +75,12 @@ describe("e2e: policy and audit", () => {
 
       const sentinelSecret = "sentinel-secret-should-never-appear-in-audit-log";
       const okInvoke = await runCliJson(
-        ["invoke", alias, "echo", "--input", JSON.stringify({ secret: sentinelSecret })],
+        ["tools", "call", alias, "echo", "--input", JSON.stringify({ secret: sentinelSecret })],
         stateDir,
       );
       expect(okInvoke.ok).toBe(true);
 
-      const deniedInvoke = await runCliJson(["invoke", alias, "deleteAll", "--input", "{}"], stateDir);
+      const deniedInvoke = await runCliJson(["tools", "call", alias, "deleteAll", "--input", "{}"], stateDir);
       expect(deniedInvoke.ok).toBe(false);
       expect(deniedInvoke.error?.type).toBe("policy_denied");
       // The hint names the config file the operator would edit to change this (ARCHITECTURE.md §12).
