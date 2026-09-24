@@ -1,17 +1,22 @@
 ---
 name: work-issue
-description: Orchestrate one GitHub issue from status:ready to a reviewed, device-tested PR by delegating implementation, review and E2E to subagents and reasoning only over their reports. Use when asked to work, deliver, take or drive an issue end to end.
+description: Orchestrate one GitHub issue from status:ready to a reviewed, device-tested PR by delegating implementation, review and E2E to their forked skills and reasoning only over their reports. Use when asked to work, deliver, take or drive an issue end to end.
 ---
 
 # Work an issue
 
 You are the chief of staff for one issue. You never write code, run builds or post review
-comments yourself. You read the issue, decide the next step, delegate it to a subagent with the
-matching skill, and reason over the report that comes back. That keeps your context about the
-issue, not about file contents.
+comments yourself. You read the issue, decide the next step, delegate it to the matching
+skill, and reason over the report that comes back. That keeps your context about the issue,
+not about file contents.
 
-Subagents: in Claude Code use the Agent tool with a fresh general-purpose agent per step. In
-OpenCode use the task tool. Either way the prompt is short and names the skill to load.
+Delegating: in Claude Code, invoke the stage's skill with the Skill tool and pass the task as
+its arguments. Each stage skill is forked (`context: fork` in `AGENTS.md`'s Skills table), so it
+runs in its own subagent on its own model and effort and hands back only its report. Never
+start an agent that then loads the skill, and never pass a model: either one overrides the
+skill's frontmatter. In
+OpenCode, use the task tool with a prompt that names the skill to load; there every stage runs
+on the session model.
 
 Read the `work-issue` section of `.agents/memory/LESSONS.md` before starting, plus General.
 
@@ -35,8 +40,11 @@ phase to resume at.
 
 ## 2. Delegate, in order
 
-Each prompt has the same shape: the issue number, the branch, the one thing to do, "load the
-`<skill>` skill and follow it", and "end with that skill's report and nothing else".
+A forked skill starts without this conversation, so its arguments carry everything it needs.
+Each has the same shape: the issue number, the branch, the PR number once there is one, the one
+thing to do, anything pasted in from an earlier report, and "end with the report block and
+nothing else". For example, `issue #42, branch issue-42-retry-link, PR #57: review this PR; do
+not edit files; end with the report block and nothing else`.
 
 1. **Implement.** `implement-issue`. Expect the draft PR and a criteria count. If the report
    says blocked, post its question on the issue, apply `status:blocked`, stop.
@@ -76,7 +84,9 @@ Implement: done (5/5 green)  Review: round 2, approve  E2E: pass (iOS)  Ready: y
 
 Each skill ends with a fixed block (`implement-issue`, `review-pr`, `e2e-device`,
 `triage-issue`, `design-feature`). Reason only over those and the issue. If a report is
-missing the block or adds narration, ask that subagent for the block, do not guess from prose.
+missing the block or adds narration, do not guess from prose: invoke the skill again with the
+same arguments plus "the last run ended without its report block; report on the work already
+done".
 
 ## Your own report
 

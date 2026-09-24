@@ -1,6 +1,9 @@
 ---
 name: review-memory
 description: Curate agent memory - read the lessons inbox and the curated lessons file, promote what repeats, prune what is stale, open a memory-only PR and merge it. Use weekly, when the inbox has notes, when a lessons section is over its cap, or when asked to review, consolidate or dream over memory.
+model: opus
+effort: high
+context: fork
 ---
 
 # Review memory
