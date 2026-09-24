@@ -103,6 +103,21 @@ describe("lint: TLS verification in tests", () => {
     expect(rules).toContain("appduct/no-tls-bypass");
   });
 
+  test("stubbing the environment variable through vitest fails", async () => {
+    const rules = await lint("packages/appduct/src/__tests__/probe.integration.test.ts", 'import { vi } from "vitest";\nvi.stubEnv("NODE_TLS_REJECT_UNAUTHORIZED", "0");\n');
+    expect(rules).toContain("appduct/no-tls-bypass");
+  });
+
+  test("stubbing an unrelated environment variable passes", async () => {
+    const rules = await lint("packages/appduct/src/__tests__/probe.integration.test.ts", 'import { vi } from "vitest";\nvi.stubEnv("APPDUCT_HOME", "/tmp/probe");\n');
+    expect(rules).toEqual([]);
+  });
+
+  test("switching off verification on the global HTTPS agent fails", async () => {
+    const rules = await lint("packages/appduct/src/__tests__/probe.integration.test.ts", 'import https from "node:https";\nhttps.globalAgent.options.rejectUnauthorized = false;\n');
+    expect(rules).toContain("appduct/no-tls-bypass");
+  });
+
   test("a test client passing rejectUnauthorized: false fails", async () => {
     const rules = await lint(
       "packages/appduct/src/__tests__/probe.integration.test.ts",
