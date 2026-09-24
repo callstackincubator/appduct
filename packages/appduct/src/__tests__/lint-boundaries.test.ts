@@ -2,7 +2,8 @@
  * The architecture rules in AGENTS.md are enforced by the root ESLint config. These tests lint
  * small snippets under hypothetical paths, so they pin the rules themselves rather than the
  * current state of the tree: a module's index.ts is its only import surface, Node I/O is reached
- * only from adapters and composition roots, and tests never module-mock.
+ * only from adapters and composition roots, tests never module-mock, and tests never switch off
+ * TLS verification.
  */
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -86,6 +87,49 @@ describe("lint: tests", () => {
   });
 });
 
+describe("lint: TLS verification in tests", () => {
+  test("a test switching off TLS verification process-wide fails", async () => {
+    const rules = await lint("packages/appduct/src/__tests__/probe.integration.test.ts", 'process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";\n');
+    expect(rules).toContain("appduct/no-tls-bypass");
+  });
+
+  test("the bracketed form of the same assignment fails", async () => {
+    const rules = await lint("packages/appduct/src/__tests__/probe.integration.test.ts", 'process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";\n');
+    expect(rules).toContain("appduct/no-tls-bypass");
+  });
+
+  test("handing a child process an environment without TLS verification fails", async () => {
+    const rules = await lint("packages/appduct/src/__tests__/probe.e2e.test.ts", 'export const env = { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: "0" };\n');
+    expect(rules).toContain("appduct/no-tls-bypass");
+  });
+
+  test("a test client passing rejectUnauthorized: false fails", async () => {
+    const rules = await lint(
+      "packages/appduct/src/__tests__/probe.integration.test.ts",
+      'import WebSocket from "ws";\nexport const ws = new WebSocket("wss://127.0.0.1:1", { rejectUnauthorized: false });\n',
+    );
+    expect(rules).toContain("appduct/no-tls-bypass");
+  });
+
+  test("a test helper outside a *.test.ts file is covered too", async () => {
+    const rules = await lint("packages/appduct/src/__tests__/e2e/probe-helper.ts", 'import { connect } from "node:tls";\nexport const s = connect({ port: 1, rejectUnauthorized: false });\n');
+    expect(rules).toContain("appduct/no-tls-bypass");
+  });
+
+  test("a test trusting the daemon's own certificate passes", async () => {
+    const rules = await lint(
+      "packages/appduct/src/__tests__/probe.integration.test.ts",
+      'import WebSocket from "ws";\ndeclare const daemon: { tls: { current(): { certPem: string } } };\nexport const ws = new WebSocket("wss://127.0.0.1:1", { ca: daemon.tls.current().certPem });\n',
+    );
+    expect(rules).toEqual([]);
+  });
+
+  test("source outside tests is not linted by it: on a TLS server the option is about client certificates", async () => {
+    const rules = await lint("packages/appduct/src/daemon/node-probe-server.ts", 'import { createServer } from "node:https";\nexport const s = createServer({ requestCert: false, rejectUnauthorized: false });\n');
+    expect(rules).toEqual([]);
+  });
+});
+
 /**
  * The burn-down lists exempt files that predate the rules. Each entry must still be a genuine
  * violator: a file converted to a port but left on the list would silently re-admit the exact
@@ -97,6 +141,7 @@ describe("lint: burn-down lists", () => {
     LEGACY_NODE_IO: string[];
     LEGACY_VI_MOCK: string[];
     LEGACY_MODULE_BOUNDARY: string[];
+    LEGACY_TLS_BYPASS: string[];
     NODE_IO_RESTRICTION: Linter.RuleEntry;
     VI_MOCK_RESTRICTION: Linter.RuleEntry;
   };
@@ -123,5 +168,10 @@ describe("lint: burn-down lists", () => {
   test("every LEGACY_MODULE_BOUNDARY entry still reaches inside a module", async () => {
     const { LEGACY_MODULE_BOUNDARY } = await loadConfig();
     expect(await violators(LEGACY_MODULE_BOUNDARY, { "appduct/module-boundary": "error" }, "appduct/module-boundary")).toEqual(LEGACY_MODULE_BOUNDARY);
+  });
+
+  test("every LEGACY_TLS_BYPASS entry still switches off TLS verification", async () => {
+    const { LEGACY_TLS_BYPASS } = await loadConfig();
+    expect(await violators(LEGACY_TLS_BYPASS, { "appduct/no-tls-bypass": "error" }, "appduct/no-tls-bypass")).toEqual(LEGACY_TLS_BYPASS);
   });
 });
