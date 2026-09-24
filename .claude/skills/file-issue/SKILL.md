@@ -1,6 +1,7 @@
 ---
 name: file-issue
 description: Turn a request or a discovered bug into a GitHub issue in this repo's format - interview the person until the intent is well defined, check for duplicates, then file. Use when asked to file, open, create or write up an issue, when someone describes a feature they want, or when you hit a bug you should not fix in the current change.
+model: sonnet
 ---
 
 # File an issue

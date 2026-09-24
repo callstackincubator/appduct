@@ -1,6 +1,7 @@
 ---
 name: cut-release
 description: Cut a release of the three npm packages - propose the version from the Unreleased changelog, bump versions in lockstep, open the release PR, and after it merges create the GitHub release that triggers publishing, only on an explicit yes. Use when asked to release, cut a version, tag or publish.
+model: sonnet
 ---
 
 # Cut a release

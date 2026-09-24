@@ -1,6 +1,8 @@
 ---
 name: design-feature
 description: Design a feature that is too big for one PR - verify the issue's claims against the code, choose the shape (modules, public API, calls vs events, ports), cut it into ordered slices each with its own acceptance criteria, and after a human approves, file one child issue per slice. Use on issues labelled status:needs-design, or when asked to design, shape or break down a feature.
+model: opus
+context: fork
 ---
 
 # Design a feature

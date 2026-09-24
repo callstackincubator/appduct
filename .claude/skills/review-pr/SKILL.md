@@ -1,6 +1,8 @@
 ---
 name: review-pr
 description: Adversarial code review of a PR or branch - hunt for concrete failures, drop low-ROI comments, verify every finding, post inline comments and a verdict through gh. Use when asked to review a PR, a branch or the current diff, or when a work-issue orchestrator delegates review.
+model: opus
+context: fork
 ---
 
 # Review a PR

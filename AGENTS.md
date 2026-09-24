@@ -69,19 +69,22 @@ no restating the question. Commit subjects: conventional prefix, imperative, und
 ## Skills
 
 Load the skill before starting the matching task. They live in `.claude/skills/`.
+Model and Forked mirror each skill's `model:` and `context: fork` frontmatter, and
+`pnpm check:skills` fails CI when they drift. A forked skill runs in its own subagent on its
+model however it is started, and sees only the arguments it was invoked with.
 
-| Task | Skill |
-| --- | --- |
-| Designing or writing any non-trivial code | `architecture` |
-| Implementing an issue (tests first, draft PR, checkpoints) | `implement-issue` |
-| Reviewing a PR or branch | `review-pr` |
-| Investigating a bug report | `triage-issue` |
-| Designing a feature too big for one PR, or sizing one | `design-feature` |
-| Turning a request or a found bug into an issue (interviews first) | `file-issue` |
-| Running the app on a simulator and driving it through the CLI | `e2e-device` |
-| Writing or editing anything an Appduct user reads: READMEs, `docs/`, website, the shipped skill, CLI help, error messages | `writing-user-docs` |
-| Adding, amending or reviewing an entry in `CHANGELOG.md` | `writing-changelog` |
-| Cutting a release | `cut-release` |
-| Curating agent memory (weekly, or when the inbox has notes) | `review-memory` |
-| Taking an issue from `status:ready` to a reviewed, tested PR | `work-issue` (orchestrator) |
-| Driving an Appduct-enabled app as a user of Appduct | `appduct` (in `skills/`) |
+| Task | Skill | Model | Forked |
+| --- | --- | --- | --- |
+| Designing or writing any non-trivial code | `architecture` | none | no |
+| Implementing an issue (tests first, draft PR, checkpoints) | `implement-issue` | sonnet | yes |
+| Reviewing a PR or branch | `review-pr` | opus | yes |
+| Investigating a bug report | `triage-issue` | opus | yes |
+| Designing a feature too big for one PR, or sizing one | `design-feature` | opus | yes |
+| Turning a request or a found bug into an issue (interviews first) | `file-issue` | sonnet | no |
+| Running the app on a simulator and driving it through the CLI | `e2e-device` | sonnet | yes |
+| Writing or editing anything an Appduct user reads: READMEs, `docs/`, website, the shipped skill, CLI help, error messages | `writing-user-docs` | none | no |
+| Adding, amending or reviewing an entry in `CHANGELOG.md` | `writing-changelog` | none | no |
+| Cutting a release | `cut-release` | sonnet | no |
+| Curating agent memory (weekly, or when the inbox has notes) | `review-memory` | opus | yes |
+| Taking an issue from `status:ready` to a reviewed, tested PR | `work-issue` (orchestrator) | none | no |
+| Driving an Appduct-enabled app as a user of Appduct | `appduct` (in `skills/`) | none | no |
