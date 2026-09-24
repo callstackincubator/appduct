@@ -57,18 +57,31 @@ describe("event-bus: retention buffer", () => {
     expect(events.map((event) => event.seq)).toEqual([3, 4, 5]);
   });
 
-  test("kinds filters the retained buffer without disturbing seq/cursor", () => {
+  test("retains app_event only; every other session-scoped kind is fanned out live but never retained", () => {
     const bus = createEventBus({ clock });
+    const seen: string[] = [];
+    bus.subscribe((event) => seen.push(event.kind));
 
-    bus.emit({ kind: "app_event", sessionId: "s1", data: {} });
+    bus.emit({ kind: "link_created", sessionId: "s1", data: {} });
+    bus.emit({ kind: "session_claimed", sessionId: "s1", data: {} });
     bus.emit({ kind: "tools_changed", sessionId: "s1", data: {} });
     bus.emit({ kind: "app_event", sessionId: "s1", data: {} });
+    bus.emit({ kind: "tool_call_started", sessionId: "s1", data: {} });
+    bus.emit({ kind: "tool_call_finished", sessionId: "s1", data: {} });
+    bus.emit({ kind: "session_suspended", sessionId: "s1", data: {} });
 
-    const { events, cursor } = bus.since("s1", { kinds: ["app_event"] });
-    expect(events.map((event) => event.kind)).toEqual(["app_event", "app_event"]);
-    expect(events.map((event) => event.seq)).toEqual([1, 3]);
-    // cursor reflects the whole session, not just the filtered subset.
-    expect(cursor).toBe(3);
+    expect(seen).toEqual([
+      "link_created",
+      "session_claimed",
+      "tools_changed",
+      "app_event",
+      "tool_call_started",
+      "tool_call_finished",
+      "session_suspended",
+    ]);
+    const { events, cursor } = bus.since("s1");
+    expect(events.map((event) => [event.kind, event.seq])).toEqual([["app_event", 4]]);
+    expect(cursor).toBe(4);
   });
 
   test("limit truncates to the oldest N so paging with the returned cursor never skips events", () => {
@@ -94,17 +107,28 @@ describe("event-bus: retention buffer", () => {
     expect(third.cursor).toBe(5);
   });
 
-  test("an empty page with a kinds filter still advances the cursor to the session's high-water mark", () => {
+  test("an empty page still advances the cursor past kinds that are never retained", () => {
     const bus = createEventBus({ clock });
 
     bus.emit({ kind: "tools_changed", sessionId: "s1", data: {} });
     bus.emit({ kind: "tools_changed", sessionId: "s1", data: {} });
 
-    // Nothing matches "app_event" — without the high-water-mark fallback this would return
-    // cursor: 0 forever, forcing the caller to re-scan the same (empty) result on every call.
-    const { events, cursor } = bus.since("s1", { kinds: ["app_event"] });
+    const { events, cursor } = bus.since("s1");
     expect(events).toEqual([]);
     expect(cursor).toBe(2);
+  });
+
+  test("an app_event survives bufferSize tool calls with no app events after it", () => {
+    const bus = createEventBus({ clock, bufferSize: 3 });
+
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "before" } });
+
+    for (let i = 0; i < 3; i++) {
+      bus.emit({ kind: "tool_call_started", sessionId: "s1", data: {} });
+      bus.emit({ kind: "tool_call_finished", sessionId: "s1", data: {} });
+    }
+
+    expect(bus.since("s1").events.map((event) => event.data)).toEqual([{ name: "before" }]);
   });
 
   test("the ring buffer caps retention at bufferSize, dropping the oldest first", () => {
@@ -182,7 +206,7 @@ describe("event-bus: retention buffer", () => {
   test("drop() discards a session's buffer outright, with no event required", () => {
     const bus = createEventBus({ clock });
 
-    bus.emit({ kind: "link_created", sessionId: "s1", data: {} });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: {} });
     expect(bus.since("s1").events).toHaveLength(1);
 
     bus.drop("s1");

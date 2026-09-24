@@ -1,8 +1,7 @@
 /**
- * E2E scenario: events. `appduct events --json` streams NDJSON; this drives the full
- * lifecycle through a real CLI subprocess and fake app client and asserts the subscriber sees
- * `session_claimed` -> `tools_changed` -> `app_event` -> `tool_call_started`/`tool_call_finished` ->
- * `session_suspended`, in that order, on one persistent `events --json` subprocess.
+ * E2E scenario: events. `appduct events --json` streams NDJSON; this drives the full session
+ * lifecycle (claim, tool registration, an app event, a tool call, a second app event) through a real
+ * CLI subprocess and fake app client and asserts the subscriber prints the app's own events only.
  */
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -57,13 +56,13 @@ const collectLines = (proc: ReturnType<typeof spawnCli>): { lines: CapturedLine[
   return { lines, stop: () => (stopped = true) };
 };
 
-/** Polls `lines` until one of `kind` is present, or throws after `timeoutMs`. */
-const waitForKindInLines = async (lines: CapturedLine[], kind: string, timeoutMs = 5000): Promise<void> => {
+/** Polls `lines` until `count` of them are `app_event`, or throws after `timeoutMs`. */
+const waitForAppEventLines = async (lines: CapturedLine[], count: number, timeoutMs = 5000): Promise<void> => {
   const deadline = Date.now() + timeoutMs;
 
-  while (!lines.some((line) => line.kind === kind)) {
+  while (lines.filter((line) => line.kind === "app_event").length < count) {
     if (Date.now() > deadline) {
-      throw new Error(`Timed out waiting for a "${kind}" event line. Seen: ${JSON.stringify(lines.map((l) => l.kind))}`);
+      throw new Error(`Timed out waiting for ${count} app_event lines. Seen: ${JSON.stringify(lines.map((l) => l.kind))}`);
     }
 
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -72,7 +71,7 @@ const waitForKindInLines = async (lines: CapturedLine[], kind: string, timeoutMs
 
 describe("e2e: events --json", () => {
   test(
-    "NDJSON stream captures claim -> tools_changed -> app_event -> tool_call_started/finished -> suspended, in order",
+    "prints only the app's own events across claim, tool registration and a tool call",
     async () => {
       const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
@@ -84,10 +83,10 @@ describe("e2e: events --json", () => {
       const eventsProcess = spawnCli(["events", "--json"], stateDir);
       const { lines, stop } = collectLines(eventsProcess);
 
-      // The subscriber must be attached before the claim fires, or `session_claimed` would be
-      // missed outright; there is no stdout signal for "subscribed" (only `event` notifications are
-      // printed), so a short settle window is unavoidable here — matching the accepted precedent in
-      // events.integration.test.ts. Every event below is still awaited by content, not by sleeping.
+      // The subscriber must be attached before the claim fires, or the lifecycle events this test
+      // proves are hidden would never have been sent to it; there is no stdout signal for
+      // "subscribed", so a short settle window is unavoidable here — matching the accepted
+      // precedent in events.integration.test.ts.
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       const link = await mintLink(stateDir);
@@ -95,31 +94,19 @@ describe("e2e: events --json", () => {
       const ack = await app.claim(link, { model: "Pixel 8" });
       const alias = ack.alias;
 
-      await waitForKindInLines(lines, "session_claimed");
-
       app.registerTools([{ name: "echo" }]);
-      await waitForKindInLines(lines, "tools_changed");
-
-      app.emitEvent("custom_event", { hello: "world" });
-      await waitForKindInLines(lines, "app_event");
+      app.emitEvent("first", { n: 1 });
+      await waitForAppEventLines(lines, 1);
 
       app.answerCalls(() => ({ result: "ok" }));
       const invokeResult = await runCliJson(["invoke", alias, "echo", "--input", "{}"], stateDir);
       expect(invokeResult.ok).toBe(true);
-      await waitForKindInLines(lines, "tool_call_started");
-      await waitForKindInLines(lines, "tool_call_finished");
 
-      app.dropSocket();
-      await waitForKindInLines(lines, "session_suspended");
+      app.emitEvent("second", { n: 2 });
+      await waitForAppEventLines(lines, 2);
 
-      const kinds = lines.map((line) => line.kind);
-      const indexOf = (kind: string): number => kinds.indexOf(kind);
-
-      expect(indexOf("session_claimed")).toBeLessThan(indexOf("tools_changed"));
-      expect(indexOf("tools_changed")).toBeLessThan(indexOf("app_event"));
-      expect(indexOf("app_event")).toBeLessThan(indexOf("tool_call_started"));
-      expect(indexOf("tool_call_started")).toBeLessThan(indexOf("tool_call_finished"));
-      expect(indexOf("tool_call_finished")).toBeLessThan(indexOf("session_suspended"));
+      expect(lines.map((line) => line.kind)).toEqual(["app_event", "app_event"]);
+      expect(lines.map((line) => (line.data as { name: string }).name)).toEqual(["first", "second"]);
 
       stop();
       eventsProcess.kill("SIGINT");

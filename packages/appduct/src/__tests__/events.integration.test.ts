@@ -2,7 +2,7 @@
  * `appduct events --json` (ARCHITECTURE.md §10): spawns the CLI as a subprocess and asserts
  * line-delimited parseability. Drives a real daemon (auto-spawned by the first
  * CLI call) and a real `events` subprocess, asserts each stdout line is independently parseable
- * NDJSON, then confirms Ctrl-C (SIGINT) ends the stream cleanly (exit 0).
+ * NDJSON carrying an app event, then confirms Ctrl-C (SIGINT) ends the stream cleanly (exit 0).
  */
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -111,7 +111,7 @@ const claimAppOverCli = async (
 };
 
 describe("appduct events --json", () => {
-  test("streams NDJSON lines and exits 0 on SIGINT", async () => {
+  test("streams only app_event lines as NDJSON and exits 0 on SIGINT", async () => {
     const { stateDir } = await makeTempStateDir();
 
     // `daemon status` both auto-spawns the daemon and gives us its pid for cleanup.
@@ -123,7 +123,7 @@ describe("appduct events --json", () => {
 
     const lines: string[] = [];
     let buffered = "";
-    const linesSeen = new Promise<void>((resolve) => {
+    const appEventSeen = new Promise<void>((resolve) => {
       (async () => {
         for await (const chunk of eventsProcess.stdout) {
           buffered += chunk.toString("utf8");
@@ -136,7 +136,7 @@ describe("appduct events --json", () => {
             if (line.length > 0) {
               lines.push(line);
 
-              if (lines.length >= 1) {
+              if (JSON.parse(line).kind === "app_event") {
                 resolve();
               }
             }
@@ -147,36 +147,33 @@ describe("appduct events --json", () => {
       })();
     });
 
-    // Give the events subprocess a moment to connect and subscribe before minting the link that
-    // should show up as a `link_created` notification.
+    // Give the events subprocess a moment to connect and subscribe before minting the link, so the
+    // link and claim events it must not print are actually sent its way.
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    const linkResult = runCliJson(["link", "--ttl", "30", "--scheme", "appduct-events-test"], stateDir);
-    expect(linkResult.ok).toBe(true);
+    const { socket, sessionId } = await claimAppOverCli(stateDir);
+    socket.send(JSON.stringify({ type: "event", session_id: sessionId, name: "greeting", ts: Date.now() }));
 
     await Promise.race([
-      linesSeen,
-      new Promise((_resolve, reject) => setTimeout(() => reject(new Error("Timed out waiting for an events line")), 5000)),
+      appEventSeen,
+      new Promise((_resolve, reject) => setTimeout(() => reject(new Error("Timed out waiting for an app_event line")), 5000)),
     ]);
 
-    for (const line of lines) {
-      // Every line must be independently parseable NDJSON — the core acceptance criterion.
-      const parsed = JSON.parse(line);
-      expect(parsed).toHaveProperty("kind");
-      expect(parsed).toHaveProperty("ts");
-    }
-
-    expect(lines.some((line) => JSON.parse(line).kind === "link_created")).toBe(true);
+    // Every line must be independently parseable NDJSON, and the link and claim that came first
+    // must not have been printed.
+    expect(lines.map((line) => JSON.parse(line).kind)).toEqual(["app_event"]);
+    expect(JSON.parse(lines[0]!)).toHaveProperty("ts");
 
     eventsProcess.kill("SIGINT");
     const exitCode = await waitForExit(eventsProcess);
     expect(exitCode).toBe(0);
 
+    socket.close();
     const stopResult = runCliJson(["daemon", "stop"], stateDir);
     expect(stopResult.ok).toBe(true);
   }, 15_000);
 
-  test("--since pulls retained events one-shot for a claimed session, and a later pull with the returned cursor sees nothing new", async () => {
+  test("--since pulls only retained app events one-shot for a claimed session, and a later pull with the returned cursor sees nothing new", async () => {
     const { stateDir } = await makeTempStateDir();
 
     const status = runCliJson(["daemon", "status"], stateDir);
@@ -209,12 +206,11 @@ describe("appduct events --json", () => {
     const eventLines = lines.slice(0, -1);
 
     for (const line of eventLines) {
-      const parsed = JSON.parse(line);
-      expect(parsed).toHaveProperty("kind");
-      expect(parsed).toHaveProperty("seq");
+      expect(JSON.parse(line)).toHaveProperty("seq");
     }
 
-    expect(eventLines.some((line) => JSON.parse(line).kind === "app_event")).toBe(true);
+    // The session's claim is not printed, only the app's own event.
+    expect(eventLines.map((line) => JSON.parse(line).kind)).toEqual(["app_event"]);
 
     const drainedProcess = spawnCliBinary(["events", alias, "--since", String(cursorLine.cursor), "--json"], { stateDir });
     let drainedStdout = "";
