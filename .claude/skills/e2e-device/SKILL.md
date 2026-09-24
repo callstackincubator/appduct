@@ -43,8 +43,8 @@ cd ..
 Connect and wait until the session is active:
 
 ```bash
-pnpm playground:appduct -- link --open ios-sim
-until pnpm playground:appduct -- ls --json | jq -e '.data[] | select(.state=="active")' >/dev/null; do sleep 2; done
+pnpm playground:appduct -- sessions link --open ios-sim
+until pnpm playground:appduct -- sessions ls --json | jq -e '.data[] | select(.state=="active")' >/dev/null; do sleep 2; done
 ```
 
 ## Android, Expo playground
@@ -57,7 +57,7 @@ cd playground
 pnpm exec expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
 pnpm exec expo run:android --no-bundler
 cd ..
-pnpm playground:appduct -- link --open android            # app id comes from playground/.appduct/config.json
+pnpm playground:appduct -- sessions link --open android   # app id comes from playground/.appduct/config.json
 ```
 
 ## Native playgrounds
@@ -73,13 +73,13 @@ All five tools, one chain. Expected values are on the right.
 
 ```bash
 a="pnpm playground:appduct --"
-$a invoke reset_counter --input '{}' --json | jq -e '.data.count == 0' \
-&& $a invoke sum --input '{"a":1,"b":2}' --json | jq -e '.data.total == 3' \
-&& $a invoke call_count --input '{}' --json | jq -e '.data.count == 1' \
-&& $a invoke slow_task --input '{}' --json | jq -e '.data.done == true' \
-&& $a invoke call_count --input '{}' --json | jq -e '.data.count == 2' \
+$a tools call reset_counter --input '{}' --json | jq -e '.data.count == 0' \
+&& $a tools call sum --input '{"a":1,"b":2}' --json | jq -e '.data.total == 3' \
+&& $a tools call call_count --input '{}' --json | jq -e '.data.count == 1' \
+&& $a tools call slow_task --input '{}' --json | jq -e '.data.done == true' \
+&& $a tools call call_count --input '{}' --json | jq -e '.data.count == 2' \
 && echo SMOKE_OK
-$a invoke throwing_tool --input '{}' --json; echo "exit=$? (non-zero expected, type tool_execution_error)"
+$a tools call throwing_tool --input '{}' --json; echo "exit=$? (non-zero expected, type tool_execution_error)"
 ```
 
 A checked-in script for this pass is planned; until it exists, this chain is the suite.
@@ -105,7 +105,7 @@ gh pr edit <N> --body-file <updated body>
 Target: iOS simulator (iPhone 17, iOS 26), Expo playground, commit <sha>
 Smoke: SMOKE_OK
 Feature:
-$ pnpm playground:appduct -- invoke <tool> --input '{...}'
+$ pnpm playground:appduct -- tools call <tool> --input '{...}'
 <output>
 ```
 

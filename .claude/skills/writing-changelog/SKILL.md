@@ -70,7 +70,7 @@ A feature:
 
 ```
 - **New: tool groups.** A tool can declare a `group` such as `"cart"` or `"checkout/payment"`,
-  and `appduct tools --group <name>` and `appduct_list_tools` list one group; see
+  and `appduct tools ls --group <name>` and `appduct_list_tools` list one group; see
   `docs/TOOLS.md`.
 ```
 
