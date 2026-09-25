@@ -580,31 +580,75 @@ describe("renderEventLine", () => {
 });
 
 describe("renderEventsCursorLine", () => {
-  test("NDJSON mode emits a parseable { cursor } object", () => {
-    const line = renderEventsCursorLine(42, flags({ json: true }));
-    expect(JSON.parse(line)).toEqual({ cursor: 42 });
+  test("NDJSON mode emits a parseable { cursor, dropped, remaining } object (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 42, dropped: 0, remaining: 0 }, flags({ json: true }));
+    expect(JSON.parse(line)).toEqual({ cursor: 42, dropped: 0, remaining: 0 });
   });
 
   test("NDJSON stays a single line even under --pretty", () => {
-    const line = renderEventsCursorLine(42, flags({ json: true, pretty: true }));
+    const line = renderEventsCursorLine({ cursor: 42, dropped: 0, remaining: 0 }, flags({ json: true, pretty: true }));
     expect(line.split("\n")).toHaveLength(1);
-    expect(JSON.parse(line)).toEqual({ cursor: 42 });
+    expect(JSON.parse(line)).toEqual({ cursor: 42, dropped: 0, remaining: 0 });
   });
 
-  test("human mode includes the cursor value and the resume command", () => {
-    const line = renderEventsCursorLine(42, flags());
-    expect(line).toContain("42");
-    expect(line).toContain('appduct events since 42');
+  test("NDJSON mode carries non-zero dropped and remaining through unchanged (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 12, dropped: 3, remaining: 40 }, flags({ json: true }));
+    expect(JSON.parse(line)).toEqual({ cursor: 12, dropped: 3, remaining: 40 });
+  });
+
+  test("human mode includes the cursor, dropped and remaining values and the resume command (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 12, dropped: 0, remaining: 40 }, flags());
+    expect(line).toContain("cursor: 12");
+    expect(line).toContain("dropped: 0");
+    expect(line).toContain("remaining: 40");
+    expect(line).toContain('appduct events since 12');
   });
 
   test("human mode includes the selector in the resume command when one was given", () => {
-    const line = renderEventsCursorLine(3, flags(), "pixel-8");
+    const line = renderEventsCursorLine({ cursor: 3, dropped: 0, remaining: 0 }, flags(), "pixel-8");
     expect(line).toContain('appduct events since pixel-8 3');
   });
 
   test("NDJSON mode does not change when a selector was given", () => {
-    const line = renderEventsCursorLine(3, flags({ json: true }), "pixel-8");
-    expect(JSON.parse(line)).toEqual({ cursor: 3 });
+    const line = renderEventsCursorLine({ cursor: 3, dropped: 0, remaining: 0 }, flags({ json: true }), "pixel-8");
+    expect(JSON.parse(line)).toEqual({ cursor: 3, dropped: 0, remaining: 0 });
+  });
+
+  test("human mode carries --name into the resume command when given (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 2, dropped: 0, remaining: 1 }, flags(), undefined, {
+      name: "*_failed",
+    });
+    expect(line).toContain("appduct events since 2 --name '*_failed'");
+  });
+
+  test("human mode carries --payload-max-bytes into the resume command when given (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 2, dropped: 0, remaining: 1 }, flags(), undefined, {
+      payloadMaxBytes: 100,
+    });
+    expect(line).toContain("appduct events since 2 --payload-max-bytes 100");
+  });
+
+  test("human mode carries the selector, --name and --payload-max-bytes together into the resume command (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 2, dropped: 0, remaining: 1 }, flags(), "pixel-8", {
+      name: "*_failed",
+      payloadMaxBytes: 100,
+    });
+    expect(line).toContain("appduct events since pixel-8 2 --name '*_failed' --payload-max-bytes 100");
+  });
+
+  test("human mode single-quotes a --name glob containing a single quote for shell safety (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 2, dropped: 0, remaining: 1 }, flags(), undefined, {
+      name: "checkout's_*",
+    });
+    expect(line).toContain(`appduct events since 2 --name 'checkout'\\''s_*'`);
+  });
+
+  test("NDJSON mode is unaffected by --name/--payload-max-bytes (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 2, dropped: 0, remaining: 1 }, flags({ json: true }), undefined, {
+      name: "*_failed",
+      payloadMaxBytes: 100,
+    });
+    expect(JSON.parse(line)).toEqual({ cursor: 2, dropped: 0, remaining: 1 });
   });
 });
 

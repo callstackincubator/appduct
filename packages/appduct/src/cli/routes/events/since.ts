@@ -13,6 +13,7 @@ import { parseNonNegativeIntegerOption, splitSelectorAndRequiredTarget } from ".
 import { commandName } from "../../router.js";
 import { executeHostedCommand } from "../../runner.js";
 import { guarded } from "../../version-guard.js";
+import { parseEventsFilterFlags } from "./shared-options.js";
 
 export const route: Route = async (context) => {
   const { stateDir, env } = context;
@@ -28,17 +29,18 @@ export const route: Route = async (context) => {
         "events since [selector] <cursor>",
       );
       const since = parseNonNegativeIntegerOption(cursorArg, "<cursor>");
+      const { name, payloadMaxBytes } = parseEventsFilterFlags(context);
 
       return guarded(context)(() =>
         handleEventsCommand(
-          { selector, since },
+          { selector, since, name, payloadMaxBytes },
           {
             stateDir,
             onEvent: (event: EventNotification) => {
               env.stdout.write(`${renderEventLine(event, env.flags)}\n`);
             },
             onCursor: (cursor) => {
-              env.stdout.write(`${renderEventsCursorLine(cursor, env.flags, selector)}\n`);
+              env.stdout.write(`${renderEventsCursorLine(cursor, env.flags, selector, { name, payloadMaxBytes })}\n`);
             },
           },
         ),

@@ -70,8 +70,8 @@ Every command is `appduct <noun> <verb> [selector] [args]`; `daemon` is the mode
 | `appduct tools ls [selector] [--groups] [--group <g>] [--filter <text>] [--limit <n>] [--offset <n>] [--full]` | list tools |
 | `appduct tools describe [selector] <name>` | one tool's full schema and annotations |
 | `appduct tools call [selector] <name> --input '<json>' [--timeout <ms>]` | call a tool; `--input` is required and must be a JSON object |
-| `appduct events tail [selector] [--follow]` | stream the events the app posts with `postEvent` (`app_event` only); `--json` emits NDJSON |
-| `appduct events since [selector] <cursor>` | pull the app events retained since `<cursor>` and exit; `--json` emits NDJSON |
+| `appduct events tail [selector] [--follow] [--name <glob>] [--payload-max-bytes <n>]` | stream the events the app posts with `postEvent` (`app_event` only); `--name` filters to a whole-name glob (`*` matches any run of characters); `--payload-max-bytes` caps each payload's JSON, over the cap the line carries `payloadPreview`/`payloadBytes`/`truncated: true` instead of `payload`; neither has a default; `--json` emits NDJSON |
+| `appduct events since [selector] <cursor> [--name <glob>] [--payload-max-bytes <n>]` | pull the app events retained since `<cursor>` and exit, same `--name`/`--payload-max-bytes` as `events tail`; the trailing cursor line carries `dropped` (events evicted before this pull) and `remaining` (matching events still waiting beyond this page); `--json` emits NDJSON |
 | `appduct init [--scheme <s>] [--android-app-id <id>] [--ios-app-id <id>] [--force]` | record scheme and app ids in `.appduct/config.json`; prints the MCP server entry; safe to re-run |
 | `appduct daemon status\|stop` | inspect or stop the daemon; `stop` disconnects every device, so only for a port or key rotation |
 | `appduct keygen [--out <path>]` | hardening only: the daemon generates its own key on first start |
