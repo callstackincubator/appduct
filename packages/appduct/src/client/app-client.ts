@@ -62,6 +62,12 @@ export type WaitForEventOptions = {
    * so a matching event that already fired before this call still resolves immediately.
    */
   since?: number;
+  /**
+   * Caps the resolved event's payload to this many UTF-8 bytes of its JSON, daemon-side (issue
+   * #114, same cap {@link AppClient.events} takes). Omitted, the payload is delivered whole; passed,
+   * the resolved event may come back truncated — see {@link AppClient.waitForEvent}'s overloads.
+   */
+  payloadMaxBytes?: number;
 };
 
 export type EventsOptions = {
@@ -164,12 +170,27 @@ export type AppClient<TTools = ToolMap> = {
    * `AppClient`'s connection, so concurrent `waitForEvent` calls with different `name`s each get
    * their own `events.subscribe` filter and resolve on their own event.
    *
-   * No `payloadMaxBytes` here (issue #113 scopes the overload to {@link AppClient.events}); this
-   * always resolves with the full, untruncated payload.
+   * Overloaded on `payloadMaxBytes` the same way {@link AppClient.events} is (issue #114): omit it
+   * and the resolved event's `payload` is readable unnarrowed ({@link FullAppEvent}); pass it to
+   * cap the payload's JSON to that many UTF-8 bytes daemon-side, and narrow on `truncated` before
+   * reading `payload` ({@link AppEvent}) — an event whose payload was over the cap has
+   * `payloadPreview`/`payloadBytes` instead. See {@link AppClient.events}'s doc comment for why the
+   * uncapped overload spells its `payloadMaxBytes` as `undefined` rather than omitting the key.
    */
-  waitForEvent<TPayload = unknown>(name: string, options?: WaitForEventOptions): Promise<FullAppEvent<TPayload>>;
+  waitForEvent<TPayload = unknown>(
+    name: string,
+    options?: WaitForEventOptions & { payloadMaxBytes?: undefined },
+  ): Promise<FullAppEvent<TPayload>>;
+  waitForEvent<TPayload = unknown>(
+    name: string,
+    options: WaitForEventOptions & { payloadMaxBytes?: number },
+  ): Promise<AppEvent<TPayload>>;
 
-  /** Closes the underlying connection. Safe to call more than once. */
+  /** Closes the underlying connection, and every stream a still-pending {@link
+   * AppClient.waitForEvent} call opened for itself — each such call rejects with a `"connection_error"`
+   * {@link AppductError}, the same way it did before `waitForEvent` moved onto its own stream (issue
+   * #114). A `waitForEvent` call made after `close()` rejects immediately with the same error and
+   * never opens a stream (so it never auto-spawns a daemon). Safe to call more than once. */
   close(): void;
 };
 
@@ -211,6 +232,14 @@ export const makeAppClient = <TTools = ToolMap>(
    * other method keeps using `stream` above. */
   openStream: () => Promise<DaemonStream>,
 ): AppClient<TTools> => {
+  // Set by `close()`; checked at the top of `waitForEvent` so a call made after `close()` rejects
+  // immediately instead of opening a stream (and possibly auto-spawning a daemon) for a wait that
+  // would just be torn down. `openWaitStreams` holds every stream a still-pending `waitForEvent`
+  // call opened for itself, so `close()` can close them too — closing only the shared `stream`
+  // stopped ending a pending wait once each wait moved onto its own connection (issue #114).
+  let closed = false;
+  const openWaitStreams = new Set<DaemonStream>();
+
   const client = {
     sessionId,
 
@@ -277,9 +306,17 @@ export const makeAppClient = <TTools = ToolMap>(
       }
     },
 
-    waitForEvent: async (name: string, options: WaitForEventOptions = {}): Promise<FullAppEvent> => {
+    waitForEvent: async (name: string, options: WaitForEventOptions = {}): Promise<AppEvent> => {
+      if (closed) {
+        throw new AppductError(
+          "connection_error",
+          `Cannot wait for event "${name}": this AppClient (session "${sessionId}") is closed.`,
+        );
+      }
+
       const timeoutMs = options.timeoutMs ?? DEFAULT_WAIT_FOR_EVENT_TIMEOUT_MS;
       const waitStream = await openStream();
+      openWaitStreams.add(waitStream);
 
       try {
         const { event } = await waitForAppEvent(waitStream, {
@@ -287,11 +324,10 @@ export const makeAppClient = <TTools = ToolMap>(
           name,
           since: options.since,
           timeoutMs,
+          payloadMaxBytes: options.payloadMaxBytes,
         });
 
-        // `waitForEvent` never passes `payloadMaxBytes` (issue #113 scopes the overload to
-        // `events()`), so the daemon never truncates: `event` is always a `FullAppEvent`.
-        return event as FullAppEvent;
+        return event;
       } catch (error) {
         if (error instanceof WaitForAppEventTimeoutError) {
           throw new AppductError("timeout", error.message);
@@ -303,11 +339,19 @@ export const makeAppClient = <TTools = ToolMap>(
 
         throw toAppductError(error);
       } finally {
+        openWaitStreams.delete(waitStream);
         waitStream.close();
       }
     },
 
     close: (): void => {
+      closed = true;
+
+      for (const waitStream of openWaitStreams) {
+        waitStream.close();
+      }
+
+      openWaitStreams.clear();
       stream.close();
     },
   };

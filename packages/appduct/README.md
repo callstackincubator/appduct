@@ -268,11 +268,12 @@ const app = await connect<Tools>();
 const { total } = await app.call("sum", { a: 2, b: 3 }); // typed
 ```
 
-`waitForEvent`'s first argument is a whole-name glob (`*` waits for any name, `"cart.*"` for any name starting with `cart.`). It first drains the daemon's per-session retained buffer for an already-arrived match before falling back to a live wait, so it's safe to call after the action that emits the event; each call opens its own daemon connection, so concurrent `waitForEvent()` calls for different names each resolve on their own event. Pass `since` (the `cursor` from a previous `app.events()`/`waitForEvent()` call) to skip events already handled:
+`waitForEvent`'s first argument is a whole-name glob (`*` waits for any name, `"cart.*"` for any name starting with `cart.`). It first drains the daemon's per-session retained buffer for an already-arrived match before falling back to a live wait, so it's safe to call after the action that emits the event; each call opens its own daemon connection, so concurrent `waitForEvent()` calls for different names each resolve on their own event. Pass `since` (the `cursor` from a previous `app.events()`/`waitForEvent()` call) to skip events already handled, and `payloadMaxBytes` to cap the resolved event's payload the same way `app.events()` does — without it the payload always comes back whole:
 
 ```ts
 const { events, cursor } = await app.events();               // pull: what already happened
 const next = await app.waitForEvent("checkout_done", { since: cursor });
+const capped = await app.waitForEvent("checkout_done", { payloadMaxBytes: 1024 }); // check `truncated` before reading `payload`
 ```
 
 For everything else, the package exports `runCli` and the command handlers from [`src/index.ts`](https://github.com/callstackincubator/appduct/blob/main/packages/appduct/src/index.ts), so you can embed the same behavior in Node or Bun scripts without shelling out.
