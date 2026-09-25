@@ -575,8 +575,8 @@ embedded JSON values, never NDJSON lines), `--verbose` (include the `meta` block
 default in both human and `--json` output), `--no-color`, `--state-dir`, `--daemon-restart` (force
 a version-drift restart, §4).
 
-The deep-link scheme used to compose a link is resolved by `scheme.ts`, shared by `appduct
-link`, `appduct mcp`, `appduct/client`'s `link()` and the MCP `appduct_connect` tool so
+The deep-link scheme used to compose a link is resolved by `scheme.ts`, shared by
+`appduct sessions link`, `appduct mcp`, `appduct/client`'s `link()` and the MCP `appduct_connect` tool so
 they cannot drift. First match wins:
 
 1. the `--scheme` flag (or the equivalent programmatic option)
