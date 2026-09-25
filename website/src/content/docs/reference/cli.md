@@ -100,6 +100,8 @@ Streams the events your app posts with `postEvent` until you stop it. With `--js
 | Flag | Description |
 | --- | --- |
 | `--follow` | Accepted for readability; streaming is the default. |
+| `--name <glob>` | Only events whose name matches this glob (`*` matches any run of characters; a pattern without `*` is an exact name), e.g. `"cart.*"`. Matches the whole name, case-sensitively. |
+| `--payload-max-bytes <n>` | Cap each event's payload to this many UTF-8 bytes of its JSON. Over the cap, the line's `data` carries `payloadPreview`/`payloadBytes`/`truncated: true` instead of `payload`. No default — payloads print whole unless you set this. |
 
 Device connections and tool calls are not printed. To see when a device connects, use `appduct sessions ls`.
 
@@ -107,7 +109,9 @@ Each device keeps its last 256 app events (`eventBufferSize`), however many tool
 
 ### `appduct events since [selector] <cursor>`
 
-Prints the app events retained since `<cursor>`, then exits. With `--json`, prints one JSON object per event line plus a trailing `{ "cursor": n }` line to resume from.
+Prints the app events retained since `<cursor>`, then exits. With `--json`, prints one JSON object per event line plus a trailing `{ "cursor": n, "dropped": n, "remaining": n }` line to resume from; without it, the same line reads `cursor: n, dropped: n, remaining: n (run "appduct events since n" to resume from here)`. `dropped` counts events that fell off the retention buffer before this pull; `remaining` counts matching events still waiting beyond this page.
+
+Takes the same `--name <glob>` and `--payload-max-bytes <n>` flags as `events tail`, above.
 
 ### `appduct mcp`
 

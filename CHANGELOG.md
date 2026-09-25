@@ -27,6 +27,9 @@ section into a versioned heading.
 - **New: `appduct_events` and `app.events()` report `dropped` and `remaining`.** `dropped` counts
   events evicted from the retention buffer before you asked, and `remaining` counts events still
   waiting after the page you got back.
+- **New: `appduct events tail` and `appduct events since` accept `--name <glob>` and
+  `--payload-max-bytes <n>`.** Same behavior as `appduct_events`'s `name`/`payloadMaxBytes`, and
+  `events since`'s trailing cursor line now also reports `dropped` and `remaining`.
 - **New: `app.events()` accepts `payloadMaxBytes` to cap an event's payload size.** Without it every
   event keeps its full `payload`; with it, an oversized payload comes back as `payloadPreview`/
   `payloadBytes` and you check `truncated` before reading `payload`.
