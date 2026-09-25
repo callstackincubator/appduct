@@ -367,4 +367,80 @@ describe("appduct events tail --json", () => {
     const stopResult = runCliJson(["daemon", "stop"], stateDir);
     expect(stopResult.ok).toBe(true);
   }, 15_000);
+
+  test("events tail --payload-max-bytes truncates a payload over the cap; without the flag it is streamed whole (issue #115)", async () => {
+    const { stateDir } = await makeTempStateDir();
+
+    const status = runCliJson(["daemon", "status"], stateDir);
+    expect(status.ok).toBe(true);
+    daemonPids.push(status.data.daemon.pid);
+
+    const bigPayload = { blob: "x".repeat(5000) };
+
+    const readOneAppEvent = (proc: ReturnType<typeof spawnCliBinary>): Promise<Record<string, unknown>> => {
+      let buffered = "";
+      return new Promise((resolve, reject) => {
+        (async () => {
+          for await (const chunk of proc.stdout) {
+            buffered += chunk.toString("utf8");
+            let newlineIndex = buffered.indexOf("\n");
+
+            while (newlineIndex !== -1) {
+              const line = buffered.slice(0, newlineIndex);
+              buffered = buffered.slice(newlineIndex + 1);
+
+              if (line.length > 0) {
+                const parsed = JSON.parse(line);
+
+                if (parsed.kind === "app_event") {
+                  resolve(parsed.data);
+                  return;
+                }
+              }
+
+              newlineIndex = buffered.indexOf("\n");
+            }
+          }
+        })().catch(reject);
+      });
+    };
+
+    const wholeProcess = spawnCliBinary(["events", "tail", "--json"], { stateDir });
+    const wholeSeen = readOneAppEvent(wholeProcess);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const { socket, sessionId } = await claimAppOverCli(stateDir);
+    socket.send(JSON.stringify({ type: "event", session_id: sessionId, name: "big", payload: bigPayload, ts: Date.now() }));
+
+    const wholeEvent = await Promise.race([
+      wholeSeen,
+      new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("Timed out waiting for an app_event line")), 5000)),
+    ]);
+    expect(wholeEvent.payload).toEqual(bigPayload);
+    expect(wholeEvent.truncated).toBeUndefined();
+
+    wholeProcess.kill("SIGINT");
+    expect(await waitForExit(wholeProcess)).toBe(0);
+
+    const cappedProcess = spawnCliBinary(["events", "tail", "--json", "--payload-max-bytes", "100"], { stateDir });
+    const cappedSeen = readOneAppEvent(cappedProcess);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    socket.send(JSON.stringify({ type: "event", session_id: sessionId, name: "big", payload: bigPayload, ts: Date.now() }));
+
+    const cappedEvent = await Promise.race([
+      cappedSeen,
+      new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("Timed out waiting for an app_event line")), 5000)),
+    ]);
+    expect(cappedEvent.truncated).toBe(true);
+    expect(cappedEvent.payload).toBeUndefined();
+    expect(typeof cappedEvent.payloadPreview).toBe("string");
+
+    cappedProcess.kill("SIGINT");
+    expect(await waitForExit(cappedProcess)).toBe(0);
+
+    socket.close();
+    const stopResult = runCliJson(["daemon", "stop"], stateDir);
+    expect(stopResult.ok).toBe(true);
+  }, 15_000);
 });

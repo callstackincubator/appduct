@@ -613,6 +613,43 @@ describe("renderEventsCursorLine", () => {
     const line = renderEventsCursorLine({ cursor: 3, dropped: 0, remaining: 0 }, flags({ json: true }), "pixel-8");
     expect(JSON.parse(line)).toEqual({ cursor: 3, dropped: 0, remaining: 0 });
   });
+
+  test("human mode carries --name into the resume command when given (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 2, dropped: 0, remaining: 1 }, flags(), undefined, {
+      name: "*_failed",
+    });
+    expect(line).toContain("appduct events since 2 --name '*_failed'");
+  });
+
+  test("human mode carries --payload-max-bytes into the resume command when given (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 2, dropped: 0, remaining: 1 }, flags(), undefined, {
+      payloadMaxBytes: 100,
+    });
+    expect(line).toContain("appduct events since 2 --payload-max-bytes 100");
+  });
+
+  test("human mode carries the selector, --name and --payload-max-bytes together into the resume command (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 2, dropped: 0, remaining: 1 }, flags(), "pixel-8", {
+      name: "*_failed",
+      payloadMaxBytes: 100,
+    });
+    expect(line).toContain("appduct events since pixel-8 2 --name '*_failed' --payload-max-bytes 100");
+  });
+
+  test("human mode single-quotes a --name glob containing a single quote for shell safety (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 2, dropped: 0, remaining: 1 }, flags(), undefined, {
+      name: "checkout's_*",
+    });
+    expect(line).toContain(`appduct events since 2 --name 'checkout'\\''s_*'`);
+  });
+
+  test("NDJSON mode is unaffected by --name/--payload-max-bytes (issue #115)", () => {
+    const line = renderEventsCursorLine({ cursor: 2, dropped: 0, remaining: 1 }, flags({ json: true }), undefined, {
+      name: "*_failed",
+      payloadMaxBytes: 100,
+    });
+    expect(JSON.parse(line)).toEqual({ cursor: 2, dropped: 0, remaining: 1 });
+  });
 });
 
 describe("daemon status rendering", () => {
