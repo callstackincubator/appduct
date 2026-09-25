@@ -258,6 +258,17 @@ describe("appduct events tail --json", () => {
     expect(eventLines).toHaveLength(1);
     expect(JSON.parse(eventLines[0]!).data.name).toBe("checkout_failed");
 
+    // Human-mode (non --json) resume hint must echo the --name this pull used, not just the
+    // NDJSON cursor line (issue #115 round 2: since.ts wires `{ name, payloadMaxBytes }` into
+    // `renderEventsCursorLine`, but nothing exercised that wiring end to end).
+    const humanProcess = spawnCliBinary(["events", "since", alias, "0", "--name", "*_failed"], { stateDir });
+    let humanStdout = "";
+    humanProcess.stdout.on("data", (chunk: Buffer) => {
+      humanStdout += chunk.toString("utf8");
+    });
+    expect(await waitForExit(humanProcess)).toBe(0);
+    expect(humanStdout).toContain("--name '*_failed'");
+
     socket.close();
     const stopResult = runCliJson(["daemon", "stop"], stateDir);
     expect(stopResult.ok).toBe(true);
