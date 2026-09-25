@@ -75,7 +75,9 @@ whole sequence, then pick the smallest form that fits:
 - `policy_denied`: the daemon's policy blocks this tool. Do not retry and do not edit
   `~/.appduct/config.json`; tell the user which tool was denied.
 - `tool_timeout`: a call gets 10 s unless the app registered the tool with `timeoutMs`.
-  `--timeout <ms>` can only shorten that; the fix is in the app's registration.
+  `--timeout <ms>` can only shorten that; the fix is in the app's registration. From a wait
+  (`appduct_wait_for_event`), the same error means no matching event arrived within `timeoutMs` —
+  there is no registration to fix; see "Wait" under Over MCP.
 - `tool_execution_error`: the app's handler threw; report its message.
 - An empty `appduct tools ls` listing is not an error: the app registered no tools.
 
@@ -99,12 +101,19 @@ before it (e.g. a leftover `checkout.failed` from an earlier attempt). Pass that
 page wasn't everything waiting — call again with the new cursor. Treat `dropped > 0` as a gap:
 events between your last `since` and this page were evicted from the daemon's retention buffer
 before you could read them, so a plain "nothing matched" isn't the same as "nothing happened."
+The `cursor` is scoped to the `name` you drained with — it's the seq of the last event matching
+that glob, not a high-water mark over every event the session has seen. Reuse it only as `since`
+on a later call that uses the *same* `name`.
 
 **Wait**: for one expected event, call `appduct_wait_for_event` with `name` and `since` (the
-cursor from your last `appduct_events` call, or the `seq` from a previous
-`appduct_wait_for_event` result — omit it and a match from before this call can resolve
-instantly, which usually isn't what you want) and a `timeoutMs` long enough for the app to
-actually finish, not the default. `timeoutMs` is capped server-side at 1,500,000 ms (25 minutes)
+cursor from your last `appduct_events` call *with that same `name`*, or the `seq` from a previous
+`appduct_wait_for_event` result for that same `name` — omit it and a match from before this call
+can resolve instantly, which usually isn't what you want). A cursor or `seq` from a different
+`name` doesn't line up: it can sit past events your new glob would have matched (you miss them
+and the wait times out) or short of ones already sitting in the buffer (the wait resolves
+instantly on a stale leftover). Before waiting on a `name` you haven't drained yet, drain that
+same glob first to get a baseline, exactly as under "Drain" above. Pass a `timeoutMs` long enough
+for the app to actually finish, not the default. `timeoutMs` is capped server-side at 1,500,000 ms (25 minutes)
 regardless of what you pass. If nothing matching arrives in time, the call fails with
 `tool_timeout` — that means the event never arrived, not that the tool is misconfigured; the
 "fix the app's registration" advice under Output and errors is for a `tools call` timeout, not
