@@ -49,7 +49,18 @@ export const connect = async <TTools = ToolMap>(
       selector: options.selector,
     });
 
-    return makeAppClient<TTools>(stream, detail.sessionId);
+    // Each `waitForEvent` call opens its own stream (issue #114) with this same connection's
+    // options, so a fresh subscription never has to wait on `autoSpawn`/version-check work this
+    // stream's own `openDaemonStream` call already did.
+    const openStream = (): Promise<DaemonStream> =>
+      openDaemonStream({
+        stateDir,
+        spawn: options.spawn,
+        autoSpawn: options.autoSpawn,
+        requestTimeoutMs: options.requestTimeoutMs,
+      });
+
+    return makeAppClient<TTools>(stream, detail.sessionId, openStream);
   } catch (error) {
     stream.close();
     throw toAppductError(error);

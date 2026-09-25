@@ -98,12 +98,17 @@ export const waitForSession = async <TTools = ToolMap>(
     throw toAppductError(error);
   }
 
+  // Each `waitForEvent` call on the returned `AppClient` opens its own stream (issue #114), with
+  // the same options this one did.
+  const openStream = (): Promise<DaemonStream> =>
+    openDaemonStream({ stateDir, spawn: options.spawn, autoSpawn: options.autoSpawn });
+
   try {
     // The session may already be claimed by the time this runs — resolve immediately rather than
     // waiting for an event that already happened.
     try {
       await stream.call<SessionsDescribeResult>(RPC_METHODS.sessionsDescribe, { selector: sessionId });
-      return makeAppClient<TTools>(stream, sessionId);
+      return makeAppClient<TTools>(stream, sessionId, openStream);
     } catch (error) {
       if (!(error instanceof DaemonRpcError) || error.data?.type !== "unknown_session") {
         throw error;
@@ -171,7 +176,7 @@ export const waitForSession = async <TTools = ToolMap>(
         });
     });
 
-    return makeAppClient<TTools>(stream, sessionId);
+    return makeAppClient<TTools>(stream, sessionId, openStream);
   } catch (error) {
     stream.close();
     throw toAppductError(error);
