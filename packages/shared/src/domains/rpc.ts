@@ -278,6 +278,14 @@ export type EventsSubscribeParams = {
    * with no `*` is an exact name. Applies only to `app_event`s pushed on this subscription — every
    * other kind is delivered unfiltered, since only an app event carries a `name`. */
   name?: string;
+  /**
+   * Caps an `app_event`'s payload to this many UTF-8 bytes of its JSON (issue #113), applied
+   * through `projectAppEvent` (`daemon/event-bus.ts`) to every notification pushed on this
+   * subscription. Omitted, payloads are delivered whole. No default here — a caller that wants a
+   * cap on live events must ask for one; see `appduct_events`/`app.events()` for callers that
+   * default it.
+   */
+  payloadMaxBytes?: number;
 };
 
 export type EventsSubscribeResult = { ok: true };
@@ -292,9 +300,10 @@ export type EventNotification = {
   data: unknown;
   /**
    * Monotonically increasing per-session cursor (ARCHITECTURE.md §5), assigned by the daemon-side
-   * retention buffer at emit time. Only meaningful for session-scoped events (`sessionId` set) —
-   * daemon-wide events (e.g. `daemon_started`) are never buffered and carry `seq: 0`. Pass the
-   * highest `seq` seen back into `events.since`'s `since` to resume after it.
+   * retention buffer at emit time. Only `app_event` ever advances it (issue #113) — every other
+   * kind, session-scoped or not, carries `seq: 0`, since only `app_event` is retained and `dropped`
+   * (below) is worked out from its `seq` alone. Pass the highest `seq` seen back into
+   * `events.since`'s `since` to resume after it.
    */
   seq: number;
 };
@@ -318,6 +327,10 @@ export type EventsSinceParams = {
   /** Whole-name, case-sensitive glob (issue #112): `*` matches any run of characters, a pattern
    * with no `*` is an exact name. Applies only to `app_event`s. */
   name?: string;
+  /** Caps an `app_event`'s payload to this many UTF-8 bytes of its JSON (issue #113); see
+   * `EventsSubscribeParams.payloadMaxBytes`. No default here either — `appduct_events`/
+   * `app.events()` each choose their own. */
+  payloadMaxBytes?: number;
 };
 
 export type EventsSinceResult = {
@@ -326,13 +339,24 @@ export type EventsSinceResult = {
    * so a caller can pass it straight back into the next `since` even when `limit` truncated the
    * response or nothing new had happened. */
   cursor: number;
+  /**
+   * How many app events at or before `since` were evicted from the ring buffer before this call
+   * could see them (issue #113): `max(0, oldest.seq - since - 1)`, where `oldest` is the buffer's
+   * current oldest retained entry — `0` once nothing has fallen off (including when only
+   * never-retained kinds were emitted in between, since those never advance `seq`).
+   */
+  dropped: number;
+  /** How many events still match this query (`since`, `name`) after the returned page — the
+   * count `limit` cut off, not the whole buffer. `0` on the last page. */
+  remaining: number;
 };
 
-/** An app-pushed event (`postEvent(name, payload)`), narrowed from the daemon's generic
- * `EventNotification` envelope to the shape a consumer actually wants — `appduct/client`'s
- * `events()`/`waitForEvent()` and the built-in `appduct_events` MCP tool both return this flat
- * shape rather than the `kind`/`data` envelope (issue #112). */
-export type AppEvent<TPayload = unknown> = {
+/** An app-pushed event (`postEvent(name, payload)`) whose payload came back whole — narrowed from
+ * the daemon's generic `EventNotification` envelope to the shape a consumer actually wants
+ * (issue #112). This is what `appduct/client`'s `events()`/`waitForEvent()` and the built-in
+ * `appduct_events` MCP tool return when no `payloadMaxBytes` is in play, so existing `event.payload`
+ * reads keep compiling unchanged (issue #113's overload decision, #94). */
+export type FullAppEvent<TPayload = unknown> = {
   name: string;
   payload: TPayload;
   /** Unix ms. */
@@ -342,21 +366,61 @@ export type AppEvent<TPayload = unknown> = {
   /** Monotonically increasing per-session cursor (ARCHITECTURE.md §5) assigned by the daemon's
    * retention buffer at emit time — pass back into `since` to resume after this event. */
   seq: number;
+  truncated?: false;
 };
 
-/** Narrows an `app_event` `EventNotification` to an `AppEvent`, or `undefined` when the
+/** The same app-pushed event, but whose payload's JSON was over a `payloadMaxBytes` cap and was
+ * replaced with a preview (issue #113): `payloadBytes` is the UTF-8 byte length of the full
+ * payload's JSON, and `payloadPreview` is the longest prefix of that JSON fitting in
+ * `payloadMaxBytes` bytes without splitting a code point. There is no `payload` to read. */
+export type TruncatedAppEvent = {
+  name: string;
+  payloadPreview: string;
+  payloadBytes: number;
+  truncated: true;
+  /** Unix ms. */
+  ts: number;
+  sessionId: string;
+  alias?: string;
+  seq: number;
+};
+
+/**
+ * An app-pushed event as a caller that supplied `payloadMaxBytes` sees it: either the full shape
+ * (`truncated` absent/`false`, `payload` present) or the truncated one (`truncated: true`,
+ * `payloadPreview`/`payloadBytes`, no `payload`). Narrow on `truncated` before reading `payload` —
+ * TypeScript rejects an unnarrowed read (issue #113). A caller that never passes
+ * `payloadMaxBytes` gets {@link FullAppEvent} instead and needs no narrowing at all.
+ */
+export type AppEvent<TPayload = unknown> = FullAppEvent<TPayload> | TruncatedAppEvent;
+
+/** Narrows an `app_event` `EventNotification` to an {@link AppEvent}, or `undefined` when the
  * notification isn't an app event for `sessionId`, or carries no string `name`. The one
  * implementation `appduct/client` and `appduct_events` both call, so they can't disagree about
- * the flat shape. */
+ * the flat shape. Reads whichever data shape the daemon already produced (`daemon/event-bus.ts`'s
+ * `projectAppEvent` decides full vs. truncated at emit/drain time) rather than re-deciding here. */
 export const toAppEvent = (event: EventNotification, sessionId: string): AppEvent | undefined => {
   if (event.kind !== "app_event" || event.sessionId !== sessionId) {
     return undefined;
   }
 
-  const data = event.data as { name?: unknown; payload?: unknown };
+  const data = event.data as { name?: unknown; payload?: unknown; payloadPreview?: unknown; payloadBytes?: unknown; truncated?: unknown };
 
   if (typeof data.name !== "string") {
     return undefined;
+  }
+
+  if (data.truncated === true) {
+    return {
+      name: data.name,
+      payloadPreview: typeof data.payloadPreview === "string" ? data.payloadPreview : "",
+      payloadBytes: typeof data.payloadBytes === "number" ? data.payloadBytes : 0,
+      truncated: true,
+      ts: event.ts,
+      sessionId: event.sessionId!,
+      alias: event.alias,
+      seq: event.seq,
+    };
   }
 
   return {
