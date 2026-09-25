@@ -1,9 +1,10 @@
 /**
  * E2E scenario: multi-device.
  *
- * Two fake clients get distinct aliases; `invoke` without a selector errors `ambiguous_session`,
- * with an alias it works; `revoke` on one leaves the other untouched (ARCHITECTURE.md §1 goal 3:
- * "one daemon serves N concurrent device sessions on one port").
+ * Two fake clients get distinct aliases; `tools call` without a selector errors
+ * `ambiguous_session`, with an alias it works; `sessions revoke` on one leaves the other
+ * untouched (ARCHITECTURE.md §1 goal 3: "one daemon serves N concurrent device sessions on one
+ * port").
  */
 
 import { afterEach, describe, expect, test } from "vitest";

@@ -7,8 +7,8 @@
  * files a command does need into as few as possible.
  *
  * Why no code splitting: esbuild's tree-shaking is per bundle, and a chunk shared by several
- * routes carries everything *any* of them uses from the modules in it (`invoke` would load the
- * daemon's RPC server because `daemon run` needs it). Making every route its own entry point
+ * routes carries everything *any* of them uses from the modules in it (`tools call` would load
+ * the daemon's RPC server because `daemon run` needs it). Making every route its own entry point
  * bundles each one alone, so each is tree-shaken alone and a command loads exactly two files of
  * ours: `dist/bin.js` and its route. The price is that the modules a route shares with the eager
  * entry (`errors`, `output`, `rpc/client`, …) are duplicated into every route bundle — a few tens

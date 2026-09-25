@@ -71,7 +71,7 @@ type CliJsonResult = { ok: boolean; data?: unknown; error?: { type: string; mess
 
 /**
  * Runs the CLI as a subprocess and returns its parsed `--json` output. It uses an async process:
- * several flows below (`invoke`) need the daemon to round-trip through this
+ * several flows below (`tools call`) need the daemon to round-trip through this
  * test's own fake app WebSocket client while the CLI subprocess is in flight — `spawnSync` blocks
  * this process's event loop for the subprocess's entire lifetime, which would starve that
  * WebSocket's `message` handler and deadlock the round-trip.
@@ -242,7 +242,7 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(toolsDetailMissing.error?.type).toBe("usage_error");
       expect(toolsDetailMissing.error?.message).toBe('Tool "does-not-exist" is not registered.');
 
-      // invoke: round-trip through the fake app.
+      // tools call: round-trip through the fake app.
       appSocket.on("message", (data) => {
         const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
         if (msg.type === "tool_call") {
@@ -264,12 +264,12 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(invokeResult.ok).toBe(true);
       expect(invokeResult.data).toEqual({ echoed: "hello" });
 
-      // invoke a nonexistent tool: the wire error type is preserved verbatim.
+      // tools call on a nonexistent tool: the wire error type is preserved verbatim.
       const invokeMissing = await runCliJson(["tools", "call", alias, "does-not-exist", "--input", "{}"], stateDir);
       expect(invokeMissing.ok).toBe(false);
       expect(invokeMissing.error?.type).toBe("tool_not_found");
 
-      // revoke: the session disappears from ls.
+      // sessions revoke: the session disappears from sessions ls.
       const revokeResult = await runCliJson(["sessions", "revoke", alias], stateDir);
       expect(revokeResult.ok).toBe(true);
       expect(revokeResult.data).toEqual({ ok: true });

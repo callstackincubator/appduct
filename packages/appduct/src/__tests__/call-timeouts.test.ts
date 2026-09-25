@@ -66,7 +66,7 @@ describe("deriveCallTransportTimeoutMs", () => {
  * the thing that fails a long tool call.
  */
 describe("callers that do not know the effective deadline", () => {
-  test("invoke with no --timeout sizes its watchdog for the largest deadline the daemon could enforce", () => {
+  test("tools call with no --timeout sizes its watchdog for the largest deadline the daemon could enforce", () => {
     // Mirrors `commands/invoke.ts`: `options.timeoutMs ?? MAX_CALL_TIMEOUT_MS`.
     const noCallerTimeout: number | undefined = undefined;
     expect(deriveCallTransportTimeoutMs(noCallerTimeout ?? MAX_CALL_TIMEOUT_MS)).toBe(

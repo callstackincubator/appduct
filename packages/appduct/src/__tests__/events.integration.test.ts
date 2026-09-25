@@ -174,7 +174,7 @@ describe("appduct events tail --json", () => {
     expect(stopResult.ok).toBe(true);
   }, 15_000);
 
-  test("--since pulls only retained app events one-shot for a claimed session, and a later pull with the returned cursor sees nothing new", async () => {
+  test("events since pulls only retained app events one-shot for a claimed session, and a later pull with the returned cursor sees nothing new", async () => {
     const { stateDir } = await makeTempStateDir();
 
     const status = runCliJson(["daemon", "status"], stateDir);

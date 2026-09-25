@@ -87,9 +87,9 @@ export const readTextOption = (
 };
 
 /**
- * Splits the positional args of a command shaped `<command> [selector] <target>` (e.g. `invoke
- * [selector] <tool>`, `tools [selector] <name>`): the last positional is always the required
- * target, everything before it (zero or one args) is the optional selector.
+ * Splits the positional args of a command shaped `<command> [selector] <target>` (e.g. `tools
+ * call [selector] <tool>`, `tools describe [selector] <name>`): the last positional is always the
+ * required target, everything before it (zero or one args) is the optional selector.
  */
 export const splitSelectorAndRequiredTarget = (
   args: readonly string[],
@@ -121,7 +121,7 @@ export const splitOptionalSelector = (args: readonly string[], commandUsage: str
 };
 
 /**
- * Parses the JSON payload for `invoke --input`; never throws a raw `SyntaxError` at the CLI
+ * Parses the JSON payload for `tools call --input`; never throws a raw `SyntaxError` at the CLI
  * boundary. A missing flag is a usage error (nothing was given); a present-but-unparseable or
  * wrong-shaped value is a validation error (something was given, and it's invalid).
  */

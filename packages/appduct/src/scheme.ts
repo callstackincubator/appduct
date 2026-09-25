@@ -557,7 +557,7 @@ export type ResolveAppIdOptions = {
   /** Which `appId.<platform>` key to read from a project config; see `cli/open-target.ts`'s
    * `platformOf`. */
   platform: AppIdPlatform;
-  /** `--app-id` (CLI `link`) / `appId` (MCP `appduct_connect`) / `appId` (`mintLink`, the
+  /** `--app-id` (CLI `sessions link`) / `appId` (MCP `appduct_connect`) / `appId` (`mintLink`, the
    * `appduct/client` `link()`) — highest precedence, because the target is known at the call
    * site. */
   flagAppId?: string;

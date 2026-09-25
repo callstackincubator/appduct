@@ -136,7 +136,7 @@ const listOrGroups = async (
     try {
       return await listGroups(selector, context);
     } catch (error) {
-      // `--groups` takes no value, so `tools --groups checkout` reads `checkout` as a session
+      // `--groups` takes no value, so `tools ls --groups checkout` reads `checkout` as a session
       // selector. When no such session exists, the likelier intent is `--group checkout`.
       if (
         selector !== undefined &&

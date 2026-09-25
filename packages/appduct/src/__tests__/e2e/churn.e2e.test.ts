@@ -1,9 +1,10 @@
 /**
  * E2E scenario: churn.
  *
- * claim -> `dropSocket()` -> `ls` shows SUSPENDED -> `invoke` fails `session_suspended` ->
- * `resume()` -> `invoke` succeeds -> grace expiry (short configured grace) -> EXPIRED and alias
- * freed. This is the "survive churn" goal from ARCHITECTURE.md §1 exercised end-to-end.
+ * claim -> `dropSocket()` -> `sessions ls` shows SUSPENDED -> `tools call` fails
+ * `session_suspended` -> `resume()` -> `tools call` succeeds -> grace expiry (short configured
+ * grace) -> EXPIRED and alias freed. This is the "survive churn" goal from ARCHITECTURE.md §1
+ * exercised end-to-end.
  *
  * Grace expiry is synchronized on the daemon's own `session_expired` event (via a raw UDS
  * subscription used only for test synchronization, never to drive the scenario) rather than a
@@ -28,7 +29,7 @@ afterEach(cleanupAfterEach);
 
 describe("e2e: churn", () => {
   test(
-    "suspend on socket loss, session_suspended on invoke, resume, then grace expiry frees the alias",
+    "suspend on socket loss, session_suspended on tools call, resume, then grace expiry frees the alias",
     async () => {
       const { stateDir } = await makeTempStateDir({ graceSeconds: 2 });
       await ensureDaemon(stateDir);

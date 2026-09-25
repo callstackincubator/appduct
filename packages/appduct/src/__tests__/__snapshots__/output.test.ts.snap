@@ -82,12 +82,6 @@ Next
 "
 `;
 
-exports[`output rendering > invoke human output prints the raw tool result 1`] = `
-"Result
-{"echoed":"hello"}
-"
-`;
-
 exports[`output rendering > keygen success output includes the key path and fingerprint 1`] = `
 "Key Ready
 Key
@@ -117,6 +111,12 @@ exports[`output rendering > ls human output includes alias, state, device, tools
 "Sessions
   Alias    State   Device                       Tools  Age
   pixel-8  active  Google Pixel 8 (Android 14)  3      1m 
+"
+`;
+
+exports[`output rendering > tools call human output prints the raw tool result 1`] = `
+"Result
+{"echoed":"hello"}
 "
 `;
 

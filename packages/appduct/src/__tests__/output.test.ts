@@ -389,7 +389,7 @@ describe("output rendering", () => {
     expect(rendered.stdout).toMatchSnapshot();
   });
 
-  test("invoke human output prints the raw tool result", () => {
+  test("tools call human output prints the raw tool result", () => {
     const rendered = renderResult(
       {
         ok: true,
@@ -404,7 +404,7 @@ describe("output rendering", () => {
     expect(rendered.stdout).toMatchSnapshot();
   });
 
-  test("human invoke output embeds compact JSON by default, and indented JSON under --pretty", () => {
+  test("human tools call output embeds compact JSON by default, and indented JSON under --pretty", () => {
     const result = {
       ok: true as const,
       data: { echoed: { nested: { value: true } } },

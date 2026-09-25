@@ -306,7 +306,7 @@ Callers that hold their own transport watchdog over a `tools.call` (the MCP serv
 so the daemon's `tool_timeout` always arrives first and the real error type reaches the
 caller instead of a generic transport failure. A caller that knows the effective deadline
 sizes the watchdog from it (the MCP server reads the tool's `timeout_ms` straight off its
-`tools.list` entry); a caller that does not — `invoke` with no `--timeout`,
+`tools.list` entry); a caller that does not — `tools call` with no `--timeout`,
 `AppClient.call` with no `timeoutMs`, both of which leave the deadline to the tool's own
 undeclared-to-them value — sizes it from `MAX_TOOL_TIMEOUT_MS` instead. That
 backstop is only ever reached by a daemon that accepts a request and then answers nothing:
@@ -607,7 +607,7 @@ The project `.appduct/config.json` carries a second key alongside `scheme` since
 per delivery target (`android` → `appId.android`, `ios-device` → `appId.ios`; `ios-sim` needs
 none — see §8), in a shorter order than `scheme`'s, first match wins:
 
-1. `--app-id` (CLI `link`) / `appId` (MCP `appduct_connect`) / `appId` (`mintLink`,
+1. `--app-id` (CLI `sessions link`) / `appId` (MCP `appduct_connect`) / `appId` (`mintLink`,
    `appduct/client`'s `link()`) — the target is known at the call site, so this is unambiguous
 2. the nearest `.appduct/config.json` declaring `appId.<platform>`, using the *same* walk-up
    `scheme` uses (`findProjectConfigs`)
@@ -703,7 +703,7 @@ process loads only the modules the command it is running needs. Concretely:
   instance shared by all of them. Its own build bundles it into a single `dist/index.js` for the
   same reason this one bundles: one resolution, not one per source file). Code splitting was
   deliberately *not* used: esbuild tree-shakes per bundle, so a chunk shared by several routes
-  carries whatever any of them uses from a module (`invoke` would have loaded the daemon's RPC
+  carries whatever any of them uses from a module (`tools call` would have loaded the daemon's RPC
   server because `daemon run` needs it). Bundling each route alone tree-shakes it alone.
 - **Duplication is the accepted price, and it has one rule.** The modules a route shares with the
   eager entry (`errors`, `output`, `rpc/client`, …) are copied into every route bundle: tens of

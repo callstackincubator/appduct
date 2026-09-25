@@ -1,8 +1,9 @@
 /**
  * E2E scenario: cold start.
  *
- * `keygen --out` -> `link --json` (daemon auto-spawns) -> claim -> `ls` shows ACTIVE with alias ->
- * `tools`/`invoke` round-trip -> `revoke` -> `daemon stop` leaves no socket/pidfile.
+ * `keygen --out` -> `sessions link --json` (daemon auto-spawns) -> claim -> `sessions ls` shows
+ * ACTIVE with alias -> `tools ls`/`tools call` round-trip -> `sessions revoke` -> `daemon stop`
+ * leaves no socket/pidfile.
  *
  * Every step is a real CLI subprocess (`runCliJson`) driving a real auto-spawned daemon, except the
  * claim itself, which is the scripted fake app client verifying the daemon's SPKI pin before
@@ -31,7 +32,7 @@ afterEach(cleanupAfterEach);
 
 describe("e2e: cold start", () => {
   test(
-    "keygen -> link auto-spawns -> claim (pin-verified) -> ls ACTIVE -> tools/invoke -> revoke -> daemon stop leaves no socket/pidfile",
+    "keygen -> sessions link auto-spawns -> claim (pin-verified) -> sessions ls ACTIVE -> tools ls/tools call -> sessions revoke -> daemon stop leaves no socket/pidfile",
     async () => {
       const { stateDir } = await makeTempStateDir();
       // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back

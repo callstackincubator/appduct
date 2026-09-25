@@ -9,7 +9,7 @@ The `appduct` package is the operator/agent side of Appduct: a CLI and an MCP se
 ## Why use this package
 
 - **One daemon, many devices.** It auto-spawns on first use, serves every device on one `wss://` port, and survives Metro reloads, backgrounding, and network flaps by suspending and resuming sessions instead of dying with them.
-- **Same surface for humans and agents.** The CLI (`tools`, `invoke`, `events`, ...) and `appduct mcp` use the same RPC methods, so an agent sees the tools a human operator does.
+- **Same surface for humans and agents.** The CLI (`sessions`, `tools`, `events`, ...) and `appduct mcp` use the same RPC methods, so an agent sees the tools a human operator does.
 - **Hardened control plane.** The CLI and MCP server never touch sockets, keys, or state files directly — everything goes through a Unix-domain-socket RPC surface gated by filesystem permissions (see [`docs/SECURITY.md`][security]).
 - **Fits production-minded apps.** The app only exposes what you register; trust boundaries are pins and TLS, and production deployments can gate tools with policy and audit every call.
 

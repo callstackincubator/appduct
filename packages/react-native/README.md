@@ -91,7 +91,7 @@ An agent picks a tool from one signature line and the first line of its descript
 
 ### 5. Start the daemon and test the flow
 
-`appduct` auto-spawns its daemon. `link` needs your app's deep-link scheme: pass `--scheme` (matching `expo.scheme`), or set `scheme` once in `~/.appduct/config.json`:
+`appduct` auto-spawns its daemon. `sessions link` needs your app's deep-link scheme: pass `--scheme` (matching `expo.scheme`), or set `scheme` once in `~/.appduct/config.json`:
 
 ```bash
 appduct sessions link --scheme myapp --qr
