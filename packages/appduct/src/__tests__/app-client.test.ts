@@ -387,4 +387,39 @@ describe("AppClient.waitForEvent()", () => {
     await expect(client.waitForEvent("ping")).rejects.toMatchObject({ type: "connection_error" });
     expect(openCount).toBe(0);
   });
+
+  test("close() while the wait's stream is still opening rejects promptly with connection_error, not after timeoutMs (issue #114 review round 2)", async () => {
+    // Never resolves `events.since` with a match, so if the race were lost the wait would run
+    // to its full (huge) timeout instead of noticing the close.
+    const pendingAnswer = (method: string, params: unknown): unknown => {
+      if (method === RPC_METHODS.eventsSubscribe) {
+        return { ok: true };
+      }
+
+      if (method === RPC_METHODS.eventsSince) {
+        return { events: [], cursor: 0, dropped: 0, remaining: 0 };
+      }
+
+      throw new Error(`unexpected method ${method} (${JSON.stringify(params)})`);
+    };
+    const pendingWaitStream = makeFakeWaitStream(pendingAnswer);
+
+    // `openStream` resolves only after `close()` has already run synchronously below, so the
+    // fix must re-check `closed` once the (slow) open completes rather than only before it starts.
+    const client = makeAppClient(
+      streamAnswering({}),
+      "s1",
+      async () =>
+        new Promise<DaemonStream>((resolve) => {
+          setTimeout(() => resolve(pendingWaitStream), 20);
+        }),
+    );
+
+    const waitPromise = client.waitForEvent("never", { timeoutMs: 200_000 });
+
+    client.close();
+
+    await expect(waitPromise).rejects.toMatchObject({ type: "connection_error" });
+    expect(pendingWaitStream.closed()).toBe(true);
+  });
 });
