@@ -23,3 +23,8 @@ One note per PR that hit friction, four lines:
   Would have prevented it: at the start, check for a simulator (xcrun, or an Android emulator with KVM) and, if there is none, ask the human up front to run e2e-device locally.
   Cost: blocked
   Seen: 2026-09-24
+
+- 2026-09-25 #111 skill: implement-issue
+  What went wrong: sweeps for removed CLI forms grepped whole command patterns (`appduct <word>`) and missed `playground:appduct -- link`, a command wrapped across a line break, and a removed flag named inside an output hint.
+  Would have prevented it: when renaming a CLI surface, grep the bare old words (`invoke`, `--since`) across the whole repo, multiline too, and check every hit by hand before the first review.
+  Cost: review rounds 2-4, blocked at the fix-round limit; E2E also blocked (no simulator in the cloud container)
