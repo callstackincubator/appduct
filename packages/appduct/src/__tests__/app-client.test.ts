@@ -109,4 +109,47 @@ describe("AppClient.events()", () => {
       expect(event.payloadBytes).toBe(500);
     }
   });
+
+  test("a payloadMaxBytes passed through an object-literal-typed variable still requires narrowing (issue #113)", async () => {
+    const { stream } = streamRecordingEventsSince({
+      events: [{ kind: "app_event", sessionId: "s1", ts: 1, seq: 5, data: { name: "big", payloadPreview: "{\"a", truncated: true, payloadBytes: 500 } }],
+      cursor: 5,
+      dropped: 3,
+      remaining: 7,
+    });
+    const client = makeAppClient(stream, "s1");
+
+    // Excess-property checks only apply to object literals passed directly as an argument, so a
+    // capped options bag routed through a variable must still resolve to the capped overload —
+    // never to `FullEventsResult`, whose `payload` reads are unnarrowed.
+    const opts = { since: 0, payloadMaxBytes: 64 };
+    const result = await client.events(opts);
+    const event = result.events[0]!;
+
+    // @ts-expect-error -- `payload` is not on `TruncatedAppEvent`; only readable after narrowing.
+    expect(event.payload).toBeUndefined();
+    if (event.truncated) {
+      expect(event.payloadPreview).toBe("{\"a");
+    }
+  });
+
+  test("an explicitly-typed payloadMaxBytes options object still requires narrowing (issue #113)", async () => {
+    const { stream } = streamRecordingEventsSince({
+      events: [{ kind: "app_event", sessionId: "s1", ts: 1, seq: 5, data: { name: "big", payloadPreview: "{\"a", truncated: true, payloadBytes: 500 } }],
+      cursor: 5,
+      dropped: 3,
+      remaining: 7,
+    });
+    const client = makeAppClient(stream, "s1");
+
+    const opts: { since?: number; payloadMaxBytes?: number } = { since: 0, payloadMaxBytes: 64 };
+    const result = await client.events(opts);
+    const event = result.events[0]!;
+
+    // @ts-expect-error -- `payload` is not on `TruncatedAppEvent`; only readable after narrowing.
+    expect(event.payload).toBeUndefined();
+    if (event.truncated) {
+      expect(event.payloadPreview).toBe("{\"a");
+    }
+  });
 });
