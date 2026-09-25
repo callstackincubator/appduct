@@ -751,5 +751,5 @@ export const renderEventsCursorLine = (cursor: number, flags: GlobalFlags): stri
   }
 
   const colors = pc.createColors(flags.color);
-  return colors.dim(`cursor: ${cursor} (pass --since ${cursor} to resume from here)`);
+  return colors.dim(`cursor: ${cursor} (run "appduct events since ${cursor}" to resume from here)`);
 };
