@@ -34,6 +34,17 @@ section into a versioned heading.
   that annotates a variable or parameter with `AppEvent`/`EventsResult` and reads `.payload`
   unconditionally should switch to `FullAppEvent`/`FullEventsResult`, which `appduct/client` now
   exports alongside `TruncatedAppEvent`.
+- **Breaking: `appduct_wait_for_event`'s `name` is now a glob, and `match` is removed.** `name`
+  matches the same whole-name glob `appduct_events` does (`*` waits for the next event of any
+  name); pass `match` and the call now fails with `invalid_request`.
+- **Breaking: `appduct_wait_for_event` truncates a payload over 4096 bytes by default and reports
+  `dropped`.** Same shape as `appduct_events`: a truncated result comes back as
+  `{ name, payloadPreview, truncated: true, payloadBytes, ... }` instead of `{ name, payload, ... }`;
+  pass `payloadMaxBytes` to raise or lower the cap.
+- **Breaking: `app.waitForEvent()`'s `name` is now a glob, `WaitForEventOptions.match` is removed,
+  and it now accepts `payloadMaxBytes`.** `app.waitForEvent("cart.*")` waits for any name matching
+  the glob and `match` is gone; pass `payloadMaxBytes` to cap the resolved event's payload the same
+  way `app.events()` does, otherwise it comes back whole as before.
 
 ## 0.12.0 (2026-09-24)
 

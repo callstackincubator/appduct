@@ -161,7 +161,7 @@ describe("e2e: appduct/client", () => {
     20_000,
   );
 
-  test("waitForEvent() rejects (rather than crashing the connection) when its match predicate throws", async () => {
+  test("waitForEvent() resolves on a name glob (issue #114)", async () => {
     const { stateDir } = await makeTempStateDir();
     await ensureDaemon(stateDir);
     // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
@@ -182,24 +182,52 @@ describe("e2e: appduct/client", () => {
 
     const app = await connect({ stateDir, selector: link.sessionId });
 
-    const waiting = app.waitForEvent("boom", {
-      timeoutMs: 5000,
-      match: () => {
-        throw new Error("predicate exploded");
-      },
-    });
+    const waiting = app.waitForEvent<{ id: number }>("cart.*", { timeoutMs: 5000 });
+    fakeApp.emitEvent("checkout_started", { ignored: true });
+    fakeApp.emitEvent("cart.item_added", { id: 1 });
 
-    fakeApp.emitEvent("boom", { anything: true });
-    await expect(waiting).rejects.toThrow("predicate exploded");
-
-    // The connection must still be usable afterwards — a throwing listener must not have taken
-    // down the socket's data handler for every other in-flight/future call.
-    const result = await app.call("echo", {});
-    expect(result).toBe("ok");
+    const event = await waiting;
+    expect(event).toMatchObject({ name: "cart.item_added", payload: { id: 1 } });
 
     app.close();
     fakeApp.close();
-  });
+  }, 15_000);
+
+  test("two concurrent waitForEvent() calls with different names each resolve on their own event (issue #114)", async () => {
+    const { stateDir } = await makeTempStateDir();
+    await ensureDaemon(stateDir);
+    // The daemon binds an OS-assigned wss port (`wssPort: 0`), so the port is read back
+    // from the daemon itself rather than chosen here — see harness.makeTempStateDir.
+    const port = await daemonWssPort(stateDir);
+    const pinnedKeys = await fetchPinnedKeys(stateDir);
+
+    const events = await subscribeToEvents(stateDir);
+    const link = await mintLink(stateDir);
+    const fakeApp = new FakeAppClient(port, pinnedKeys);
+    await fakeApp.claim(link, { model: "Pixel 8" });
+
+    const toolsChanged = events.waitFor("tools_changed");
+    fakeApp.registerTools([{ name: "echo" }]);
+    await toolsChanged;
+    events.close();
+
+    const app = await connect({ stateDir, selector: link.sessionId });
+
+    // Each call opens its own daemon stream (issue #114), so their `events.subscribe` filters
+    // can't clobber one another the way sharing one connection's single filter would.
+    const waitingForFirst = app.waitForEvent<{ n: number }>("first", { timeoutMs: 5000 });
+    const waitingForSecond = app.waitForEvent<{ n: number }>("second", { timeoutMs: 5000 });
+
+    fakeApp.emitEvent("second", { n: 2 });
+    fakeApp.emitEvent("first", { n: 1 });
+
+    const [first, second] = await Promise.all([waitingForFirst, waitingForSecond]);
+    expect(first).toMatchObject({ name: "first", payload: { n: 1 } });
+    expect(second).toMatchObject({ name: "second", payload: { n: 2 } });
+
+    app.close();
+    fakeApp.close();
+  }, 15_000);
 
   test(
     "waitForEvent() resolves from the retained buffer for an event emitted before it was called (no live-subscribe race)",

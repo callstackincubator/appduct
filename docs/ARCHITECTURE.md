@@ -551,15 +551,22 @@ proxies daemon RPC (auto-spawning the daemon like any client):
   issue #112), defaulting `limit` to 50 and `payloadMaxBytes` to 4096 (issue #113, so one
   gigantic payload can't blow out an agent's context on its own), and returning `dropped`/
   `remaining` alongside `events`/`cursor` — and both reject a `kinds` argument with
-  `invalid_request`; `appduct_wait_for_event` blocks for a matching
-  event, draining the retained buffer for an already-arrived match before falling back to
-  a live wait — closing the same race `appduct_wait_for_session` doesn't have to worry
-  about (a session is either claimed or not, but an event can fire between "the agent
-  decides to wait" and "the wait subscription lands"). `timeoutMs` is capped server-side
-  well under the 30-minute idle window a stdio MCP tool call gets before Claude Code aborts
-  it for sending neither a response nor a progress notification; a call still running after
-  about two minutes moves to a Claude Code background task, so its result may arrive well
-  after the call returns.
+  `invalid_request`; `appduct_wait_for_event` blocks for the next event matching `name`, a
+  whole-name glob (`*` waits for any name), draining the retained buffer for an
+  already-arrived match before falling back to a live wait — closing the same race
+  `appduct_wait_for_session` doesn't have to worry about (a session is either claimed or
+  not, but an event can fire between "the agent decides to wait" and "the wait subscription
+  lands"). It also defaults `payloadMaxBytes` to 4096 and resolves with `dropped` alongside
+  the matched event (issue #114); a payload predicate (`match`) is not offered — a caller
+  that needs one loops on `appduct_wait_for_event` with `since`. `timeoutMs` is capped
+  server-side well under the 30-minute idle window a stdio MCP tool call gets before Claude
+  Code aborts it for sending neither a response nor a progress notification; a call still
+  running after about two minutes moves to a Claude Code background task, so its result may
+  arrive well after the call returns. The drain-then-live wait itself is `src/events/`'s
+  `waitForAppEvent` (issue #114) — the one implementation this tool and `appduct/client`'s
+  `AppClient.waitForEvent` both call, each opening its own daemon stream per wait so
+  concurrent waits with different `name`s never share (and can't clobber) one connection's
+  `events.subscribe` filter.
 
 ## 10. CLI surface
 

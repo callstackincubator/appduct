@@ -3,9 +3,10 @@
  * wrapper over the same `tools.list`/`tools.call`/`events.subscribe`/`events.since` RPC the CLI and
  * MCP server use (`rpc/client.ts`'s `DaemonStream`), bound to one resolved session. No new privilege
  * or transport — every call is attributed `caller: "client"` for the audit log (ARCHITECTURE.md
- * §12). {@link AppClient.waitForEvent}'s drain-then-live pattern mirrors the built-in
- * `appduct_wait_for_event` MCP tool (`mcp/events-tool.ts`) — see that module's doc comment for
- * why the notification listener has to be registered before the `events.since` drain call is sent.
+ * §12). {@link AppClient.waitForEvent} is `events/index.ts`'s `waitForAppEvent` (issue #114) — the
+ * same drain-then-live implementation the built-in `appduct_wait_for_event` MCP tool
+ * (`mcp/events-tool.ts`) uses — called on a fresh stream opened for that one wait, so concurrent
+ * waits on the same `AppClient` never share (and can't clobber) one connection's subscription.
  */
 import {
   clampToolTimeoutMs,
@@ -13,7 +14,6 @@ import {
   RPC_METHODS,
   toAppEvent,
   type AppEvent,
-  type EventNotification,
   type EventsSinceResult,
   type FullAppEvent,
   type ListedToolDescriptor,
@@ -21,6 +21,11 @@ import {
   type ToolsListResult,
 } from "@appduct/shared";
 
+import {
+  waitForAppEvent,
+  WaitForAppEventConnectionClosedError,
+  WaitForAppEventTimeoutError,
+} from "../events/index.js";
 import type { DaemonStream } from "../rpc/client.js";
 import { AppductError, toAppductError } from "./errors.js";
 
@@ -50,9 +55,6 @@ export type CallOptions = {
 export type WaitForEventOptions = {
   /** Defaults to 30s. */
   timeoutMs?: number;
-  /** Extra filter over the event's payload; the event still must match `name` first. A predicate
-   * that throws rejects the wait with that error rather than crashing the connection. */
-  match?: (payload: unknown) => boolean;
   /**
    * Exclusive lower bound on `AppEvent.seq` (a cursor from a previous {@link AppClient.events} or
    * {@link AppClient.waitForEvent} call) — skips already-retained events at/before it instead of
@@ -60,6 +62,12 @@ export type WaitForEventOptions = {
    * so a matching event that already fired before this call still resolves immediately.
    */
   since?: number;
+  /**
+   * Caps the resolved event's payload to this many UTF-8 bytes of its JSON, daemon-side (issue
+   * #114, same cap {@link AppClient.events} takes). Omitted, the payload is delivered whole; passed,
+   * the resolved event may come back truncated — see {@link AppClient.waitForEvent}'s overloads.
+   */
+  payloadMaxBytes?: number;
 };
 
 export type EventsOptions = {
@@ -150,23 +158,39 @@ export type AppClient<TTools = ToolMap> = {
 
   /**
    * Waits for the next `app_event` (as pushed by the connected app's `postEvent(name, payload)`)
-   * matching `name`. Checks the daemon's retained buffer for an already-arrived match first, then
-   * falls back to a live wait — so an event emitted between "the caller decides to wait" and "the
-   * subscription lands" is never missed; pass `since` (a cursor from a previous {@link
+   * whose name matches `name`, a whole-name, case-sensitive glob (issue #114: `*` matches any run
+   * of characters, a pattern with no `*` is an exact name — e.g. `"cart.*"`, or `"*"` for the next
+   * event of any name). Checks the daemon's retained buffer for an already-arrived match first,
+   * then falls back to a live wait — so an event emitted between "the caller decides to wait" and
+   * "the subscription lands" is never missed; pass `since` (a cursor from a previous {@link
    * AppClient.events}/`waitForEvent` call) to skip events already handled and wait only for a new
    * one, since omitting it can return an old match instantly on every call.
    *
-   * This shares the connection's single `events.subscribe` filter (the daemon keeps one per
-   * connection, replaced — not merged — on each call); concurrent `waitForEvent` calls on the same
-   * `AppClient` all see every `app_event`, so this is safe today, but it means the connection stays
-   * subscribed to `app_event` for its lifetime once any `waitForEvent` has run.
+   * Opens its own daemon stream for this one wait (issue #114) rather than sharing this
+   * `AppClient`'s connection, so concurrent `waitForEvent` calls with different `name`s each get
+   * their own `events.subscribe` filter and resolve on their own event.
    *
-   * No `payloadMaxBytes` here yet (issue #113 scopes the overload to {@link AppClient.events});
-   * this always resolves with the full, untruncated payload.
+   * Overloaded on `payloadMaxBytes` the same way {@link AppClient.events} is (issue #114): omit it
+   * and the resolved event's `payload` is readable unnarrowed ({@link FullAppEvent}); pass it to
+   * cap the payload's JSON to that many UTF-8 bytes daemon-side, and narrow on `truncated` before
+   * reading `payload` ({@link AppEvent}) — an event whose payload was over the cap has
+   * `payloadPreview`/`payloadBytes` instead. See {@link AppClient.events}'s doc comment for why the
+   * uncapped overload spells its `payloadMaxBytes` as `undefined` rather than omitting the key.
    */
-  waitForEvent<TPayload = unknown>(name: string, options?: WaitForEventOptions): Promise<FullAppEvent<TPayload>>;
+  waitForEvent<TPayload = unknown>(
+    name: string,
+    options?: WaitForEventOptions & { payloadMaxBytes?: undefined },
+  ): Promise<FullAppEvent<TPayload>>;
+  waitForEvent<TPayload = unknown>(
+    name: string,
+    options: WaitForEventOptions & { payloadMaxBytes?: number },
+  ): Promise<AppEvent<TPayload>>;
 
-  /** Closes the underlying connection. Safe to call more than once. */
+  /** Closes the underlying connection, and every stream a still-pending {@link
+   * AppClient.waitForEvent} call opened for itself — each such call rejects with a `"connection_error"`
+   * {@link AppductError}, the same way it did before `waitForEvent` moved onto its own stream (issue
+   * #114). A `waitForEvent` call made after `close()` rejects immediately with the same error and
+   * never opens a stream (so it never auto-spawns a daemon). Safe to call more than once. */
   close(): void;
 };
 
@@ -201,7 +225,21 @@ export const transportTimeoutForToolCall = (timeoutMs: number | undefined): numb
   return clamped + CALL_TRANSPORT_TIMEOUT_SLACK_MS;
 };
 
-export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId: string): AppClient<TTools> => {
+export const makeAppClient = <TTools = ToolMap>(
+  stream: DaemonStream,
+  sessionId: string,
+  /** Opens a fresh `DaemonStream` for one {@link AppClient.waitForEvent} call (issue #114) — every
+   * other method keeps using `stream` above. */
+  openStream: () => Promise<DaemonStream>,
+): AppClient<TTools> => {
+  // Set by `close()`; checked at the top of `waitForEvent` so a call made after `close()` rejects
+  // immediately instead of opening a stream (and possibly auto-spawning a daemon) for a wait that
+  // would just be torn down. `openWaitStreams` holds every stream a still-pending `waitForEvent`
+  // call opened for itself, so `close()` can close them too — closing only the shared `stream`
+  // stopped ending a pending wait once each wait moved onto its own connection (issue #114).
+  let closed = false;
+  const openWaitStreams = new Set<DaemonStream>();
+
   const client = {
     sessionId,
 
@@ -268,161 +306,70 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
       }
     },
 
-    waitForEvent: (name: string, options: WaitForEventOptions = {}): Promise<FullAppEvent> => {
+    waitForEvent: async (name: string, options: WaitForEventOptions = {}): Promise<AppEvent> => {
+      if (closed) {
+        throw new AppductError(
+          "connection_error",
+          `Cannot wait for event "${name}": this AppClient (session "${sessionId}") is closed.`,
+        );
+      }
+
       const timeoutMs = options.timeoutMs ?? DEFAULT_WAIT_FOR_EVENT_TIMEOUT_MS;
+      let waitStream: DaemonStream;
+      try {
+        waitStream = await openStream();
+      } catch (error) {
+        throw toAppductError(error);
+      }
 
-      // `waitForEvent` never asks for `payloadMaxBytes` (issue #113 scopes the overload to
-      // `events()`), so every `app_event` it can possibly see comes back from `toAppEvent` as a
-      // `FullAppEvent` — `truncated` is only ever `true` when a `payloadMaxBytes` cap on this
-      // connection's subscription did the truncating, and this connection's subscribe call below
-      // never sets one.
-      const toMatch = (event: EventNotification): FullAppEvent | undefined => {
-        const appEvent = toAppEvent(event, sessionId);
+      // `close()` may have run while `openStream()` was still pending (it only closes streams
+      // already in `openWaitStreams`, which is empty until here). Re-check now that we hold the
+      // stream, before it is registered and used, so a wait that raced a close fails fast with
+      // `connection_error` instead of running to its full timeout.
+      if (closed) {
+        waitStream.close();
+        throw new AppductError(
+          "connection_error",
+          `Cannot wait for event "${name}": this AppClient (session "${sessionId}") is closed.`,
+        );
+      }
 
-        if (!appEvent || appEvent.truncated || appEvent.name !== name) {
-          return undefined;
-        }
+      openWaitStreams.add(waitStream);
 
-        if (options.match && !options.match(appEvent.payload)) {
-          return undefined;
-        }
-
-        return appEvent;
-      };
-
-      return new Promise<FullAppEvent>((resolve, reject) => {
-        let settled = false;
-
-        const settle = (fn: () => void): void => {
-          if (settled) {
-            return;
-          }
-
-          settled = true;
-          clearTimeout(timer);
-          unsubscribeClose();
-          liveHandler = null;
-          fn();
-        };
-
-        const timer = setTimeout(() => {
-          settle(() =>
-            reject(new AppductError("timeout", `Timed out after ${timeoutMs}ms waiting for event "${name}".`)),
-          );
-        }, timeoutMs);
-
-        // Registered before `events.since` is even sent (not merely before it resolves): the
-        // daemon's response to that call and a `notify()` for a brand-new event can arrive in the
-        // same socket chunk, and a listener added only after awaiting that response could miss a
-        // notification from that same chunk. Buffers into `earlyEvents` until the drain below has
-        // merged its own backlog and switched this to `liveHandler`.
-        let liveHandler: ((event: EventNotification) => void) | null = null;
-        const earlyEvents: EventNotification[] = [];
-
-        const unsubscribeNotification = stream.onNotification((payload) => {
-          const event = payload as EventNotification;
-
-          if (liveHandler) {
-            liveHandler(event);
-          } else {
-            earlyEvents.push(event);
-          }
+      try {
+        const { event } = await waitForAppEvent(waitStream, {
+          sessionId,
+          name,
+          since: options.since,
+          timeoutMs,
+          payloadMaxBytes: options.payloadMaxBytes,
         });
 
-        let unsubscribeClose = (): void => {};
+        return event;
+      } catch (error) {
+        if (error instanceof WaitForAppEventTimeoutError) {
+          throw new AppductError("timeout", error.message);
+        }
 
-        const fail = (error: unknown): void => {
-          settle(() => reject(toAppductError(error)));
-          unsubscribeNotification();
-        };
+        if (error instanceof WaitForAppEventConnectionClosedError) {
+          throw new AppductError("connection_error", error.message);
+        }
 
-        (async () => {
-          await stream.call(RPC_METHODS.eventsSubscribe, { sessionSelector: sessionId, kinds: ["app_event"] });
-
-          const sinceResult = await stream.call<EventsSinceResult>(RPC_METHODS.eventsSince, {
-            selector: sessionId,
-            since: options.since,
-          });
-
-          // Merge the retained backlog with whatever arrived on the live channel while the two
-          // calls above were in flight, deduped by `seq` — the same event can legitimately show up
-          // in both (the daemon buffers before it fans out). Everything from here to `liveHandler =
-          // …` below is synchronous — no `await` — so nothing can arrive on the socket and be missed
-          // in the gap.
-          const seenSeqs = new Set<number>();
-          const backlog: EventNotification[] = [];
-
-          for (const event of [...sinceResult.events, ...earlyEvents]) {
-            if (event.sessionId === sessionId && !seenSeqs.has(event.seq)) {
-              seenSeqs.add(event.seq);
-              backlog.push(event);
-            }
-          }
-
-          backlog.sort((a, b) => a.seq - b.seq);
-
-          for (const event of backlog) {
-            try {
-              const matched = toMatch(event);
-
-              if (matched) {
-                settle(() => resolve(matched));
-                unsubscribeNotification();
-                return;
-              }
-            } catch (error) {
-              fail(error);
-              return;
-            }
-          }
-
-          // Nothing matched yet: resume live from the last event actually considered, or — if
-          // nothing was retained/arrived at all — `events.since`'s own cursor, which already
-          // reflects the session's true high-water mark even when nothing was retained.
-          const highestConsideredSeq = backlog.length > 0 ? backlog[backlog.length - 1]!.seq : sinceResult.cursor;
-
-          unsubscribeClose = stream.onClose(() => {
-            settle(() =>
-              reject(
-                new AppductError(
-                  "connection_error",
-                  `The connection to the Appduct daemon closed while waiting for event "${name}".`,
-                ),
-              ),
-            );
-            unsubscribeNotification();
-          });
-
-          // From here on, every notification goes straight to this handler instead of
-          // `earlyEvents` — assigned synchronously (no `await` since the backlog scan above), so
-          // nothing is missed.
-          liveHandler = (event) => {
-            if (settled) {
-              return;
-            }
-
-            if (event.sessionId === sessionId && event.seq <= highestConsideredSeq) {
-              return;
-            }
-
-            try {
-              const matched = toMatch(event);
-
-              if (matched) {
-                settle(() => resolve(matched));
-                unsubscribeNotification();
-              }
-            } catch (error) {
-              fail(error);
-            }
-          };
-        })().catch((error) => {
-          fail(error);
-        });
-      });
+        throw toAppductError(error);
+      } finally {
+        openWaitStreams.delete(waitStream);
+        waitStream.close();
+      }
     },
 
     close: (): void => {
+      closed = true;
+
+      for (const waitStream of openWaitStreams) {
+        waitStream.close();
+      }
+
+      openWaitStreams.clear();
       stream.close();
     },
   };

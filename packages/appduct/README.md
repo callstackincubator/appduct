@@ -224,7 +224,7 @@ Set this before you connect: the daemon reads `config.json` only when it starts,
 
 Four more built-in tools cover what the app's own tools can't. `appduct_connect` mints a link and, by default, delivers it to whichever `android`/`ios-sim` device it detects — pass `target`/`device` to choose, or `target: "none"` to force the human flow — falling back to a QR code, plus instructions to show it, only when there's nothing to deliver to. Delivering to `android` (chosen or detected) needs `appId`, resolved the same way as `--app-id` (see [Delivering the link to a device](#delivering-the-link-to-a-device)); passing it with `target: "ios-sim"` or `"none"` is an error. `appduct_wait_for_session` then waits for that session to be claimed. `target: "ios-device"` reaches a paired physical iPhone or iPad, with `appId` and the [prerequisites above](#--open-ios-device-experimental) — it's experimental and never auto-detected, so an agent has to ask for it by name.
 
-The other two give an agent a pull surface over `postEvent()`-pushed app events: `appduct_events` drains everything retained since a cursor, and `appduct_wait_for_event` blocks for a matching event (checking what's already retained before waiting live), rejecting with `tool_timeout` if none arrives in time.
+The other two give an agent a pull surface over `postEvent()`-pushed app events: `appduct_events` drains everything retained since a cursor, and `appduct_wait_for_event` blocks for the next event whose name matches `name`, a whole-name glob (`*` waits for any name) — checking what's already retained before waiting live — rejecting with `tool_timeout` if none arrives in time.
 
 ## Test runners: `appduct/client`
 
@@ -268,11 +268,12 @@ const app = await connect<Tools>();
 const { total } = await app.call("sum", { a: 2, b: 3 }); // typed
 ```
 
-`waitForEvent` first drains the daemon's per-session retained buffer for an already-arrived match before falling back to a live wait, so it's safe to call after the action that emits the event. Pass `since` (the `cursor` from a previous `app.events()`/`waitForEvent()` call) to skip events already handled:
+`waitForEvent`'s first argument is a whole-name glob (`*` waits for any name, `"cart.*"` for any name starting with `cart.`). It first drains the daemon's per-session retained buffer for an already-arrived match before falling back to a live wait, so it's safe to call after the action that emits the event. Pass `since` (the `cursor` from a previous `app.events()`/`waitForEvent()` call) to skip events already handled, and `payloadMaxBytes` to cap the resolved event's payload the same way `app.events()` does — without it the payload always comes back whole:
 
 ```ts
 const { events, cursor } = await app.events();               // pull: what already happened
 const next = await app.waitForEvent("checkout_done", { since: cursor });
+const capped = await app.waitForEvent("checkout_done", { payloadMaxBytes: 1024 }); // check `truncated` before reading `payload`
 ```
 
 For everything else, the package exports `runCli` and the command handlers from [`src/index.ts`](https://github.com/callstackincubator/appduct/blob/main/packages/appduct/src/index.ts), so you can embed the same behavior in Node or Bun scripts without shelling out.
