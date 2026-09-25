@@ -131,9 +131,22 @@ export type AppClient<TTools = ToolMap> = {
    * unnarrowed ({@link FullEventsResult}); pass it to cap each payload's JSON to that many UTF-8
    * bytes, and narrow each event on `truncated` before reading `payload` ({@link EventsResult}) —
    * an event whose payload was over the cap has `payloadPreview`/`payloadBytes` instead.
+   *
+   * The uncapped overload is listed first, but excludes `payloadMaxBytes` from its type
+   * (`payloadMaxBytes?: undefined`) rather than simply omitting the key from `EventsOptions`:
+   * TypeScript's excess-property check only rejects an extra `payloadMaxBytes` on an object
+   * *literal* passed directly as the argument, so an options bag held in a variable would
+   * otherwise still structurally match plain `EventsOptions` and resolve to `FullEventsResult`
+   * — letting `event.payload` compile unnarrowed even though the daemon truncated it (issue
+   * #113's review). Requiring the key to be `undefined` when present means a variable whose
+   * `payloadMaxBytes` is typed `number` (required or optional) fails to match this overload —
+   * by excess-property check for a literal, by property-type mismatch for a variable — and
+   * falls through to the capped overload below, which accepts any `payloadMaxBytes` (including
+   * `number | undefined`) and returns the narrowed `EventsResult` whenever the type cannot
+   * prove the payload is uncapped.
    */
-  events(options?: EventsOptions): Promise<FullEventsResult>;
-  events(options: EventsOptions & { payloadMaxBytes: number }): Promise<EventsResult>;
+  events(options?: EventsOptions & { payloadMaxBytes?: undefined }): Promise<FullEventsResult>;
+  events(options: EventsOptions & { payloadMaxBytes?: number }): Promise<EventsResult>;
 
   /**
    * Waits for the next `app_event` (as pushed by the connected app's `postEvent(name, payload)`)
