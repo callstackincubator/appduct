@@ -35,45 +35,40 @@ export type ProjectAppEventOptions = {
 /** Whether `name` matches the whole-name glob `pattern` (`*` matches any run of characters,
  * everything else literally), in time linear in the two strings' lengths.
  *
- * A backtracking regex (every `*` compiled to `.*`) is exponential: with N stars the engine tries
- * every way of splitting `name` between them. A pattern like `"*a".repeat(10) + "*b"` against a
- * 40-character name took 33 s in testing, and the daemon is single-threaded, so that one
- * `events.since` call or subscription match blocks every session and RPC client until it
- * finishes (issue #112 review). This is the standard greedy two-pointer glob matcher instead:
- * walk both strings, and on a literal mismatch backtrack to the most recent `*` and retry one
- * character further into `name` — each retry only advances through `name`, so the whole match is
- * O(pattern length * name length) at worst, with no exponential blowup. */
+ * No regex and no backtracking: the daemon is single-threaded, so a match that blows up blocks
+ * every session and RPC client (issue #112 review). Compiling `*` to `.*` was exponential in the
+ * star count, and a two-pointer matcher that backtracks to the last `*` was still quadratic.
+ * Instead the pattern is split on `*`: the first piece must be a prefix, the last a suffix, and
+ * each middle piece is found in order with `indexOf`. Taking the leftmost occurrence of each
+ * middle piece is always safe, because it leaves the most room for the pieces after it. */
 const matchesNameGlob = (pattern: string, name: string): boolean => {
-  let patternIndex = 0;
-  let nameIndex = 0;
-  let starPatternIndex = -1;
-  let starNameIndex = -1;
+  const pieces = pattern.split("*");
+  const first = pieces[0] ?? "";
 
-  while (nameIndex < name.length) {
-    if (patternIndex < pattern.length && pattern[patternIndex] === "*") {
-      // Record the star's position and tentatively match zero characters with it; a later
-      // mismatch backtracks here and consumes one more character instead.
-      starPatternIndex = patternIndex;
-      starNameIndex = nameIndex;
-      patternIndex++;
-    } else if (patternIndex < pattern.length && pattern[patternIndex] === name[nameIndex]) {
-      patternIndex++;
-      nameIndex++;
-    } else if (starPatternIndex !== -1) {
-      // Backtrack: let the most recent `*` swallow one more character of `name`.
-      patternIndex = starPatternIndex + 1;
-      starNameIndex++;
-      nameIndex = starNameIndex;
-    } else {
+  if (pieces.length === 1) {
+    return name === first;
+  }
+
+  const last = pieces[pieces.length - 1] ?? "";
+
+  if (first.length + last.length > name.length || !name.startsWith(first) || !name.endsWith(last)) {
+    return false;
+  }
+
+  const end = name.length - last.length;
+  let position = first.length;
+
+  for (const piece of pieces.slice(1, -1)) {
+    const found = name.indexOf(piece, position);
+
+    if (found === -1 || found + piece.length > end) {
       return false;
     }
+
+    position = found + piece.length;
   }
 
-  while (patternIndex < pattern.length && pattern[patternIndex] === "*") {
-    patternIndex++;
-  }
-
-  return patternIndex === pattern.length;
+  return true;
 };
 
 /**

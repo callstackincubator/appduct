@@ -257,6 +257,36 @@ describe("event-bus: retention buffer", () => {
     expect(elapsed).toBeLessThan(1000);
   });
 
+  test("a long literal after a star against many maximum-length names completes quickly", () => {
+    const bus = createEventBus({ clock, bufferSize: 256 });
+
+    for (let index = 0; index < 256; index++) {
+      bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "a".repeat(4096) } });
+    }
+
+    const pattern = "*" + "a".repeat(2048) + "b";
+    const start = performance.now();
+    const { events } = bus.since("s1", { name: pattern });
+    const elapsed = performance.now() - start;
+
+    expect(events).toEqual([]);
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  test("a prefix and suffix around a star never overlap in the name", () => {
+    const bus = createEventBus({ clock });
+
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "ab" } });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "abab" } });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "ab.x.cd.y.ab" } });
+
+    const { events } = bus.since("s1", { name: "ab*ab" });
+    expect(events.map((event) => (event.data as { name: string }).name)).toEqual(["abab", "ab.x.cd.y.ab"]);
+    expect(bus.since("s1", { name: "ab*cd*ab" }).events.map((event) => (event.data as { name: string }).name)).toEqual([
+      "ab.x.cd.y.ab",
+    ]);
+  });
+
   test("name matching is case-sensitive", () => {
     const bus = createEventBus({ clock });
 
