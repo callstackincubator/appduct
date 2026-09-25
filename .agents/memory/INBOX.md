@@ -44,3 +44,7 @@ One note per PR that hit friction, four lines:
   What went wrong: the implementer left out `payloadMaxBytes` on `waitForEvent`, which the issue explicitly asks for. Moving each wait onto its own stream then broke `close()` three times over: pending waits were not closed, a wait whose stream was still opening escaped `close()`, and a failed open rejected with a raw socket error instead of `connection_error`.
   Would have prevented it: tick off every bullet of the issue's Expected outcome, not just the numbered criteria. When a call moves off a shared resource onto its own, list what the shared resource did for free (close on shutdown, error typing) and test each against the new resource, including `close()` with no tick before it and an open that rejects.
   Cost: three review rounds, fix-loop limit hit, issue blocked with one should-fix open
+- 2026-09-25 #120 skill: implement-issue
+  What went wrong: the `events since` resume hint dropped the new `--name`/`--payload-max-bytes` flags, so following it changed the query, and the changelog claimed parity with `appduct_events` defaults it doesn't have; a second round fixed `--payload-max-bytes` help that described `payloadPreview` as the overflow rather than the first n bytes.
+  Would have prevented it: when adding a flag to a command that prints a resume hint, echo the flag in the hint and test it end to end in human mode; check help and changelog wording on truncation against the projection code, not memory.
+  Cost: two review rounds; E2E blocked (no simulator in the cloud container)
