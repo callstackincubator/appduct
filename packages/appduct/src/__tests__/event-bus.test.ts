@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from "vitest";
 
-import { createEventBus } from "../daemon/event-bus.js";
+import { createEventBus, projectAppEvent } from "../daemon/event-bus.js";
 
 const clock = { now: () => new Date("2026-01-01T00:00:00.000Z") };
 
@@ -219,6 +219,39 @@ describe("event-bus: retention buffer", () => {
     expect(() => bus.drop("never-emitted")).not.toThrow();
   });
 
+  test("since with a name glob returns only events whose name matches (issue #112)", () => {
+    const bus = createEventBus({ clock });
+
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "cart.item_added" } });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "checkout_completed" } });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "cart.item_removed" } });
+
+    const { events } = bus.since("s1", { name: "cart.*" });
+    expect(events.map((event) => (event.data as { name: string }).name)).toEqual([
+      "cart.item_added",
+      "cart.item_removed",
+    ]);
+  });
+
+  test("a name with no * matches only that exact name, never a longer name it prefixes", () => {
+    const bus = createEventBus({ clock });
+
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "checkout_completed" } });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "checkout_completed_v2" } });
+
+    const { events } = bus.since("s1", { name: "checkout_completed" });
+    expect(events.map((event) => (event.data as { name: string }).name)).toEqual(["checkout_completed"]);
+  });
+
+  test("name matching is case-sensitive", () => {
+    const bus = createEventBus({ clock });
+
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "cart.item_added" } });
+
+    const { events } = bus.since("s1", { name: "Cart.*" });
+    expect(events).toEqual([]);
+  });
+
   test("a throwing subscriber never breaks buffering or another subscriber", () => {
     const bus = createEventBus({ clock });
     const seen: string[] = [];
@@ -232,5 +265,28 @@ describe("event-bus: retention buffer", () => {
 
     expect(seen).toEqual(["app_event"]);
     expect(bus.since("s1").events).toHaveLength(1);
+  });
+});
+
+describe("projectAppEvent: the one name-glob implementation shared by since() and events.subscribe (issue #112)", () => {
+  const appEvent = (name: string) =>
+    ({ kind: "app_event", sessionId: "s1", ts: 0, seq: 1, data: { name } }) as const;
+
+  test("with no name filter, passes the event through unchanged", () => {
+    const event = appEvent("cart.item_added");
+    expect(projectAppEvent(event)).toBe(event);
+  });
+
+  test("a non-app_event kind is never filtered by name — only an app event carries one", () => {
+    const event = { kind: "tools_changed", sessionId: "s1", ts: 0, seq: 0, data: {} } as const;
+    expect(projectAppEvent(event, { name: "cart.*" })).toBe(event);
+  });
+
+  test("matches a trailing glob", () => {
+    expect(projectAppEvent(appEvent("cart.item_added"), { name: "cart.*" })).toBeDefined();
+  });
+
+  test("rejects a name the glob doesn't cover", () => {
+    expect(projectAppEvent(appEvent("checkout_completed_v2"), { name: "checkout_completed" })).toBeUndefined();
   });
 });
