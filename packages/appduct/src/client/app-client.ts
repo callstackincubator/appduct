@@ -315,7 +315,12 @@ export const makeAppClient = <TTools = ToolMap>(
       }
 
       const timeoutMs = options.timeoutMs ?? DEFAULT_WAIT_FOR_EVENT_TIMEOUT_MS;
-      const waitStream = await openStream();
+      let waitStream: DaemonStream;
+      try {
+        waitStream = await openStream();
+      } catch (error) {
+        throw toAppductError(error);
+      }
 
       // `close()` may have run while `openStream()` was still pending (it only closes streams
       // already in `openWaitStreams`, which is empty until here). Re-check now that we hold the
