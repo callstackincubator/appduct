@@ -30,6 +30,40 @@ export type ProjectAppEventOptions = {
   /** Whole-name, case-sensitive glob (issue #112): `*` matches any run of characters, a pattern
    * with no `*` is an exact name. */
   name?: string;
+  /** Caps the payload's JSON to this many UTF-8 bytes (issue #113); see {@link truncateToUtf8Bytes}. */
+  payloadMaxBytes?: number;
+};
+
+/** UTF-8 byte length of `text` — what a `payloadMaxBytes` cap counts against, not `text.length`
+ * (UTF-16 code units), which undercounts anything outside the BMP or with multi-byte characters. */
+const utf8ByteLength = (text: string): number => Buffer.byteLength(text, "utf8");
+
+/**
+ * The longest prefix of `text` whose UTF-8 encoding is at most `maxBytes` bytes, never splitting a
+ * multi-byte code point (issue #113). A naive byte slice (`Buffer.from(text).subarray(0,
+ * maxBytes)`) can land mid-sequence; decoding that back with the lossy `Buffer#toString("utf8")`
+ * would silently replace the broken tail with U+FFFD instead of dropping it, corrupting the
+ * preview rather than shortening it cleanly. This decodes strictly (`TextDecoder` with `fatal:
+ * true`) and backs off one byte at a time until the slice decodes clean.
+ */
+const truncateToUtf8Bytes = (text: string, maxBytes: number): string => {
+  const encoded = Buffer.from(text, "utf8");
+
+  if (encoded.length <= maxBytes) {
+    return text;
+  }
+
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+
+  for (let end = maxBytes; end > 0; end--) {
+    try {
+      return decoder.decode(encoded.subarray(0, end));
+    } catch {
+      // `end` landed inside a multi-byte sequence; back off one byte and retry.
+    }
+  }
+
+  return "";
 };
 
 /** Whether `name` matches the whole-name glob `pattern` (`*` matches any run of characters,
@@ -72,25 +106,58 @@ const matchesNameGlob = (pattern: string, name: string): boolean => {
 };
 
 /**
- * Whether `event` survives `options.name`'s glob — the one implementation `since()`'s drain and
- * `daemon.ts`'s `events.subscribe` fan-out both call, so the two can't drift apart (issue #112).
- * Returns `event` unchanged when it should be kept, `undefined` when it should be dropped.
+ * Whether `event` survives `options.name`'s glob, and truncates its payload to `options
+ * .payloadMaxBytes` when given — the one implementation `since()`'s drain and `daemon.ts`'s
+ * `events.subscribe` fan-out both call, so the two can't drift apart (issue #112, #113). Returns
+ * `event` (unchanged, or with its payload replaced by a preview) when it should be kept,
+ * `undefined` when it should be dropped.
  *
- * Only an `app_event` carries a `name` to match against, so every other kind passes through
- * unfiltered regardless of `options.name` — the `kinds` filter (`events.subscribe`) is what
- * narrows those.
+ * Only an `app_event` carries a `name`/`payload` to filter or truncate, so every other kind passes
+ * through unfiltered and untouched regardless of either option — the `kinds` filter
+ * (`events.subscribe`) is what narrows those.
  */
 export const projectAppEvent = (
   event: EventNotification,
   options: ProjectAppEventOptions = {},
 ): EventNotification | undefined => {
-  if (options.name === undefined || event.kind !== "app_event") {
+  if (event.kind !== "app_event") {
     return event;
   }
 
-  const data = event.data as { name?: unknown };
+  const data = event.data as { name?: unknown; payload?: unknown };
 
-  return typeof data.name === "string" && matchesNameGlob(options.name, data.name) ? event : undefined;
+  if (options.name !== undefined && !(typeof data.name === "string" && matchesNameGlob(options.name, data.name))) {
+    return undefined;
+  }
+
+  if (options.payloadMaxBytes === undefined || !("payload" in data)) {
+    return event;
+  }
+
+  const payloadJson = JSON.stringify(data.payload);
+
+  // `JSON.stringify` returns `undefined` (the value, not a string) only for a payload that has no
+  // JSON representation at all (`undefined` itself) — nothing to measure or preview, so it passes
+  // through exactly like an event with no `payload` key at all.
+  if (payloadJson === undefined) {
+    return event;
+  }
+
+  const payloadBytes = utf8ByteLength(payloadJson);
+
+  if (payloadBytes <= options.payloadMaxBytes) {
+    return event;
+  }
+
+  return {
+    ...event,
+    data: {
+      name: data.name,
+      payloadPreview: truncateToUtf8Bytes(payloadJson, options.payloadMaxBytes),
+      truncated: true,
+      payloadBytes,
+    },
+  };
 };
 
 export type EventsSinceQuery = {
@@ -99,11 +166,21 @@ export type EventsSinceQuery = {
   /** Whole-name, case-sensitive glob (issue #112): `*` matches any run of characters, a pattern
    * with no `*` is an exact name. See {@link projectAppEvent}. */
   name?: string;
+  /** Caps a returned `app_event`'s payload to this many UTF-8 bytes of its JSON (issue #113);
+   * applied to the page actually returned, after `name`/`limit`, via {@link projectAppEvent}. */
+  payloadMaxBytes?: number;
 };
 
 export type EventsSinceQueryResult = {
   events: EventNotification[];
   cursor: number;
+  /** How many app events after `since` were evicted before this call could return them (issue
+   * #113): `max(0, oldest.seq - since - 1)`, `oldest` being the buffer's current oldest retained
+   * entry. `0` once nothing has fallen off, and `since` defaults to `0` when omitted. */
+  dropped: number;
+  /** How many events still match `since`/`name` after the returned (possibly `limit`-truncated)
+   * page. `0` on the last page. */
+  remaining: number;
 };
 
 export type EventBus = {
@@ -146,9 +223,13 @@ export const createEventBus = (options: CreateEventBusOptions = {}): EventBus =>
   return {
     emit: (event) => {
       const sessionId = event.sessionId;
-      const seq = sessionId !== undefined ? (cursors.get(sessionId) ?? 0) + 1 : 0;
+      // `seq` counts `app_event`s only (issue #113): every other kind — session-scoped or not —
+      // carries `seq: 0`, since only `app_event` is retained and `dropped` is worked out from its
+      // `seq` alone (`since()` below). Nothing else reads `seq`.
+      let seq = 0;
 
-      if (sessionId !== undefined) {
+      if (sessionId !== undefined && event.kind === "app_event") {
+        seq = (cursors.get(sessionId) ?? 0) + 1;
         cursors.set(sessionId, seq);
       }
 
@@ -189,18 +270,30 @@ export const createEventBus = (options: CreateEventBusOptions = {}): EventBus =>
       const buffer = buffers.get(sessionId) ?? [];
       const sessionCursor = cursors.get(sessionId) ?? 0;
 
+      // How many app events fell off the front of the ring buffer before this call could see them
+      // (issue #113): the buffer's own oldest retained entry is the earliest still-visible `seq`,
+      // so anything between the caller's cursor and just before it is gone. `since` defaults to 0
+      // (the same "from the start" a caller gets by omitting it), and only ever grows past what's
+      // still retained, never past what's been filtered by `name` — a name filter narrows what's
+      // returned, not what history exists.
+      const sinceValue = query.since ?? 0;
+      const oldestRetainedSeq = buffer.length > 0 ? buffer[0]!.seq : undefined;
+      const dropped = oldestRetainedSeq !== undefined ? Math.max(0, oldestRetainedSeq - sinceValue - 1) : 0;
+
       // Never hand back the live buffer array itself — `emit()` keeps pushing into it after this
       // call returns, and a caller that gets `events` by reference would see it mutate underneath
       // it.
-      let events = buffer.slice();
+      let matching = buffer.slice();
 
       if (query.since !== undefined) {
-        events = events.filter((event) => event.seq > query.since!);
+        matching = matching.filter((event) => event.seq > query.since!);
       }
 
       if (query.name !== undefined) {
-        events = events.filter((event) => projectAppEvent(event, { name: query.name }) !== undefined);
+        matching = matching.filter((event) => projectAppEvent(event, { name: query.name }) !== undefined);
       }
+
+      let events = matching;
 
       if (query.limit !== undefined && events.length > query.limit) {
         // Keep the OLDEST N, not the newest: `limit` exists to bound one response, not to skip
@@ -210,6 +303,11 @@ export const createEventBus = (options: CreateEventBusOptions = {}): EventBus =>
         events = events.slice(0, query.limit);
       }
 
+      // What `limit` (if any) cut off: matching events strictly after the ones actually returned.
+      // `matching` is oldest-first and `events` is its own prefix, so the difference in lengths is
+      // exactly that count (issue #113).
+      const remaining = matching.length - events.length;
+
       // The cursor a caller should resume from: the last event actually returned, so paging
       // through a `limit`-truncated response with `since: cursor` always advances. Only when
       // nothing was returned (empty buffer, or every retained event was filtered out) does it fall
@@ -217,7 +315,13 @@ export const createEventBus = (options: CreateEventBusOptions = {}): EventBus =>
       // the unretained kinds' seqs rather than re-fetching from an older cursor forever.
       const cursor = events.length > 0 ? events[events.length - 1]!.seq : sessionCursor;
 
-      return { events, cursor };
+      if (query.payloadMaxBytes !== undefined) {
+        // Truncation never removes an event (only `name` does, already applied above), so this
+        // always returns a defined result for each one.
+        events = events.map((event) => projectAppEvent(event, { payloadMaxBytes: query.payloadMaxBytes })!);
+      }
+
+      return { events, cursor, dropped, remaining };
     },
     drop: (sessionId) => {
       buffers.delete(sessionId);

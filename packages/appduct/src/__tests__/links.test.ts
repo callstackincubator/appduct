@@ -64,7 +64,7 @@ describe("PendingLinkRegistry: TTL expiry and eventual free", () => {
       eventBus: {
         emit: (event) => events.push({ ...event, ts: event.ts ?? 0, seq: 0 }),
         subscribe: () => () => {},
-        since: () => ({ events: [], cursor: 0 }),
+        since: () => ({ events: [], cursor: 0, dropped: 0, remaining: 0 }),
         drop: () => {},
       },
     });
@@ -103,7 +103,7 @@ describe("PendingLinkRegistry: TTL expiry and eventual free", () => {
       eventBus: {
         emit: () => {},
         subscribe: () => () => {},
-        since: () => ({ events: [], cursor: 0 }),
+        since: () => ({ events: [], cursor: 0, dropped: 0, remaining: 0 }),
         drop: () => {},
       },
     });
@@ -131,7 +131,7 @@ describe("PendingLinkRegistry: claimableCount (issue #30)", () => {
       eventBus: {
         emit: () => {},
         subscribe: () => () => {},
-        since: () => ({ events: [], cursor: 0 }),
+        since: () => ({ events: [], cursor: 0, dropped: 0, remaining: 0 }),
         drop: () => {},
       },
     });
@@ -167,7 +167,7 @@ describe("PendingLinkRegistry: claimableCount (issue #30)", () => {
       eventBus: {
         emit: () => {},
         subscribe: () => () => {},
-        since: () => ({ events: [], cursor: 0 }),
+        since: () => ({ events: [], cursor: 0, dropped: 0, remaining: 0 }),
         drop: () => {},
       },
     });

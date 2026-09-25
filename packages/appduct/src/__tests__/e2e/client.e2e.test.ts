@@ -286,6 +286,45 @@ describe("e2e: appduct/client", () => {
     15_000,
   );
 
+  test(
+    "events() with payloadMaxBytes truncates an oversized payload and reports dropped/remaining (issue #113)",
+    async () => {
+      const { stateDir } = await makeTempStateDir();
+      await ensureDaemon(stateDir);
+      const port = await daemonWssPort(stateDir);
+      const pinnedKeys = await fetchPinnedKeys(stateDir);
+
+      const events = await subscribeToEvents(stateDir);
+      const link = await mintLink(stateDir);
+      const fakeApp = new FakeAppClient(port, pinnedKeys);
+      await fakeApp.claim(link, { model: "Pixel 8" });
+
+      const toolsChanged = events.waitFor("tools_changed");
+      fakeApp.registerTools([{ name: "echo" }]);
+      await toolsChanged;
+      events.close();
+
+      const app = await connect({ stateDir, selector: link.sessionId });
+
+      fakeApp.emitEvent("big", { text: "x".repeat(200) });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      const drained = await app.events({ payloadMaxBytes: 10 });
+      const event = drained.events.find((candidate) => candidate.name === "big")!;
+      expect(event.truncated).toBe(true);
+      if (event.truncated) {
+        expect(event.payloadBytes).toBeGreaterThan(10);
+        expect(Buffer.byteLength(event.payloadPreview, "utf8")).toBeLessThanOrEqual(10);
+      }
+      expect(drained.dropped).toBe(0);
+      expect(drained.remaining).toBe(0);
+
+      app.close();
+      fakeApp.close();
+    },
+    15_000,
+  );
+
   test("connect() rejects with a connection_error AppductError when the daemon is unreachable and auto-spawn is disabled", async () => {
     const { stateDir } = await makeTempStateDir();
 

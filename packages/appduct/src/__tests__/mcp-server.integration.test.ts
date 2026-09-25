@@ -1653,6 +1653,105 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
     app.socket.close();
   });
 
+  test("appduct_events truncates a payload over the default 4096-byte cap (issue #113)", async () => {
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const bigPayload = { text: "x".repeat(5000) };
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "big", payload: bigPayload, ts: Date.now() }));
+    await emitted;
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const result = await client.request(
+      { method: "tools/call", params: { name: "appduct_events", arguments: {} } },
+      CallToolResultSchema,
+    );
+    expect(result.isError).not.toBe(true);
+    const data = result.structuredContent as {
+      events: Array<{ name: string; payload?: unknown; payloadPreview?: string; truncated?: boolean; payloadBytes?: number }>;
+    };
+    const event = data.events.find((candidate) => candidate.name === "big")!;
+    expect(event.truncated).toBe(true);
+    expect(event.payload).toBeUndefined();
+    expect(event.payloadBytes).toBe(Buffer.byteLength(JSON.stringify(bigPayload), "utf8"));
+    expect(Buffer.byteLength(event.payloadPreview!, "utf8")).toBeLessThanOrEqual(4096);
+
+    app.socket.close();
+  });
+
+  test("appduct_events leaves a payload under the default cap unchanged, with no truncated field (issue #113)", async () => {
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "small", payload: { hi: true }, ts: Date.now() }));
+    await emitted;
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const result = await client.request(
+      { method: "tools/call", params: { name: "appduct_events", arguments: {} } },
+      CallToolResultSchema,
+    );
+    const data = result.structuredContent as { events: Array<{ name: string; payload?: unknown; truncated?: boolean }> };
+    const event = data.events.find((candidate) => candidate.name === "small")!;
+    expect(event.truncated).toBeUndefined();
+    expect(event.payload).toEqual({ hi: true });
+
+    app.socket.close();
+  });
+
+  test("appduct_events accepts payloadMaxBytes to override the default cap (issue #113)", async () => {
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "small", payload: { hi: true }, ts: Date.now() }));
+    await emitted;
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const result = await client.request(
+      { method: "tools/call", params: { name: "appduct_events", arguments: { payloadMaxBytes: 2 } } },
+      CallToolResultSchema,
+    );
+    const data = result.structuredContent as { events: Array<{ name: string; truncated?: boolean }> };
+    const event = data.events.find((candidate) => candidate.name === "small")!;
+    expect(event.truncated).toBe(true);
+
+    app.socket.close();
+  });
+
+  test("appduct_events returns dropped and remaining (issue #113)", async () => {
+    const { daemon, stateDir } = await startTestDaemon({ eventBufferSize: 3 });
+    const app = await claimApp(daemon);
+
+    for (let i = 0; i < 5; i++) {
+      const emitted = waitForEvent(daemon, "app_event");
+      app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: `e${i}`, ts: Date.now() }));
+      await emitted;
+    }
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const first = await client.request(
+      { method: "tools/call", params: { name: "appduct_events", arguments: { limit: 1 } } },
+      CallToolResultSchema,
+    );
+    const firstData = first.structuredContent as { events: Array<{ name: string }>; dropped: number; remaining: number };
+    // Only e2, e3, e4 are retained (bufferSize 3) — e0 and e1 were evicted.
+    expect(firstData.dropped).toBe(2);
+    expect(firstData.remaining).toBe(2);
+
+    app.socket.close();
+  });
+
   test("appduct_events and appduct_wait_for_event do not offer kinds and reject it with invalid_request", async () => {
     const { daemon, stateDir } = await startTestDaemon();
     const app = await claimApp(daemon);
@@ -1786,6 +1885,130 @@ describe("daemon: events.since / events.subscribe name filter (issue #112)", () 
       stream.close();
       app.socket.close();
     }
+  });
+});
+
+describe("daemon: events.since / events.subscribe payloadMaxBytes, dropped and remaining (issue #113)", () => {
+  test("events.since truncates an app_event's payload over payloadMaxBytes", async () => {
+    const { daemon } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const bigPayload = { text: "x".repeat(200) };
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "big", payload: bigPayload, ts: Date.now() }));
+    await emitted;
+
+    const result = (await rpcCall(daemon.paths.socketPath, "events.since", {
+      selector: app.alias,
+      payloadMaxBytes: 10,
+    })) as { events: Array<{ data: { name: string; payload?: unknown; payloadPreview: string; truncated: boolean; payloadBytes: number } }> };
+
+    const data = result.events[0]!.data;
+    expect(data.truncated).toBe(true);
+    expect(data.payload).toBeUndefined();
+    expect(data.payloadBytes).toBe(Buffer.byteLength(JSON.stringify(bigPayload), "utf8"));
+    expect(Buffer.byteLength(data.payloadPreview, "utf8")).toBeLessThanOrEqual(10);
+
+    app.socket.close();
+  });
+
+  test("events.since with no payloadMaxBytes never truncates", async () => {
+    const { daemon } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const bigPayload = { text: "x".repeat(200) };
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "big", payload: bigPayload, ts: Date.now() }));
+    await emitted;
+
+    const result = (await rpcCall(daemon.paths.socketPath, "events.since", {
+      selector: app.alias,
+    })) as { events: Array<{ data: { name: string; payload?: unknown; truncated?: boolean } }> };
+
+    expect(result.events[0]!.data.truncated).toBeUndefined();
+    expect(result.events[0]!.data.payload).toEqual(bigPayload);
+
+    app.socket.close();
+  });
+
+  test("events.subscribe with payloadMaxBytes delivers live events truncated the same way", async () => {
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const stream = await openDaemonStream({ stateDir, spawn: failIfCalled });
+
+    try {
+      await stream.call(RPC_METHODS.eventsSubscribe, { sessionSelector: app.sessionId, payloadMaxBytes: 5 });
+
+      const received: Array<{ data: { name: string; truncated?: boolean; payload?: unknown } }> = [];
+      stream.onNotification((payload) => {
+        const event = payload as { kind: string; data: { name: string; truncated?: boolean; payload?: unknown } };
+        if (event.kind === "app_event") {
+          received.push(event);
+        }
+      });
+
+      const emitted = waitForEvent(daemon, "app_event");
+      app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "big", payload: { text: "x".repeat(200) }, ts: Date.now() }));
+      await emitted;
+
+      const deadline = Date.now() + 2000;
+      while (received.length < 1 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      expect(received[0]!.data.truncated).toBe(true);
+      expect(received[0]!.data.payload).toBeUndefined();
+    } finally {
+      stream.close();
+      app.socket.close();
+    }
+  });
+
+  test("events.since reports dropped after more than eventBufferSize app events, 0 otherwise", async () => {
+    const { daemon } = await startTestDaemon({ eventBufferSize: 3 });
+    const app = await claimApp(daemon);
+
+    for (let i = 0; i < 5; i++) {
+      const emitted = waitForEvent(daemon, "app_event");
+      app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: `e${i}`, ts: Date.now() }));
+      await emitted;
+    }
+
+    const result = (await rpcCall(daemon.paths.socketPath, "events.since", { selector: app.alias })) as {
+      dropped: number;
+      remaining: number;
+    };
+    expect(result.dropped).toBe(2);
+    expect(result.remaining).toBe(0);
+
+    app.socket.close();
+  });
+
+  test("events.since reports dropped: 0 when Appduct's own kinds fired in between but nothing was evicted", async () => {
+    const { daemon } = await startTestDaemon();
+    const app = await claimApp(daemon);
+    await snapshotTools(daemon, app, [{ name: "echo" }]);
+
+    app.socket.on("message", (data) => {
+      const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+      if (msg.type === "tool_call") {
+        app.socket.send(JSON.stringify({ type: "tool_result", session_id: app.sessionId, id: msg.id, result: "ok" }));
+      }
+    });
+
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "before", ts: Date.now() }));
+    await emitted;
+
+    const finished = waitForEvent(daemon, "tool_call_finished");
+    await rpcCall(daemon.paths.socketPath, "tools.call", { selector: app.alias, name: "echo", args: {} });
+    await finished;
+
+    const result = (await rpcCall(daemon.paths.socketPath, "events.since", { selector: app.alias })) as { dropped: number };
+    expect(result.dropped).toBe(0);
+
+    app.socket.close();
   });
 });
 

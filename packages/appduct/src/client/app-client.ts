@@ -15,6 +15,7 @@ import {
   type AppEvent,
   type EventNotification,
   type EventsSinceResult,
+  type FullAppEvent,
   type ListedToolDescriptor,
   type ToolsCallResult,
   type ToolsListResult,
@@ -70,17 +71,38 @@ export type EventsOptions = {
   limit?: number;
 };
 
-export type EventsResult = {
-  events: AppEvent[];
+/** `events.since`'s `dropped`/`remaining`, shared by both of {@link AppClient.events}'s overloaded
+ * results (issue #113). */
+export type EventsCounts = {
+  /** App events after `since` that were evicted before this call could return them (`0` once
+   * nothing has fallen off — including across a gap of only Appduct's own kinds, which never
+   * advance `seq`). */
+  dropped: number;
+  /** Events still matching this query after the returned (possibly `limit`-truncated) page; `0`
+   * on the last page. */
+  remaining: number;
+};
+
+/** {@link AppClient.events}'s result with no `payloadMaxBytes` — every event's `payload` is
+ * readable unnarrowed. */
+export type FullEventsResult = EventsCounts & {
+  events: FullAppEvent[];
   /** The highest `seq` currently retained for this session (not just among the returned events) —
-   * pass it back as `since`/`since` on the next {@link AppClient.events}/{@link
-   * AppClient.waitForEvent} call to resume after it. */
+   * pass it back as `since` on the next {@link AppClient.events}/{@link AppClient.waitForEvent}
+   * call to resume after it. */
+  cursor: number;
+};
+
+/** {@link AppClient.events}'s result once a `payloadMaxBytes` cap is given — narrow each event on
+ * `truncated` before reading `payload`. */
+export type EventsResult = EventsCounts & {
+  events: AppEvent[];
   cursor: number;
 };
 
 /** Re-exported from `@appduct/shared` (issue #112) so `appduct/client` keeps its own public
  * `AppEvent` name and doc comment for a `waitForEvent`/`events` caller. */
-export type { AppEvent } from "@appduct/shared";
+export type { AppEvent, FullAppEvent } from "@appduct/shared";
 
 export type AppClient<TTools = ToolMap> = {
   readonly sessionId: string;
@@ -97,11 +119,34 @@ export type AppClient<TTools = ToolMap> = {
     options?: CallOptions,
   ): Promise<ToolResult<TTools, K>>;
 
-  /** Drains `app_event`s retained in the daemon's per-session ring buffer since a cursor — the pull
+  /**
+   * Drains `app_event`s retained in the daemon's per-session ring buffer since a cursor — the pull
    * counterpart to {@link AppClient.waitForEvent}, for checking what already happened instead of
    * waiting for the next one. Pass `cursor` from the result back as `since` on the next call to
-   * avoid re-reading events already seen. */
-  events(options?: EventsOptions): Promise<EventsResult>;
+   * avoid re-reading events already seen. `dropped`/`remaining` (issue #113) report, respectively,
+   * how many app events after `since` were evicted before this call could return them, and how
+   * much more still matches after this page.
+   *
+   * Overloaded on `payloadMaxBytes` (issue #113): omit it and every event's `payload` is readable
+   * unnarrowed ({@link FullEventsResult}); pass it to cap each payload's JSON to that many UTF-8
+   * bytes, and narrow each event on `truncated` before reading `payload` ({@link EventsResult}) —
+   * an event whose payload was over the cap has `payloadPreview`/`payloadBytes` instead.
+   *
+   * The uncapped overload is listed first, but excludes `payloadMaxBytes` from its type
+   * (`payloadMaxBytes?: undefined`) rather than simply omitting the key from `EventsOptions`:
+   * TypeScript's excess-property check only rejects an extra `payloadMaxBytes` on an object
+   * *literal* passed directly as the argument, so an options bag held in a variable would
+   * otherwise still structurally match plain `EventsOptions` and resolve to `FullEventsResult`
+   * — letting `event.payload` compile unnarrowed even though the daemon truncated it (issue
+   * #113's review). Requiring the key to be `undefined` when present means a variable whose
+   * `payloadMaxBytes` is typed `number` (required or optional) fails to match this overload —
+   * by excess-property check for a literal, by property-type mismatch for a variable — and
+   * falls through to the capped overload below, which accepts any `payloadMaxBytes` (including
+   * `number | undefined`) and returns the narrowed `EventsResult` whenever the type cannot
+   * prove the payload is uncapped.
+   */
+  events(options?: EventsOptions & { payloadMaxBytes?: undefined }): Promise<FullEventsResult>;
+  events(options: EventsOptions & { payloadMaxBytes?: number }): Promise<EventsResult>;
 
   /**
    * Waits for the next `app_event` (as pushed by the connected app's `postEvent(name, payload)`)
@@ -115,8 +160,11 @@ export type AppClient<TTools = ToolMap> = {
    * connection, replaced — not merged — on each call); concurrent `waitForEvent` calls on the same
    * `AppClient` all see every `app_event`, so this is safe today, but it means the connection stays
    * subscribed to `app_event` for its lifetime once any `waitForEvent` has run.
+   *
+   * No `payloadMaxBytes` here yet (issue #113 scopes the overload to {@link AppClient.events});
+   * this always resolves with the full, untruncated payload.
    */
-  waitForEvent<TPayload = unknown>(name: string, options?: WaitForEventOptions): Promise<AppEvent<TPayload>>;
+  waitForEvent<TPayload = unknown>(name: string, options?: WaitForEventOptions): Promise<FullAppEvent<TPayload>>;
 
   /** Closes the underlying connection. Safe to call more than once. */
   close(): void;
@@ -195,12 +243,16 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
       }
     },
 
-    events: async (options: EventsOptions = {}): Promise<EventsResult> => {
+    // A single implementation backs both of the public type's overloaded signatures — `makeAppClient`
+    // returns `client as unknown as AppClient<TTools>` below, so nothing here has to structurally
+    // satisfy either signature on its own; the overloads are strictly a compile-time view for callers.
+    events: async (options: EventsOptions & { payloadMaxBytes?: number } = {}): Promise<EventsResult> => {
       try {
         const result = await stream.call<EventsSinceResult>(RPC_METHODS.eventsSince, {
           selector: sessionId,
           since: options.since,
           limit: options.limit,
+          payloadMaxBytes: options.payloadMaxBytes,
         });
 
         return {
@@ -208,19 +260,26 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
             .map((event) => toAppEvent(event, sessionId))
             .filter((event): event is AppEvent => event !== undefined),
           cursor: result.cursor,
+          dropped: result.dropped,
+          remaining: result.remaining,
         };
       } catch (error) {
         throw toAppductError(error);
       }
     },
 
-    waitForEvent: (name: string, options: WaitForEventOptions = {}): Promise<AppEvent> => {
+    waitForEvent: (name: string, options: WaitForEventOptions = {}): Promise<FullAppEvent> => {
       const timeoutMs = options.timeoutMs ?? DEFAULT_WAIT_FOR_EVENT_TIMEOUT_MS;
 
-      const toMatch = (event: EventNotification): AppEvent | undefined => {
+      // `waitForEvent` never asks for `payloadMaxBytes` (issue #113 scopes the overload to
+      // `events()`), so every `app_event` it can possibly see comes back from `toAppEvent` as a
+      // `FullAppEvent` — `truncated` is only ever `true` when a `payloadMaxBytes` cap on this
+      // connection's subscription did the truncating, and this connection's subscribe call below
+      // never sets one.
+      const toMatch = (event: EventNotification): FullAppEvent | undefined => {
         const appEvent = toAppEvent(event, sessionId);
 
-        if (!appEvent || appEvent.name !== name) {
+        if (!appEvent || appEvent.truncated || appEvent.name !== name) {
           return undefined;
         }
 
@@ -231,7 +290,7 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
         return appEvent;
       };
 
-      return new Promise<AppEvent>((resolve, reject) => {
+      return new Promise<FullAppEvent>((resolve, reject) => {
         let settled = false;
 
         const settle = (fn: () => void): void => {

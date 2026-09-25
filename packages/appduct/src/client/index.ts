@@ -20,7 +20,10 @@ export type {
   CallOptions,
   EventsOptions,
   EventsResult,
+  FullAppEvent,
+  FullEventsResult,
   ToolMap,
   WaitForEventOptions,
 } from "./app-client.js";
+export type { TruncatedAppEvent } from "@appduct/shared";
 export type { AgentEndpoint, ErrorType, ListedToolDescriptor, ToolDescriptor } from "@appduct/shared";

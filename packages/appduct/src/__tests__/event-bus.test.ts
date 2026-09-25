@@ -43,7 +43,7 @@ describe("event-bus: retention buffer", () => {
 
     expect(seen).toEqual([0]);
     // Nothing to drain for any session id — a daemon-wide event was never anyone's to retain.
-    expect(bus.since("s1")).toEqual({ events: [], cursor: 0 });
+    expect(bus.since("s1")).toEqual({ events: [], cursor: 0, dropped: 0, remaining: 0 });
   });
 
   test("since excludes everything at or before the given cursor", () => {
@@ -79,9 +79,32 @@ describe("event-bus: retention buffer", () => {
       "tool_call_finished",
       "session_suspended",
     ]);
+    // Only `app_event` ever advances the per-session seq (issue #113) — it is the first emit
+    // above to bump it, so it lands on 1, not the 4th-emit position it would have under the old
+    // "every session event bumps seq" scheme.
     const { events, cursor } = bus.since("s1");
-    expect(events.map((event) => [event.kind, event.seq])).toEqual([["app_event", 4]]);
-    expect(cursor).toBe(4);
+    expect(events.map((event) => [event.kind, event.seq])).toEqual([["app_event", 1]]);
+    expect(cursor).toBe(1);
+  });
+
+  test("app_event is the only kind that advances the per-session seq; every other kind carries seq: 0 (issue #113)", () => {
+    const bus = createEventBus({ clock });
+    const seen: Array<[string, number]> = [];
+    bus.subscribe((event) => seen.push([event.kind, event.seq]));
+
+    bus.emit({ kind: "link_created", sessionId: "s1", data: {} });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: {} });
+    bus.emit({ kind: "tools_changed", sessionId: "s1", data: {} });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: {} });
+    bus.emit({ kind: "tool_call_finished", sessionId: "s1", data: {} });
+
+    expect(seen).toEqual([
+      ["link_created", 0],
+      ["app_event", 1],
+      ["tools_changed", 0],
+      ["app_event", 2],
+      ["tool_call_finished", 0],
+    ]);
   });
 
   test("limit truncates to the oldest N so paging with the returned cursor never skips events", () => {
@@ -107,15 +130,17 @@ describe("event-bus: retention buffer", () => {
     expect(third.cursor).toBe(5);
   });
 
-  test("an empty page still advances the cursor past kinds that are never retained", () => {
+  test("a session with no app_events yet has cursor 0, even after other kinds (issue #113)", () => {
     const bus = createEventBus({ clock });
 
     bus.emit({ kind: "tools_changed", sessionId: "s1", data: {} });
     bus.emit({ kind: "tools_changed", sessionId: "s1", data: {} });
 
-    const { events, cursor } = bus.since("s1");
+    const { events, cursor, dropped, remaining } = bus.since("s1");
     expect(events).toEqual([]);
-    expect(cursor).toBe(2);
+    expect(cursor).toBe(0);
+    expect(dropped).toBe(0);
+    expect(remaining).toBe(0);
   });
 
   test("an app_event survives bufferSize tool calls with no app events after it", () => {
@@ -151,7 +176,7 @@ describe("event-bus: retention buffer", () => {
     bus.emit({ kind: "app_event", sessionId: "s1", data: {} });
     bus.emit({ kind: "session_expired", sessionId: "s1", data: {} });
 
-    expect(bus.since("s1")).toEqual({ events: [], cursor: 0 });
+    expect(bus.since("s1")).toEqual({ events: [], cursor: 0, dropped: 0, remaining: 0 });
   });
 
   test("the terminal event itself is still delivered live even though it isn't retained", () => {
@@ -171,7 +196,7 @@ describe("event-bus: retention buffer", () => {
     bus.emit({ kind: "app_event", sessionId: "s1", data: {} });
     bus.emit({ kind: "session_revoked", sessionId: "s1", data: {} });
 
-    expect(bus.since("s1")).toEqual({ events: [], cursor: 0 });
+    expect(bus.since("s1")).toEqual({ events: [], cursor: 0, dropped: 0, remaining: 0 });
   });
 
   test("since returns a snapshot, not the live buffer — a later emit doesn't mutate an already-returned result", () => {
@@ -211,7 +236,7 @@ describe("event-bus: retention buffer", () => {
 
     bus.drop("s1");
 
-    expect(bus.since("s1")).toEqual({ events: [], cursor: 0 });
+    expect(bus.since("s1")).toEqual({ events: [], cursor: 0, dropped: 0, remaining: 0 });
   });
 
   test("drop() on a session with nothing retained is a harmless no-op", () => {
@@ -309,6 +334,164 @@ describe("event-bus: retention buffer", () => {
 
     expect(seen).toEqual(["app_event"]);
     expect(bus.since("s1").events).toHaveLength(1);
+  });
+});
+
+describe("event-bus: dropped and remaining (issue #113)", () => {
+  test("dropped is 0 while nothing has been evicted", () => {
+    const bus = createEventBus({ clock, bufferSize: 5 });
+
+    for (let i = 0; i < 5; i++) {
+      bus.emit({ kind: "app_event", sessionId: "s1", data: { i } });
+    }
+
+    expect(bus.since("s1").dropped).toBe(0);
+    expect(bus.since("s1", { since: 2 }).dropped).toBe(0);
+  });
+
+  test("dropped counts app events evicted before the buffer's current oldest entry", () => {
+    const bus = createEventBus({ clock, bufferSize: 3 });
+
+    for (let i = 0; i < 5; i++) {
+      bus.emit({ kind: "app_event", sessionId: "s1", data: { i } });
+    }
+    // seq 1 and 2 were evicted; the buffer now holds seq 3, 4, 5.
+
+    expect(bus.since("s1").dropped).toBe(2);
+    // Resuming from a still-retained cursor: nothing beyond it was evicted.
+    expect(bus.since("s1", { since: 3 }).dropped).toBe(0);
+    expect(bus.since("s1", { since: 4 }).dropped).toBe(0);
+  });
+
+  test("dropped is 0 across a gap of only never-retained kinds, even with a huge buffer wrap on other sessions", () => {
+    const bus = createEventBus({ clock, bufferSize: 2 });
+
+    bus.emit({ kind: "app_event", sessionId: "s1", data: {} });
+    const { cursor } = bus.since("s1");
+
+    for (let i = 0; i < 50; i++) {
+      bus.emit({ kind: "tool_call_progress", sessionId: "s1", data: {} });
+    }
+
+    // Appduct's own kinds never advance seq (issue #113), so however many fired between calls,
+    // nothing was evicted that the caller's cursor didn't already see.
+    expect(bus.since("s1", { since: cursor }).dropped).toBe(0);
+  });
+
+  test("remaining counts matching events left after the returned page, 0 on the last page", () => {
+    const bus = createEventBus({ clock });
+
+    for (let i = 0; i < 5; i++) {
+      bus.emit({ kind: "app_event", sessionId: "s1", data: { i } });
+    }
+
+    const first = bus.since("s1", { limit: 2 });
+    expect(first.events.map((event) => event.seq)).toEqual([1, 2]);
+    expect(first.remaining).toBe(3);
+
+    const second = bus.since("s1", { since: first.cursor, limit: 2 });
+    expect(second.events.map((event) => event.seq)).toEqual([3, 4]);
+    expect(second.remaining).toBe(1);
+
+    const third = bus.since("s1", { since: second.cursor, limit: 2 });
+    expect(third.events.map((event) => event.seq)).toEqual([5]);
+    expect(third.remaining).toBe(0);
+  });
+
+  test("remaining counts only events matching the name filter", () => {
+    const bus = createEventBus({ clock });
+
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "cart.a" } });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "other" } });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "cart.b" } });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "cart.c" } });
+
+    const { events, remaining } = bus.since("s1", { name: "cart.*", limit: 1 });
+    expect(events.map((event) => (event.data as { name: string }).name)).toEqual(["cart.a"]);
+    // Two more "cart.*" events remain (cart.b, cart.c) — "other" never counted at all.
+    expect(remaining).toBe(2);
+  });
+});
+
+describe("event-bus: payloadMaxBytes truncation via since() (issue #113)", () => {
+  test("a payload under the cap is returned unchanged, with no truncated/preview fields", () => {
+    const bus = createEventBus({ clock });
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "small", payload: { a: 1 } } });
+
+    const { events } = bus.since("s1", { payloadMaxBytes: 4096 });
+    expect(events[0]!.data).toEqual({ name: "small", payload: { a: 1 } });
+  });
+
+  test("a payload over the cap comes back as { name, payloadPreview, truncated: true, payloadBytes }", () => {
+    const bus = createEventBus({ clock });
+    const payload = { text: "x".repeat(100) };
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "big", payload } });
+
+    const { events } = bus.since("s1", { payloadMaxBytes: 10 });
+    const data = events[0]!.data as { name: string; payload?: unknown; payloadPreview: string; truncated: true; payloadBytes: number };
+
+    expect(data.name).toBe("big");
+    expect(data.truncated).toBe(true);
+    expect(data.payload).toBeUndefined();
+    expect(data.payloadBytes).toBe(Buffer.byteLength(JSON.stringify(payload), "utf8"));
+    expect(Buffer.byteLength(data.payloadPreview, "utf8")).toBeLessThanOrEqual(10);
+    expect(JSON.stringify(payload).startsWith(data.payloadPreview)).toBe(true);
+  });
+
+  test("the preview never splits a multi-byte UTF-8 code point", () => {
+    const bus = createEventBus({ clock });
+    // Each "💥" is a 4-byte UTF-8 sequence once JSON-quoted; a byte-oblivious slice at an odd
+    // offset would land mid-character and corrupt it.
+    const payload = { text: "💥".repeat(20) };
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "emoji", payload } });
+
+    for (const cap of [1, 2, 3, 4, 5, 6, 7, 15, 20]) {
+      const { events } = bus.since("s1", { payloadMaxBytes: cap });
+      const data = events[0]!.data as { payloadPreview: string; payloadBytes: number };
+
+      expect(Buffer.byteLength(data.payloadPreview, "utf8")).toBeLessThanOrEqual(cap);
+      // A valid, non-truncated-mid-codepoint string re-encodes to exactly the bytes it consumed —
+      // never fewer, which is what a split surrogate/continuation byte would silently produce via
+      // the replacement character.
+      expect(new TextEncoder().encode(data.payloadPreview).length).toBe(Buffer.byteLength(data.payloadPreview, "utf8"));
+      expect(JSON.stringify(payload).startsWith(data.payloadPreview)).toBe(true);
+    }
+  });
+
+  test("without payloadMaxBytes, payloads are never truncated regardless of size", () => {
+    const bus = createEventBus({ clock });
+    const payload = { text: "x".repeat(10_000) };
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "huge", payload } });
+
+    const { events } = bus.since("s1");
+    expect(events[0]!.data).toEqual({ name: "huge", payload });
+  });
+});
+
+describe("projectAppEvent: payloadMaxBytes truncation (issue #113)", () => {
+  test("passes a payload at exactly the cap through unchanged (cap is inclusive)", () => {
+    const payload = "abcd"; // JSON: "abcd" -> 6 bytes with quotes
+    const bytes = Buffer.byteLength(JSON.stringify(payload), "utf8");
+    const event = { kind: "app_event" as const, sessionId: "s1", ts: 0, seq: 1, data: { name: "n", payload } };
+
+    const projected = projectAppEvent(event, { payloadMaxBytes: bytes });
+    expect(projected!.data).toEqual({ name: "n", payload });
+  });
+
+  test("truncates a payload one byte over the cap", () => {
+    const payload = "abcde";
+    const bytes = Buffer.byteLength(JSON.stringify(payload), "utf8");
+    const event = { kind: "app_event" as const, sessionId: "s1", ts: 0, seq: 1, data: { name: "n", payload } };
+
+    const projected = projectAppEvent(event, { payloadMaxBytes: bytes - 1 });
+    const data = projected!.data as { truncated: true; payloadBytes: number };
+    expect(data.truncated).toBe(true);
+    expect(data.payloadBytes).toBe(bytes);
+  });
+
+  test("combines a name filter with truncation: filtered out entirely wins over truncation", () => {
+    const event = { kind: "app_event" as const, sessionId: "s1", ts: 0, seq: 1, data: { name: "no-match", payload: "x".repeat(100) } };
+    expect(projectAppEvent(event, { name: "cart.*", payloadMaxBytes: 1 })).toBeUndefined();
   });
 });
 

@@ -94,6 +94,10 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
         "name": {
           "type": "string",
         },
+        "payloadMaxBytes": {
+          "exclusiveMinimum": 0,
+          "type": "integer",
+        },
         "selector": {
           "type": "string",
         },
