@@ -743,13 +743,17 @@ export const renderEventLine = (event: EventNotification, flags: GlobalFlags): s
 
 /** Renders the trailing cursor line for `appduct events since` (issue #6): NDJSON under
  * `--json` so a scripted caller can parse the resume point without maxing `seq` over the printed
- * events (impossible when the response is empty), a human note otherwise. */
-export const renderEventsCursorLine = (cursor: number, flags: GlobalFlags): string => {
+ * events (impossible when the response is empty), a human note otherwise. `selector` is the
+ * device/session selector the caller passed (issue #96): with two devices connected, a resume
+ * hint that dropped it would resolve to `ambiguous_session`, so it is echoed back in the hinted
+ * command when present. */
+export const renderEventsCursorLine = (cursor: number, flags: GlobalFlags, selector?: string): string => {
   if (flags.json) {
     // Same NDJSON rule as renderEventLine above: always one compact line, never `--pretty`.
     return JSON.stringify({ cursor });
   }
 
   const colors = pc.createColors(flags.color);
-  return colors.dim(`cursor: ${cursor} (run "appduct events since ${cursor}" to resume from here)`);
+  const target = selector === undefined ? `${cursor}` : `${selector} ${cursor}`;
+  return colors.dim(`cursor: ${cursor} (run "appduct events since ${target}" to resume from here)`);
 };
