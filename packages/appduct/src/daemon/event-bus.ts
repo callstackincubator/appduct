@@ -174,9 +174,9 @@ export type EventsSinceQuery = {
 export type EventsSinceQueryResult = {
   events: EventNotification[];
   cursor: number;
-  /** How many app events at or before `since` were evicted before this call could see them
-   * (issue #113): `max(0, oldest.seq - since - 1)`, `oldest` being the buffer's current oldest
-   * retained entry. `0` once nothing has fallen off, and `since` defaults to `0` when omitted. */
+  /** How many app events after `since` were evicted before this call could return them (issue
+   * #113): `max(0, oldest.seq - since - 1)`, `oldest` being the buffer's current oldest retained
+   * entry. `0` once nothing has fallen off, and `since` defaults to `0` when omitted. */
   dropped: number;
   /** How many events still match `since`/`name` after the returned (possibly `limit`-truncated)
    * page. `0` on the last page. */

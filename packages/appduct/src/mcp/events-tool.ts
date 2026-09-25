@@ -72,8 +72,8 @@ export const EVENTS_TOOL_DESCRIPTOR = {
     "sessionId, alias } or, once a payload's JSON exceeds payloadMaxBytes (default 4096), as " +
     "{ name, payloadPreview, truncated: true, payloadBytes, ts, seq, sessionId, alias } instead — " +
     "check truncated before reading payload. pass cursor back as since on the next call to avoid " +
-    "re-reading events you've already seen; dropped counts app events evicted from the retention " +
-    "buffer before since (0 once nothing has fallen off), and remaining counts events still " +
+    "re-reading events you've already seen; dropped counts app events after since that were " +
+    "evicted before this call could return them (0 once nothing has fallen off), and remaining counts events still " +
     "matching this query after the returned page (0 on the last page). limit (default 50) keeps " +
     "the OLDEST events in the window and advances cursor only past what was actually returned, so " +
     "repeated calls page forward through everything retained rather than skipping ahead.",

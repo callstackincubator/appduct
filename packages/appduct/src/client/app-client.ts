@@ -74,9 +74,9 @@ export type EventsOptions = {
 /** `events.since`'s `dropped`/`remaining`, shared by both of {@link AppClient.events}'s overloaded
  * results (issue #113). */
 export type EventsCounts = {
-  /** App events evicted from the retention buffer at or before `since` before this call could see
-   * them (`0` once nothing has fallen off — including across a gap of only Appduct's own kinds,
-   * which never advance `seq`). */
+  /** App events after `since` that were evicted before this call could return them (`0` once
+   * nothing has fallen off — including across a gap of only Appduct's own kinds, which never
+   * advance `seq`). */
   dropped: number;
   /** Events still matching this query after the returned (possibly `limit`-truncated) page; `0`
    * on the last page. */
@@ -124,8 +124,8 @@ export type AppClient<TTools = ToolMap> = {
    * counterpart to {@link AppClient.waitForEvent}, for checking what already happened instead of
    * waiting for the next one. Pass `cursor` from the result back as `since` on the next call to
    * avoid re-reading events already seen. `dropped`/`remaining` (issue #113) report, respectively,
-   * how much history at/before `since` is already gone and how much more still matches after this
-   * page.
+   * how many app events after `since` were evicted before this call could return them, and how
+   * much more still matches after this page.
    *
    * Overloaded on `payloadMaxBytes` (issue #113): omit it and every event's `payload` is readable
    * unnarrowed ({@link FullEventsResult}); pass it to cap each payload's JSON to that many UTF-8

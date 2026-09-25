@@ -30,9 +30,10 @@ section into a versioned heading.
 - **New: `app.events()` accepts `payloadMaxBytes` to cap an event's payload size.** Without it every
   event keeps its full `payload`; with it, an oversized payload comes back as `payloadPreview`/
   `payloadBytes` and you check `truncated` before reading `payload`.
-- **Breaking: `appduct/client`'s `AppEvent` type may now be truncated.** Code that annotates a
-  variable or parameter with `AppEvent` and reads `.payload` unconditionally should switch to
-  `FullAppEvent`, which `appduct/client` now exports alongside `TruncatedAppEvent`.
+- **Breaking: `appduct/client`'s `AppEvent` and `EventsResult` types may now be truncated.** Code
+  that annotates a variable or parameter with `AppEvent`/`EventsResult` and reads `.payload`
+  unconditionally should switch to `FullAppEvent`/`FullEventsResult`, which `appduct/client` now
+  exports alongside `TruncatedAppEvent`.
 
 ## 0.12.0 (2026-09-24)
 

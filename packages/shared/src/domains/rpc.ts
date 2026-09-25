@@ -340,10 +340,10 @@ export type EventsSinceResult = {
    * response or nothing new had happened. */
   cursor: number;
   /**
-   * How many app events at or before `since` were evicted from the ring buffer before this call
-   * could see them (issue #113): `max(0, oldest.seq - since - 1)`, where `oldest` is the buffer's
-   * current oldest retained entry — `0` once nothing has fallen off (including when only
-   * never-retained kinds were emitted in between, since those never advance `seq`).
+   * How many app events after `since` were evicted before this call could return them (issue
+   * #113): `max(0, oldest.seq - since - 1)`, where `oldest` is the buffer's current oldest
+   * retained entry — `0` once nothing has fallen off (including when only never-retained kinds
+   * were emitted in between, since those never advance `seq`).
    */
   dropped: number;
   /** How many events still match this query (`since`, `name`) after the returned page — the
