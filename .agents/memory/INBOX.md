@@ -32,3 +32,7 @@ One note per PR that hit friction, four lines:
   What went wrong: sweeps for removed CLI forms grepped whole command patterns (`appduct <word>`) and missed `playground:appduct -- link`, a command wrapped across a line break, and a removed flag named inside an output hint.
   Would have prevented it: when renaming a CLI surface, grep the bare old words (`invoke`, `--since`) across the whole repo, multiline too, and check every hit by hand before the first review.
   Cost: review rounds 2-4, blocked at the fix-round limit; E2E also blocked (no simulator in the cloud container)
+- 2026-09-25 #117 skill: implement-issue
+  What went wrong: the event-name glob was compiled to a regex with `.*` per `*`, which backtracks exponentially on many-star patterns and would block the single-threaded daemon; review caught it and a second round replaced it with a hand-written matcher.
+  Would have prevented it: match user-supplied wildcard patterns in the daemon without building a regex (split on `*` and `indexOf` each piece), and add a many-star timing test with the red tests.
+  Cost: review round; E2E also blocked (no simulator in the cloud container)
