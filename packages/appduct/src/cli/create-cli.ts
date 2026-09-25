@@ -89,7 +89,15 @@ export const createCli = () => {
   cli
     .command("events [...args]", "Stream the app's events, or replay them since a cursor: tail or since.")
     .usage("events <tail|since> [selector] [args]")
-    .option("--follow", "tail: accepted for script readability; the default behavior already follows.");
+    .option("--follow", "tail: accepted for script readability; the default behavior already follows.")
+    .option(
+      "--name <glob>",
+      "Only events whose name matches this whole-name, case-sensitive glob (\"*\" matches any run of characters).",
+    )
+    .option(
+      "--payload-max-bytes <n>",
+      "Cap each event's payload to this many UTF-8 bytes of its JSON; the rest comes back as payloadPreview/payloadBytes.",
+    );
 
   cli
     .command("mcp", "Start a stdio MCP server that gives MCP clients access to connected apps' tools.")

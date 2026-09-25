@@ -24,16 +24,32 @@ export type EventsCommandOptions = {
   /** Exclusive lower bound on `EventNotification.seq`; switches this command to a one-shot
    * `events.since` pull instead of a live `events.subscribe` stream. */
   since?: number;
+  /** Whole-name, case-sensitive glob (issue #115), forwarded to `events.subscribe`/`events.since`.
+   * No default — everything is delivered unfiltered unless asked. */
+  name?: string;
+  /** Caps an `app_event`'s payload to this many UTF-8 bytes of its JSON (issue #115), forwarded to
+   * `events.subscribe`/`events.since`. No default — nothing is truncated unless asked. */
+  payloadMaxBytes?: number;
+};
+
+/** `events since` mode's resulting cursor, plus how far behind or ahead of the full picture it
+ * is (issue #115): `dropped` events fell off the retention buffer before this pull, `remaining`
+ * matching events are still waiting beyond this page. */
+export type EventsSinceCursor = {
+  cursor: number;
+  dropped: number;
+  remaining: number;
 };
 
 export type EventsCommandContext = {
   stateDir: string;
   spawn?: SpawnFn;
   onEvent: (event: EventNotification) => void;
-  /** `events since` mode only: called once with the pull's resulting cursor, so a scripted caller
-   * doesn't have to reconstruct it by maxing `seq` over the printed lines (impossible when the
-   * response is empty — the whole point of a cursor is knowing where to resume from either way). */
-  onCursor?: (cursor: number) => void;
+  /** `events since` mode only: called once with the pull's resulting cursor (plus `dropped`/
+   * `remaining`), so a scripted caller doesn't have to reconstruct it by maxing `seq` over the
+   * printed lines (impossible when the response is empty — the whole point of a cursor is
+   * knowing where to resume from either way). */
+  onCursor?: (cursor: EventsSinceCursor) => void;
 };
 
 export type EventsHostedResult = {
@@ -54,13 +70,15 @@ const handleEventsSinceCommand = async (
     const since = await stream.call<EventsSinceResult>(RPC_METHODS.eventsSince, {
       selector: options.selector,
       since: options.since,
+      name: options.name,
+      payloadMaxBytes: options.payloadMaxBytes,
     });
 
     for (const event of since.events) {
       context.onEvent(event);
     }
 
-    context.onCursor?.(since.cursor);
+    context.onCursor?.({ cursor: since.cursor, dropped: since.dropped, remaining: since.remaining });
   } finally {
     stream.close();
   }
@@ -82,6 +100,8 @@ export const handleEventsCommand = async (
     await stream.call<EventsSubscribeResult>(RPC_METHODS.eventsSubscribe, {
       sessionSelector: options.selector,
       kinds: ["app_event"],
+      name: options.name,
+      payloadMaxBytes: options.payloadMaxBytes,
     });
   } catch (error) {
     stream.close();

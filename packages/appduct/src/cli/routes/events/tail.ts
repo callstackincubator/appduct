@@ -13,6 +13,7 @@ import { splitOptionalSelector } from "../../command-options.js";
 import { commandName } from "../../router.js";
 import { executeHostedCommand } from "../../runner.js";
 import { guarded } from "../../version-guard.js";
+import { parseEventsFilterFlags } from "./shared-options.js";
 
 export const route: Route = async (context) => {
   const { stateDir, env } = context;
@@ -24,10 +25,11 @@ export const route: Route = async (context) => {
     // rejection, and before the version check so a typo never waits on the daemon.
     () => {
       const { selector } = splitOptionalSelector(context.args, "events tail [selector]");
+      const { name, payloadMaxBytes } = parseEventsFilterFlags(context);
 
       return guarded(context)(() =>
         handleEventsCommand(
-          { selector },
+          { selector, name, payloadMaxBytes },
           {
             stateDir,
             onEvent: (event: EventNotification) => {

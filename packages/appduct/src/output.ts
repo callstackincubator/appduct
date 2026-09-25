@@ -746,14 +746,23 @@ export const renderEventLine = (event: EventNotification, flags: GlobalFlags): s
  * events (impossible when the response is empty), a human note otherwise. `selector` is the
  * device/session selector the caller passed (issue #96): with two devices connected, a resume
  * hint that dropped it would resolve to `ambiguous_session`, so it is echoed back in the hinted
- * command when present. */
-export const renderEventsCursorLine = (cursor: number, flags: GlobalFlags, selector?: string): string => {
+ * command when present. `dropped`/`remaining` (issue #115) are carried straight from
+ * `events.since`'s own result: how many events fell off the retention buffer before this pull,
+ * and how many matching events are still waiting beyond this page. */
+export const renderEventsCursorLine = (
+  cursor: { cursor: number; dropped: number; remaining: number },
+  flags: GlobalFlags,
+  selector?: string,
+): string => {
   if (flags.json) {
     // Same NDJSON rule as renderEventLine above: always one compact line, never `--pretty`.
-    return JSON.stringify({ cursor });
+    return JSON.stringify({ cursor: cursor.cursor, dropped: cursor.dropped, remaining: cursor.remaining });
   }
 
   const colors = pc.createColors(flags.color);
-  const target = selector === undefined ? `${cursor}` : `${selector} ${cursor}`;
-  return colors.dim(`cursor: ${cursor} (run "appduct events since ${target}" to resume from here)`);
+  const target = selector === undefined ? `${cursor.cursor}` : `${selector} ${cursor.cursor}`;
+  return colors.dim(
+    `cursor: ${cursor.cursor}, dropped: ${cursor.dropped}, remaining: ${cursor.remaining} ` +
+      `(run "appduct events since ${target}" to resume from here)`,
+  );
 };
