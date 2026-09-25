@@ -36,3 +36,7 @@ One note per PR that hit friction, four lines:
   What went wrong: the event-name glob was compiled to a regex with `.*` per `*`, which backtracks exponentially on many-star patterns and would block the single-threaded daemon; review caught it and a second round replaced it with a hand-written matcher.
   Would have prevented it: match user-supplied wildcard patterns in the daemon without building a regex (split on `*` and `indexOf` each piece), and add a many-star timing test with the red tests.
   Cost: review round; E2E also blocked (no simulator in the cloud container)
+- 2026-09-25 #118 skill: implement-issue
+  What went wrong: the `app.events()` overloads put the uncapped signature first, so options with `payloadMaxBytes` passed through a variable (no excess-property check) resolved to it and `e.payload` compiled unnarrowed; a second round then fixed `dropped` docs that described the evicted events as before `since` instead of after it.
+  Would have prevented it: when an optional field switches a return type, make the other overload forbid it (`field?: undefined`) and add a `@ts-expect-error` test that passes the options through a variable; check each doc comment on a derived count against its formula with a worked example.
+  Cost: two review rounds; E2E blocked (no simulator in the cloud container)
