@@ -243,6 +243,20 @@ describe("event-bus: retention buffer", () => {
     expect(events.map((event) => (event.data as { name: string }).name)).toEqual(["checkout_completed"]);
   });
 
+  test("a pathological many-star pattern against a long name completes quickly (issue #117)", () => {
+    const bus = createEventBus({ clock });
+
+    bus.emit({ kind: "app_event", sessionId: "s1", data: { name: "a".repeat(40) } });
+
+    const pattern = "*a".repeat(10) + "*b";
+    const start = performance.now();
+    const { events } = bus.since("s1", { name: pattern });
+    const elapsed = performance.now() - start;
+
+    expect(events).toEqual([]);
+    expect(elapsed).toBeLessThan(1000);
+  });
+
   test("name matching is case-sensitive", () => {
     const bus = createEventBus({ clock });
 
