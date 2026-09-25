@@ -101,9 +101,8 @@ before it (e.g. a leftover `checkout.failed` from an earlier attempt). Pass that
 page wasn't everything waiting — call again with the new cursor. Treat `dropped > 0` as a gap:
 events between your last `since` and this page were evicted from the daemon's retention buffer
 before you could read them, so a plain "nothing matched" isn't the same as "nothing happened."
-The `cursor` is scoped to the `name` you drained with — it's the seq of the last event matching
-that glob, not a high-water mark over every event the session has seen. Reuse it only as `since`
-on a later call that uses the *same* `name`.
+The `cursor` is scoped to the `name` you drained with: reuse it only as `since` on a later call
+that uses the *same* `name`.
 
 **Wait**: for one expected event, call `appduct_wait_for_event` with `name` and `since` (the
 cursor from your last `appduct_events` call *with that same `name`*, or the `seq` from a previous
