@@ -26,9 +26,51 @@ export type EventBusListener = (event: EventNotification) => void;
 /** Terminal event kinds whose arrival for a session discards that session's retained buffer. */
 const TERMINAL_EVENT_KINDS: ReadonlySet<EventKind> = new Set<EventKind>(["session_expired", "session_revoked"]);
 
+export type ProjectAppEventOptions = {
+  /** Whole-name, case-sensitive glob (issue #112): `*` matches any run of characters, a pattern
+   * with no `*` is an exact name. */
+  name?: string;
+};
+
+/** Turns a whole-name glob into the `RegExp` that matches it: every `*` becomes `.*`, everything
+ * else is matched literally. */
+const globToRegExp = (pattern: string): RegExp => {
+  const escaped = pattern
+    .split("*")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
+    .join(".*");
+
+  return new RegExp(`^${escaped}$`, "u");
+};
+
+/**
+ * Whether `event` survives `options.name`'s glob — the one implementation `since()`'s drain and
+ * `daemon.ts`'s `events.subscribe` fan-out both call, so the two can't drift apart (issue #112).
+ * Returns `event` unchanged when it should be kept, `undefined` when it should be dropped.
+ *
+ * Only an `app_event` carries a `name` to match against, so every other kind passes through
+ * unfiltered regardless of `options.name` — the `kinds` filter (`events.subscribe`) is what
+ * narrows those.
+ */
+export const projectAppEvent = (
+  event: EventNotification,
+  options: ProjectAppEventOptions = {},
+): EventNotification | undefined => {
+  if (options.name === undefined || event.kind !== "app_event") {
+    return event;
+  }
+
+  const data = event.data as { name?: unknown };
+
+  return typeof data.name === "string" && globToRegExp(options.name).test(data.name) ? event : undefined;
+};
+
 export type EventsSinceQuery = {
   since?: number;
   limit?: number;
+  /** Whole-name, case-sensitive glob (issue #112): `*` matches any run of characters, a pattern
+   * with no `*` is an exact name. See {@link projectAppEvent}. */
+  name?: string;
 };
 
 export type EventsSinceQueryResult = {
@@ -126,6 +168,10 @@ export const createEventBus = (options: CreateEventBusOptions = {}): EventBus =>
 
       if (query.since !== undefined) {
         events = events.filter((event) => event.seq > query.since!);
+      }
+
+      if (query.name !== undefined) {
+        events = events.filter((event) => projectAppEvent(event, { name: query.name }) !== undefined);
       }
 
       if (query.limit !== undefined && events.length > query.limit) {

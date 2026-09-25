@@ -277,8 +277,8 @@ Methods:
 | `tools.list` | `{ selector?, group?, filter?, limit?, offset? }` | `{ tools: ToolsListEntry[], total, groups }` — `tools` is the registry sorted by `name` (code-point order), narrowed to `group` (PROTOCOL.md §5 syntax, matched by segment: `checkout` includes `checkout/*` and never `checkoutx`; case-sensitive), `filter`ed (case-insensitive substring match against name/description) and paged with `limit`/`offset`; each entry is a `ToolDescriptor` (full schema + annotations, plus `group`, which an entry always carries — the tool's group or `null` for an ungrouped one, the same value the summary's ungrouped row uses) plus the tool's effective `policy: "allow" \| "deny" \| "prompt"` (§12), resolved daemon-side. `total` is the count matching `group` and `filter` *before* paging, so a caller can tell how much a page left out. `groups: { group: string \| null, total }[]` summarizes the **whole** registry — never narrowed by `group`, `filter` or paging: one entry per top-level group (its `total` includes its subgroups), one per subgroup, and `group: null` for ungrouped tools when there are any; sorted by group path with a parent right before its subgroups, `null` last. A malformed `group` is `invalid_request`, like a bad `limit` |
 | `tools.call` | `{ selector?, name, args, timeoutMs?, caller?: "cli" \| "mcp", consent?: "elicitation" }` | `{ result, callId }` on success — `callId` lets a caller with several in-flight calls match `tool_call_progress`/`tool_call_finished` events back to this call; JSON-RPC error with `data.type` preserving the wire error type on failure. `caller` attributes the audit record (§12); `consent` is the MCP server's evidence of a `"prompt"`-policy human gate (§12) — `"elicitation"` after the client accepted an elicitation prompt, absent otherwise (including for the CLI). |
 | `tools.cancel` | `{ selector?, callId, reason? }` | `{ cancelled: boolean }` — sends `tool_cancel` (§7) to the app for a still-pending call; `false` for an unknown/already-finished `callId` or no active socket (a no-op, not an error) |
-| `events.subscribe` | `{ sessionSelector?, kinds? }` | `{ ok: true }`, then `event` notifications on this connection |
-| `events.since` | `{ selector?, since?, limit? }` | `{ events: EventNotification[], cursor }` — pull counterpart to `events.subscribe` for `app_event` only, draining the per-session retention buffer described below. An older client's `kinds` is ignored like any unknown param |
+| `events.subscribe` | `{ sessionSelector?, kinds?, name? }` | `{ ok: true }`, then `event` notifications on this connection |
+| `events.since` | `{ selector?, since?, limit?, name? }` | `{ events: EventNotification[], cursor }` — pull counterpart to `events.subscribe` for `app_event` only, draining the per-session retention buffer described below. An older client's `kinds` is ignored like any unknown param |
 
 `SessionSummary`: `{ sessionId, alias, state, device: { manufacturer?, model?, os? },
 createdAt, claimedAt?, suspendedAt?, toolCount }`.
@@ -336,7 +336,11 @@ of the last event actually **returned** (so `since: cursor` on the next call res
 after it), falling back to the session's true high-water mark only when nothing was
 returned, so an empty page still lets a caller skip past the unretained kinds' `seq`s
 rather than re-scanning from an older cursor. `selector` defaults the same way as every
-other selector-taking method (§ above). The readers built on it — `appduct_events`,
+other selector-taking method (§ above). Both `events.since` and `events.subscribe` also take
+`name` (issue #112): a whole-name, case-sensitive glob (`*` matches any run of characters; a
+pattern with no `*` is an exact name) applied through one `projectAppEvent(event, { name? })`
+(`daemon/event-bus.ts`), so the drain and the live fan-out can't disagree about a match. The
+readers built on it — `appduct_events`,
 `appduct_wait_for_event`, `appduct events tail` (whose live mode subscribes with
 `kinds: ["app_event"]`) and the client SDK — therefore only ever show `app_event`; the
 internal consumers that need Appduct's own kinds (`appduct_wait_for_session`,
@@ -528,7 +532,9 @@ proxies daemon RPC (auto-spawning the daemon like any client):
   finds no simulator knows the option exists rather than defaulting to a QR nobody scans.
 - Two more built-in tools, `appduct_events` and `appduct_wait_for_event` (issue #6),
   give an agent a pull surface over `postEvent()`-pushed `app_event`s: `appduct_events`
-  is a thin proxy over `events.since`, and both reject a `kinds` argument with
+  is a thin proxy over `events.since` — flattening its `EventNotification[]` to
+  `AppEvent[]` (`{ name, payload, ts, seq, sessionId, alias }`, `@appduct/shared`,
+  issue #112) and defaulting `limit` to 50 — and both reject a `kinds` argument with
   `invalid_request`; `appduct_wait_for_event` blocks for a matching
   event, draining the retained buffer for an already-arrived match before falling back to
   a live wait — closing the same race `appduct_wait_for_session` doesn't have to worry

@@ -19,6 +19,8 @@
 
 import {
   RPC_METHODS,
+  toAppEvent,
+  type AppEvent,
   type EventNotification,
   type EventsSinceResult,
   type SessionsDescribeResult,
@@ -30,6 +32,10 @@ import { McpBuiltinToolError } from "./connect-tool.js";
 
 export const EVENTS_TOOL_NAME = "appduct_events";
 export const WAIT_FOR_EVENT_TOOL_NAME = "appduct_wait_for_event";
+
+/** `appduct_events`'s default `limit` when the caller gives none — matches `appduct_list_tools`
+ * (issue #112), so an agent that never names a page size still gets a bounded one. */
+const DEFAULT_EVENTS_LIMIT = 50;
 
 const DEFAULT_WAIT_FOR_EVENT_TIMEOUT_MS = 120_000;
 /** Kept safely under the 30-minute idle window a stdio MCP server gets before Claude Code aborts a
@@ -54,16 +60,20 @@ export const EVENTS_TOOL_DESCRIPTOR = {
     "Drain the events the app posted with postEvent(name, payload) that the daemon retained for a " +
     "session since a cursor, for checking what the app reported after calling a tool or " +
     "triggering app behavior. With no selector, targets the sole active/suspended session. " +
-    "Returns { events, cursor }; pass cursor back as since on the next call to avoid re-reading " +
-    "events you've already seen. limit (if given) keeps the OLDEST events in the window and " +
-    "advances cursor only past what was actually returned, so repeated calls page forward through " +
-    "everything retained rather than skipping ahead.",
+    "name filters to events whose name matches a whole-name, case-sensitive glob (* matches any " +
+    "run of characters; a pattern without * is an exact name), e.g. \"cart.*\". Returns " +
+    "{ events, cursor } with each event as { name, payload, ts, seq, sessionId, alias }; pass " +
+    "cursor back as since on the next call to avoid re-reading events you've already seen. limit " +
+    "(default 50) keeps the OLDEST events in the window and advances cursor only past what was " +
+    "actually returned, so repeated calls page forward through everything retained rather than " +
+    "skipping ahead.",
   inputSchema: {
     type: "object",
     properties: {
       selector: { type: "string" },
       since: { type: "integer", minimum: 0 },
       limit: { type: "integer", exclusiveMinimum: 0 },
+      name: { type: "string" },
     },
     additionalProperties: false,
   },
@@ -205,15 +215,31 @@ const asOptionalMatch = (value: unknown): Record<string, MatchPrimitive> | undef
   return record as Record<string, MatchPrimitive>;
 };
 
-export const handleEventsTool = async (rawArgs: unknown, deps: EventsToolDeps): Promise<EventsSinceResult> => {
+export type EventsToolResult = {
+  events: AppEvent[];
+  cursor: number;
+};
+
+export const handleEventsTool = async (rawArgs: unknown, deps: EventsToolDeps): Promise<EventsToolResult> => {
   const args = asRecord(rawArgs);
   rejectKinds(args);
 
-  return deps.call<EventsSinceResult>(RPC_METHODS.eventsSince, {
+  const result = await deps.call<EventsSinceResult>(RPC_METHODS.eventsSince, {
     selector: asOptionalString(args.selector, "selector"),
     since: asOptionalNonNegativeInteger(args.since, "since"),
-    limit: asOptionalPositiveInteger(args.limit, "limit"),
+    limit: asOptionalPositiveInteger(args.limit, "limit") ?? DEFAULT_EVENTS_LIMIT,
+    name: asOptionalString(args.name, "name"),
   });
+
+  // `events.since` only ever retains `app_event`s, each carrying a `sessionId` — flattened here
+  // (issue #112) so a caller gets `{ name, payload, ts, seq, sessionId, alias }` instead of the
+  // daemon's generic `kind`/`data` envelope.
+  return {
+    events: result.events
+      .map((event) => (event.sessionId === undefined ? undefined : toAppEvent(event, event.sessionId)))
+      .filter((event): event is AppEvent => event !== undefined),
+    cursor: result.cursor,
+  };
 };
 
 export type WaitForEventToolDeps = {

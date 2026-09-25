@@ -274,6 +274,10 @@ export type EventKind = (typeof EVENT_KINDS)[number];
 export type EventsSubscribeParams = {
   sessionSelector?: string;
   kinds?: EventKind[];
+  /** Whole-name, case-sensitive glob (issue #112): `*` matches any run of characters, a pattern
+   * with no `*` is an exact name. Applies only to `app_event`s pushed on this subscription — every
+   * other kind is delivered unfiltered, since only an app event carries a `name`. */
+  name?: string;
 };
 
 export type EventsSubscribeResult = { ok: true };
@@ -311,6 +315,9 @@ export type EventsSinceParams = {
   /** Caps the number of events returned (oldest kept); omitted returns everything after `since`
    * up to the buffer's own retention limit. */
   limit?: number;
+  /** Whole-name, case-sensitive glob (issue #112): `*` matches any run of characters, a pattern
+   * with no `*` is an exact name. Applies only to `app_event`s. */
+  name?: string;
 };
 
 export type EventsSinceResult = {
@@ -319,6 +326,47 @@ export type EventsSinceResult = {
    * so a caller can pass it straight back into the next `since` even when `limit` truncated the
    * response or nothing new had happened. */
   cursor: number;
+};
+
+/** An app-pushed event (`postEvent(name, payload)`), narrowed from the daemon's generic
+ * `EventNotification` envelope to the shape a consumer actually wants — `appduct/client`'s
+ * `events()`/`waitForEvent()` and the built-in `appduct_events` MCP tool both return this flat
+ * shape rather than the `kind`/`data` envelope (issue #112). */
+export type AppEvent<TPayload = unknown> = {
+  name: string;
+  payload: TPayload;
+  /** Unix ms. */
+  ts: number;
+  sessionId: string;
+  alias?: string;
+  /** Monotonically increasing per-session cursor (ARCHITECTURE.md §5) assigned by the daemon's
+   * retention buffer at emit time — pass back into `since` to resume after this event. */
+  seq: number;
+};
+
+/** Narrows an `app_event` `EventNotification` to an `AppEvent`, or `undefined` when the
+ * notification isn't an app event for `sessionId`, or carries no string `name`. The one
+ * implementation `appduct/client` and `appduct_events` both call, so they can't disagree about
+ * the flat shape. */
+export const toAppEvent = (event: EventNotification, sessionId: string): AppEvent | undefined => {
+  if (event.kind !== "app_event" || event.sessionId !== sessionId) {
+    return undefined;
+  }
+
+  const data = event.data as { name?: unknown; payload?: unknown };
+
+  if (typeof data.name !== "string") {
+    return undefined;
+  }
+
+  return {
+    name: data.name,
+    payload: data.payload,
+    ts: event.ts,
+    sessionId: event.sessionId!,
+    alias: event.alias,
+    seq: event.seq,
+  };
 };
 
 // --- JSON-RPC 2.0 error shape ---

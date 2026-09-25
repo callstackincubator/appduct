@@ -1773,6 +1773,14 @@ describe("daemon: events.since / events.subscribe name filter (issue #112)", () 
         await emitted;
       }
 
+      // `waitForEvent` above only confirms the daemon's own bus emitted — the fan-out notification
+      // still has to travel the control socket to `stream` before `received` reflects it, so poll
+      // rather than asserting immediately.
+      const deadline = Date.now() + 2000;
+      while (received.length < 2 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
       expect(received.map((event) => event.data.name)).toEqual(["cart.item_added", "cart.item_removed"]);
     } finally {
       stream.close();
