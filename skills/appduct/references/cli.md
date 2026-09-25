@@ -1,21 +1,21 @@
 # Appduct CLI reference
 
-Read this when `appduct ls` is empty, when you need a command the main skill file does not
-cover, or when a test suite should drive the app without shelling out.
+Read this when `appduct sessions ls` is empty, when you need a command the main skill file does
+not cover, or when a test suite should drive the app without shelling out.
 
 ## Connect a device
 
-A device connects by opening a one-time deep link in the app. `appduct link` mints the link;
-run it **from the app's root directory** so the scheme is discovered from the project's own
+A device connects by opening a one-time deep link in the app. `appduct sessions link` mints the
+link; run it **from the app's root directory** so the scheme is discovered from the project's own
 files (`app.json`'s `expo.scheme`, else the Android `build.gradle`/`AndroidManifest.xml`, else
 the iOS `Info.plist`/`project.yml`). No key, pin or config file is needed for a dev loop.
 
 | Device | Command |
 | --- | --- |
-| Booted iOS Simulator | `appduct link --open ios-sim` |
-| Android emulator or USB device | `appduct link --open android --app-id <package>` |
-| Any device on the same network (a human scans) | `appduct link --qr` |
-| Wired iPhone/iPad, experimental | `appduct link --open ios-device --app-id <bundle-id>` |
+| Booted iOS Simulator | `appduct sessions link --open ios-sim` |
+| Android emulator or USB device | `appduct sessions link --open android --app-id <package>` |
+| Any device on the same network (a human scans) | `appduct sessions link --qr` |
+| Wired iPhone/iPad, experimental | `appduct sessions link --open ios-device --app-id <bundle-id>` |
 
 - **`--open android` needs the app's package name.** Without it, another installed app
   declaring the same scheme can pop an "Open with" chooser, `adb` still reports success, and
@@ -28,14 +28,14 @@ the iOS `Info.plist`/`project.yml`). No key, pin or config file is needed for a 
   Mode on, a dev build installed, and the phone on this machine's network. If the link does not
   take on a running app add `--relaunch`. If it fails, fall back to `--qr`. It is never picked
   automatically; use it only when the user says the app runs on a physical iPhone.
-- No device you can reach: `appduct link --json` and relay `data.deepLink` **whole** to a human
-  (the trailing `&pin=sha256/...` is what lets a build with no embedded pins trust the daemon,
-  in any build type), or use `--qr`
+- No device you can reach: `appduct sessions link --json` and relay `data.deepLink` **whole** to a
+  human (the trailing `&pin=sha256/...` is what lets a build with no embedded pins trust the
+  daemon, in any build type), or use `--qr`
   on a TTY.
 
-Then wait for the app to claim the session: poll `appduct ls --json` until the session shows
-`"state": "active"`, or over MCP call `appduct_wait_for_session` with `data.sessionId` from
-`link --json`. The link expires after 5 minutes and works once.
+Then wait for the app to claim the session: poll `appduct sessions ls --json` until the session
+shows `"state": "active"`, or over MCP call `appduct_wait_for_session` with `data.sessionId` from
+`sessions link --json`. The link expires after 5 minutes and works once.
 
 **Scheme not found.** Pass `--scheme <s>` (or set `APPDUCT_SCHEME`) when you are not in the app
 root or the project uses a dynamic `app.config.js`, which Appduct never executes. `appduct init
@@ -60,19 +60,26 @@ device and delivers the link there. On `delivered: true`, call
 
 ## Commands
 
+Every command is `appduct <noun> <verb> [selector] [args]`; `daemon` is the model:
+
 | Command | Does |
 | --- | --- |
-| `appduct ls` | sessions: alias, state, device, tool count |
-| `appduct tools [selector] [name] [--groups] [--group <g>] [--filter <text>] [--limit <n>] [--offset <n>] [--full]` | list tools, or one tool's full schema and annotations |
-| `appduct invoke [selector] <tool> --input '<json>' [--timeout <ms>]` | call a tool; `--input` is required and must be a JSON object |
-| `appduct events [selector] [--since <cursor>]` | stream the events the app posts with `postEvent` (`app_event` only); `--since` pulls the ones retained since a cursor and exits; `--json` emits NDJSON |
-| `appduct revoke [selector]` | end one session without touching the daemon or other sessions |
-| `appduct link [--open …] [--app-id <id>] [--device <id>] [--qr] [--scheme <s>] [--ttl <s>]` | mint a session and its deep link |
+| `appduct sessions ls` | sessions: alias, state, device, tool count |
+| `appduct sessions link [--open …] [--app-id <id>] [--device <id>] [--qr] [--scheme <s>] [--ttl <s>]` | mint a session and its deep link |
+| `appduct sessions revoke [selector]` | end one session without touching the daemon or other sessions |
+| `appduct tools ls [selector] [--groups] [--group <g>] [--filter <text>] [--limit <n>] [--offset <n>] [--full]` | list tools |
+| `appduct tools describe [selector] <name>` | one tool's full schema and annotations |
+| `appduct tools call [selector] <name> --input '<json>' [--timeout <ms>]` | call a tool; `--input` is required and must be a JSON object |
+| `appduct events tail [selector] [--follow]` | stream the events the app posts with `postEvent` (`app_event` only); `--json` emits NDJSON |
+| `appduct events since [selector] <cursor>` | pull the app events retained since `<cursor>` and exit; `--json` emits NDJSON |
 | `appduct init [--scheme <s>] [--android-app-id <id>] [--ios-app-id <id>] [--force]` | record scheme and app ids in `.appduct/config.json`; prints the MCP server entry; safe to re-run |
 | `appduct daemon status\|stop` | inspect or stop the daemon; `stop` disconnects every device, so only for a port or key rotation |
 | `appduct keygen [--out <path>]` | hardening only: the daemon generates its own key on first start |
 | `appduct doctor <artifact> --assert-absent\|--assert-present` | release gate: does a built `.ipa`/`.apk`/`.aab`/`.app` contain Appduct |
 | `appduct mcp [--scheme <s>]` | stdio MCP server; what an agent's MCP config runs |
+
+There are no aliases for the removed bare-verb forms (`ls`, `revoke`, `link`, `invoke`, and
+`events --since`) — each fails with a usage error naming its replacement.
 
 Global flags: `--json`, `--pretty`, `--verbose` (adds `meta` with duration), `--no-color`,
 `--state-dir <path>` (default `~/.appduct`; never point it at a project's `.appduct/`, the state

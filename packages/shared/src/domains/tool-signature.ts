@@ -2,10 +2,10 @@
  * Renders a `ToolDescriptor` into a one-line call signature, e.g.
  * `seed_cart(items: int, sku?: string, clear?: bool = true) -> { added: int, cartId: string }`.
  *
- * This exists so `appduct tools` can list hundreds of tools cheaply for an agent to read: a
+ * This exists so `appduct tools ls` can list hundreds of tools cheaply for an agent to read: a
  * signature plus the description's first line says far more per line than a bare name, without
- * the cost of printing every tool's full schema (`--full`/`tools <name>` remain the source of
- * truth for that).
+ * the cost of printing every tool's full schema (`--full`/`tools describe <name>` remain the
+ * source of truth for that).
  *
  * A tool's `input_schema`/`output_schema` are draft-2020-12 JSON Schema fragments whose internals
  * are never validated anywhere in this codebase (`tool-descriptor.ts`'s `isToolDescriptor` only
@@ -36,7 +36,7 @@ const isUnresolvable = (schema: JsonSchema): boolean => {
 
 const MAX_ENUM_VALUES = 5;
 /** `default` only appends to a param entry when its JSON rendering stays this short — a longer
- * default belongs in the full schema (`tools <name>`), not a one-line signature. */
+ * default belongs in the full schema (`tools describe <name>`), not a one-line signature. */
 const MAX_DEFAULT_LENGTH = 20;
 
 /** An `enum`/`const` value longer than this (as JSON) is cut with `…` — one 5 KB enum string must
@@ -280,7 +280,7 @@ export const renderToolSignature = (
 export const MAX_TOOL_SUMMARY_LENGTH = 120;
 
 /**
- * A tool description's first line, for a listing (`appduct tools`, `appduct_list_tools`): any line
+ * A tool description's first line, for a listing (`appduct tools ls`, `appduct_list_tools`): any line
  * break ends it (`\r` alone included), remaining control characters are dropped since the text is
  * app-supplied and may be printed straight to a terminal, and it is capped at
  * {@link MAX_TOOL_SUMMARY_LENGTH} code points, never cut through a surrogate pair.

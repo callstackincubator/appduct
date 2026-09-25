@@ -67,7 +67,7 @@ const mint = async (stateDir: string, cwd: string, scheme?: string) => {
   );
 };
 
-describe("appduct link scheme discovery", () => {
+describe("appduct sessions link scheme discovery", () => {
   test("mints from an app.json alone, with no scheme configured anywhere", async () => {
     const stateDir = await startSchemelessDaemon();
     const appRoot = await makeAppRoot("myapp");
@@ -90,7 +90,7 @@ describe("appduct link scheme discovery", () => {
     const nested = path.join(appRoot, "src", "screens");
     await mkdir(nested, { recursive: true });
 
-    // Run from a subdirectory: the walk-up is what makes `appduct link` work anywhere in a repo.
+    // Run from a subdirectory: the walk-up is what makes `appduct sessions link` work anywhere in a repo.
     const result = await mint(stateDir, nested);
 
     expect(result.ok && result.data.deepLink).toMatch(/^from-project-config:\/\/\/\?appduct=/u);

@@ -63,7 +63,7 @@ fresh clone of this repo (or a fresh app project) works with zero setup:
 
 - The daemon auto-generates `key.pem` the first time it starts if the file is missing, and
   prints its `sha256/...` fingerprint.
-- `appduct link` composes that fingerprint into the deep link as a separate `pin` query
+- `appduct sessions link` composes that fingerprint into the deep link as a separate `pin` query
   param, alongside the existing binary `appduct` bootstrap payload. The binary payload
   format is unchanged — an app build that doesn't know about `pin` simply ignores it.
 - The native client trusts that link-carried pin, for that one link's session only, when the
@@ -185,7 +185,7 @@ Android `<application>` meta-data:
 | `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean meta-data value (a `"true"`/`"false"` String is also accepted); defaults to `true` (fail-closed) when absent |
 
 Wire **deep links** so the OS can open your app with the host's bootstrap URL, and make
-sure the app scheme matches the one `appduct link` (or the `deepLinkScheme` plugin
+sure the app scheme matches the one `appduct sessions link` (or the `deepLinkScheme` plugin
 option, or `config.json`) uses to compose that link.
 
 ### Plain native apps (no React Native)
@@ -286,7 +286,7 @@ app copies for hardening.
 **Consequence for agents and E2E flows:** because registration is the app-side allowlist,
 the tool set legitimately differs per build artifact. A CI testing build may expose a
 different tool set than a local dev build or a hardened production build. Automated flows
-should discover tools (`appduct tools`, or `appduct_list_tools` over MCP) rather than assume
+should discover tools (`appduct tools ls`, or `appduct_list_tools` over MCP) rather than assume
 a fixed set is always present.
 
 ## Key handling rules

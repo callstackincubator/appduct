@@ -50,9 +50,9 @@ step required for the smoke test below.
 
 ### 3. Bootstrap a session
 
-- **iOS Simulator**: `pnpm run playground:appduct -- link --open ios-sim`
-- **Android emulator**: `pnpm run playground:appduct -- link --open android`
-- **Physical device**: `pnpm run playground:appduct -- link --qr`, then scan the QR code with the device's camera (it
+- **iOS Simulator**: `pnpm run playground:appduct -- sessions link --open ios-sim`
+- **Android emulator**: `pnpm run playground:appduct -- sessions link --open android`
+- **Physical device**: `pnpm run playground:appduct -- sessions link --qr`, then scan the QR code with the device's camera (it
   must be on the same LAN as the daemon, or `allowPrivateLanOnly` will reject it)
 
 The **Status** tab should flip to `active` with an alias once the app claims the session.
@@ -60,24 +60,24 @@ The **Status** tab should flip to `active` with an alias once the app claims the
 ### 4. Drive it from the CLI
 
 ```sh
-pnpm run playground:appduct -- ls
-pnpm run playground:appduct -- tools
-pnpm run playground:appduct -- invoke sum --input '{"a":1,"b":2}'
-pnpm run playground:appduct -- invoke call_count --input '{}'      # reads state a handler closes over
-pnpm run playground:appduct -- invoke reset_counter --input '{}'   # destructive; denied if policy.destructive=deny
-pnpm run playground:appduct -- invoke slow_task --input '{}'       # watch progress with events --follow
-pnpm run playground:appduct -- invoke throwing_tool --input '{}'   # exercises tool_execution_error
-pnpm run playground:appduct -- events --follow
+pnpm run playground:appduct -- sessions ls
+pnpm run playground:appduct -- tools ls
+pnpm run playground:appduct -- tools call sum --input '{"a":1,"b":2}'
+pnpm run playground:appduct -- tools call call_count --input '{}'      # reads state a handler closes over
+pnpm run playground:appduct -- tools call reset_counter --input '{}'   # destructive; denied if policy.destructive=deny
+pnpm run playground:appduct -- tools call slow_task --input '{}'       # watch progress with events tail --follow
+pnpm run playground:appduct -- tools call throwing_tool --input '{}'   # exercises tool_execution_error
+pnpm run playground:appduct -- events tail --follow
 ```
 
-Tap **Send playground_ping** on the Status tab while `events --follow` is running to see the
+Tap **Send playground_ping** on the Status tab while `events tail --follow` is running to see the
 `app_event` show up on the stream.
 
 ### 5. Try the resume behavior
 
 With a session active, trigger a Metro reload (press `r` in the Metro terminal, or shake the
 device and choose Reload). The Status tab should show `reconnecting` then `active` again with the
-**same alias**—no new `appduct link` needed. Keep the native app process alive: the resume
+**same alias**—no new `appduct sessions link` needed. Keep the native app process alive: the resume
 lease exists only in native process memory, so killing/relaunching the app requires a new link.
 The daemon-side session grace window (`graceSeconds` in `config.json`) starts when the transport
 suspends/disconnects.

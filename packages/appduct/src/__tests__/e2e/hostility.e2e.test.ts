@@ -114,7 +114,7 @@ describe("e2e: hostility", () => {
       // The ACTIVE session, untouched by any of the hostile connections, keeps invoking successfully.
       app.answerCalls((call) => ({ result: { echoed: (call.args as Record<string, unknown>).text } }));
       const invokeResult = await runCliJson(
-        ["invoke", alias, "echo", "--input", JSON.stringify({ text: "still-alive" })],
+        ["tools", "call", alias, "echo", "--input", JSON.stringify({ text: "still-alive" })],
         stateDir,
       );
       expect(invokeResult.ok).toBe(true);

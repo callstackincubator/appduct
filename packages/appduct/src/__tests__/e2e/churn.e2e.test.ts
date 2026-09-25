@@ -1,9 +1,10 @@
 /**
  * E2E scenario: churn.
  *
- * claim -> `dropSocket()` -> `ls` shows SUSPENDED -> `invoke` fails `session_suspended` ->
- * `resume()` -> `invoke` succeeds -> grace expiry (short configured grace) -> EXPIRED and alias
- * freed. This is the "survive churn" goal from ARCHITECTURE.md §1 exercised end-to-end.
+ * claim -> `dropSocket()` -> `sessions ls` shows SUSPENDED -> `tools call` fails
+ * `session_suspended` -> `resume()` -> `tools call` succeeds -> grace expiry (short configured
+ * grace) -> EXPIRED and alias freed. This is the "survive churn" goal from ARCHITECTURE.md §1
+ * exercised end-to-end.
  *
  * Grace expiry is synchronized on the daemon's own `session_expired` event (via a raw UDS
  * subscription used only for test synchronization, never to drive the scenario) rather than a
@@ -28,7 +29,7 @@ afterEach(cleanupAfterEach);
 
 describe("e2e: churn", () => {
   test(
-    "suspend on socket loss, session_suspended on invoke, resume, then grace expiry frees the alias",
+    "suspend on socket loss, session_suspended on tools call, resume, then grace expiry frees the alias",
     async () => {
       const { stateDir } = await makeTempStateDir({ graceSeconds: 2 });
       await ensureDaemon(stateDir);
@@ -52,12 +53,12 @@ describe("e2e: churn", () => {
       app.dropSocket();
       await suspended;
 
-      const suspendedLs = await runCliJson<Array<{ alias: string; state: string }>>(["ls"], stateDir);
+      const suspendedLs = await runCliJson<Array<{ alias: string; state: string }>>(["sessions", "ls"], stateDir);
       expect(suspendedLs.ok).toBe(true);
       expect(suspendedLs.data).toEqual([expect.objectContaining({ alias, state: "suspended" })]);
 
       // A call against a SUSPENDED session fails fast with session_suspended, not a timeout.
-      const failedInvoke = await runCliJson(["invoke", alias, "echo", "--input", "{}"], stateDir);
+      const failedInvoke = await runCliJson(["tools", "call", alias, "echo", "--input", "{}"], stateDir);
       expect(failedInvoke.ok).toBe(false);
       expect(failedInvoke.error?.type).toBe("session_suspended");
 
@@ -70,7 +71,7 @@ describe("e2e: churn", () => {
       await events.waitFor("tools_changed");
 
       app.answerCalls(() => ({ result: "ok-after-resume" }));
-      const resumedInvoke = await runCliJson(["invoke", alias, "echo", "--input", "{}"], stateDir);
+      const resumedInvoke = await runCliJson(["tools", "call", alias, "echo", "--input", "{}"], stateDir);
       expect(resumedInvoke.ok).toBe(true);
       expect(resumedInvoke.data).toBe("ok-after-resume");
 
@@ -82,7 +83,7 @@ describe("e2e: churn", () => {
       const expired = events.waitFor("session_expired");
       await expired;
 
-      const afterExpiryLs = await runCliJson<unknown[]>(["ls"], stateDir);
+      const afterExpiryLs = await runCliJson<unknown[]>(["sessions", "ls"], stateDir);
       expect(afterExpiryLs.ok).toBe(true);
       expect(afterExpiryLs.data).toEqual([]);
 

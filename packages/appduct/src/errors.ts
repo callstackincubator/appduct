@@ -109,7 +109,7 @@ const rpcErrorClass = (error: DaemonRpcError): CliErrorType | undefined => {
  * Converts any error thrown from a command handler into the CLI's rendered `CliError` shape.
  * RPC/app-originated failures (`DaemonRpcError` with a preserved `data.type`) keep that type
  * **verbatim** in `type` — never re-wrapped under a generic bucket (ARCHITECTURE.md §5) — so e.g.
- * `invoke --json` on a failing tool call renders `error.type === "tool_execution_error"`, not
+ * `tools call --json` on a failing tool call renders `error.type === "tool_execution_error"`, not
  * `"tool_error"`. `getExitCodeForError` still buckets that same error into a sysexits class.
  */
 export const toCliError = (error: unknown): CliError => {

@@ -64,9 +64,9 @@ Your app's tools aren't added to the agent's tool list one by one. Instead, the 
 
 | Tool | What it does | CLI equivalent |
 | --- | --- | --- |
-| `appduct_list_tools` | Lists your app's tools as one-line signatures, with each tool's group and policy, and your app's groups with counts. Returns 50 at a time unless given `limit`; takes `group`, `filter`, and `offset`. | `appduct tools` |
-| `appduct_describe_tool` | Shows one tool's full input and output schema. | `appduct tools <name>` |
-| `appduct_call_tool` | Calls a tool by `name` with `args`. Progress and errors come through unchanged. | `appduct invoke` |
+| `appduct_list_tools` | Lists your app's tools as one-line signatures, with each tool's group and policy, and your app's groups with counts. Returns 50 at a time unless given `limit`; takes `group`, `filter`, and `offset`. | `appduct tools ls` |
+| `appduct_describe_tool` | Shows one tool's full input and output schema. | `appduct tools describe <name>` |
+| `appduct_call_tool` | Calls a tool by `name` with `args`. Progress and errors come through unchanged. | `appduct tools call` |
 
 So an app with hundreds of tools adds only these to the agent's context, and the list doesn't change when tools register or a device connects.
 
@@ -130,12 +130,12 @@ Install it too if you're asking an agent to add Appduct to your app or to write 
 A typical session from an agent:
 
 ```bash
-appduct ls                          # is a device connected?
-appduct link --open ios-sim         # connect one if not
-appduct tools --groups              # large app: see the areas first
-appduct tools --group cart          # then list one area
-appduct tools add_item              # full schema for one tool
-appduct invoke add_item --input '{"sku":"SKU-1042","quantity":2}'
+appduct sessions ls                       # is a device connected?
+appduct sessions link --open ios-sim      # connect one if not
+appduct tools ls --groups                 # large app: see the areas first
+appduct tools ls --group cart             # then list one area
+appduct tools describe add_item           # full schema for one tool
+appduct tools call add_item --input '{"sku":"SKU-1042","quantity":2}'
 ```
 
 Plain-text output is meant for reading, and may change between versions. Scripts should add `--json`. See the [CLI guide](/appduct/guides/cli/).

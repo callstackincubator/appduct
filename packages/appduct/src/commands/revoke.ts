@@ -1,4 +1,4 @@
-/** `appduct revoke` (ARCHITECTURE.md §10): revokes a session, optionally by selector. */
+/** `appduct sessions revoke` (ARCHITECTURE.md §10): revokes a session, optionally by selector. */
 
 import { RPC_METHODS } from "@appduct/shared";
 

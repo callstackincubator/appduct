@@ -1,9 +1,10 @@
 /**
  * E2E scenario: multi-device.
  *
- * Two fake clients get distinct aliases; `invoke` without a selector errors `ambiguous_session`,
- * with an alias it works; `revoke` on one leaves the other untouched (ARCHITECTURE.md §1 goal 3:
- * "one daemon serves N concurrent device sessions on one port").
+ * Two fake clients get distinct aliases; `tools call` without a selector errors
+ * `ambiguous_session`, with an alias it works; `sessions revoke` on one leaves the other
+ * untouched (ARCHITECTURE.md §1 goal 3: "one daemon serves N concurrent device sessions on one
+ * port").
  */
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -49,12 +50,12 @@ describe("e2e: multi-device", () => {
       const deviceB = await claimDevice("Pixel 8");
       expect(deviceA.alias).not.toBe(deviceB.alias);
 
-      const lsResult = await runCliJson<Array<{ alias: string }>>(["ls"], stateDir);
+      const lsResult = await runCliJson<Array<{ alias: string }>>(["sessions", "ls"], stateDir);
       expect(lsResult.ok).toBe(true);
       expect(lsResult.data!.map((session) => session.alias).sort()).toEqual([deviceA.alias, deviceB.alias].sort());
 
       // No selector, two live sessions: ambiguous_session, listing both aliases.
-      const ambiguous = await runCliJson(["invoke", "echo", "--input", "{}"], stateDir);
+      const ambiguous = await runCliJson(["tools", "call", "echo", "--input", "{}"], stateDir);
       expect(ambiguous.ok).toBe(false);
       expect(ambiguous.error?.type).toBe("ambiguous_session");
       expect(ambiguous.error?.message).toContain(deviceA.alias);
@@ -64,26 +65,26 @@ describe("e2e: multi-device", () => {
       deviceA.app.answerCalls(() => ({ result: "from-a" }));
       deviceB.app.answerCalls(() => ({ result: "from-b" }));
 
-      const invokeA = await runCliJson(["invoke", deviceA.alias, "echo", "--input", "{}"], stateDir);
+      const invokeA = await runCliJson(["tools", "call", deviceA.alias, "echo", "--input", "{}"], stateDir);
       expect(invokeA.ok).toBe(true);
       expect(invokeA.data).toBe("from-a");
 
-      const invokeB = await runCliJson(["invoke", deviceB.alias, "echo", "--input", "{}"], stateDir);
+      const invokeB = await runCliJson(["tools", "call", deviceB.alias, "echo", "--input", "{}"], stateDir);
       expect(invokeB.ok).toBe(true);
       expect(invokeB.data).toBe("from-b");
 
       // revoke device A: its socket closes, but device B stays untouched and invokable.
       const revokeAClosed = deviceA.app.waitForClose();
-      const revokeResult = await runCliJson(["revoke", deviceA.alias], stateDir);
+      const revokeResult = await runCliJson(["sessions", "revoke", deviceA.alias], stateDir);
       expect(revokeResult.ok).toBe(true);
       const closeInfo = await revokeAClosed;
       expect(closeInfo.code).toBe(1000);
 
-      const afterRevokeLs = await runCliJson<Array<{ alias: string; state: string }>>(["ls"], stateDir);
+      const afterRevokeLs = await runCliJson<Array<{ alias: string; state: string }>>(["sessions", "ls"], stateDir);
       expect(afterRevokeLs.ok).toBe(true);
       expect(afterRevokeLs.data).toEqual([expect.objectContaining({ alias: deviceB.alias, state: "active" })]);
 
-      const stillWorks = await runCliJson(["invoke", deviceB.alias, "echo", "--input", "{}"], stateDir);
+      const stillWorks = await runCliJson(["tools", "call", deviceB.alias, "echo", "--input", "{}"], stateDir);
       expect(stillWorks.ok).toBe(true);
       expect(stillWorks.data).toBe("from-b");
 

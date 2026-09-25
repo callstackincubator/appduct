@@ -1,19 +1,18 @@
 /**
- * `appduct tools` (ARCHITECTURE.md §10): `tools [selector] [--full] [--group <name>] [--filter
- * <text>] [--limit <n>] [--offset <n>]` lists tools for a session; `tools [selector] --groups`
- * lists only the session's groups with their tool counts; `tools [selector] <name>` shows one
- * tool's full schema/annotations.
+ * `appduct tools ls`/`appduct tools describe` (ARCHITECTURE.md §10, issue #96): `ls [selector]
+ * [--full] [--group <name>] [--filter <text>] [--limit <n>] [--offset <n>]` lists tools for a
+ * session; `ls [selector] --groups` lists only the session's groups with their tool counts;
+ * `describe [selector] <name>` shows one tool's full schema/annotations.
  *
- * The command table gives both forms a leading optional `[selector]`, which makes a single
- * positional argument inherently ambiguous (is it the selector, or the tool name in `tools <name>`
- * with the selector omitted?). This resolves it the same way a human reading the table would:
- * first try the arg as a tool name in the implicit-selector session's registry; if no such tool
- * exists there (or the implicit selector doesn't resolve, e.g. `ambiguous_session`), fall back to
- * treating it as a selector and list that session's tools instead.
+ * The two verbs (`cli/routes/tools/ls.ts` and `cli/routes/tools/describe.ts`) split `[selector]`
+ * from `<name>` unambiguously before this handler ever runs — `describe`'s `<name>` is always the
+ * last positional, required, never a candidate selector — so there is no probing here: a listing
+ * request (`options.name === undefined`) always lists, a lookup (`options.name !== undefined`)
+ * always looks up, on the given selector or the implicit session if none was given.
  *
- * `--group`/`--filter`/`--limit`/`--offset` only ever reach the daemon on a *listing* request: the detail
- * path (an explicit `<name>`, or the ambiguous single-arg probe above) always asks for the whole,
- * unpaged registry, so a name lookup can never miss a tool that paging would have left off a page.
+ * `--group`/`--filter`/`--limit`/`--offset` only ever reach the daemon on a *listing* request: the
+ * detail path always asks for the whole, unpaged registry, so a name lookup can never miss a tool
+ * that paging would have left off a page.
  */
 
 import { RPC_METHODS, type ToolsListEntry, type ToolsListResult } from "@appduct/shared";
@@ -137,7 +136,7 @@ const listOrGroups = async (
     try {
       return await listGroups(selector, context);
     } catch (error) {
-      // `--groups` takes no value, so `tools --groups checkout` reads `checkout` as a session
+      // `--groups` takes no value, so `tools ls --groups checkout` reads `checkout` as a session
       // selector. When no such session exists, the likelier intent is `--group checkout`.
       if (
         selector !== undefined &&
@@ -177,13 +176,15 @@ export const handleToolsCommand = async (
     throw listingOnlyError();
   }
 
-  if (options.selector !== undefined && options.name !== undefined) {
+  if (options.name !== undefined) {
     const result = await listTools(options.selector, context);
     const tool = findTool(result.tools, options.name);
 
     if (!tool) {
       throw usageError(
-        `Tool "${options.name}" is not registered on session "${options.selector}".`,
+        options.selector !== undefined
+          ? `Tool "${options.name}" is not registered on session "${options.selector}".`
+          : `Tool "${options.name}" is not registered.`,
         { available: result.tools.map((entry) => entry.name) },
       );
     }
@@ -191,36 +192,5 @@ export const handleToolsCommand = async (
     return { ok: true, data: tool };
   }
 
-  if (options.selector !== undefined) {
-    // A single positional arg: try it as the implicit session's tool name first.
-    let implicitTools: ToolsListResult | undefined;
-
-    try {
-      implicitTools = await listTools(undefined, context);
-    } catch (error) {
-      if (!(error instanceof DaemonRpcError)) {
-        throw error;
-      }
-    }
-
-    if (implicitTools) {
-      const tool = findTool(implicitTools.tools, options.selector);
-
-      if (tool) {
-        // The same rule as an explicit `<selector> <name>`: silently dropping the listing flags
-        // here would make `tools <name> --limit 5` behave differently from `tools <sel> <name>`.
-        if (hasListingOnlyOptions(options)) {
-          throw listingOnlyError();
-        }
-
-        return { ok: true, data: tool };
-      }
-    }
-
-    // Not a tool name on the implicit session (or there is no implicit session): treat the arg as
-    // a selector and list that session's tools instead.
-    return { ok: true, data: await listOrGroups(options.selector, options, context) };
-  }
-
-  return { ok: true, data: await listOrGroups(undefined, options, context) };
+  return { ok: true, data: await listOrGroups(options.selector, options, context) };
 };

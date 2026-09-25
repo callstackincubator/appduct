@@ -1,8 +1,9 @@
 /**
  * The built-in `appduct_list_tools` / `appduct_describe_tool` / `appduct_call_tool` MCP tools
  * (ARCHITECTURE.md §9). The app's own tools are never listed as MCP tools. An agent reaches them
- * the way the CLI does: compact signatures first (`appduct tools`), one full schema on demand
- * (`appduct tools <name>`), then a call by name (`appduct invoke`). A registry of hundreds of tools
+ * the way the CLI does: compact signatures first (`appduct tools ls`), one full schema on demand
+ * (`appduct tools describe <name>`), then a call by name (`appduct tools call`). A registry of
+ * hundreds of tools
  * therefore costs a client three fixed tool definitions, and `tools/list` never changes while an
  * agent works.
  *

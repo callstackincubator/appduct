@@ -1,8 +1,9 @@
 /**
- * `appduct events --json` (ARCHITECTURE.md §10): spawns the CLI as a subprocess and asserts
+ * `appduct events tail --json` (ARCHITECTURE.md §10): spawns the CLI as a subprocess and asserts
  * line-delimited parseability. Drives a real daemon (auto-spawned by the first
- * CLI call) and a real `events` subprocess, asserts each stdout line is independently parseable
- * NDJSON carrying an app event, then confirms Ctrl-C (SIGINT) ends the stream cleanly (exit 0).
+ * CLI call) and a real `events tail` subprocess, asserts each stdout line is independently
+ * parseable NDJSON carrying an app event, then confirms Ctrl-C (SIGINT) ends the stream cleanly
+ * (exit 0).
  */
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -80,7 +81,7 @@ const nextMessage = (socket: WebSocket): Promise<Record<string, unknown>> => {
 const claimAppOverCli = async (
   stateDir: string,
 ): Promise<{ socket: WebSocket; alias: string; sessionId: string }> => {
-  const linkResult = runCliJson(["link", "--ttl", "30", "--scheme", "appduct-events-since-test"], stateDir);
+  const linkResult = runCliJson(["sessions", "link", "--ttl", "30", "--scheme", "appduct-events-since-test"], stateDir);
   expect(linkResult.ok).toBe(true);
 
   const payload = (linkResult.data.deepLink as string).split("appduct=")[1]!.split("&")[0]!;
@@ -110,7 +111,7 @@ const claimAppOverCli = async (
   return { socket, alias: ack.alias as string, sessionId: decoded.sessionId };
 };
 
-describe("appduct events --json", () => {
+describe("appduct events tail --json", () => {
   test("streams only app_event lines as NDJSON and exits 0 on SIGINT", async () => {
     const { stateDir } = await makeTempStateDir();
 
@@ -119,7 +120,7 @@ describe("appduct events --json", () => {
     expect(status.ok).toBe(true);
     daemonPids.push(status.data.daemon.pid);
 
-    const eventsProcess = spawnCliBinary(["events", "--json"], { stateDir });
+    const eventsProcess = spawnCliBinary(["events", "tail", "--json"], { stateDir });
 
     const lines: string[] = [];
     let buffered = "";
@@ -173,7 +174,7 @@ describe("appduct events --json", () => {
     expect(stopResult.ok).toBe(true);
   }, 15_000);
 
-  test("--since pulls only retained app events one-shot for a claimed session, and a later pull with the returned cursor sees nothing new", async () => {
+  test("events since pulls only retained app events one-shot for a claimed session, and a later pull with the returned cursor sees nothing new", async () => {
     const { stateDir } = await makeTempStateDir();
 
     const status = runCliJson(["daemon", "status"], stateDir);
@@ -189,7 +190,7 @@ describe("appduct events --json", () => {
     // Attach the data listener before the process can exit — the child's stdout write and its
     // `process.exit()` race the parent's own read otherwise, and a `for await` started only once
     // the child has already exited can end up seeing nothing.
-    const sinceProcess = spawnCliBinary(["events", alias, "--since", "0", "--json"], { stateDir });
+    const sinceProcess = spawnCliBinary(["events", "since", alias, "0", "--json"], { stateDir });
     let stdout = "";
     sinceProcess.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf8");
@@ -212,7 +213,7 @@ describe("appduct events --json", () => {
     // The session's claim is not printed, only the app's own event.
     expect(eventLines.map((line) => JSON.parse(line).kind)).toEqual(["app_event"]);
 
-    const drainedProcess = spawnCliBinary(["events", alias, "--since", String(cursorLine.cursor), "--json"], { stateDir });
+    const drainedProcess = spawnCliBinary(["events", "since", alias, String(cursorLine.cursor), "--json"], { stateDir });
     let drainedStdout = "";
     drainedProcess.stdout.on("data", (chunk: Buffer) => {
       drainedStdout += chunk.toString("utf8");

@@ -64,7 +64,7 @@ const readStatus = async (stateDir: string): Promise<DaemonStatus> => {
 
 /**
  * One raw JSON-RPC request over the control socket. Used only to mint a link for the live-session
- * scenario: `appduct link` is itself one of the commands that runs the version check, so using
+ * scenario: `appduct sessions link` is itself one of the commands that runs the version check, so using
  * it as *setup* would restart the very daemon the test needs to keep stale. Every scenario action
  * still goes through a real CLI subprocess or the fake app client.
  */
@@ -162,7 +162,7 @@ describe("e2e: daemon/CLI version drift", () => {
       const { stateDir } = await makeTempStateDir();
       const stalePid = await startStaleDaemon(stateDir);
 
-      const lsResult = await runCliJson<unknown[]>(["ls"], stateDir);
+      const lsResult = await runCliJson<unknown[]>(["sessions", "ls"], stateDir);
       expect(lsResult.ok).toBe(true);
       expect(lsResult.data).toEqual([]);
 
@@ -199,7 +199,7 @@ describe("e2e: daemon/CLI version drift", () => {
       await app.claim(link, { model: "Pixel 8" });
 
       try {
-        const lsResult = await runCliJson(["ls"], stateDir);
+        const lsResult = await runCliJson(["sessions", "ls"], stateDir);
 
         expect(lsResult.ok).toBe(false);
         expect(lsResult.exitCode).toBe(70);
@@ -243,7 +243,7 @@ describe("e2e: daemon/CLI version drift", () => {
       await app.claim(link, { model: "Pixel 8" });
       const socketClosed = app.waitForClose();
 
-      const lsResult = await runCliJson<unknown[]>(["ls", "--daemon-restart"], stateDir);
+      const lsResult = await runCliJson<unknown[]>(["sessions", "ls", "--daemon-restart"], stateDir);
       expect(lsResult.ok).toBe(true);
       // The session went with the old daemon — the documented cost the default refuses to pay.
       expect(lsResult.data).toEqual([]);
@@ -307,7 +307,7 @@ describe("e2e: forcing a version-drift restart", () => {
       await app.claim(link, { model: "Pixel 8" });
 
       // The env form exists for exactly this: an MCP launch config passes no CLI flags.
-      const lsResult = await runCliJson<unknown[]>(["ls"], stateDir, {
+      const lsResult = await runCliJson<unknown[]>(["sessions", "ls"], stateDir, {
         APPDUCT_DAEMON_RESTART: "1",
       });
 
@@ -344,7 +344,7 @@ describe("e2e: forcing a version-drift restart", () => {
         // Config says "always restart"; the flag says "not this time". A flag that parsed cleanly
         // and then did nothing would be the worst outcome for a knob that decides whether the
         // operator's connected device survives the next command.
-        const lsResult = await runCliJson(["ls", "--no-daemon-restart"], stateDir);
+        const lsResult = await runCliJson(["sessions", "ls", "--no-daemon-restart"], stateDir);
 
         expect(lsResult.ok).toBe(false);
         expect(lsResult.error?.type).toBe("connection_error");
@@ -370,7 +370,7 @@ describe("e2e: forcing a version-drift restart", () => {
       // session, so nothing in `sessions` protects it — the daemon reports it separately.
       await mintLinkWithoutCli(stateDir);
 
-      const lsResult = await runCliJson(["ls"], stateDir);
+      const lsResult = await runCliJson(["sessions", "ls"], stateDir);
 
       expect(lsResult.ok).toBe(false);
       expect(lsResult.error?.type).toBe("connection_error");
@@ -407,14 +407,14 @@ describe("e2e: a daemon newer than the CLI", () => {
       const newerPid = await startStaleDaemon(stateDir, NEWER_VERSION);
 
       // Human mode: the operator gets told, and the daemon keeps serving.
-      const human = await runCliCapturing(["ls"], stateDir);
+      const human = await runCliCapturing(["sessions", "ls"], stateDir);
       expect(human.exitCode).toBe(0);
       expect(human.stderr).toContain(NEWER_VERSION);
       expect(human.stderr).toContain(CLI_VERSION);
 
       // `--json` promises one machine-readable object and nothing else; a bare line of prose on
       // stderr would corrupt a script that captures both streams.
-      const machine = await runCliCapturing(["ls", "--json"], stateDir);
+      const machine = await runCliCapturing(["sessions", "ls", "--json"], stateDir);
       expect(machine.exitCode).toBe(0);
       expect(machine.stderr).toBe("");
       expect(JSON.parse(machine.stdout).ok).toBe(true);
@@ -438,7 +438,7 @@ describe("e2e: an expired link no longer blocks an upgrade", () => {
       await mintLinkWithoutCli(stateDir);
 
       // While the link is claimable it is live state, and the restart is refused.
-      const blocked = await runCliJson(["ls"], stateDir);
+      const blocked = await runCliJson(["sessions", "ls"], stateDir);
       expect(blocked.ok).toBe(false);
       expect(blocked.error?.details).toMatchObject({ pending_link_count: 1 });
 
@@ -449,7 +449,7 @@ describe("e2e: an expired link no longer blocks an upgrade", () => {
         { timeoutMs: 10_000, intervalMs: 100, description: "the minted link to pass its TTL" },
       );
 
-      const lsResult = await runCliJson<unknown[]>(["ls"], stateDir);
+      const lsResult = await runCliJson<unknown[]>(["sessions", "ls"], stateDir);
       expect(lsResult.ok).toBe(true);
 
       const status = await readStatus(stateDir);

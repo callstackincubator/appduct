@@ -606,7 +606,7 @@ describe("tools.call: timeout", () => {
 
 describe("caller transport timeouts over a slow tool", () => {
   test(
-    "invoke (with and without --timeout) and appduct/client all outlive the daemon's 10 s default (issue #25)",
+    "tools call (with and without --timeout) and appduct/client all outlive the daemon's 10 s default (issue #25)",
     async () => {
       const daemon = await startTestDaemon();
       const app = await claimApp(daemon);

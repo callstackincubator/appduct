@@ -1,7 +1,7 @@
 /**
  * `appduct/client` (issue #8): a first-class programmatic client for test runners — a thin typed
  * wrapper over the same daemon RPC the CLI and MCP server use, so a Jest/Vitest/Detox spec can
- * `connect()`/`call()` instead of spawning `appduct invoke ... --json` and parsing stdout.
+ * `connect()`/`call()` instead of spawning `appduct tools call ... --json` and parsing stdout.
  *
  * ```ts
  * import { connect } from "appduct/client";

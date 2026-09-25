@@ -42,7 +42,7 @@ Forgetting this is a **manifest-merger error at build time**, not a silent no-op
 Attribute data@scheme at ... requires a placeholder substitution but no value for <appductScheme> is provided.
 ```
 
-The scheme you pick is what `appduct link --scheme <s>` / `appduct init --scheme <s>` must
+The scheme you pick is what `appduct sessions link --scheme <s>` / `appduct init --scheme <s>` must
 match on the CLI side. It can be a dedicated scheme distinct from your app's own primary
 deep-link scheme — see [Deep links](#3-deep-links) for why that matters if you already handle
 your own scheme.
@@ -95,7 +95,7 @@ signs out or pays, and give every tool an `outputSchema`. See
 [`docs/TOOLS.md`](../../../docs/TOOLS.md#designing-tools-for-agents) for the full list of rules.
 
 On an app with many tools, pass `group` so agents can list them one area at a time
-(`appduct tools --group cart`). A group is `"cart"` or one subgroup below it, like
+(`appduct tools ls --group cart`). A group is `"cart"` or one subgroup below it, like
 `"checkout/payment"`; each part uses tool-name characters (letters, digits, `_`, `-`, at most 64).
 A malformed group makes `register` throw `IllegalArgumentException`, like a malformed name:
 
@@ -134,7 +134,7 @@ does no further suspending work simply runs to completion, the same way a JS han
 
 Appduct ships a no-UI trampoline activity, `AppductLinkActivity`, declared in `core`'s own
 manifest with an intent filter on `${appductScheme}`. Open a bootstrap link
-(`appduct link --scheme myapp`) and it reaches your registered tools with no code required on
+(`appduct sessions link --scheme myapp`) and it reaches your registered tools with no code required on
 your side: the OS routes the link to the trampoline, which calls `Appduct.handle(intent)` and
 finishes immediately.
 
@@ -240,10 +240,10 @@ appduct`, or invoke the workspace build directly if the two might disagree.
 `manifestPlaceholders["appductScheme"]` in your app's `build.gradle` — see
 [The `appductScheme` placeholder](#the-appductscheme-placeholder) above.
 
-**`appduct link --open android` reports "unable to resolve Intent".** Either the app id
+**`appduct sessions link --open android` reports "unable to resolve Intent".** Either the app id
 (`--app-id`, or `appId.android` in `.appduct/config.json`) isn't the installed build's
 `applicationId` — check for an `applicationIdSuffix` on the variant you installed — or the scheme
-`appduct link` used doesn't match `manifestPlaceholders["appductScheme"]` on the installed build.
+`appduct sessions link` used doesn't match `manifestPlaceholders["appductScheme"]` on the installed build.
 If the app was built before that placeholder was set, rebuild and reinstall — placeholders are
 baked in at build time, not read at runtime.
 

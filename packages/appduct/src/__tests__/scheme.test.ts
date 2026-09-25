@@ -1,6 +1,6 @@
 /**
  * Deep-link scheme resolution (`scheme.ts`, issue #29): `app.json` discovery, the project-config
- * walk-up, and the precedence order shared by `appduct link`, `appduct mcp`,
+ * walk-up, and the precedence order shared by `appduct sessions link`, `appduct mcp`,
  * `appduct/client`'s `link()` and `appduct_connect`.
  */
 

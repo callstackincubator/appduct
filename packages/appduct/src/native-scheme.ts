@@ -25,7 +25,7 @@
  * **Disagreement is not guessed away.** If more than one probe below resolves to a *different*
  * scheme (e.g. a monorepo whose `android/` and `ios/` declare different values), discovery throws
  * a usage error naming every conflicting source instead of picking one — silently choosing would
- * mean `appduct link` opens the wrong app on whichever platform lost.
+ * mean `appduct sessions link` opens the wrong app on whichever platform lost.
  */
 
 import { readdir, readFile, stat } from "node:fs/promises";

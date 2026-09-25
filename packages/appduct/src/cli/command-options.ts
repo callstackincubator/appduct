@@ -26,8 +26,9 @@ export const parsePositiveIntegerOption = (value: unknown, flagName: string): nu
 };
 
 /** Parses a `cac`-provided option value into a non-negative integer (0 allowed, unlike
- * {@link parsePositiveIntegerOption}), or throws a clear `usage_error`. Used by `events --since`,
- * whose cursor `0` is a meaningful "everything retained" value, not an omission. */
+ * {@link parsePositiveIntegerOption}), or throws a clear `usage_error`. Used by `events since`'s
+ * `<cursor>` positional, whose value `0` is a meaningful "everything retained" value, not an
+ * omission. */
 export const parseNonNegativeIntegerOption = (value: unknown, flagName: string): number | undefined => {
   if (value === undefined) {
     return undefined;
@@ -86,9 +87,9 @@ export const readTextOption = (
 };
 
 /**
- * Splits the positional args of a command shaped `<command> [selector] <target>` (e.g. `invoke
- * [selector] <tool>`, `tools [selector] <name>`): the last positional is always the required
- * target, everything before it (zero or one args) is the optional selector.
+ * Splits the positional args of a command shaped `<command> [selector] <target>` (e.g. `tools
+ * call [selector] <tool>`, `tools describe [selector] <name>`): the last positional is always the
+ * required target, everything before it (zero or one args) is the optional selector.
  */
 export const splitSelectorAndRequiredTarget = (
   args: readonly string[],
@@ -120,32 +121,7 @@ export const splitOptionalSelector = (args: readonly string[], commandUsage: str
 };
 
 /**
- * Splits the positional args of a command shaped `<command> [selector] [target]` (`tools [selector]
- * [name]`): with 2 args, `(selector, target)`; with 1, the single arg is ambiguous between "the
- * selector" and "the target with the selector omitted" — the caller resolves that (see
- * `commands/tools.ts`), so it comes back unlabeled here as `selectorOrTarget`.
- */
-export const splitOptionalSelectorAndTarget = (
-  args: readonly string[],
-  commandUsage: string,
-): { selector?: string; target?: string; selectorOrTarget?: string } => {
-  if (args.length > 2) {
-    throw usageError(`Usage: ${commandUsage} (too many arguments).`);
-  }
-
-  if (args.length === 2) {
-    return { selector: args[0], target: args[1] };
-  }
-
-  if (args.length === 1) {
-    return { selectorOrTarget: args[0] };
-  }
-
-  return {};
-};
-
-/**
- * Parses the JSON payload for `invoke --input`; never throws a raw `SyntaxError` at the CLI
+ * Parses the JSON payload for `tools call --input`; never throws a raw `SyntaxError` at the CLI
  * boundary. A missing flag is a usage error (nothing was given); a present-but-unparseable or
  * wrong-shaped value is a validation error (something was given, and it's invalid).
  */

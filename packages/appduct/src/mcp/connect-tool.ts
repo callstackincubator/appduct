@@ -208,7 +208,7 @@ const asOptionalPositiveNumber = (value: unknown, field: string): number | undef
 export type ConnectToolDeps = {
   call: DaemonCall;
   /** The scheme composing the deep link (`<scheme>:///?appduct=<payload>`), resolved once at
-   * server startup against the shared order in `scheme.ts` — the same one `appduct link` uses,
+   * server startup against the shared order in `scheme.ts` — the same one `appduct sessions link` uses,
    * so an app root with an `app.json` needs no configuration at all. */
   scheme?: string;
   /** Every location `scheme.ts` consulted, named in the failure below so an agent can tell its

@@ -57,9 +57,9 @@ export type McpHostedResult = {
 /**
  * Resolves the deep-link scheme for the server, *never* throwing.
  *
- * Unlike `appduct link`, an unresolved (or unresolvable) scheme must not stop `appduct mcp`
+ * Unlike `appduct sessions link`, an unresolved (or unresolvable) scheme must not stop `appduct mcp`
  * from starting: the server is still fully useful for proxying an app's tools to a session that was
- * paired some other way (a QR scan, `appduct link` in another terminal), and an MCP client that
+ * paired some other way (a QR scan, `appduct sessions link` in another terminal), and an MCP client that
  * cannot start its server gets a much worse failure than one whose `appduct_connect` call
  * returns a clear `invalid_request`. So a scheme problem here is downgraded to an extra entry in
  * the `tried` list, which `appduct_connect` renders if and when it is actually called.

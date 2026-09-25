@@ -215,7 +215,7 @@ describe("appduct mcp command", () => {
   });
 
   // The server must still start without a scheme (it is useful for proxying a session paired by
-  // QR or `appduct link`); only `appduct_connect` fails, and it names where to put one.
+  // QR or `appduct sessions link`); only `appduct_connect` fails, and it names where to put one.
   test("starts without any scheme and fails appduct_connect with the locations tried", async () => {
     const { stateDir } = await startTestDaemon();
     const { client } = await startMcpCommandWithClient(stateDir);

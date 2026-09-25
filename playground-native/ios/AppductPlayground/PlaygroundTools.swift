@@ -2,7 +2,7 @@ import AppductCore
 import Foundation
 
 /// Registers the same tools `playground/app/(tabs)/index.tsx` (the Expo playground) registers --
-/// same names, descriptions, and schemas -- so `appduct tools` reports an equivalent surface
+/// same names, descriptions, and schemas -- so `appduct tools ls` reports an equivalent surface
 /// regardless of which playground app answered the link. Implementations are simple in-memory
 /// mirrors of the Expo versions, backed by `PlaygroundViewModel.shared` instead of React state.
 enum PlaygroundTools {

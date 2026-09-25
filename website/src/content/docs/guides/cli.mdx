@@ -11,16 +11,16 @@ Install it with `npm install -g appduct` (Node 20 or newer). There's no server t
 
 ## Connect a device
 
-A device connects by opening a one-time link in your app. `appduct link` creates the link; how it reaches the device depends on the device. Run `appduct link` from your app's root directory, so it finds your deep-link scheme (see [How the CLI finds your scheme](#how-the-cli-finds-your-scheme)).
+A device connects by opening a one-time link in your app. `appduct sessions link` creates the link; how it reaches the device depends on the device. Run `appduct sessions link` from your app's root directory, so it finds your deep-link scheme (see [How the CLI finds your scheme](#how-the-cli-finds-your-scheme)).
 
 | Device | Command | Needs |
 | --- | --- | --- |
-| iOS Simulator | `appduct link --open ios-sim` | A booted simulator |
-| Android emulator or USB device | `appduct link --open android` | `adb`, and your app's package name |
-| Any device on your local network | `appduct link --qr` | Scan the QR code with the device's camera |
-| Physical iPhone or iPad (experimental) | `appduct link --open ios-device` | See [below](#physical-iphone-or-ipad-experimental) |
+| iOS Simulator | `appduct sessions link --open ios-sim` | A booted simulator |
+| Android emulator or USB device | `appduct sessions link --open android` | `adb`, and your app's package name |
+| Any device on your local network | `appduct sessions link --qr` | Scan the QR code with the device's camera |
+| Physical iPhone or iPad (experimental) | `appduct sessions link --open ios-device` | See [below](#physical-iphone-or-ipad-experimental) |
 
-The link expires after 5 minutes and works once. Run `appduct ls` to check the session's state; once the app opens the link, it shows `active`.
+The link expires after 5 minutes and works once. Run `appduct sessions ls` to check the session's state; once the app opens the link, it shows `active`.
 
 **Android needs your app's package name**, so the link opens your app and not another one that declares the same scheme. Pass `--app-id com.example.shop`, or record it once in your project:
 
@@ -43,7 +43,7 @@ appduct init --android-app-id com.example.shop --ios-app-id com.example.shop
 - Your app's bundle id: `--app-id`, or `appId.ios` recorded by `appduct init --ios-app-id`.
 
 ```bash
-appduct link --open ios-device --app-id com.example.shop
+appduct sessions link --open ios-device --app-id com.example.shop
 ```
 
 If the app is already running and nothing happens, add `--relaunch` to restart it first.
@@ -53,20 +53,20 @@ If the app is already running and nothing happens, add `--relaunch` to restart i
 One background service handles every connected device. Each session gets an alias based on the device model, such as `pixel-8` or `iphone15-2`:
 
 ```bash
-appduct ls
+appduct sessions ls
 ```
 
 Every command that targets a device takes an optional **selector** — an alias or session id — as its first argument. Leave it out when only one device is connected; with several, the command fails with `ambiguous_session` and lists the aliases.
 
 ```bash
-appduct tools pixel-8
-appduct invoke pixel-8 seed_cart --input '{"items":3}'
+appduct tools ls pixel-8
+appduct tools call pixel-8 seed_cart --input '{"items":3}'
 ```
 
 ## Find a tool
 
 ```bash
-appduct tools
+appduct tools ls
 ```
 
 This prints one call signature and a one-line description per tool:
@@ -87,15 +87,15 @@ Tools
 For one tool's full input and output schema:
 
 ```bash
-appduct tools seed_cart
+appduct tools describe seed_cart
 ```
 
 **On an app with many tools**, look at its groups first, then list one:
 
 ```bash
-appduct tools --groups
-appduct tools --group checkout            # checkout and its subgroups
-appduct tools --group checkout/payment    # only that subgroup
+appduct tools ls --groups
+appduct tools ls --group checkout            # checkout and its subgroups
+appduct tools ls --group checkout/payment    # only that subgroup
 ```
 
 You can also narrow by text with `--filter <text>`, which matches names and descriptions, and page with `--limit <n>` and `--offset <n>`. A cut-off listing ends with a line telling you how many tools were left out.
@@ -103,7 +103,7 @@ You can also narrow by text with `--filter <text>`, which matches names and desc
 ## Call a tool
 
 ```bash
-appduct invoke seed_cart --input '{"items":3}'
+appduct tools call seed_cart --input '{"items":3}'
 ```
 
 `--input` is required and must be a JSON object. Use `--input '{}'` for a tool that takes no arguments.
@@ -119,17 +119,17 @@ When a call fails, the error type comes from the app unchanged, for example `too
 Your app can post events with `postEvent`, such as "checkout finished". To stream them:
 
 ```bash
-appduct events
+appduct events tail
 ```
 
-This keeps running until you stop it. To print what already happened and exit, pass the cursor from an earlier result with `--since <cursor>`. Add `--json` for one JSON object per line.
+This keeps running until you stop it. To print what already happened and exit, pass the cursor from an earlier result to `appduct events since <cursor>`. Add `--json` for one JSON object per line.
 
-Only your app's events are printed, not device connections or tool calls. To check that a device is connected, run `appduct ls`.
+Only your app's events are printed, not device connections or tool calls. To check that a device is connected, run `appduct sessions ls`.
 
 ## Disconnect a device
 
 ```bash
-appduct revoke pixel-8
+appduct sessions revoke pixel-8
 ```
 
 This ends one session and frees its alias. Other devices stay connected.
@@ -139,7 +139,7 @@ This ends one session and frees its alias. Other devices stay connected.
 Plain-text output is for reading and can change between versions. For scripts, add `--json`:
 
 ```bash
-appduct invoke seed_cart --input '{"items":3}' --json
+appduct tools call seed_cart --input '{"items":3}' --json
 ```
 
 The result is one compact JSON line on stdout. Errors are JSON on stderr. Add `--pretty` to indent it.
@@ -214,7 +214,7 @@ It reads `.app`, `.ipa`, `.apk`, and `.aab` files. With `--assert-absent` or `--
 
 ## How the CLI finds your scheme
 
-`appduct link`, `appduct mcp`, and the agent's `appduct_connect` need your app's deep-link scheme. They use the first of:
+`appduct sessions link`, `appduct mcp`, and the agent's `appduct_connect` need your app's deep-link scheme. They use the first of:
 
 1. The `--scheme` flag.
 2. The `APPDUCT_SCHEME` environment variable.

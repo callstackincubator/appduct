@@ -171,8 +171,8 @@ export default function StatusScreen() {
           </Pressable>
           <ThemedText type="caption" style={styles.cardHint}>
             {lastPingAt !== null
-              ? `Last sent at ${new Date(lastPingAt).toLocaleTimeString()}. Watch it with: appduct events --follow`
-              : "Watch it arrive with: appduct events --follow"}
+              ? `Last sent at ${new Date(lastPingAt).toLocaleTimeString()}. Watch it with: appduct events tail --follow`
+              : "Watch it arrive with: appduct events tail --follow"}
           </ThemedText>
         </View>
 

@@ -139,7 +139,7 @@ Unions of objects (`z.union`, `z.discriminatedUnion`, `z.intersection`) work, bu
 
 ## Group tools in a large app
 
-Once your app has more tools than fit on a screen, give each a `group`. An agent then lists your app's areas with `appduct tools --groups` and one area with `--group cart`, instead of guessing search words.
+Once your app has more tools than fit on a screen, give each a `group`. An agent then lists your app's areas with `appduct tools ls --groups` and one area with `--group cart`, instead of guessing search words.
 
 ```ts
 useAppductTool({
@@ -201,7 +201,7 @@ An agent picks a tool from one line, `name(params) -> result`, plus the first li
 - **Few coarse tools beat many fine ones.** `complete_onboarding()`, not `dismiss_step_1` through `dismiss_step_7`.
 - **Set `timeoutMs`** on anything that touches the network, and **never register a tool that needs a person to finish**: return when the state change is done, and [post an event](#tell-callers-something-happened) for anything later.
 
-Then connect a device and run `appduct tools`. That listing is what the agent sees: fix any `...` in a signature, any tool without `-> { ... }`, and any first line that doesn't say what the tool needs. The full list of rules, with before-and-after examples, is in [`docs/TOOLS.md`](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#designing-tools-for-agents).
+Then connect a device and run `appduct tools ls`. That listing is what the agent sees: fix any `...` in a signature, any tool without `-> { ... }`, and any first line that doesn't say what the tool needs. The full list of rules, with before-and-after examples, is in [`docs/TOOLS.md`](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#designing-tools-for-agents).
 
 ## Long-running tools
 
@@ -217,7 +217,7 @@ useAppductTool({
 });
 ```
 
-`timeoutMs` must be between 1,000 and 600,000; values outside are clamped, with a warning in development. It's the only way to give a tool more time: callers can shorten the limit (`appduct invoke --timeout`) but never extend it.
+`timeoutMs` must be between 1,000 and 600,000; values outside are clamped, with a warning in development. It's the only way to give a tool more time: callers can shorten the limit (`appduct tools call --timeout`) but never extend it.
 
 When the time is up, the call fails with `tool_timeout`, and whatever the handler returns later is ignored.
 

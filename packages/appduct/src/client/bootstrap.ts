@@ -1,6 +1,6 @@
 /**
  * `link()`/`waitForSession()` (issue #8): the bootstrap half of the client, so a test's
- * `globalSetup` can pair a simulator/emulator without shelling out to `appduct link --open`.
+ * `globalSetup` can pair a simulator/emulator without shelling out to `appduct sessions link --open`.
  * `link()` delegates to the same `mintLink` core `commands/link.ts` uses (`../link.js`) so the
  * deep-link shape can't drift between the CLI and this package; `waitForSession()` mirrors
  * `mcp/connect-tool.ts`'s `handleWaitForSessionTool`.

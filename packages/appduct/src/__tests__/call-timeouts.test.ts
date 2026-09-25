@@ -1,7 +1,7 @@
 /**
  * `daemon/calls.ts`'s timeout arithmetic (issue #25). `clampTimeout` decides the deadline the
  * daemon actually enforces for a `tools.call`; `deriveCallTransportTimeoutMs` is what every caller
- * (the MCP server, `appduct invoke`) sizes its own socket watchdog off, so that the daemon's
+ * (the MCP server, `appduct tools call`) sizes its own socket watchdog off, so that the daemon's
  * `tool_timeout` always wins the race and the caller reports the real error type.
  */
 
@@ -60,13 +60,13 @@ describe("deriveCallTransportTimeoutMs", () => {
 });
 
 /**
- * `appduct invoke` and `AppClient.call` differ from the MCP server: they pass the *caller's*
+ * `appduct tools call` and `AppClient.call` differ from the MCP server: they pass the *caller's*
  * timeout, so `undefined` there means "the daemon will fall back to the tool's own declared
  * deadline", which neither knows. Sizing their watchdog off the 10 s default would make the caller
  * the thing that fails a long tool call.
  */
 describe("callers that do not know the effective deadline", () => {
-  test("invoke with no --timeout sizes its watchdog for the largest deadline the daemon could enforce", () => {
+  test("tools call with no --timeout sizes its watchdog for the largest deadline the daemon could enforce", () => {
     // Mirrors `commands/invoke.ts`: `options.timeoutMs ?? MAX_CALL_TIMEOUT_MS`.
     const noCallerTimeout: number | undefined = undefined;
     expect(deriveCallTransportTimeoutMs(noCallerTimeout ?? MAX_CALL_TIMEOUT_MS)).toBe(

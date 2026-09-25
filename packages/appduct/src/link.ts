@@ -2,7 +2,7 @@
  * Shared core of `link.create` + deep-link composition + optional emulator/simulator delivery
  * (ARCHITECTURE.md §8, §10): mints a pending session via `link.create`, then composes
  * `<scheme>:///?appduct=<payload>&pin=<spki-pin>` and optionally delivers it to a booted
- * Android emulator/device or iOS simulator. Used by `commands/link.ts` (`appduct link`) and
+ * Android emulator/device or iOS simulator. Used by `commands/link.ts` (`appduct sessions link`) and
  * `client/bootstrap.ts` (`appduct/client`'s `link()`) so this shape — scheme resolution, the
  * `pin` query param, the `127.0.0.1` emulator/simulator address override (which the experimental
  * `ios-device` target deliberately opts out of) — can't drift between the CLI and the programmatic

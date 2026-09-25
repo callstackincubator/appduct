@@ -1,4 +1,4 @@
-/** `appduct ls` (ARCHITECTURE.md §10): `sessions.list` passthrough. */
+/** `appduct sessions ls` (ARCHITECTURE.md §10): `sessions.list` passthrough. */
 
 import { RPC_METHODS, type SessionsListResult } from "@appduct/shared";
 

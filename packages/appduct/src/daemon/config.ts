@@ -63,7 +63,7 @@ export type AppductConfig = {
   /** Operator override for advertised-address detection (daemon/address.ts); undefined = auto-detect. */
   advertisedIp?: string;
   /**
-   * Deep-link URI scheme used to compose `appduct link`'s output (ARCHITECTURE.md §10: "taken
+   * Deep-link URI scheme used to compose `appduct sessions link`'s output (ARCHITECTURE.md §10: "taken
    * from the flag, else `config.json`, else the CLI errors with a clear message"). Not part of the
    * `config.json` shape enumerated in ARCHITECTURE.md §3 (which only covers daemon-side settings),
    * but `config.json` is explicitly "all fields optional" there and this is the natural home for a

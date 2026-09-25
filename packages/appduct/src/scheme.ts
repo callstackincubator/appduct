@@ -1,7 +1,7 @@
 /**
  * Deep-link scheme resolution (ARCHITECTURE.md §10, issue #29).
  *
- * A scheme is needed to compose `<scheme>:///?appduct=<payload>` in `appduct link`,
+ * A scheme is needed to compose `<scheme>:///?appduct=<payload>` in `appduct sessions link`,
  * `appduct/client`'s `link()` and the MCP `appduct_connect` tool. Before this module the only
  * source was `<state-dir>/config.json` — a single global file, which meant two apps with different
  * schemes on one machine required hand-editing it on every switch.
@@ -257,7 +257,7 @@ export const globalConfigDirs = (options: ProjectConfigLookupOptions = {}): Set<
  * documented precedence:
  *
  * - `<homeDir>/.appduct`, the default state dir. Essentially every project lives somewhere under
- *   the home directory, so without this a plain `appduct link` in any repo would pick up the
+ *   the home directory, so without this a plain `appduct sessions link` in any repo would pick up the
  *   global `config.json` as if it were the project's — and with `--state-dir` pointing elsewhere it
  *   would shadow the state dir the operator explicitly chose.
  * - `stateDirRoot`, the state dir actually in use, for the same reason when it is not the default.
@@ -512,7 +512,7 @@ export const resolveScheme = async (options: ResolveSchemeOptions = {}): Promise
 
 /**
  * The shared "no scheme anywhere" message. Every caller renders the same body so the locations
- * listed (and the fixes suggested) can't drift between `appduct link`, `appduct mcp` and
+ * listed (and the fixes suggested) can't drift between `appduct sessions link`, `appduct mcp` and
  * `appduct_connect`.
  */
 export const describeMissingScheme = (tried: string[]): string => {
@@ -557,7 +557,7 @@ export type ResolveAppIdOptions = {
   /** Which `appId.<platform>` key to read from a project config; see `cli/open-target.ts`'s
    * `platformOf`. */
   platform: AppIdPlatform;
-  /** `--app-id` (CLI `link`) / `appId` (MCP `appduct_connect`) / `appId` (`mintLink`, the
+  /** `--app-id` (CLI `sessions link`) / `appId` (MCP `appduct_connect`) / `appId` (`mintLink`, the
    * `appduct/client` `link()`) — highest precedence, because the target is known at the call
    * site. */
   flagAppId?: string;

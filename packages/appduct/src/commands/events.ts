@@ -1,15 +1,17 @@
 /**
- * `appduct events` (ARCHITECTURE.md §10): subscribes to `events.subscribe` for `app_event` only
- * over a persistent connection and streams the app's own events until interrupted (Ctrl-C) or the
- * connection drops. Appduct's lifecycle and tool-call kinds are not printed (issue #98). This is
- * the one command whose output isn't a single rendered `CliResult` — each event is written as it
- * arrives (NDJSON under `--json`, a human line otherwise) — so it plugs into `executeHostedCommand`
- * with a live reporter that suppresses the default one-shot bootstrap render (`cli/runner.ts`).
+ * `appduct events tail` (ARCHITECTURE.md §10): subscribes to `events.subscribe` for `app_event`
+ * only over a persistent connection and streams the app's own events until interrupted (Ctrl-C) or
+ * the connection drops. Appduct's lifecycle and tool-call kinds are not printed (issue #98). This
+ * is the one command whose output isn't a single rendered `CliResult` — each event is written as
+ * it arrives (NDJSON under `--json`, a human line otherwise) — so it plugs into
+ * `executeHostedCommand` with a live reporter that suppresses the default one-shot bootstrap
+ * render (`cli/runner.ts`).
  *
- * `--since <cursor>` (issue #6) switches to a one-shot mode: a single `events.since` pull instead
- * of a live subscription. It falls out of the same `EventsHostedResult` shape (each retained event
- * is written through `onEvent` exactly like a live one) so the CLI plumbing needs no forking — the
- * "hosted command" here just completes immediately instead of running until interrupted.
+ * `appduct events since <cursor>` (issue #6) is a one-shot mode: a single `events.since` pull
+ * instead of a live subscription, selected here by `since !== undefined`. It falls out of the same
+ * `EventsHostedResult` shape (each retained event is written through `onEvent` exactly like a live
+ * one) so the CLI plumbing needs no forking — the "hosted command" here just completes immediately
+ * instead of running until interrupted.
  */
 
 import { RPC_METHODS, type EventNotification, type EventsSinceResult, type EventsSubscribeResult } from "@appduct/shared";
@@ -28,7 +30,7 @@ export type EventsCommandContext = {
   stateDir: string;
   spawn?: SpawnFn;
   onEvent: (event: EventNotification) => void;
-  /** `--since` mode only: called once with the pull's resulting cursor, so a scripted caller
+  /** `events since` mode only: called once with the pull's resulting cursor, so a scripted caller
    * doesn't have to reconstruct it by maxing `seq` over the printed lines (impossible when the
    * response is empty — the whole point of a cursor is knowing where to resume from either way). */
   onCursor?: (cursor: number) => void;

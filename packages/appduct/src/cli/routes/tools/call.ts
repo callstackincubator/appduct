@@ -1,16 +1,17 @@
-/** Route for `appduct invoke` — loaded by `cli/dispatch.ts`'s router only when it runs. */
+/** Route for `appduct tools call` — loaded by `routes/tools/index.ts`'s router only when it runs
+ * (issue #96; replaces the removed `appduct invoke`). */
 
-import type { Route } from "../router.js";
+import type { Route } from "../../router.js";
 
-import { handleInvokeCommand } from "../../commands/invoke.js";
+import { handleInvokeCommand } from "../../../commands/invoke.js";
 import {
   parseJsonInputOption,
   parsePositiveIntegerOption,
   splitSelectorAndRequiredTarget,
-} from "../command-options.js";
-import { commandName } from "../router.js";
-import { executeCommand } from "../runner.js";
-import { guarded } from "../version-guard.js";
+} from "../../command-options.js";
+import { commandName } from "../../router.js";
+import { executeCommand } from "../../runner.js";
+import { guarded } from "../../version-guard.js";
 
 export const route: Route = async (context) => {
   const { options, stateDir } = context;
@@ -24,12 +25,12 @@ export const route: Route = async (context) => {
   try {
     return await executeCommand(
       commandName(context),
-      // Positionals are split inside the handler so a missing `<tool>` renders through the runner
+      // Positionals are split inside the handler so a missing `<name>` renders through the runner
       // as a usage error instead of escaping the route as an uncaught rejection.
       () => {
         const { selector, target: tool } = splitSelectorAndRequiredTarget(
           context.args,
-          "invoke [selector] <tool> --input '<json>'",
+          "tools call [selector] <name> --input '<json>'",
         );
 
         return guarded(context)(() =>

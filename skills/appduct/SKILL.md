@@ -12,23 +12,27 @@ of it and start it on first use. There is no server for you to start.
 ## The loop
 
 ```bash
-appduct ls                                  # connected devices
-appduct tools                               # one signature + description per tool
-appduct tools <name>                        # one tool's full input/output schema
-appduct invoke <name> --input '{"k":"v"}'   # call it; --input is required, use '{}' for no args
+appduct sessions ls                                # connected devices
+appduct tools ls                                   # one signature + description per tool
+appduct tools describe <name>                      # one tool's full input/output schema
+appduct tools call <name> --input '{"k":"v"}'      # call it; --input is required, use '{}' for no args
 ```
 
-- If `appduct ls` is empty, connect a device first: read [references/cli.md](./references/cli.md),
-  section "Connect a device".
-- Every session command takes an optional **selector** (alias or session id from `appduct ls`)
-  as its first positional argument. Omit it when one device is connected. With several, the
-  CLI fails with `ambiguous_session` and lists the aliases; pass one.
+Every command is `appduct <noun> <verb> [selector] [args]` — `sessions`, `tools` and `events`
+work like `appduct daemon run|start|stop|status` already does; there are no other forms.
+
+- If `appduct sessions ls` is empty, connect a device first: read
+  [references/cli.md](./references/cli.md), section "Connect a device".
+- Every session command takes an optional **selector** (alias or session id from
+  `appduct sessions ls`) as its first positional argument. Omit it when one device is connected.
+  With several, the CLI fails with `ambiguous_session` and lists the aliases; pass one.
 - A signature reads `name(param: type, optional?: type = default) -> { result }`. A trailing
   `[prompt]` or `[deny]` is the tool's policy. `...` means that part of the schema could not be
-  summarized: run `appduct tools <name>` before calling that tool, and only for such tools.
-- When the listing footer says tools were left out: run `appduct tools --groups`, then
-  `appduct tools --group <name>` (a parent group includes its subgroups), or
-  `appduct tools --filter <text>` (matches name and description), or page with
+  summarized: run `appduct tools describe <name>` before calling that tool, and only for such
+  tools.
+- When the listing footer says tools were left out: run `appduct tools ls --groups`, then
+  `appduct tools ls --group <name>` (a parent group includes its subgroups), or
+  `appduct tools ls --filter <text>` (matches name and description), or page with
   `--limit <n> --offset <n>`.
 
 ## Run a known sequence as one command
@@ -40,9 +44,9 @@ whole sequence, then pick the smallest form that fits:
    first one.
 
    ```bash
-   appduct invoke login --input '{"userId":"u_42"}' \
-     && appduct invoke seed_cart --input '{"items":3}' \
-     && appduct invoke get_cart --input '{}'
+   appduct tools call login --input '{"userId":"u_42"}' \
+     && appduct tools call seed_cart --input '{"items":3}' \
+     && appduct tools call get_cart --input '{}'
    ```
 
 2. **A later call needs an earlier result:** add `--json` and parse it with `jq`. Success is
@@ -50,8 +54,8 @@ whole sequence, then pick the smallest form that fits:
    on stderr.
 
    ```bash
-   cart_id=$(appduct invoke create_cart --input '{}' --json | jq -r .data.cartId)
-   appduct invoke add_item --input "{\"cartId\":\"$cart_id\",\"sku\":\"SKU-1042\"}"
+   cart_id=$(appduct tools call create_cart --input '{}' --json | jq -r .data.cartId)
+   appduct tools call add_item --input "{\"cartId\":\"$cart_id\",\"sku\":\"SKU-1042\"}"
    ```
 
 3. **A loop, a branch on a result, or a wait for an app event:** write a short `.mjs` script
@@ -66,14 +70,14 @@ whole sequence, then pick the smallest form that fits:
 
 - Read the plain-text output. Add `--json` only when a command or script parses it; `--pretty`
   indents it.
-- `no_session`, `unknown_session`, or an empty `appduct ls`: no device is connected. Connect one
-  ([references/cli.md](./references/cli.md), "Connect a device").
+- `no_session`, `unknown_session`, or an empty `appduct sessions ls`: no device is connected.
+  Connect one ([references/cli.md](./references/cli.md), "Connect a device").
 - `policy_denied`: the daemon's policy blocks this tool. Do not retry and do not edit
   `~/.appduct/config.json`; tell the user which tool was denied.
 - `tool_timeout`: a call gets 10 s unless the app registered the tool with `timeoutMs`.
   `--timeout <ms>` can only shorten that; the fix is in the app's registration.
 - `tool_execution_error`: the app's handler threw; report its message.
-- An empty `appduct tools` listing is not an error: the app registered no tools.
+- An empty `appduct tools ls` listing is not an error: the app registered no tools.
 
 ## Over MCP
 
@@ -87,9 +91,9 @@ MCP tools of their own). With several devices connected, pass `selector`. A tool
 
 Read a reference only when its trigger applies:
 
-- [references/cli.md](./references/cli.md): `appduct ls` is empty, or you need a command or flag
-  not shown above (`link`, `events`, `revoke`, `init`, `--open`, QR, MCP `appduct_connect`), or
-  you are writing a script or test with `appduct/client`.
+- [references/cli.md](./references/cli.md): `appduct sessions ls` is empty, or you need a command
+  or flag not shown above (`sessions link`, `events tail`/`since`, `sessions revoke`, `init`,
+  `--open`, QR, MCP `appduct_connect`), or you are writing a script or test with `appduct/client`.
 - [references/writing-tools.md](./references/writing-tools.md): the task is to add, change or
   review tools in the app's code (`registerTool`, `useAppductTool`, Swift or Kotlin `register`).
 - [references/setup.md](./references/setup.md): the task is to add Appduct to a project that

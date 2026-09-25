@@ -90,12 +90,12 @@ This page adds Appduct to a plain Android app, with no React Native. You registe
 Install the debug build on an emulator or a USB-connected device, then, from your project directory:
 
 ```bash
-appduct link --open android
-appduct tools
-appduct invoke seed_cart --input '{"items":3}'
+appduct sessions link --open android
+appduct tools ls
+appduct tools call seed_cart --input '{"items":3}'
 ```
 
-`--open android` forwards the connection through `adb`, so it works over USB without the device being on your network. To connect by QR code instead, run `appduct link --qr` and scan it with the device's camera; the device must then be on the same local network as your computer.
+`--open android` forwards the connection through `adb`, so it works over USB without the device being on your network. To connect by QR code instead, run `appduct sessions link --qr` and scan it with the device's camera; the device must then be on the same local network as your computer.
 
 The app restores its session on its own after a short network drop. If the app process is killed, connect again with a new link.
 
@@ -127,7 +127,7 @@ The app restores its session on its own after a short network drop. If the app p
 - **Optional arguments:** `outputSchema`, `annotations` (`ToolAnnotations(readOnlyHint, destructiveHint, idempotentHint)`), `timeoutMs` (default 10 seconds), and `group`. See [Writing tools](/appduct/guides/writing-tools/) for what each one does. A malformed name or group throws `IllegalArgumentException`.
 - **Unregistering:** `register` returns a `ToolRegistration`; call `.remove()`.
 
-To watch the connection, use `Appduct.addListener { event -> … }`, which reports state changes, session changes, and errors, and returns a subscription you can `remove()`. `Appduct.state` and `Appduct.sessionId` give the current values. To tell a test or agent that something happened, call `Appduct.postEvent(name, payload)` from a coroutine. The event is dropped if no session is connected. Read events with `appduct events`, or [wait for one from a test](/appduct/guides/cli/#watch-events).
+To watch the connection, use `Appduct.addListener { event -> … }`, which reports state changes, session changes, and errors, and returns a subscription you can `remove()`. `Appduct.state` and `Appduct.sessionId` give the current values. To tell a test or agent that something happened, call `Appduct.postEvent(name, payload)` from a coroutine. The event is dropped if no session is connected. Read events with `appduct events tail`, or [wait for one from a test](/appduct/guides/cli/#watch-events).
 
 ## Deep links
 
@@ -184,7 +184,7 @@ appduct doctor app/build/outputs/apk/debug/app-debug.apk --assert-present
 
 **Manifest-merger error naming `appductScheme`.** Set `manifestPlaceholders["appductScheme"]` in `build.gradle`.
 
-**`appduct link --open android` reports "unable to resolve Intent".** Either the app id isn't the installed build's `applicationId` (check for an `applicationIdSuffix`), or the scheme doesn't match `appductScheme` in the installed build. Placeholders are fixed at build time, so rebuild and reinstall after changing one.
+**`appduct sessions link --open android` reports "unable to resolve Intent".** Either the app id isn't the installed build's `applicationId` (check for an `applicationIdSuffix`), or the scheme doesn't match `appductScheme` in the installed build. Placeholders are fixed at build time, so rebuild and reinstall after changing one.
 
 **The link opens the app, but it never connects, with a permission-style error.** Add the `INTERNET` permission to your manifest.
 

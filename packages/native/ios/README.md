@@ -74,7 +74,7 @@ Add a `CFBundleURLTypes` entry to your `Info.plist` (Xcode: target → Info → 
 </array>
 ```
 
-This is the scheme `appduct link --scheme myapp` (or `appduct init --scheme myapp` once, or
+This is the scheme `appduct sessions link --scheme myapp` (or `appduct init --scheme myapp` once, or
 `APPDUCT_SCHEME`) composes the bootstrap deep link with. There is nothing to configure on the
 Swift side for this step — the scheme lives entirely in `Info.plist`.
 
@@ -174,11 +174,11 @@ try Appduct.shared.register(
 - `annotations` (`ToolAnnotations(readOnlyHint:destructiveHint:idempotentHint:)`) and `timeoutMs`
   are optional, exactly like the JS API's `registerTool`.
   Set them the way an agent needs them: `readOnlyHint` on every observer, `destructiveHint` on
-  anything that deletes, signs out or pays, and an `outputSchema` on every tool, so `appduct tools`
+  anything that deletes, signs out or pays, and an `outputSchema` on every tool, so `appduct tools ls`
   shows a complete signature. [`docs/TOOLS.md`](../../../docs/TOOLS.md#designing-tools-for-agents)
   has the full list of rules, with examples.
 - `group` is optional too. On an app with many tools, set it so agents can list them one area at a
-  time (`appduct tools --group cart`). A group is `"cart"` or one subgroup below it, like
+  time (`appduct tools ls --group cart`). A group is `"cart"` or one subgroup below it, like
   `"checkout/payment"`; each part uses tool-name characters (letters, digits, `_`, `-`, at most 64).
   A malformed group makes `register` throw, like a malformed name:
 
@@ -215,7 +215,7 @@ without a listener — useful for a view's initial render before its first event
 try await Appduct.shared.postEvent("checkout_completed", payload: ["orderId": "abc123"])
 ```
 
-Read back with `appduct events`. Throws (does not send) unless a session is currently active.
+Read back with `appduct events tail`. Throws (does not send) unless a session is currently active.
 
 ## Hardened builds
 
@@ -276,15 +276,15 @@ call from any thread and need no such hop.
 ## Troubleshooting
 
 **`handle(_:)` always returns `false`.** The URL doesn't carry a `appduct` query parameter —
-check the scheme in `Info.plist` matches what `appduct link --scheme <scheme>` used, and that
+check the scheme in `Info.plist` matches what `appduct sessions link --scheme <scheme>` used, and that
 you're forwarding the *actual* opened URL (not a re-derived one) into `handle(_:)`.
 
 **A tool call never reaches your handler.** Confirm `Appduct.shared.state == .active` and that
-`appduct tools` lists the name you registered — a call for an unregistered name gets
+`appduct tools ls` lists the name you registered — a call for an unregistered name gets
 `tool_not_found` without ever reaching app code, by design.
 
 **Registering the same name twice.** `register` upserts by name; the second registration's handler
-replaces the first's, and the tool keeps its original position in `appduct tools`' listing.
+replaces the first's, and the tool keeps its original position in `appduct tools ls`' listing.
 
 **A Release build still connects.** You depended on the `AlwaysEnabled` trait (SwiftPM) or dropped
 CocoaPods' `:configurations` restriction, most likely on purpose for an internal/QA build — see

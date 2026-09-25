@@ -52,9 +52,9 @@ The Expo app has two tabs: **Tools** lists the registered tools, and **Status** 
 3. Back in the repository root, connect the app:
 
    ```bash
-   pnpm run playground:appduct -- link --open ios-sim    # iOS Simulator
-   pnpm run playground:appduct -- link --open android    # Android emulator
-   pnpm run playground:appduct -- link --qr              # physical device on your local network
+   pnpm run playground:appduct -- sessions link --open ios-sim    # iOS Simulator
+   pnpm run playground:appduct -- sessions link --open android    # Android emulator
+   pnpm run playground:appduct -- sessions link --qr              # physical device on your local network
    ```
 
    `playground:appduct` runs the repository's own build of the CLI. The **Status** tab switches to `active` and shows the session's alias.
@@ -62,21 +62,21 @@ The Expo app has two tabs: **Tools** lists the registered tools, and **Status** 
 4. Drive it:
 
    ```bash
-   pnpm run playground:appduct -- tools
-   pnpm run playground:appduct -- invoke sum --input '{"a":1,"b":2}'
-   pnpm run playground:appduct -- invoke slow_task --input '{}'
-   pnpm run playground:appduct -- events --follow
+   pnpm run playground:appduct -- tools ls
+   pnpm run playground:appduct -- tools call sum --input '{"a":1,"b":2}'
+   pnpm run playground:appduct -- tools call slow_task --input '{}'
+   pnpm run playground:appduct -- events tail --follow
    ```
 
-   While `events --follow` runs, tap **Send playground_ping** on the Status tab to see the event arrive.
+   While `events tail --follow` runs, tap **Send playground_ping** on the Status tab to see the event arrive.
 
 </Steps>
 
 Things to try:
 
-- **Groups:** `tools --groups`, then `tools --group diagnostics`. The playground puts its tools in `counter`, `diagnostics`, and `diagnostics/progress`, and leaves `sum` ungrouped.
+- **Groups:** `tools ls --groups`, then `tools ls --group diagnostics`. The playground puts its tools in `counter`, `diagnostics`, and `diagnostics/progress`, and leaves `sum` ungrouped.
 - **Reloads:** press `r` in the Metro terminal. The Status tab shows `reconnecting`, then `active` with the same alias. No new link is needed as long as the app process stays alive.
-- **Errors:** `invoke throwing_tool --input '{}'` fails with `tool_execution_error`.
+- **Errors:** `tools call throwing_tool --input '{}'` fails with `tool_execution_error`.
 - **Policy:** set `policy.destructive` to `"deny"` in `~/.appduct/config.json`, run `pnpm run playground:appduct -- daemon stop`, reconnect, and `reset_counter` is refused with `policy_denied`. See [Security](/appduct/guides/security/#limit-what-callers-can-run).
 
 ## Native iOS playground
@@ -109,9 +109,9 @@ A SwiftUI app that uses `AppductCore` directly. Its scheme, `appduct-native`, is
 3. Connect and call a tool, from `playground-native/ios`:
 
    ```bash
-   appduct link --open ios-sim
-   appduct tools
-   appduct invoke sum --input '{"a":2,"b":3}'
+   appduct sessions link --open ios-sim
+   appduct tools ls
+   appduct tools call sum --input '{"a":2,"b":3}'
    ```
 
 </Steps>
@@ -134,10 +134,10 @@ A Jetpack Compose app that uses `com.callstack.appduct:core` directly. It builds
 2. Connect and call a tool, from inside `playground-native/`, where the scheme and app id are recorded:
 
    ```bash
-   appduct link --open android
-   appduct tools
-   appduct invoke sum --input '{"a":2,"b":3}'
-   appduct events
+   appduct sessions link --open android
+   appduct tools ls
+   appduct tools call sum --input '{"a":2,"b":3}'
+   appduct events tail
    ```
 
 </Steps>

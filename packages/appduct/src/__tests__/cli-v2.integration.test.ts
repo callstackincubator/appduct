@@ -1,10 +1,11 @@
 /**
- * The v2 command table of §10 works end-to-end against a real daemon in an
- * integration test (temp state dir): keygen -> daemon auto-spawn via `ls` -> link -> fake app client
- * claims -> `ls` shows the alias ACTIVE -> `tools`/`invoke` round-trip -> `revoke`. Every command
- * here runs as a real CLI subprocess (`bin.ts`) against a real daemon it auto-spawns, driven by a
- * scripted fake app client (`ws`) — the same harness pattern as
- * `tool-invocation.integration.test.ts`, just through the CLI instead of raw UDS RPC.
+ * The noun-verb command table of §10 (issue #96) works end-to-end against a real daemon in an
+ * integration test (temp state dir): keygen -> daemon auto-spawn via `sessions ls` -> `sessions
+ * link` -> fake app client claims -> `sessions ls` shows the alias ACTIVE -> `tools
+ * ls`/`describe`/`call` round-trip -> `sessions revoke`. Every command here runs as a real CLI
+ * subprocess (`bin.ts`) against a real daemon it auto-spawns, driven by a scripted fake app client
+ * (`ws`) — the same harness pattern as `tool-invocation.integration.test.ts`, just through the CLI
+ * instead of raw UDS RPC.
  */
 
 import path from "node:path";
@@ -70,7 +71,7 @@ type CliJsonResult = { ok: boolean; data?: unknown; error?: { type: string; mess
 
 /**
  * Runs the CLI as a subprocess and returns its parsed `--json` output. It uses an async process:
- * several flows below (`invoke`) need the daemon to round-trip through this
+ * several flows below (`tools call`) need the daemon to round-trip through this
  * test's own fake app WebSocket client while the CLI subprocess is in flight — `spawnSync` blocks
  * this process's event loop for the subprocess's entire lifetime, which would starve that
  * WebSocket's `message` handler and deadlock the round-trip.
@@ -131,7 +132,7 @@ const nextMessage = (socket: WebSocket): Promise<Record<string, unknown>> => {
 
 describe("appduct CLI v2: end-to-end command table", () => {
   test(
-    "keygen -> ls auto-spawns -> link -> claim -> ls ACTIVE -> tools/invoke round-trip -> revoke",
+    "keygen -> sessions ls auto-spawns -> sessions link -> claim -> sessions ls ACTIVE -> tools ls/describe/call round-trip -> sessions revoke",
     async () => {
       const stateDir = await makeTempStateDir();
 
@@ -146,7 +147,7 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(keygenAgain.error?.type).toBe("usage_error");
 
       // ls: no sessions yet, and this is the call that auto-spawns the daemon.
-      const firstLs = await runCliJson(["ls"], stateDir);
+      const firstLs = await runCliJson(["sessions", "ls"], stateDir);
       expect(firstLs.ok).toBe(true);
       expect(firstLs.data).toEqual([]);
 
@@ -159,7 +160,7 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(port).toBeGreaterThan(0);
 
       // link: mint a pending session and decode its deep link.
-      const linkResult = await runCliJson(["link", "--ttl", "60"], stateDir);
+      const linkResult = await runCliJson(["sessions", "link", "--ttl", "60"], stateDir);
       expect(linkResult.ok).toBe(true);
       const linkData = linkResult.data as { sessionId: string; deepLink: string; endpoint: { port: number } };
       expect(linkData.deepLink.startsWith("appduct-e2e:///?appduct=")).toBe(true);
@@ -206,7 +207,7 @@ describe("appduct CLI v2: end-to-end command table", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // ls: the claimed session shows up ACTIVE with its device metadata and tool count.
-      const secondLs = await runCliJson(["ls"], stateDir);
+      const secondLs = await runCliJson(["sessions", "ls"], stateDir);
       expect(secondLs.ok).toBe(true);
       const sessions = secondLs.data as Array<{ alias: string; state: string; toolCount: number }>;
       expect(sessions).toHaveLength(1);
@@ -215,20 +216,33 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(sessions[0]!.toolCount).toBe(1);
 
       // tools: list, then detail by name.
-      const toolsList = await runCliJson(["tools", alias], stateDir);
+      const toolsList = await runCliJson(["tools", "ls", alias], stateDir);
       expect(toolsList.ok).toBe(true);
       const toolsListData = toolsList.data as { tools: Array<{ name: string }>; total: number };
       expect(toolsListData.tools.map((tool) => tool.name)).toEqual(["echo"]);
       expect(toolsListData.total).toBe(1);
 
-      const toolsDetail = await runCliJson(["tools", alias, "echo"], stateDir);
+      const toolsDetail = await runCliJson(["tools", "describe", alias, "echo"], stateDir);
       expect(toolsDetail.ok).toBe(true);
       expect((toolsDetail.data as { name: string; input_schema?: unknown }).input_schema).toEqual({
         type: "object",
         properties: { text: { type: "string" } },
       });
 
-      // invoke: round-trip through the fake app.
+      // `describe` with no selector resolves against the one active session (issue #96: no more
+      // probing a single positional as "selector or name" — the verb says which it is).
+      const toolsDetailImplicit = await runCliJson(["tools", "describe", "echo"], stateDir);
+      expect(toolsDetailImplicit.ok).toBe(true);
+      expect((toolsDetailImplicit.data as { name: string }).name).toBe("echo");
+
+      // A name that matches nothing is a clean "not registered" error, not "unknown session" —
+      // there is no selector here for the daemon to have misread the name as.
+      const toolsDetailMissing = await runCliJson(["tools", "describe", "does-not-exist"], stateDir);
+      expect(toolsDetailMissing.ok).toBe(false);
+      expect(toolsDetailMissing.error?.type).toBe("usage_error");
+      expect(toolsDetailMissing.error?.message).toBe('Tool "does-not-exist" is not registered.');
+
+      // tools call: round-trip through the fake app.
       appSocket.on("message", (data) => {
         const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
         if (msg.type === "tool_call") {
@@ -244,23 +258,23 @@ describe("appduct CLI v2: end-to-end command table", () => {
       });
 
       const invokeResult = await runCliJson(
-        ["invoke", alias, "echo", "--input", JSON.stringify({ text: "hello" })],
+        ["tools", "call", alias, "echo", "--input", JSON.stringify({ text: "hello" })],
         stateDir,
       );
       expect(invokeResult.ok).toBe(true);
       expect(invokeResult.data).toEqual({ echoed: "hello" });
 
-      // invoke a nonexistent tool: the wire error type is preserved verbatim.
-      const invokeMissing = await runCliJson(["invoke", alias, "does-not-exist", "--input", "{}"], stateDir);
+      // tools call on a nonexistent tool: the wire error type is preserved verbatim.
+      const invokeMissing = await runCliJson(["tools", "call", alias, "does-not-exist", "--input", "{}"], stateDir);
       expect(invokeMissing.ok).toBe(false);
       expect(invokeMissing.error?.type).toBe("tool_not_found");
 
-      // revoke: the session disappears from ls.
-      const revokeResult = await runCliJson(["revoke", alias], stateDir);
+      // sessions revoke: the session disappears from sessions ls.
+      const revokeResult = await runCliJson(["sessions", "revoke", alias], stateDir);
       expect(revokeResult.ok).toBe(true);
       expect(revokeResult.data).toEqual({ ok: true });
 
-      const finalLs = await runCliJson(["ls"], stateDir);
+      const finalLs = await runCliJson(["sessions", "ls"], stateDir);
       expect(finalLs.ok).toBe(true);
       expect(finalLs.data).toEqual([]);
 
@@ -285,7 +299,7 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(port).toBeGreaterThan(0);
 
       const claimOne = async (deviceModel: string): Promise<{ socket: WebSocket; alias: string }> => {
-        const linkResult = await runCliJson(["link", "--ttl", "60"], stateDir);
+        const linkResult = await runCliJson(["sessions", "link", "--ttl", "60"], stateDir);
         const linkData = linkResult.data as { deepLink: string };
         const linkPayload = linkData.deepLink
           .slice(linkData.deepLink.indexOf("appduct=") + "appduct=".length)
@@ -309,7 +323,7 @@ describe("appduct CLI v2: end-to-end command table", () => {
       const first = await claimOne("Pixel 8");
       const second = await claimOne("Pixel 8");
 
-      const toolsResult = await runCliJson(["tools"], stateDir);
+      const toolsResult = await runCliJson(["tools", "ls"], stateDir);
       expect(toolsResult.ok).toBe(false);
       expect(toolsResult.error?.type).toBe("ambiguous_session");
       expect(toolsResult.error?.message).toContain(first.alias);
@@ -336,7 +350,7 @@ describe("appduct CLI v2: end-to-end command table", () => {
       const port = (status.data as { daemon: { wss_port: number } }).daemon.wss_port;
       expect(port).toBeGreaterThan(0);
 
-      const linkResult = await runCliJson(["link", "--ttl", "60"], stateDir);
+      const linkResult = await runCliJson(["sessions", "link", "--ttl", "60"], stateDir);
       const linkData = linkResult.data as { deepLink: string };
       const linkPayload = linkData.deepLink
         .slice(linkData.deepLink.indexOf("appduct=") + "appduct=".length)
@@ -373,14 +387,14 @@ describe("appduct CLI v2: end-to-end command table", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Unpaged: `{ tools, total }`, total tools registered.
-      const unpaged = await runCliJson(["tools", alias], stateDir);
+      const unpaged = await runCliJson(["tools", "ls", alias], stateDir);
       expect(unpaged.ok).toBe(true);
       const unpagedData = unpaged.data as { tools: Array<{ name: string }>; total: number };
       expect(unpagedData.tools).toHaveLength(30);
       expect(unpagedData.total).toBe(30);
 
       // --filter narrows both the page and `total`.
-      const filtered = await runCliJson(["tools", alias, "--filter", "tool_1"], stateDir);
+      const filtered = await runCliJson(["tools", "ls", alias, "--filter", "tool_1"], stateDir);
       expect(filtered.ok).toBe(true);
       const filteredData = filtered.data as { tools: Array<{ name: string }>; total: number };
       // tool_10..tool_19 (substring match on the name), still name-sorted.
@@ -388,43 +402,43 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(filteredData.tools.map((tool) => tool.name)).toEqual(toolNames.slice(10, 20));
 
       // --limit/--offset returns the right slice of the sorted, unfiltered registry.
-      const paged = await runCliJson(["tools", alias, "--limit", "5", "--offset", "5"], stateDir);
+      const paged = await runCliJson(["tools", "ls", alias, "--limit", "5", "--offset", "5"], stateDir);
       expect(paged.ok).toBe(true);
       const pagedData = paged.data as { tools: Array<{ name: string }>; total: number };
       expect(pagedData.tools.map((tool) => tool.name)).toEqual(toolNames.slice(5, 10));
       expect(pagedData.total).toBe(30);
 
       // A name lookup still resolves even though it would fall outside a small page.
-      const detailUnderPaging = await runCliJson(["tools", alias, "tool_29", "--limit", "1"], stateDir);
+      const detailUnderPaging = await runCliJson(["tools", "describe", alias, "tool_29", "--limit", "1"], stateDir);
       expect(detailUnderPaging.ok).toBe(false);
       expect(detailUnderPaging.error?.type).toBe("usage_error");
 
-      const detail = await runCliJson(["tools", alias, "tool_29"], stateDir);
+      const detail = await runCliJson(["tools", "describe", alias, "tool_29"], stateDir);
       expect(detail.ok).toBe(true);
       expect((detail.data as { name: string }).name).toBe("tool_29");
 
-      // The single-arg form that resolves to a tool name follows the same rule as `<sel> <name>`.
-      const probeUnderPaging = await runCliJson(["tools", "tool_29", "--limit", "1"], stateDir);
-      expect(probeUnderPaging.ok).toBe(false);
-      expect(probeUnderPaging.error?.type).toBe("usage_error");
+      // `describe`'s listing flags are rejected next to a `<name>` the same as an explicit `<sel> <name>`.
+      const describeWithLimit = await runCliJson(["tools", "describe", "tool_29", "--limit", "1"], stateDir);
+      expect(describeWithLimit.ok).toBe(false);
+      expect(describeWithLimit.error?.type).toBe("usage_error");
 
       // A numeric-looking filter is matched as text, verbatim (cac alone would turn "07" into 7).
-      const numericFilter = await runCliJson(["tools", alias, "--filter", "07"], stateDir);
+      const numericFilter = await runCliJson(["tools", "ls", alias, "--filter", "07"], stateDir);
       expect(numericFilter.ok).toBe(true);
       const numericFilterData = numericFilter.data as { tools: Array<{ name: string }>; total: number; filter: string };
       expect(numericFilterData.tools.map((tool) => tool.name)).toEqual(["tool_07"]);
       expect(numericFilterData.filter).toBe("07");
 
       // An offset past the end is an empty page of a non-empty registry, not "No tools registered".
-      const pastEnd = await runCliHuman(["tools", alias, "--offset", "100"], stateDir);
+      const pastEnd = await runCliHuman(["tools", "ls", alias, "--offset", "100"], stateDir);
       expect(pastEnd.stdout).toContain("No tools at offset 100; 30 matching tools in total.");
       expect(pastEnd.stdout).not.toContain("No tools registered");
 
       // Human output: a signature line per tool, and the "Showing" line once the page truncates.
-      const human = await runCliHuman(["tools", alias, "--limit", "5"], stateDir);
+      const human = await runCliHuman(["tools", "ls", alias, "--limit", "5"], stateDir);
       expect(human.stdout).toContain("tool_00(value: string)");
       expect(human.stdout).toContain("Showing 5 of 30 tools (offset 0).");
-      expect(human.stdout).toContain("Run `appduct tools <name>` for a tool's full schema.");
+      expect(human.stdout).toContain("Run `appduct tools describe <name>` for a tool's full schema.");
 
       socket.close();
 
@@ -444,7 +458,7 @@ describe("appduct CLI v2: end-to-end command table", () => {
       daemonPids.push((status.data as { daemon: { pid: number } }).daemon.pid);
       const port = (status.data as { daemon: { wss_port: number } }).daemon.wss_port;
 
-      const linkResult = await runCliJson(["link", "--ttl", "60"], stateDir);
+      const linkResult = await runCliJson(["sessions", "link", "--ttl", "60"], stateDir);
       const linkData = linkResult.data as { deepLink: string };
       const linkPayload = linkData.deepLink
         .slice(linkData.deepLink.indexOf("appduct=") + "appduct=".length)
@@ -482,7 +496,7 @@ describe("appduct CLI v2: end-to-end command table", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // --json: `group` on each entry, `groups` on the listing (whole registry, parent first).
-      const json = await runCliJson(["tools", alias], stateDir);
+      const json = await runCliJson(["tools", "ls", alias], stateDir);
       expect(json.ok).toBe(true);
       const jsonData = json.data as {
         tools: Array<{ name: string; group?: string }>;
@@ -500,7 +514,7 @@ describe("appduct CLI v2: end-to-end command table", () => {
       ]);
 
       // Human listing: group headings, a subgroup as an indented sub-heading, ungrouped last.
-      const human = await runCliHuman(["tools", alias], stateDir);
+      const human = await runCliHuman(["tools", "ls", alias], stateDir);
       const lines = stripAnsi(human.stdout).split("\n");
       const indexOfLine = (line: string) => lines.indexOf(line);
       expect(indexOfLine("  cart")).toBeGreaterThan(-1);
@@ -515,14 +529,14 @@ describe("appduct CLI v2: end-to-end command table", () => {
       expect(human.stdout).not.toContain("Showing");
 
       // Truncated: the footer names the top-level groups (never subgroups) to narrow to.
-      const truncated = await runCliHuman(["tools", alias, "--limit", "5"], stateDir);
+      const truncated = await runCliHuman(["tools", "ls", alias, "--limit", "5"], stateDir);
       expect(truncated.stdout).toContain(
         "Showing 5 of 30 tools (offset 0). Narrow with --group <name> (groups: cart 12, checkout 8, flags 6) " +
           "or --filter <text>, or page with --offset <n>.",
       );
 
       // --group <parent>: includes the subgroup; `total` is the group's size.
-      const parent = await runCliJson(["tools", alias, "--group", "checkout"], stateDir);
+      const parent = await runCliJson(["tools", "ls", alias, "--group", "checkout"], stateDir);
       const parentData = parent.data as { tools: Array<{ name: string }>; total: number; group: string };
       expect(parentData.total).toBe(8);
       expect(parentData.group).toBe("checkout");
@@ -538,44 +552,44 @@ describe("appduct CLI v2: end-to-end command table", () => {
       ]);
 
       // --group <parent>/<sub>: exactly the subgroup, flat (no headings), under its own title.
-      const sub = await runCliHuman(["tools", alias, "--group", "checkout/payment"], stateDir);
+      const sub = await runCliHuman(["tools", "ls", alias, "--group", "checkout/payment"], stateDir);
       expect(stripAnsi(sub.stdout)).toContain("Tools in group checkout/payment");
       expect(sub.stdout).toContain("  payment_0()");
       expect(sub.stdout).not.toContain("checkout_0");
       expect(sub.stdout).not.toContain("(ungrouped)");
 
       // An empty group (matching is case-sensitive) is not an empty registry.
-      const unknownGroup = await runCliHuman(["tools", alias, "--group", "Cart"], stateDir);
+      const unknownGroup = await runCliHuman(["tools", "ls", alias, "--group", "Cart"], stateDir);
       expect(stripAnsi(unknownGroup.stdout)).toContain(
-        'Tools in group Cart\n  No tools in group "Cart". Run `appduct tools --groups` to see the session\'s groups.',
+        'Tools in group Cart\n  No tools in group "Cart". Run `appduct tools ls --groups` to see the session\'s groups.',
       );
 
       // --group combines with --filter and paging; the footer drops the group hint once narrowed.
-      const combined = await runCliHuman(["tools", alias, "--group", "cart", "--filter", "cart_1", "--limit", "1"], stateDir);
+      const combined = await runCliHuman(["tools", "ls", alias, "--group", "cart", "--filter", "cart_1", "--limit", "1"], stateDir);
       expect(combined.stdout).toContain("Showing 1 of 2 tools (offset 0). Narrow with --filter <text> or page with --offset <n>.");
 
       // --groups: groups and counts only, subgroups indented under their parent.
-      const groupsHuman = await runCliHuman(["tools", alias, "--groups"], stateDir);
+      const groupsHuman = await runCliHuman(["tools", "ls", alias, "--groups"], stateDir);
       expect(stripAnsi(groupsHuman.stdout)).toContain("Groups\n  cart                12\n  checkout             8\n    checkout/payment   3\n  flags                6\n  (ungrouped)          4\n");
       expect(groupsHuman.stdout).not.toContain("cart_00");
 
-      const groupsJson = await runCliJson(["tools", alias, "--groups"], stateDir);
+      const groupsJson = await runCliJson(["tools", "ls", alias, "--groups"], stateDir);
       expect(groupsJson.data).toEqual({ groups: jsonData.groups, total: 30 });
 
       // Usage errors: a listing flag with a tool name, --groups with a narrowing flag, a bad group.
       for (const args of [
-        ["tools", alias, "cart_00", "--group", "cart"],
-        ["tools", "cart_00", "--group", "cart"],
-        ["tools", alias, "cart_00", "--groups"],
-        ["tools", alias, "--groups", "--group", "cart"],
-        ["tools", alias, "--groups", "--filter", "x"],
-        ["tools", alias, "--groups", "--full"],
-        ["tools", alias, "--groups", "--limit", "2"],
-        ["tools", alias, "--groups", "--offset", "1"],
-        // The single-arg probe: `cart_00` resolves to a tool, so `--groups` is a listing flag on a lookup.
-        ["tools", "cart_00", "--groups"],
-        ["tools", alias, "--group", "a/b/c"],
-        ["tools", alias, "--group", "checkout/"],
+        ["tools", "describe", alias, "cart_00", "--group", "cart"],
+        ["tools", "describe", "cart_00", "--group", "cart"],
+        ["tools", "describe", alias, "cart_00", "--groups"],
+        ["tools", "ls", alias, "--groups", "--group", "cart"],
+        ["tools", "ls", alias, "--groups", "--filter", "x"],
+        ["tools", "ls", alias, "--groups", "--full"],
+        ["tools", "ls", alias, "--groups", "--limit", "2"],
+        ["tools", "ls", alias, "--groups", "--offset", "1"],
+        // `describe cart_00 --groups`: a listing flag on a lookup, unambiguous now.
+        ["tools", "describe", "cart_00", "--groups"],
+        ["tools", "ls", alias, "--group", "a/b/c"],
+        ["tools", "ls", alias, "--group", "checkout/"],
       ]) {
         const result = await runCliJson(args, stateDir);
         expect(result.ok, args.join(" ")).toBe(false);
@@ -584,7 +598,7 @@ describe("appduct CLI v2: end-to-end command table", () => {
 
       // `--groups checkout` (a value on a boolean flag) points at `--group` instead of failing as
       // an unknown session.
-      const groupsWithValue = await runCliJson(["tools", "--groups", "checkout"], stateDir);
+      const groupsWithValue = await runCliJson(["tools", "ls", "--groups", "checkout"], stateDir);
       expect(groupsWithValue.ok).toBe(false);
       expect(groupsWithValue.error?.type).toBe("usage_error");
       expect(groupsWithValue.error?.message).toContain('use "--group checkout"');

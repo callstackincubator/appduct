@@ -69,10 +69,10 @@ sequence). Run it from inside `playground-native/`: the scheme and the app id ar
 `playground-native/.appduct/config.json`.
 
 ```bash
-appduct link --open android
-appduct tools
-appduct invoke sum --input '{"a":2,"b":3}'
-appduct events
+appduct sessions link --open android
+appduct tools ls
+appduct tools call sum --input '{"a":2,"b":3}'
+appduct events tail
 ```
 
 ## `pnpm exec appduct` can resolve the wrong binary
