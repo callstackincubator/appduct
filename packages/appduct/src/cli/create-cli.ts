@@ -96,7 +96,8 @@ export const createCli = () => {
     )
     .option(
       "--payload-max-bytes <n>",
-      "Cap each event's payload to this many UTF-8 bytes of its JSON; the rest comes back as payloadPreview/payloadBytes.",
+      "Cap each event's payload at this many UTF-8 bytes of its JSON; over the cap, the event carries " +
+        "payloadPreview, payloadBytes and truncated: true instead of payload.",
     );
 
   cli
