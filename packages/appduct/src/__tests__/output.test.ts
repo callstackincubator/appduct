@@ -591,10 +591,10 @@ describe("renderEventsCursorLine", () => {
     expect(JSON.parse(line)).toEqual({ cursor: 42 });
   });
 
-  test("human mode includes the cursor value and the resume flag", () => {
+  test("human mode includes the cursor value and the resume command", () => {
     const line = renderEventsCursorLine(42, flags());
     expect(line).toContain("42");
-    expect(line).toContain("--since 42");
+    expect(line).toContain('appduct events since 42');
   });
 });
 
