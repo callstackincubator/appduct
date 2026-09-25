@@ -48,3 +48,8 @@ One note per PR that hit friction, four lines:
   What went wrong: the `events since` resume hint dropped the new `--name`/`--payload-max-bytes` flags, so following it changed the query, and the changelog claimed parity with `appduct_events` defaults it doesn't have; a second round fixed `--payload-max-bytes` help that described `payloadPreview` as the overflow rather than the first n bytes.
   Would have prevented it: when adding a flag to a command that prints a resume hint, echo the flag in the hint and test it end to end in human mode; check help and changelog wording on truncation against the projection code, not memory.
   Cost: two review rounds; E2E blocked (no simulator in the cloud container)
+
+- 2026-09-25 #116 skill: implement-issue
+  What went wrong: Skill docs described event cursors and `since` from memory of the API, not from the code, and needed three review rounds to match what `since()` actually returns.
+  Would have prevented it: When documenting a cursor or paging API, read the function that computes the cursor and state in the docs exactly what it holds for empty and non-empty pages.
+  Cost: two extra review rounds

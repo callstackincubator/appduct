@@ -51,6 +51,9 @@ section into a versioned heading.
   and it now accepts `payloadMaxBytes`.** `app.waitForEvent("cart.*")` waits for any name matching
   the glob and `match` is gone; pass `payloadMaxBytes` to cap the resolved event's payload the same
   way `app.events()` does, otherwise it comes back whole as before.
+- **Docs: the shipped skill covers draining and waiting for app events.** `skills/appduct` now
+  shows the `appduct_events` drain loop (name glob, cursor, `remaining`, `dropped`) and the
+  `appduct_wait_for_event` background wait.
 
 ## 0.12.0 (2026-09-24)
 
