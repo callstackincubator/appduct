@@ -741,6 +741,21 @@ export const renderEventLine = (event: EventNotification, flags: GlobalFlags): s
   return `${colors.dim(timestamp)} ${colors.green(event.kind)}${target ? ` ${target}` : ""}${dataSuffix}`;
 };
 
+/** Single-quotes a value for safe embedding in a POSIX shell command line, escaping any embedded
+ * single quote as `'\''` (close the quote, an escaped quote, reopen it). Used only for the
+ * `--name` glob in {@link renderEventsCursorLine}'s hinted resume command — the one value in that
+ * hint that can carry shell metacharacters (`*`, spaces, quotes). */
+const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
+
+/** The filter flags to echo back into the hinted resume command in {@link renderEventsCursorLine}
+ * (issue #115's should-fix on #96's echoed selector): the same `--name`/`--payload-max-bytes`
+ * the caller passed to this pull, forwarded as-is so following the hint doesn't silently widen
+ * the query. */
+export type EventsCursorLineFilters = {
+  name?: string;
+  payloadMaxBytes?: number;
+};
+
 /** Renders the trailing cursor line for `appduct events since` (issue #6): NDJSON under
  * `--json` so a scripted caller can parse the resume point without maxing `seq` over the printed
  * events (impossible when the response is empty), a human note otherwise. `selector` is the
@@ -748,11 +763,15 @@ export const renderEventLine = (event: EventNotification, flags: GlobalFlags): s
  * hint that dropped it would resolve to `ambiguous_session`, so it is echoed back in the hinted
  * command when present. `dropped`/`remaining` (issue #115) are carried straight from
  * `events.since`'s own result: how many events fell off the retention buffer before this pull,
- * and how many matching events are still waiting beyond this page. */
+ * and how many matching events are still waiting beyond this page. `filters` (issue #115) are the
+ * `--name`/`--payload-max-bytes` flags this pull used: without them the hint would silently drop
+ * the query's filter and cap, so they are echoed into the hinted command exactly like the
+ * selector (`--name`'s glob is shell-quoted since it can carry `*` or spaces). */
 export const renderEventsCursorLine = (
   cursor: { cursor: number; dropped: number; remaining: number },
   flags: GlobalFlags,
   selector?: string,
+  filters?: EventsCursorLineFilters,
 ): string => {
   if (flags.json) {
     // Same NDJSON rule as renderEventLine above: always one compact line, never `--pretty`.
@@ -761,8 +780,14 @@ export const renderEventsCursorLine = (
 
   const colors = pc.createColors(flags.color);
   const target = selector === undefined ? `${cursor.cursor}` : `${selector} ${cursor.cursor}`;
+  const flagTokens = [
+    ...(filters?.name === undefined ? [] : [`--name ${shellQuote(filters.name)}`]),
+    ...(filters?.payloadMaxBytes === undefined ? [] : [`--payload-max-bytes ${filters.payloadMaxBytes}`]),
+  ];
+  const command = [`appduct events since ${target}`, ...flagTokens].join(" ");
+
   return colors.dim(
     `cursor: ${cursor.cursor}, dropped: ${cursor.dropped}, remaining: ${cursor.remaining} ` +
-      `(run "appduct events since ${target}" to resume from here)`,
+      `(run "${command}" to resume from here)`,
   );
 };

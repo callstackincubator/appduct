@@ -40,7 +40,7 @@ export const route: Route = async (context) => {
               env.stdout.write(`${renderEventLine(event, env.flags)}\n`);
             },
             onCursor: (cursor) => {
-              env.stdout.write(`${renderEventsCursorLine(cursor, env.flags, selector)}\n`);
+              env.stdout.write(`${renderEventsCursorLine(cursor, env.flags, selector, { name, payloadMaxBytes })}\n`);
             },
           },
         ),
