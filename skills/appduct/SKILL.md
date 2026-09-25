@@ -91,20 +91,27 @@ To see what the app reported after a call, use `appduct_events` (drain) or
 `appduct_wait_for_event` (wait for one expected event).
 
 **Drain**: call `appduct_events` with `name`, a whole-name glob (`"cart.*"` matches any name
-starting with `cart.`; a pattern without `*` matches that name exactly), right after the call
-that triggers the app's async work. Keep the `cursor` it returns and pass it back as `since` on
-your next call, so you never re-read an event you already saw. If `remaining > 0`, the page
-wasn't everything waiting — call again with the new cursor. Treat `dropped > 0` as a gap: events
-between your last `since` and this page were evicted from the daemon's retention buffer before
-you could read them, so a plain "nothing matched" isn't the same as "nothing happened."
+starting with `cart.`; a pattern without `*` matches that name exactly), *before* the call that
+triggers the app's async work, and keep the `cursor` it returns as your baseline — draining only
+after the triggering call would return every retained matching event, including stale ones from
+before it (e.g. a leftover `checkout.failed` from an earlier attempt). Pass that cursor back as
+`since` on your next call, so you never re-read an event you already saw. If `remaining > 0`, the
+page wasn't everything waiting — call again with the new cursor. Treat `dropped > 0` as a gap:
+events between your last `since` and this page were evicted from the daemon's retention buffer
+before you could read them, so a plain "nothing matched" isn't the same as "nothing happened."
 
 **Wait**: for one expected event, call `appduct_wait_for_event` with `name` and `since` (the
-cursor from your last `appduct_events` or `appduct_wait_for_event` call — omit it and a match
-from before this call can resolve instantly, which usually isn't what you want) and a
-`timeoutMs` long enough for the app to actually finish, not the default. A call still running
-after about two minutes moves to a Claude Code background task; you get the result later as a
-task notification rather than the call hanging in front of you, so keep going with other work
-in the meantime instead of treating the two-minute mark as a timeout.
+cursor from your last `appduct_events` call, or the `seq` from a previous
+`appduct_wait_for_event` result — omit it and a match from before this call can resolve
+instantly, which usually isn't what you want) and a `timeoutMs` long enough for the app to
+actually finish, not the default. `timeoutMs` is capped server-side at 1,500,000 ms (25 minutes)
+regardless of what you pass. If nothing matching arrives in time, the call fails with
+`tool_timeout` — that means the event never arrived, not that the tool is misconfigured; the
+"fix the app's registration" advice under Output and errors is for a `tools call` timeout, not
+this one. In Claude Code, a call still running after about two minutes moves to a background
+task; you get the result later as a task notification rather than the call hanging in front of
+you, so keep going with other work in the meantime instead of treating the two-minute mark as a
+timeout.
 
 ## References
 
