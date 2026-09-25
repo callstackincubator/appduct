@@ -268,7 +268,7 @@ const app = await connect<Tools>();
 const { total } = await app.call("sum", { a: 2, b: 3 }); // typed
 ```
 
-`waitForEvent`'s first argument is a whole-name glob (`*` waits for any name, `"cart.*"` for any name starting with `cart.`). It first drains the daemon's per-session retained buffer for an already-arrived match before falling back to a live wait, so it's safe to call after the action that emits the event; each call opens its own daemon connection, so concurrent `waitForEvent()` calls for different names each resolve on their own event. Pass `since` (the `cursor` from a previous `app.events()`/`waitForEvent()` call) to skip events already handled, and `payloadMaxBytes` to cap the resolved event's payload the same way `app.events()` does — without it the payload always comes back whole:
+`waitForEvent`'s first argument is a whole-name glob (`*` waits for any name, `"cart.*"` for any name starting with `cart.`). It first drains the daemon's per-session retained buffer for an already-arrived match before falling back to a live wait, so it's safe to call after the action that emits the event. Pass `since` (the `cursor` from a previous `app.events()`/`waitForEvent()` call) to skip events already handled, and `payloadMaxBytes` to cap the resolved event's payload the same way `app.events()` does — without it the payload always comes back whole:
 
 ```ts
 const { events, cursor } = await app.events();               // pull: what already happened

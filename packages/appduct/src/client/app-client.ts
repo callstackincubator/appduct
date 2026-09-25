@@ -316,6 +316,19 @@ export const makeAppClient = <TTools = ToolMap>(
 
       const timeoutMs = options.timeoutMs ?? DEFAULT_WAIT_FOR_EVENT_TIMEOUT_MS;
       const waitStream = await openStream();
+
+      // `close()` may have run while `openStream()` was still pending (it only closes streams
+      // already in `openWaitStreams`, which is empty until here). Re-check now that we hold the
+      // stream, before it is registered and used, so a wait that raced a close fails fast with
+      // `connection_error` instead of running to its full timeout.
+      if (closed) {
+        waitStream.close();
+        throw new AppductError(
+          "connection_error",
+          `Cannot wait for event "${name}": this AppClient (session "${sessionId}") is closed.`,
+        );
+      }
+
       openWaitStreams.add(waitStream);
 
       try {
