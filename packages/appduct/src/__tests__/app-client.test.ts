@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { RPC_METHODS } from "@appduct/shared";
 
 import { makeAppClient } from "../client/app-client.js";
+import { AppductError } from "../client/errors.js";
 import type { DaemonStream } from "../rpc/client.js";
 
 const toolEntry = {
@@ -421,5 +422,19 @@ describe("AppClient.waitForEvent()", () => {
 
     await expect(waitPromise).rejects.toMatchObject({ type: "connection_error" });
     expect(pendingWaitStream.closed()).toBe(true);
+  });
+
+  test("rejects with an AppductError of type connection_error when the daemon is unreachable as the wait opens its stream (issue #114 review round 3)", async () => {
+    const unreachable = Object.assign(new Error("connect ENOENT /tmp/appduct/daemon.sock"), {
+      code: "ENOENT",
+    });
+    const client = makeAppClient(streamAnswering({}), "s1", async () => {
+      throw unreachable;
+    });
+
+    const rejection = await client.waitForEvent("ping").catch((error: unknown) => error);
+
+    expect(rejection).toBeInstanceOf(AppductError);
+    expect(rejection).toMatchObject({ type: "connection_error" });
   });
 });
