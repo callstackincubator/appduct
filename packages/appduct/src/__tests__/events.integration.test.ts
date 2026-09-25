@@ -200,10 +200,12 @@ describe("appduct events tail --json", () => {
     const lines = stdout.split("\n").filter((line) => line.length > 0);
     expect(lines.length).toBeGreaterThan(1); // at least one event line plus the trailing cursor line
 
-    // The last line is the trailing `{"cursor":N}` marker (issue #6: a scripted caller shouldn't
-    // have to reconstruct the resume point by maxing `seq` over the event lines, which is
-    // impossible when the response is empty); everything before it is an event.
-    const cursorLine = JSON.parse(lines[lines.length - 1]!) as { cursor: number };
+    // The last line is the trailing `{"cursor":N,"dropped":N,"remaining":N}` marker (issue #6,
+    // extended by #113/#115: a scripted caller shouldn't have to reconstruct the resume point by
+    // maxing `seq` over the event lines, which is impossible when the response is empty, and
+    // needs `dropped`/`remaining` to know whether it missed anything or more pages remain);
+    // everything before it is an event.
+    const cursorLine = JSON.parse(lines[lines.length - 1]!) as { cursor: number; dropped: number; remaining: number };
     const eventLines = lines.slice(0, -1);
 
     for (const line of eventLines) {
@@ -220,10 +222,146 @@ describe("appduct events tail --json", () => {
     });
     expect(await waitForExit(drainedProcess)).toBe(0);
 
-    // Nothing new since the cursor: only the trailing cursor line itself, no event lines.
+    // Nothing new since the cursor: only the trailing cursor line itself, no event lines, and
+    // nothing dropped or remaining.
     const drainedLines = drainedStdout.split("\n").filter((line) => line.length > 0);
     expect(drainedLines).toHaveLength(1);
-    expect(JSON.parse(drainedLines[0]!)).toEqual({ cursor: cursorLine.cursor });
+    expect(JSON.parse(drainedLines[0]!)).toEqual({ cursor: cursorLine.cursor, dropped: 0, remaining: 0 });
+
+    socket.close();
+    const stopResult = runCliJson(["daemon", "stop"], stateDir);
+    expect(stopResult.ok).toBe(true);
+  }, 15_000);
+
+  test("events since 0 --name filters to only the app events matching the glob (issue #115)", async () => {
+    const { stateDir } = await makeTempStateDir();
+
+    const status = runCliJson(["daemon", "status"], stateDir);
+    expect(status.ok).toBe(true);
+    daemonPids.push(status.data.daemon.pid);
+
+    const { socket, alias, sessionId } = await claimAppOverCli(stateDir);
+    socket.send(JSON.stringify({ type: "event", session_id: sessionId, name: "checkout_ok", ts: Date.now() }));
+    socket.send(JSON.stringify({ type: "event", session_id: sessionId, name: "checkout_failed", ts: Date.now() }));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const sinceProcess = spawnCliBinary(["events", "since", alias, "0", "--name", "*_failed", "--json"], { stateDir });
+    let stdout = "";
+    sinceProcess.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+    expect(await waitForExit(sinceProcess)).toBe(0);
+
+    const lines = stdout.split("\n").filter((line) => line.length > 0);
+    const eventLines = lines.slice(0, -1);
+
+    expect(eventLines).toHaveLength(1);
+    expect(JSON.parse(eventLines[0]!).data.name).toBe("checkout_failed");
+
+    socket.close();
+    const stopResult = runCliJson(["daemon", "stop"], stateDir);
+    expect(stopResult.ok).toBe(true);
+  }, 15_000);
+
+  test("events tail --name filters to only the app events matching the glob (issue #115)", async () => {
+    const { stateDir } = await makeTempStateDir();
+
+    const status = runCliJson(["daemon", "status"], stateDir);
+    expect(status.ok).toBe(true);
+    daemonPids.push(status.data.daemon.pid);
+
+    const eventsProcess = spawnCliBinary(["events", "tail", "--json", "--name", "*_failed"], { stateDir });
+
+    const lines: string[] = [];
+    let buffered = "";
+    const appEventSeen = new Promise<void>((resolve) => {
+      (async () => {
+        for await (const chunk of eventsProcess.stdout) {
+          buffered += chunk.toString("utf8");
+          let newlineIndex = buffered.indexOf("\n");
+
+          while (newlineIndex !== -1) {
+            const line = buffered.slice(0, newlineIndex);
+            buffered = buffered.slice(newlineIndex + 1);
+
+            if (line.length > 0) {
+              lines.push(line);
+
+              if (JSON.parse(line).kind === "app_event") {
+                resolve();
+              }
+            }
+
+            newlineIndex = buffered.indexOf("\n");
+          }
+        }
+      })();
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const { socket, sessionId } = await claimAppOverCli(stateDir);
+    socket.send(JSON.stringify({ type: "event", session_id: sessionId, name: "checkout_ok", ts: Date.now() }));
+    socket.send(JSON.stringify({ type: "event", session_id: sessionId, name: "checkout_failed", ts: Date.now() }));
+
+    await Promise.race([
+      appEventSeen,
+      new Promise((_resolve, reject) => setTimeout(() => reject(new Error("Timed out waiting for an app_event line")), 5000)),
+    ]);
+
+    // Give a possible (wrongly) unfiltered "checkout_ok" line a moment to also arrive before
+    // asserting on the final set.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(lines.map((line) => JSON.parse(line).kind)).toEqual(["app_event"]);
+    expect(JSON.parse(lines[0]!).data.name).toBe("checkout_failed");
+
+    eventsProcess.kill("SIGINT");
+    const exitCode = await waitForExit(eventsProcess);
+    expect(exitCode).toBe(0);
+
+    socket.close();
+    const stopResult = runCliJson(["daemon", "stop"], stateDir);
+    expect(stopResult.ok).toBe(true);
+  }, 15_000);
+
+  test("events since 0 --payload-max-bytes truncates a payload over the cap; without the flag it is returned whole (issue #115)", async () => {
+    const { stateDir } = await makeTempStateDir();
+
+    const status = runCliJson(["daemon", "status"], stateDir);
+    expect(status.ok).toBe(true);
+    daemonPids.push(status.data.daemon.pid);
+
+    const { socket, alias, sessionId } = await claimAppOverCli(stateDir);
+    const bigPayload = { blob: "x".repeat(5000) };
+    socket.send(JSON.stringify({ type: "event", session_id: sessionId, name: "big", payload: bigPayload, ts: Date.now() }));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const wholeProcess = spawnCliBinary(["events", "since", alias, "0", "--json"], { stateDir });
+    let wholeStdout = "";
+    wholeProcess.stdout.on("data", (chunk: Buffer) => {
+      wholeStdout += chunk.toString("utf8");
+    });
+    expect(await waitForExit(wholeProcess)).toBe(0);
+    const wholeLines = wholeStdout.split("\n").filter((line) => line.length > 0);
+    const wholeEvent = JSON.parse(wholeLines[0]!).data;
+    expect(wholeEvent.payload).toEqual(bigPayload);
+    expect(wholeEvent.truncated).toBeUndefined();
+
+    const cappedProcess = spawnCliBinary(
+      ["events", "since", alias, "0", "--payload-max-bytes", "100", "--json"],
+      { stateDir },
+    );
+    let cappedStdout = "";
+    cappedProcess.stdout.on("data", (chunk: Buffer) => {
+      cappedStdout += chunk.toString("utf8");
+    });
+    expect(await waitForExit(cappedProcess)).toBe(0);
+    const cappedLines = cappedStdout.split("\n").filter((line) => line.length > 0);
+    const cappedEvent = JSON.parse(cappedLines[0]!).data;
+    expect(cappedEvent.truncated).toBe(true);
+    expect(cappedEvent.payload).toBeUndefined();
+    expect(typeof cappedEvent.payloadPreview).toBe("string");
 
     socket.close();
     const stopResult = runCliJson(["daemon", "stop"], stateDir);
