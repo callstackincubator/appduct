@@ -21,6 +21,15 @@ section into a versioned heading.
   defaults to 50.
 - **New: filter events by name.** `appduct_events` accepts `name`, a glob such as `"cart.*"`
   (`*` matches any run of characters), to return only events whose name matches.
+- **Breaking: `appduct_events` truncates a payload over 4096 bytes by default.** A truncated event
+  comes back as `{ name, payloadPreview, truncated: true, payloadBytes }` instead of
+  `{ name, payload }`; pass `payloadMaxBytes` to raise or lower the cap.
+- **New: `appduct_events` and `app.events()` report `dropped` and `remaining`.** `dropped` counts
+  events evicted from the retention buffer before you asked, and `remaining` counts events still
+  waiting after the page you got back.
+- **New: `app.events()` accepts `payloadMaxBytes` to cap an event's payload size.** Without it every
+  event keeps its full `payload`; with it, an oversized payload comes back as `payloadPreview`/
+  `payloadBytes` and you check `truncated` before reading `payload`.
 
 ## 0.12.0 (2026-09-24)
 

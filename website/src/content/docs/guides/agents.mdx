@@ -76,7 +76,7 @@ The other four connect devices and read app events:
 | --- | --- |
 | `appduct_connect` | Creates a connection link and opens it on a booted iOS Simulator or Android emulator it finds. If there's none, it returns a QR code for you to scan. |
 | `appduct_wait_for_session` | Waits until the device connects. |
-| `appduct_events` | Returns events your app posted with `postEvent`, since a cursor. `name` filters to events whose name matches a glob, e.g. `"cart.*"`. |
+| `appduct_events` | Returns events your app posted with `postEvent`, since a cursor. `name` filters to events whose name matches a glob, e.g. `"cart.*"`. A payload over 4096 bytes is truncated (`payloadMaxBytes` changes that), and the result reports how many events were dropped or are still waiting. |
 | `appduct_wait_for_event` | Waits for a specific app event, checking events that already arrived first. |
 
 With more than one device connected, the agent passes `selector`, the session's alias or id, to pick one.

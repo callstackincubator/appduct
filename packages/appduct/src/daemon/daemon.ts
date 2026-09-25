@@ -69,6 +69,8 @@ type EventSubscription = {
   kinds?: ReadonlySet<EventKind>;
   /** Issue #112's whole-name glob; applied through `projectAppEvent` on the fan-out below. */
   name?: string;
+  /** Issue #113's payload cap; applied through the same `projectAppEvent` call as `name`. */
+  payloadMaxBytes?: number;
 };
 
 /**
@@ -322,7 +324,28 @@ const asEventsSubscribeParams = (params: unknown): EventsSubscribeParams => {
     throw new RpcApplicationError("invalid_request", '"name" must be a string.');
   }
 
-  return { sessionSelector: sessionSelector as string | undefined, kinds, name: name as string | undefined };
+  const payloadMaxBytes = asPayloadMaxBytes(record.payloadMaxBytes);
+
+  return {
+    sessionSelector: sessionSelector as string | undefined,
+    kinds,
+    name: name as string | undefined,
+    payloadMaxBytes,
+  };
+};
+
+/** Shared by `asEventsSubscribeParams` and `asEventsSinceParams` (issue #113): both take an
+ * optional positive-integer byte cap with no default — a caller that wants one asks for it. */
+const asPayloadMaxBytes = (value: unknown): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new RpcApplicationError("invalid_request", '"payloadMaxBytes" must be a positive integer.');
+  }
+
+  return value;
 };
 
 const asEventsSinceParams = (params: unknown): EventsSinceParams => {
@@ -352,11 +375,14 @@ const asEventsSinceParams = (params: unknown): EventsSinceParams => {
     throw new RpcApplicationError("invalid_request", '"name" must be a string.');
   }
 
+  const payloadMaxBytes = asPayloadMaxBytes(record.payloadMaxBytes);
+
   return {
     selector: selector as string | undefined,
     since: since as number | undefined,
     limit: limit as number | undefined,
     name: name as string | undefined,
+    payloadMaxBytes,
   };
 };
 
@@ -556,7 +582,12 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           continue;
         }
 
-        if (subscription.name !== undefined && projectAppEvent(event, { name: subscription.name }) === undefined) {
+        const projected = projectAppEvent(event, {
+          name: subscription.name,
+          payloadMaxBytes: subscription.payloadMaxBytes,
+        });
+
+        if (projected === undefined) {
           continue;
         }
 
@@ -568,7 +599,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           continue;
         }
 
-        server?.notify(connection, event);
+        server?.notify(connection, projected);
       }
     });
 
@@ -835,12 +866,13 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           return { cancelled };
         },
         [RPC_METHODS.eventsSubscribe]: (params, context): EventsSubscribeResult => {
-          const { sessionSelector, kinds, name } = asEventsSubscribeParams(params);
+          const { sessionSelector, kinds, name, payloadMaxBytes } = asEventsSubscribeParams(params);
 
           context.connection.state.eventSubscription = {
             sessionSelector,
             kinds: kinds ? new Set(kinds) : undefined,
             name,
+            payloadMaxBytes,
           } satisfies EventSubscription;
 
           return { ok: true };
@@ -848,14 +880,14 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
         [RPC_METHODS.eventsSince]: (params): EventsSinceResult => {
           // Only `app_event` is ever retained (event-bus.ts); an older client still sending `kinds`
           // has it ignored like any other unknown param.
-          const { selector, since, limit, name } = asEventsSinceParams(params);
+          const { selector, since, limit, name, payloadMaxBytes } = asEventsSinceParams(params);
           // Resolved the same way as every other selector-taking method (`sessions.describe`,
           // `tools.list`): defaults to the sole active/suspended session, errors on ambiguity, and
           // works for a suspended session too — a suspended app's already-retained events are still
           // fair game to drain.
           const resolved = activeSessionManager.describe(selector);
 
-          return activeEventBus.since(resolved.sessionId, { since, limit, name });
+          return activeEventBus.since(resolved.sessionId, { since, limit, name, payloadMaxBytes });
         },
       },
     });

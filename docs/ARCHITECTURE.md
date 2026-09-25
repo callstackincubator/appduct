@@ -277,8 +277,8 @@ Methods:
 | `tools.list` | `{ selector?, group?, filter?, limit?, offset? }` | `{ tools: ToolsListEntry[], total, groups }` — `tools` is the registry sorted by `name` (code-point order), narrowed to `group` (PROTOCOL.md §5 syntax, matched by segment: `checkout` includes `checkout/*` and never `checkoutx`; case-sensitive), `filter`ed (case-insensitive substring match against name/description) and paged with `limit`/`offset`; each entry is a `ToolDescriptor` (full schema + annotations, plus `group`, which an entry always carries — the tool's group or `null` for an ungrouped one, the same value the summary's ungrouped row uses) plus the tool's effective `policy: "allow" \| "deny" \| "prompt"` (§12), resolved daemon-side. `total` is the count matching `group` and `filter` *before* paging, so a caller can tell how much a page left out. `groups: { group: string \| null, total }[]` summarizes the **whole** registry — never narrowed by `group`, `filter` or paging: one entry per top-level group (its `total` includes its subgroups), one per subgroup, and `group: null` for ungrouped tools when there are any; sorted by group path with a parent right before its subgroups, `null` last. A malformed `group` is `invalid_request`, like a bad `limit` |
 | `tools.call` | `{ selector?, name, args, timeoutMs?, caller?: "cli" \| "mcp", consent?: "elicitation" }` | `{ result, callId }` on success — `callId` lets a caller with several in-flight calls match `tool_call_progress`/`tool_call_finished` events back to this call; JSON-RPC error with `data.type` preserving the wire error type on failure. `caller` attributes the audit record (§12); `consent` is the MCP server's evidence of a `"prompt"`-policy human gate (§12) — `"elicitation"` after the client accepted an elicitation prompt, absent otherwise (including for the CLI). |
 | `tools.cancel` | `{ selector?, callId, reason? }` | `{ cancelled: boolean }` — sends `tool_cancel` (§7) to the app for a still-pending call; `false` for an unknown/already-finished `callId` or no active socket (a no-op, not an error) |
-| `events.subscribe` | `{ sessionSelector?, kinds?, name? }` | `{ ok: true }`, then `event` notifications on this connection |
-| `events.since` | `{ selector?, since?, limit?, name? }` | `{ events: EventNotification[], cursor }` — pull counterpart to `events.subscribe` for `app_event` only, draining the per-session retention buffer described below. An older client's `kinds` is ignored like any unknown param |
+| `events.subscribe` | `{ sessionSelector?, kinds?, name?, payloadMaxBytes? }` | `{ ok: true }`, then `event` notifications on this connection |
+| `events.since` | `{ selector?, since?, limit?, name?, payloadMaxBytes? }` | `{ events: EventNotification[], cursor, dropped, remaining }` — pull counterpart to `events.subscribe` for `app_event` only, draining the per-session retention buffer described below. An older client's `kinds` is ignored like any unknown param |
 
 `SessionSummary`: `{ sessionId, alias, state, device: { manufacturer?, model?, os? },
 createdAt, claimedAt?, suspendedAt?, toolCount }`.
@@ -321,26 +321,24 @@ Event notification payload: `{ kind, sessionId?, alias?, ts, data, seq }` where 
 of `daemon_started`, `link_created`, `link_expired`, `session_claimed`,
 `session_suspended`, `session_resumed`, `session_revoked`, `session_expired`,
 `tools_changed`, `app_event`, `tool_call_started`, `tool_call_progress`,
-`tool_call_finished`. `seq` is a per-session cursor (§ below); daemon-wide events (no
-`sessionId`) carry `seq: 0` and are never retained.
+`tool_call_finished`. `seq` counts `app_event`s only (issue #113) — every other kind, whether
+session-scoped or daemon-wide, carries `seq: 0`.
 
 **Event retention (issue #6, #98):** alongside the live `events.subscribe` fan-out, which
 carries every kind and honours its `kinds` filter, the daemon keeps a per-session ring buffer
 of the last `eventBufferSize` **`app_event`s** (`config.json`, default 256). Every other kind is
 delivered live only and never retained, so no number of tool calls or lifecycle transitions
-can evict an app event. Every session-scoped event is still stamped with a `seq` that
-increases monotonically per session. `events.since` drains the buffer — `since` is an
+can evict an app event. `events.since` drains the buffer — `since` is an
 exclusive lower bound on `seq`, `limit` caps the response to the **oldest** N so paging
 forward with the returned `cursor` never skips anything; the result's `cursor` is the `seq`
 of the last event actually **returned** (so `since: cursor` on the next call resumes right
 after it), falling back to the session's true high-water mark only when nothing was
-returned, so an empty page still lets a caller skip past the unretained kinds' `seq`s
-rather than re-scanning from an older cursor. `selector` defaults the same way as every
+returned. `selector` defaults the same way as every
 other selector-taking method (§ above). Both `events.since` and `events.subscribe` also take
 `name` (issue #112): a whole-name, case-sensitive glob (`*` matches any run of characters; a
-pattern with no `*` is an exact name) applied through one `projectAppEvent(event, { name? })`
-(`daemon/event-bus.ts`), so the drain and the live fan-out can't disagree about a match. The
-readers built on it — `appduct_events`,
+pattern with no `*` is an exact name) applied through one `projectAppEvent(event, { name?,
+payloadMaxBytes? })` (`daemon/event-bus.ts`), so the drain and the live fan-out can't disagree
+about a match. The readers built on it — `appduct_events`,
 `appduct_wait_for_event`, `appduct events tail` (whose live mode subscribes with
 `kinds: ["app_event"]`) and the client SDK — therefore only ever show `app_event`; the
 internal consumers that need Appduct's own kinds (`appduct_wait_for_session`,
@@ -353,6 +351,22 @@ discarded for any reason (TTL, revoke, attempt-limit exceeded), even the paths w
 event kind of their own. This exists because MCP is strictly request/response (§9): without
 it, an agent that calls a tool and then asks "what happened?" has already missed the
 answer, since it was never subscribed at the moment the app pushed it.
+
+**Dropped, remaining, and payload caps (issue #113).** `events.since`'s result also carries
+`dropped` — `max(0, oldest.seq - since - 1)`, where `oldest` is the buffer's own current oldest
+retained entry, so it's `0` once nothing has fallen off the front of the ring buffer, including
+across a gap of only never-retained kinds (they carry `seq: 0` and can't move the math) — and
+`remaining`, the count of events still matching `since`/`name` after the page `limit` actually
+returned (`0` on the last page). Both `events.since` and `events.subscribe` also take
+`payloadMaxBytes`, applied by the same `projectAppEvent`: an `app_event` whose payload's JSON
+exceeds it has its `data` replaced with `{ name, payloadPreview, truncated: true, payloadBytes }`
+in place of `{ name, payload }` — `payloadBytes` is the JSON's UTF-8 byte length, and
+`payloadPreview` is the longest prefix of it that fits in `payloadMaxBytes` bytes without
+splitting a code point. Neither RPC method defaults the cap; `appduct_events` defaults it to 4096
+and the client SDK's `AppClient.events()` does not, overloaded instead: without
+`payloadMaxBytes` it returns `FullAppEvent`s (`payload` always present), with it the `AppEvent`
+union (`payload`, or `payloadPreview`/`truncated: true`/`payloadBytes`) that a caller narrows on
+`truncated`.
 
 **Error codes** (JSON-RPC `error.data.type`): `no_session`, `ambiguous_session`,
 `unknown_session`, `session_not_active`, `tool_not_found`,
@@ -534,7 +548,9 @@ proxies daemon RPC (auto-spawning the daemon like any client):
   give an agent a pull surface over `postEvent()`-pushed `app_event`s: `appduct_events`
   is a thin proxy over `events.since` — flattening its `EventNotification[]` to
   `AppEvent[]` (`{ name, payload, ts, seq, sessionId, alias }`, `@appduct/shared`,
-  issue #112) and defaulting `limit` to 50 — and both reject a `kinds` argument with
+  issue #112), defaulting `limit` to 50 and `payloadMaxBytes` to 4096 (issue #113, so one
+  gigantic payload can't blow out an agent's context on its own), and returning `dropped`/
+  `remaining` alongside `events`/`cursor` — and both reject a `kinds` argument with
   `invalid_request`; `appduct_wait_for_event` blocks for a matching
   event, draining the retained buffer for an already-arrived match before falling back to
   a live wait — closing the same race `appduct_wait_for_session` doesn't have to worry
