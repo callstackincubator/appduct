@@ -596,6 +596,16 @@ describe("renderEventsCursorLine", () => {
     expect(line).toContain("42");
     expect(line).toContain('appduct events since 42');
   });
+
+  test("human mode includes the selector in the resume command when one was given", () => {
+    const line = renderEventsCursorLine(3, flags(), "pixel-8");
+    expect(line).toContain('appduct events since pixel-8 3');
+  });
+
+  test("NDJSON mode does not change when a selector was given", () => {
+    const line = renderEventsCursorLine(3, flags({ json: true }), "pixel-8");
+    expect(JSON.parse(line)).toEqual({ cursor: 3 });
+  });
 });
 
 describe("daemon status rendering", () => {
