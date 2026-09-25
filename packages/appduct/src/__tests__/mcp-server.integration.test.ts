@@ -32,13 +32,13 @@ import {
   ReadResourceResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { decodeBootstrap, type ToolDescriptor } from "@appduct/shared";
+import { decodeBootstrap, RPC_METHODS, type ToolDescriptor } from "@appduct/shared";
 
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import { createMcpServer, type McpServerHandle } from "../mcp/server.js";
 import type { ExecFn } from "../cli/open-target.js";
 import { DAEMON_VERSION_OVERRIDE_ENV, getPackageVersion } from "../package-version.js";
-import { resetDaemonVersionChecks, type SpawnFn } from "../rpc/client.js";
+import { openDaemonStream, resetDaemonVersionChecks, type SpawnFn } from "../rpc/client.js";
 import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
 const runningDaemons: RunningDaemon[] = [];
@@ -1341,8 +1341,18 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
       CallToolResultSchema,
     );
     expect(first.isError).not.toBe(true);
-    const firstData = first.structuredContent as { events: Array<{ kind: string; data: { name: string } }>; cursor: number };
-    expect(firstData.events.some((event) => event.kind === "app_event" && event.data.name === "greeting")).toBe(true);
+    // Flat `{ name, payload, ts, seq, sessionId, alias }` events (issue #112) — no `kind`/`data`
+    // envelope.
+    const firstData = first.structuredContent as {
+      events: Array<{ name: string; payload: unknown; ts: number; seq: number; sessionId: string; alias?: string; kind?: unknown; data?: unknown }>;
+      cursor: number;
+    };
+    expect(firstData.events.some((event) => event.name === "greeting" && (event.payload as { hi: boolean }).hi === true)).toBe(true);
+    for (const event of firstData.events) {
+      expect(event.kind).toBeUndefined();
+      expect(event.data).toBeUndefined();
+      expect(event.sessionId).toBe(app.sessionId);
+    }
 
     const second = await client.request(
       { method: "tools/call", params: { name: "appduct_events", arguments: { since: firstData.cursor } } },
@@ -1580,8 +1590,65 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
       CallToolResultSchema,
     );
     expect(result.isError).not.toBe(true);
-    const data = result.structuredContent as { events: Array<{ kind: string }> };
-    expect(data.events.map((event) => event.kind)).toEqual(["app_event"]);
+    const data = result.structuredContent as { events: Array<{ name: string }> };
+    expect(data.events.map((event) => event.name)).toEqual(["greeting"]);
+
+    app.socket.close();
+  });
+
+  test("appduct_events defaults limit to 50 and pages forward with the returned cursor (issue #112)", async () => {
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    for (let i = 0; i < 55; i++) {
+      const emitted = waitForEvent(daemon, "app_event");
+      app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: `e${i}`, ts: Date.now() }));
+      await emitted;
+    }
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const first = await client.request(
+      { method: "tools/call", params: { name: "appduct_events", arguments: {} } },
+      CallToolResultSchema,
+    );
+    expect(first.isError).not.toBe(true);
+    const firstData = first.structuredContent as { events: Array<{ name: string }>; cursor: number };
+    expect(firstData.events).toHaveLength(50);
+    expect(firstData.events[0]!.name).toBe("e0");
+    expect(firstData.events[49]!.name).toBe("e49");
+
+    const second = await client.request(
+      { method: "tools/call", params: { name: "appduct_events", arguments: { since: firstData.cursor } } },
+      CallToolResultSchema,
+    );
+    const secondData = second.structuredContent as { events: Array<{ name: string }> };
+    expect(secondData.events.map((event) => event.name)).toEqual(["e50", "e51", "e52", "e53", "e54"]);
+
+    app.socket.close();
+  }, 10_000);
+
+  test("appduct_events filters by a name glob (issue #112)", async () => {
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    for (const name of ["cart.item_added", "checkout_completed", "cart.item_removed"]) {
+      const emitted = waitForEvent(daemon, "app_event");
+      app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name, ts: Date.now() }));
+      await emitted;
+    }
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const result = await client.request(
+      { method: "tools/call", params: { name: "appduct_events", arguments: { name: "cart.*" } } },
+      CallToolResultSchema,
+    );
+    expect(result.isError).not.toBe(true);
+    const data = result.structuredContent as { events: Array<{ name: string }> };
+    expect(data.events.map((event) => event.name)).toEqual(["cart.item_added", "cart.item_removed"]);
 
     app.socket.close();
   });
@@ -1622,6 +1689,104 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
 
     app.socket.close();
   }, 10_000);
+});
+
+describe("daemon: events.since / events.subscribe name filter (issue #112)", () => {
+  test("events.since with a name glob returns only matching events", async () => {
+    const { daemon } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    for (const name of ["cart.item_added", "checkout_completed", "cart.item_removed"]) {
+      const emitted = waitForEvent(daemon, "app_event");
+      app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name, ts: Date.now() }));
+      await emitted;
+    }
+
+    const result = (await rpcCall(daemon.paths.socketPath, "events.since", {
+      selector: app.alias,
+      name: "cart.*",
+    })) as { events: Array<{ data: { name: string } }> };
+
+    expect(result.events.map((event) => event.data.name)).toEqual(["cart.item_added", "cart.item_removed"]);
+
+    app.socket.close();
+  });
+
+  test("an exact name never matches a longer name it prefixes", async () => {
+    const { daemon } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    for (const name of ["checkout_completed", "checkout_completed_v2"]) {
+      const emitted = waitForEvent(daemon, "app_event");
+      app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name, ts: Date.now() }));
+      await emitted;
+    }
+
+    const result = (await rpcCall(daemon.paths.socketPath, "events.since", {
+      selector: app.alias,
+      name: "checkout_completed",
+    })) as { events: Array<{ data: { name: string } }> };
+
+    expect(result.events.map((event) => event.data.name)).toEqual(["checkout_completed"]);
+
+    app.socket.close();
+  });
+
+  test("name matching is case-sensitive", async () => {
+    const { daemon } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "cart.item_added", ts: Date.now() }));
+    await emitted;
+
+    const result = (await rpcCall(daemon.paths.socketPath, "events.since", {
+      selector: app.alias,
+      name: "Cart.*",
+    })) as { events: unknown[] };
+
+    expect(result.events).toEqual([]);
+
+    app.socket.close();
+  });
+
+  test("events.subscribe with a name glob delivers only matching live events on that connection", async () => {
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const stream = await openDaemonStream({ stateDir, spawn: failIfCalled });
+
+    try {
+      await stream.call(RPC_METHODS.eventsSubscribe, { sessionSelector: app.sessionId, name: "cart.*" });
+
+      const received: Array<{ data: { name: string } }> = [];
+      stream.onNotification((payload) => {
+        const event = payload as { kind: string; sessionId?: string; data: { name: string } };
+        if (event.kind === "app_event") {
+          received.push(event as { data: { name: string } });
+        }
+      });
+
+      for (const name of ["cart.item_added", "checkout_completed", "cart.item_removed"]) {
+        const emitted = waitForEvent(daemon, "app_event");
+        app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name, ts: Date.now() }));
+        await emitted;
+      }
+
+      // `waitForEvent` above only confirms the daemon's own bus emitted — the fan-out notification
+      // still has to travel the control socket to `stream` before `received` reflects it, so poll
+      // rather than asserting immediately.
+      const deadline = Date.now() + 2000;
+      while (received.length < 2 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      expect(received.map((event) => event.data.name)).toEqual(["cart.item_added", "cart.item_removed"]);
+    } finally {
+      stream.close();
+      app.socket.close();
+    }
+  });
 });
 
 describe("mcp: appduct://sessions resource", () => {

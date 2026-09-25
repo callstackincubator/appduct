@@ -251,7 +251,7 @@ Default location `~/.appduct/config.json`. Every key is optional. Read when the 
 | `appduct_call_tool` | `selector?`, `name`, `args?`, `timeoutMs?` (1,000–600,000; can only shorten) | The tool's result |
 | `appduct_connect` | `target?` (`android`, `ios-sim`, `ios-device`, `none`), `device?`, `appId?`, `relaunch?`, `ttlSeconds?` | `{ sessionId, delivered: true }`, or a `qr`, `deepLink`, and `instructions` for a person |
 | `appduct_wait_for_session` | `sessionId`, `timeoutMs?` | Resolves when the device connects |
-| `appduct_events` | `selector?`, `since?`, `limit?` | `{ events, cursor }` with the app's events |
+| `appduct_events` | `selector?`, `since?`, `limit?` (default 50), `name?` (glob, e.g. `"cart.*"`) | `{ events, cursor }`, each event `{ name, payload, ts, seq, sessionId, alias }` |
 | `appduct_wait_for_event` | `selector?`, `name`, `match?`, `since?`, `timeoutMs?` (default 120,000; max 1,500,000) | The matching event |
 
 Unknown arguments are rejected. A tool with policy `"prompt"` asks for approval through MCP elicitation.

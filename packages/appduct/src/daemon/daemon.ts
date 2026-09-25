@@ -47,7 +47,7 @@ import { detectAdvertisedAddress } from "./address.js";
 import { argsSha256, createAuditLogger, type AuditLogger } from "./audit.js";
 import { createCallsManager, type CallsManager } from "./calls.js";
 import { loadConfig, type AppductConfig, type ConfigWarnFn } from "./config.js";
-import { createEventBus, type EventBus } from "./event-bus.js";
+import { createEventBus, projectAppEvent, type EventBus } from "./event-bus.js";
 import { createEventsLog } from "./events-log.js";
 import { startListener, type DaemonListener } from "./listener.js";
 import { evaluate as evaluatePolicy } from "./policy.js";
@@ -67,6 +67,8 @@ const KNOWN_EVENT_KINDS: ReadonlySet<string> = new Set<EventKind>(EVENT_KINDS);
 type EventSubscription = {
   sessionSelector?: string;
   kinds?: ReadonlySet<EventKind>;
+  /** Issue #112's whole-name glob; applied through `projectAppEvent` on the fan-out below. */
+  name?: string;
 };
 
 /**
@@ -314,7 +316,13 @@ const asEventsSubscribeParams = (params: unknown): EventsSubscribeParams => {
     kinds = kindsRaw as EventKind[];
   }
 
-  return { sessionSelector: sessionSelector as string | undefined, kinds };
+  const name = record.name;
+
+  if (name !== undefined && typeof name !== "string") {
+    throw new RpcApplicationError("invalid_request", '"name" must be a string.');
+  }
+
+  return { sessionSelector: sessionSelector as string | undefined, kinds, name: name as string | undefined };
 };
 
 const asEventsSinceParams = (params: unknown): EventsSinceParams => {
@@ -338,10 +346,17 @@ const asEventsSinceParams = (params: unknown): EventsSinceParams => {
     throw new RpcApplicationError("invalid_request", '"limit" must be a positive integer.');
   }
 
+  const name = record.name;
+
+  if (name !== undefined && typeof name !== "string") {
+    throw new RpcApplicationError("invalid_request", '"name" must be a string.');
+  }
+
   return {
     selector: selector as string | undefined,
     since: since as number | undefined,
     limit: limit as number | undefined,
+    name: name as string | undefined,
   };
 };
 
@@ -538,6 +553,10 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
         }
 
         if (subscription.kinds && !subscription.kinds.has(event.kind)) {
+          continue;
+        }
+
+        if (subscription.name !== undefined && projectAppEvent(event, { name: subscription.name }) === undefined) {
           continue;
         }
 
@@ -816,11 +835,12 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           return { cancelled };
         },
         [RPC_METHODS.eventsSubscribe]: (params, context): EventsSubscribeResult => {
-          const { sessionSelector, kinds } = asEventsSubscribeParams(params);
+          const { sessionSelector, kinds, name } = asEventsSubscribeParams(params);
 
           context.connection.state.eventSubscription = {
             sessionSelector,
             kinds: kinds ? new Set(kinds) : undefined,
+            name,
           } satisfies EventSubscription;
 
           return { ok: true };
@@ -828,14 +848,14 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
         [RPC_METHODS.eventsSince]: (params): EventsSinceResult => {
           // Only `app_event` is ever retained (event-bus.ts); an older client still sending `kinds`
           // has it ignored like any other unknown param.
-          const { selector, since, limit } = asEventsSinceParams(params);
+          const { selector, since, limit, name } = asEventsSinceParams(params);
           // Resolved the same way as every other selector-taking method (`sessions.describe`,
           // `tools.list`): defaults to the sole active/suspended session, errors on ambiguity, and
           // works for a suspended session too — a suspended app's already-retained events are still
           // fair game to drain.
           const resolved = activeSessionManager.describe(selector);
 
-          return activeEventBus.since(resolved.sessionId, { since, limit });
+          return activeEventBus.since(resolved.sessionId, { since, limit, name });
         },
       },
     });

@@ -16,6 +16,11 @@ section into a versioned heading.
   is `tools describe <name>`, `invoke` is `tools call`, `events` is `events tail`, and
   `events --since <cursor>` is `events since <cursor>`; a removed command's error names its
   replacement.
+- **Breaking: `appduct_events` returns flat events.** Each event is now
+  `{ name, payload, ts, seq, sessionId, alias }` instead of `{ kind, data }`, and `limit` now
+  defaults to 50.
+- **New: filter events by name.** `appduct_events` accepts `name`, a glob such as `"cart.*"`
+  (`*` matches any run of characters), to return only events whose name matches.
 
 ## 0.12.0 (2026-09-24)
 

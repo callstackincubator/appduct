@@ -26,9 +26,79 @@ export type EventBusListener = (event: EventNotification) => void;
 /** Terminal event kinds whose arrival for a session discards that session's retained buffer. */
 const TERMINAL_EVENT_KINDS: ReadonlySet<EventKind> = new Set<EventKind>(["session_expired", "session_revoked"]);
 
+export type ProjectAppEventOptions = {
+  /** Whole-name, case-sensitive glob (issue #112): `*` matches any run of characters, a pattern
+   * with no `*` is an exact name. */
+  name?: string;
+};
+
+/** Whether `name` matches the whole-name glob `pattern` (`*` matches any run of characters,
+ * everything else literally), in time linear in the two strings' lengths.
+ *
+ * No regex and no backtracking: the daemon is single-threaded, so a match that blows up blocks
+ * every session and RPC client (issue #112 review). Compiling `*` to `.*` was exponential in the
+ * star count, and a two-pointer matcher that backtracks to the last `*` was still quadratic.
+ * Instead the pattern is split on `*`: the first piece must be a prefix, the last a suffix, and
+ * each middle piece is found in order with `indexOf`. Taking the leftmost occurrence of each
+ * middle piece is always safe, because it leaves the most room for the pieces after it. */
+const matchesNameGlob = (pattern: string, name: string): boolean => {
+  const pieces = pattern.split("*");
+  const first = pieces[0] ?? "";
+
+  if (pieces.length === 1) {
+    return name === first;
+  }
+
+  const last = pieces[pieces.length - 1] ?? "";
+
+  if (first.length + last.length > name.length || !name.startsWith(first) || !name.endsWith(last)) {
+    return false;
+  }
+
+  const end = name.length - last.length;
+  let position = first.length;
+
+  for (const piece of pieces.slice(1, -1)) {
+    const found = name.indexOf(piece, position);
+
+    if (found === -1 || found + piece.length > end) {
+      return false;
+    }
+
+    position = found + piece.length;
+  }
+
+  return true;
+};
+
+/**
+ * Whether `event` survives `options.name`'s glob — the one implementation `since()`'s drain and
+ * `daemon.ts`'s `events.subscribe` fan-out both call, so the two can't drift apart (issue #112).
+ * Returns `event` unchanged when it should be kept, `undefined` when it should be dropped.
+ *
+ * Only an `app_event` carries a `name` to match against, so every other kind passes through
+ * unfiltered regardless of `options.name` — the `kinds` filter (`events.subscribe`) is what
+ * narrows those.
+ */
+export const projectAppEvent = (
+  event: EventNotification,
+  options: ProjectAppEventOptions = {},
+): EventNotification | undefined => {
+  if (options.name === undefined || event.kind !== "app_event") {
+    return event;
+  }
+
+  const data = event.data as { name?: unknown };
+
+  return typeof data.name === "string" && matchesNameGlob(options.name, data.name) ? event : undefined;
+};
+
 export type EventsSinceQuery = {
   since?: number;
   limit?: number;
+  /** Whole-name, case-sensitive glob (issue #112): `*` matches any run of characters, a pattern
+   * with no `*` is an exact name. See {@link projectAppEvent}. */
+  name?: string;
 };
 
 export type EventsSinceQueryResult = {
@@ -126,6 +196,10 @@ export const createEventBus = (options: CreateEventBusOptions = {}): EventBus =>
 
       if (query.since !== undefined) {
         events = events.filter((event) => event.seq > query.since!);
+      }
+
+      if (query.name !== undefined) {
+        events = events.filter((event) => projectAppEvent(event, { name: query.name }) !== undefined);
       }
 
       if (query.limit !== undefined && events.length > query.limit) {

@@ -11,6 +11,8 @@ import {
   clampToolTimeoutMs,
   MAX_TOOL_TIMEOUT_MS,
   RPC_METHODS,
+  toAppEvent,
+  type AppEvent,
   type EventNotification,
   type EventsSinceResult,
   type ListedToolDescriptor,
@@ -76,19 +78,9 @@ export type EventsResult = {
   cursor: number;
 };
 
-/** An app-pushed event (`postEvent(name, payload)`), narrowed from the daemon's generic
- * `EventNotification` envelope to the shape a `waitForEvent`/`events` caller actually wants. */
-export type AppEvent<TPayload = unknown> = {
-  name: string;
-  payload: TPayload;
-  /** Unix ms. */
-  ts: number;
-  sessionId: string;
-  alias?: string;
-  /** Monotonically increasing per-session cursor (ARCHITECTURE.md §5) assigned by the daemon's
-   * retention buffer at emit time — pass back into `since` to resume after this event. */
-  seq: number;
-};
+/** Re-exported from `@appduct/shared` (issue #112) so `appduct/client` keeps its own public
+ * `AppEvent` name and doc comment for a `waitForEvent`/`events` caller. */
+export type { AppEvent } from "@appduct/shared";
 
 export type AppClient<TTools = ToolMap> = {
   readonly sessionId: string;
@@ -213,7 +205,7 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
 
         return {
           events: result.events
-            .map((event) => appEventFrom(event, sessionId))
+            .map((event) => toAppEvent(event, sessionId))
             .filter((event): event is AppEvent => event !== undefined),
           cursor: result.cursor,
         };
@@ -226,7 +218,7 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
       const timeoutMs = options.timeoutMs ?? DEFAULT_WAIT_FOR_EVENT_TIMEOUT_MS;
 
       const toMatch = (event: EventNotification): AppEvent | undefined => {
-        const appEvent = appEventFrom(event, sessionId);
+        const appEvent = toAppEvent(event, sessionId);
 
         if (!appEvent || appEvent.name !== name) {
           return undefined;
@@ -377,25 +369,4 @@ export const makeAppClient = <TTools = ToolMap>(stream: DaemonStream, sessionId:
   };
 
   return client as unknown as AppClient<TTools>;
-};
-
-const appEventFrom = (event: EventNotification, sessionId: string): AppEvent | undefined => {
-  if (event.kind !== "app_event" || event.sessionId !== sessionId) {
-    return undefined;
-  }
-
-  const data = event.data as { name?: unknown; payload?: unknown };
-
-  if (typeof data.name !== "string") {
-    return undefined;
-  }
-
-  return {
-    name: data.name,
-    payload: data.payload,
-    ts: event.ts,
-    sessionId: event.sessionId!,
-    alias: event.alias,
-    seq: event.seq,
-  };
 };
