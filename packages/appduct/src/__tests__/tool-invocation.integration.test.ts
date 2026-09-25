@@ -24,9 +24,6 @@ import { handleInvokeCommand } from "../commands/invoke.js";
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
-// Client pinning is the app's job; tests skip it client-side for their throwaway self-signed key.
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 const runningDaemons: RunningDaemon[] = [];
 const stateDirs: string[] = [];
 
@@ -40,22 +37,14 @@ afterEach(async () => {
   }
 });
 
-type TestDaemon = {
-  daemon: RunningDaemon;
-  port: number;
-};
-
-const startTestDaemon = async (configOverrides: Record<string, unknown> = {}): Promise<TestDaemon> => {
+const startTestDaemon = async (configOverrides: Record<string, unknown> = {}): Promise<RunningDaemon> => {
   const stateDir = await makeTempStateDir(configOverrides, { prefix: "appduct-tool-invocation-" });
   stateDirs.push(stateDir);
 
   const daemon = await startDaemon({ stateDir });
   runningDaemons.push(daemon);
 
-  // The daemon's `config.json` asks for an OS-assigned port (`wssPort: 0`), so the real port is
-  // only knowable from the listener that bound it — never pre-picked, which is what used to race
-  // another vitest process for the same number.
-  return { daemon, port: daemon.listener.port()! };
+  return daemon;
 };
 
 /** Raw newline-delimited JSON-RPC call over the daemon's UDS control socket. */
@@ -188,9 +177,12 @@ const waitForEvent = (daemon: RunningDaemon, kind: EventKind): Promise<EventNoti
   });
 };
 
-const connectClient = (port: number): Promise<WebSocket> => {
+/** The daemon's `config.json` asks for an OS-assigned port (`wssPort: 0`), so the real port is
+ * only knowable from the listener that bound it — never pre-picked, which is what used to race
+ * another vitest process for the same number. */
+const connectClient = (daemon: RunningDaemon): Promise<WebSocket> => {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`wss://127.0.0.1:${port}`, { rejectUnauthorized: false });
+    const socket = new WebSocket(`wss://127.0.0.1:${daemon.listener.port()!}`, { ca: daemon.tls.current().certPem });
     socket.once("open", () => resolve(socket));
     socket.once("error", reject);
   });
@@ -215,10 +207,7 @@ type ClaimedApp = {
   resumeToken: string;
 };
 
-const createLinkAndDecode = async (
-  daemon: RunningDaemon,
-  port: number,
-): Promise<{ sessionId: string; token: string }> => {
+const createLinkAndDecode = async (daemon: RunningDaemon): Promise<{ sessionId: string; token: string }> => {
   const result = (await rpcCall(daemon.paths.socketPath, "link.create", { ttlSeconds: 60 })) as {
     deepLinkPayload: string;
   };
@@ -229,9 +218,9 @@ const createLinkAndDecode = async (
 };
 
 /** Mints a link, claims it over a fresh socket, and returns the claimed app connection. */
-const claimApp = async (daemon: RunningDaemon, port: number, deviceModel = "Pixel 8"): Promise<ClaimedApp> => {
-  const link = await createLinkAndDecode(daemon, port);
-  const socket = await connectClient(port);
+const claimApp = async (daemon: RunningDaemon, deviceModel = "Pixel 8"): Promise<ClaimedApp> => {
+  const link = await createLinkAndDecode(daemon);
+  const socket = await connectClient(daemon);
 
   const claimed = waitForEvent(daemon, "session_claimed");
   socket.send(
@@ -268,8 +257,8 @@ const snapshotTools = async (
 
 describe("tools.list / tools.call: round trip", () => {
   test("list -> call -> result round-trip, including schemas visible in tools.list", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     await snapshotTools(daemon, app, [
       {
@@ -309,8 +298,8 @@ describe("tools.list / tools.call: round trip", () => {
   });
 
   test("tools.list on a SUSPENDED session still returns the retained registry", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     const suspended = waitForEvent(daemon, "session_suspended");
@@ -324,8 +313,8 @@ describe("tools.list / tools.call: round trip", () => {
   });
 
   test("tools.call for an unregistered tool rejects tool_not_found without sending a frame to the app", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     let sawToolCall = false;
@@ -345,8 +334,8 @@ describe("tools.list / tools.call: round trip", () => {
   });
 
   test("tools.call rejects invalid_request when args is not a JSON object", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     await expect(
@@ -357,8 +346,8 @@ describe("tools.list / tools.call: round trip", () => {
   });
 
   test("tools.list sorts by name, filters on name/description, reports total before paging, and slices with limit/offset", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     // Registered out of alphabetical order on purpose.
     await snapshotTools(daemon, app, [
@@ -404,8 +393,8 @@ describe("tools.list / tools.call: round trip", () => {
   });
 
   test("tools.list rejects a bad limit/offset/filter as invalid_request", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     await expect(
@@ -438,8 +427,8 @@ describe("tools.list / tools.call: round trip", () => {
   });
 
   test("tools.list narrows by group segment before filter, total and paging; groups always reflects the whole registry", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     await snapshotTools(daemon, app, [
       { name: "add_item", description: "Adds to the cart.", group: "cart" },
@@ -510,8 +499,8 @@ describe("tools.list / tools.call: round trip", () => {
   });
 
   test("tools.list on a registry with no groups returns only the ungrouped bucket", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "echo" }, { name: "ping" }]);
 
     const listing = (await rpcCall(daemon.paths.socketPath, "tools.list", { selector: app.alias })) as {
@@ -527,8 +516,8 @@ describe("tools.call: error type preservation", () => {
   test.each(TOOL_ERROR_TYPES.map((type) => [type] as const))(
     "app tool_error type %s is preserved verbatim end-to-end",
     async (errorType) => {
-      const { daemon, port } = await startTestDaemon();
-      const app = await claimApp(daemon, port);
+      const daemon = await startTestDaemon();
+      const app = await claimApp(daemon);
       await snapshotTools(daemon, app, [{ name: "boom" }]);
 
       app.socket.on("message", (data) => {
@@ -557,8 +546,8 @@ describe("tools.call: error type preservation", () => {
 
 describe("tools.call: timeout", () => {
   test("app never replies -> tool_timeout after the configured timeoutMs", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "hangs" }]);
 
     // The app receives the tool_call and does nothing (simulating a hung handler).
@@ -575,8 +564,8 @@ describe("tools.call: timeout", () => {
   }, 5000);
 
   test("the tool's own declared timeoutMs is the default when the caller passes none (issue #25)", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     // Declared well below DEFAULT_CALL_TIMEOUT_MS (10 s) so the assertion below distinguishes the
     // two: if the descriptor's timeout were still being dropped on the wire, this call would sit
     // there for 10 s and blow the 5 s test budget.
@@ -596,8 +585,8 @@ describe("tools.call: timeout", () => {
   }, 10_000);
 
   test("an explicit caller timeoutMs still shortens a longer declared deadline (issue #25)", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "hangs", timeout_ms: 600_000 }]);
 
     const startedAt = Date.now();
@@ -619,8 +608,8 @@ describe("caller transport timeouts over a slow tool", () => {
   test(
     "tools call (with and without --timeout) and appduct/client all outlive the daemon's 10 s default (issue #25)",
     async () => {
-      const { daemon, port } = await startTestDaemon();
-      const app = await claimApp(daemon, port);
+      const daemon = await startTestDaemon();
+      const app = await claimApp(daemon);
       await snapshotTools(daemon, app, [
         { name: "slow-explicit" },
         // Declares its own deadline, so a caller that passes none still gets 20 s daemon-side.
@@ -679,8 +668,8 @@ describe("caller transport timeouts over a slow tool", () => {
 
 describe("tools.call: concurrency", () => {
   test("three concurrent calls interleaved out of order resolve to the right callers", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "a" }, { name: "b" }, { name: "c" }]);
 
     const received: Array<{ id: string; name: string }> = [];
@@ -725,8 +714,8 @@ describe("tools.call: concurrency", () => {
 
 describe("tools.call: suspend mid-call", () => {
   test("suspend rejects the pending call with session_suspended; a new call succeeds after resume", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     // The app receives the tool_call but the test never answers it — the socket is dropped instead.
@@ -753,7 +742,7 @@ describe("tools.call: suspend mid-call", () => {
     await expect(pendingCall).rejects.toMatchObject({ data: { type: "session_suspended" } });
 
     // Resume on a fresh socket, re-send the authoritative snapshot, then a fresh call succeeds.
-    const resumedSocket = await connectClient(port);
+    const resumedSocket = await connectClient(daemon);
     const resumed = waitForEvent(daemon, "session_resumed");
     resumedSocket.send(
       JSON.stringify({
@@ -791,8 +780,8 @@ describe("tools.call: suspend mid-call", () => {
 
 describe("tools.cancel", () => {
   test("sends tool_cancel to the app; the app's tool_cancelled reply rejects the pending call", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "slow" }]);
 
     const cancelMessages: Record<string, unknown>[] = [];
@@ -829,8 +818,8 @@ describe("tools.cancel", () => {
   });
 
   test("cancelling an unknown or already-finished callId is a no-op, not an error", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const result = await rpcCall(daemon.paths.socketPath, "tools.cancel", {
       selector: app.alias,
@@ -844,8 +833,8 @@ describe("tools.cancel", () => {
 
 describe("tools.call: cancel on connection drop", () => {
   test("the connection that issued tools.call dropping mid-flight sends tool_cancel to the app", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "slow" }]);
 
     const gotToolCall = new Promise<void>((resolve) => {
@@ -883,12 +872,12 @@ describe("tools.call: cancel on connection drop", () => {
 
 describe("events.subscribe", () => {
   test("a subscriber receives session_claimed, tools_changed, app_event, tool_call_started/finished in order", async () => {
-    const { daemon, port } = await startTestDaemon();
+    const daemon = await startTestDaemon();
 
     const connection = await openRpcConnection(daemon.paths.socketPath);
     await connection.call("events.subscribe", {});
 
-    const app = await claimApp(daemon, port);
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "custom_event", ts: Date.now() }));
@@ -933,12 +922,12 @@ describe("events.subscribe", () => {
   });
 
   test("a subscriber with a kinds filter receives only the filtered subset", async () => {
-    const { daemon, port } = await startTestDaemon();
+    const daemon = await startTestDaemon();
 
     const filtered = await openRpcConnection(daemon.paths.socketPath);
     await filtered.call("events.subscribe", { kinds: ["tools_changed"] });
 
-    const app = await claimApp(daemon, port);
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -951,12 +940,12 @@ describe("events.subscribe", () => {
     app.socket.close();
   });
   test("a subscriber with kinds [session_claimed] still receives the claim live", async () => {
-    const { daemon, port } = await startTestDaemon();
+    const daemon = await startTestDaemon();
 
     const filtered = await openRpcConnection(daemon.paths.socketPath);
     await filtered.call("events.subscribe", { kinds: ["session_claimed"] });
 
-    const app = await claimApp(daemon, port);
+    const app = await claimApp(daemon);
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(filtered.notifications.map((n) => [n.kind, n.sessionId])).toEqual([["session_claimed", app.sessionId]]);
@@ -966,8 +955,8 @@ describe("events.subscribe", () => {
   });
 
   test("a subscriber with kinds [tool_call_started, tool_call_progress] still receives both live", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "slow" }]);
 
     const filtered = await openRpcConnection(daemon.paths.socketPath);
@@ -996,8 +985,8 @@ describe("events.subscribe", () => {
 
 describe("events.since", () => {
   test("returns app_event only, never the session's lifecycle or tool-call events", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     app.socket.on("message", (data) => {
@@ -1024,8 +1013,8 @@ describe("events.since", () => {
   });
 
   test("an older client passing kinds still gets app events only", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const emitted = waitForEvent(daemon, "app_event");
     app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "hello", ts: Date.now() }));
@@ -1041,8 +1030,8 @@ describe("events.since", () => {
   });
 
   test("an app event posted before eventBufferSize tool calls is still returned", async () => {
-    const { daemon, port } = await startTestDaemon({ eventBufferSize: 4 });
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon({ eventBufferSize: 4 });
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     const emitted = waitForEvent(daemon, "app_event");
@@ -1071,8 +1060,8 @@ describe("events.since", () => {
   });
 
   test("drains retained app_events with no live subscription, and cursor advances", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const first = waitForEvent(daemon, "app_event");
     app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "a", ts: Date.now() }));
@@ -1102,8 +1091,8 @@ describe("events.since", () => {
   });
 
   test("selector defaults to the sole active/suspended session, matching sessions.describe", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const emitted = waitForEvent(daemon, "app_event");
     app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "solo", ts: Date.now() }));
@@ -1118,8 +1107,8 @@ describe("events.since", () => {
   });
 
   test("a terminal transition discards the retained buffer", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const emitted = waitForEvent(daemon, "app_event");
     app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "before-revoke", ts: Date.now() }));
@@ -1135,14 +1124,14 @@ describe("events.since", () => {
   });
 
   test("no_session and ambiguous_session error types, matching every other selector-taking method", async () => {
-    const { daemon, port } = await startTestDaemon();
+    const daemon = await startTestDaemon();
 
     await expect(rpcCall(daemon.paths.socketPath, "events.since", {})).rejects.toMatchObject({
       data: { type: "no_session" },
     });
 
-    const appA = await claimApp(daemon, port, "Pixel 8");
-    const appB = await claimApp(daemon, port, "Pixel 8");
+    const appA = await claimApp(daemon, "Pixel 8");
+    const appB = await claimApp(daemon, "Pixel 8");
 
     await expect(rpcCall(daemon.paths.socketPath, "events.since", {})).rejects.toMatchObject({
       data: { type: "ambiguous_session" },
@@ -1153,8 +1142,8 @@ describe("events.since", () => {
   });
 
   test("limit keeps the oldest N and cursor pages forward, never skipping a retained event", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     for (const name of ["a", "b", "c"]) {
       const emitted = waitForEvent(daemon, "app_event");
@@ -1186,8 +1175,8 @@ describe("events.since", () => {
   });
 
   test("tool_call_progress is fanned out live but never retained, so it can't evict app_events", async () => {
-    const { daemon, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "slow" }]);
 
     const appEventEmitted = waitForEvent(daemon, "app_event");
@@ -1223,14 +1212,14 @@ describe("events.since", () => {
 
 describe("tools.* selectors", () => {
   test("unknown_session and ambiguous_session error types", async () => {
-    const { daemon, port } = await startTestDaemon();
+    const daemon = await startTestDaemon();
 
     await expect(
       rpcCall(daemon.paths.socketPath, "tools.call", { selector: "does-not-exist", name: "echo", args: {} }),
     ).rejects.toMatchObject({ data: { type: "unknown_session" } });
 
-    const appA = await claimApp(daemon, port, "Pixel 8");
-    const appB = await claimApp(daemon, port, "Pixel 8");
+    const appA = await claimApp(daemon, "Pixel 8");
+    const appB = await claimApp(daemon, "Pixel 8");
 
     await expect(rpcCall(daemon.paths.socketPath, "tools.list")).rejects.toMatchObject({
       data: { type: "ambiguous_session" },

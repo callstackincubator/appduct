@@ -19,9 +19,6 @@ import WebSocket from "ws";
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
-// Client pinning is the app's job; tests skip it client-side for their throwaway self-signed key.
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 const runningDaemons: RunningDaemon[] = [];
 const stateDirs: string[] = [];
 
@@ -69,9 +66,9 @@ const rpcCall = (socketPath: string, method: string, params?: unknown): Promise<
   });
 };
 
-const connectClient = (port: number): Promise<WebSocket> => {
+const connectClient = (daemon: RunningDaemon): Promise<WebSocket> => {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`wss://127.0.0.1:${port}`, { rejectUnauthorized: false });
+    const socket = new WebSocket(`wss://127.0.0.1:${daemon.listener.port()!}`, { ca: daemon.tls.current().certPem });
     socket.once("open", () => resolve(socket));
     socket.once("error", reject);
   });
@@ -112,8 +109,7 @@ describe("TLS re-mint on advertised-IP change", () => {
     // must still succeed (this is exactly what a bare cert/key swap without `setSecureContext`
     // would fail to achieve: the old context would keep serving the stale SAN, or worse, the server
     // would need a restart).
-    // The port the listener actually bound (the config asked for an OS-assigned one).
-    const socket = await connectClient(daemon.listener.port()!);
+    const socket = await connectClient(daemon);
     socket.close();
 
     const status = (await rpcCall(daemon.paths.socketPath, "daemon.status")) as { pid: number };

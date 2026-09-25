@@ -41,8 +41,6 @@ import { DAEMON_VERSION_OVERRIDE_ENV, getPackageVersion } from "../package-versi
 import { resetDaemonVersionChecks, type SpawnFn } from "../rpc/client.js";
 import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 const runningDaemons: RunningDaemon[] = [];
 const stateDirs: string[] = [];
 const mcpHandles: McpServerHandle[] = [];
@@ -73,7 +71,6 @@ const failIfCalled = (): never => {
 type TestDaemon = {
   daemon: RunningDaemon;
   stateDir: string;
-  port: number;
 };
 
 const startTestDaemon = async (extraConfig: Record<string, unknown> = {}): Promise<TestDaemon> => {
@@ -83,10 +80,7 @@ const startTestDaemon = async (extraConfig: Record<string, unknown> = {}): Promi
   const daemon = await startDaemon({ stateDir });
   runningDaemons.push(daemon);
 
-  // The daemon's `config.json` asks for an OS-assigned port (`wssPort: 0`), so the real port is
-  // only knowable from the listener that bound it — never pre-picked, which is what used to race
-  // another vitest process for the same number.
-  return { daemon, stateDir, port: daemon.listener.port()! };
+  return { daemon, stateDir };
 };
 
 /** A project root (distinct from the state dir — `appId` resolution never reads the state dir's
@@ -148,9 +142,12 @@ const waitForEvent = (daemon: RunningDaemon, kind: string): Promise<{ kind: stri
   });
 };
 
-const connectClient = (port: number): Promise<WebSocket> => {
+/** The daemon's `config.json` asks for an OS-assigned port (`wssPort: 0`), so the real port is
+ * only knowable from the listener that bound it — never pre-picked, which is what used to race
+ * another vitest process for the same number. */
+const connectClient = (daemon: RunningDaemon): Promise<WebSocket> => {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`wss://127.0.0.1:${port}`, { rejectUnauthorized: false });
+    const socket = new WebSocket(`wss://127.0.0.1:${daemon.listener.port()!}`, { ca: daemon.tls.current().certPem });
     socket.once("open", () => resolve(socket));
     socket.once("error", reject);
   });
@@ -186,9 +183,9 @@ const createLinkAndDecode = async (
   return { sessionId: decoded!.sessionId, token: decoded!.token };
 };
 
-const claimApp = async (daemon: RunningDaemon, port: number, deviceModel = "Pixel 8"): Promise<ClaimedApp> => {
+const claimApp = async (daemon: RunningDaemon, deviceModel = "Pixel 8"): Promise<ClaimedApp> => {
   const link = await createLinkAndDecode(daemon);
-  const socket = await connectClient(port);
+  const socket = await connectClient(daemon);
 
   const claimed = waitForEvent(daemon, "session_claimed");
   socket.send(
@@ -264,8 +261,8 @@ const connectInMemoryClient = async (handle: McpServerHandle): Promise<Client> =
 
 describe("mcp: calling app tools", () => {
   test("a tool declaring a timeoutMs above the daemon default gets it, over MCP, end to end (issue #25)", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
     // 20 s > DEFAULT_CALL_TIMEOUT_MS (10 s): before this fix the descriptor's timeout never left
     // the app, the daemon applied its 10 s default, and the answer below arrived to a call that
     // had already been rejected as `tool_timeout`. The gap between the 11 s reply and this 20 s
@@ -320,8 +317,8 @@ describe("mcp: calling app tools", () => {
   }, 45_000);
 
   test("appduct_list_tools passes filter/limit/offset to the real daemon, which rejects bad values as it does for the CLI", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "cart_add" }, { name: "cart_clear" }, { name: "login" }]);
 
     const handle = await createMcpHandle(stateDir);
@@ -346,8 +343,8 @@ describe("mcp: calling app tools", () => {
   });
 
   test("appduct_list_tools narrows to a group on the real daemon, and grouped tools describe and call like any other", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [
       { name: "pay", group: "checkout/payment" },
       { name: "begin", group: "checkout" },
@@ -408,8 +405,8 @@ describe("mcp: calling app tools", () => {
   });
 
   test("tool_call_progress frames map to MCP progress notifications when the client sends a progressToken", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "slow" }]);
 
     app.socket.on("message", (data) => {
@@ -449,8 +446,8 @@ describe("mcp: calling app tools", () => {
   });
 
   test("an MCP client's notifications/cancelled forwards to the app as tool_cancel (issue #9)", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "slow" }]);
 
     const receivedByApp: Record<string, unknown>[] = [];
@@ -1163,7 +1160,7 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
   });
 
   test("appduct_wait_for_session resolves once a fake client claims the minted session", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
+    const { daemon, stateDir } = await startTestDaemon();
     const handle = await createMcpHandle(stateDir);
     const client = await connectInMemoryClient(handle);
 
@@ -1181,7 +1178,7 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
       CallToolResultSchema,
     );
 
-    const socket = await connectClient(port);
+    const socket = await connectClient(daemon);
     const claimed = waitForEvent(daemon, "session_claimed");
     socket.send(
       JSON.stringify({
@@ -1256,8 +1253,8 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
   });
 
   test("appduct_wait_for_session returns immediately for a session claimed before it was called", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const handle = await createMcpHandle(stateDir);
     const client = await connectInMemoryClient(handle);
@@ -1329,8 +1326,8 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
 
 describe("mcp: appduct_events / appduct_wait_for_event", () => {
   test("appduct_events drains app_events already emitted, and honors the returned cursor", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const emitted = waitForEvent(daemon, "app_event");
     app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "greeting", payload: { hi: true }, ts: Date.now() }));
@@ -1358,8 +1355,8 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
   });
 
   test("appduct_wait_for_event resolves immediately for an event that already fired before the call", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const emitted = waitForEvent(daemon, "app_event");
     app.socket.send(
@@ -1387,8 +1384,8 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
   }, 10_000);
 
   test("appduct_wait_for_event resolves once a live-only matching event arrives, ignoring non-matching ones", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const handle = await createMcpHandle(stateDir);
     const client = await connectInMemoryClient(handle);
@@ -1419,8 +1416,8 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
   }, 10_000);
 
   test("appduct_wait_for_event rejects with tool_timeout when nothing matches in time", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const handle = await createMcpHandle(stateDir);
     const client = await connectInMemoryClient(handle);
@@ -1440,8 +1437,8 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
   }, 10_000);
 
   test("appduct_wait_for_event's match filters by shallow payload equality", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const handle = await createMcpHandle(stateDir);
     const client = await connectInMemoryClient(handle);
@@ -1475,8 +1472,8 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
   }, 10_000);
 
   test("appduct_wait_for_event rejects match values that could never match (objects/arrays)", async () => {
-    const { stateDir, port, daemon } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { stateDir, daemon } = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const handle = await createMcpHandle(stateDir);
     const client = await connectInMemoryClient(handle);
@@ -1496,8 +1493,8 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
   });
 
   test("appduct_wait_for_event's since skips an already-retained match and waits for a fresh one", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const first = waitForEvent(daemon, "app_event");
     app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "ping", payload: { n: 1 }, ts: Date.now() }));
@@ -1556,8 +1553,8 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
   });
 
   test("appduct_events returns app_event only, never lifecycle or tool-call events", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
     await snapshotTools(daemon, app, [{ name: "echo" }]);
 
     app.socket.on("message", (data) => {
@@ -1590,8 +1587,8 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
   });
 
   test("appduct_events and appduct_wait_for_event do not offer kinds and reject it with invalid_request", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const emitted = waitForEvent(daemon, "app_event");
     app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "ready", ts: Date.now() }));
@@ -1629,8 +1626,8 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
 
 describe("mcp: appduct://sessions resource", () => {
   test("lists the resource and reads it back as sessions.list JSON", async () => {
-    const { daemon, stateDir, port } = await startTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
 
     const handle = await createMcpHandle(stateDir);
     const client = await connectInMemoryClient(handle);
@@ -1777,8 +1774,8 @@ describe("mcp: daemon/CLI version drift (issue #30)", () => {
   });
 
   test("startup against a mismatched daemon with a live session fails with both versions", async () => {
-    const { daemon, stateDir, port } = await startStaleTestDaemon();
-    const app = await claimApp(daemon, port);
+    const { daemon, stateDir } = await startStaleTestDaemon();
+    const app = await claimApp(daemon);
 
     const spawn: SpawnFn = () => {
       throw new Error("the daemon must not be replaced while a session is live");
