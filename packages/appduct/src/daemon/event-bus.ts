@@ -32,15 +32,48 @@ export type ProjectAppEventOptions = {
   name?: string;
 };
 
-/** Turns a whole-name glob into the `RegExp` that matches it: every `*` becomes `.*`, everything
- * else is matched literally. */
-const globToRegExp = (pattern: string): RegExp => {
-  const escaped = pattern
-    .split("*")
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
-    .join(".*");
+/** Whether `name` matches the whole-name glob `pattern` (`*` matches any run of characters,
+ * everything else literally), in time linear in the two strings' lengths.
+ *
+ * A backtracking regex (every `*` compiled to `.*`) is exponential: with N stars the engine tries
+ * every way of splitting `name` between them. A pattern like `"*a".repeat(10) + "*b"` against a
+ * 40-character name took 33 s in testing, and the daemon is single-threaded, so that one
+ * `events.since` call or subscription match blocks every session and RPC client until it
+ * finishes (issue #112 review). This is the standard greedy two-pointer glob matcher instead:
+ * walk both strings, and on a literal mismatch backtrack to the most recent `*` and retry one
+ * character further into `name` — each retry only advances through `name`, so the whole match is
+ * O(pattern length * name length) at worst, with no exponential blowup. */
+const matchesNameGlob = (pattern: string, name: string): boolean => {
+  let patternIndex = 0;
+  let nameIndex = 0;
+  let starPatternIndex = -1;
+  let starNameIndex = -1;
 
-  return new RegExp(`^${escaped}$`, "u");
+  while (nameIndex < name.length) {
+    if (patternIndex < pattern.length && pattern[patternIndex] === "*") {
+      // Record the star's position and tentatively match zero characters with it; a later
+      // mismatch backtracks here and consumes one more character instead.
+      starPatternIndex = patternIndex;
+      starNameIndex = nameIndex;
+      patternIndex++;
+    } else if (patternIndex < pattern.length && pattern[patternIndex] === name[nameIndex]) {
+      patternIndex++;
+      nameIndex++;
+    } else if (starPatternIndex !== -1) {
+      // Backtrack: let the most recent `*` swallow one more character of `name`.
+      patternIndex = starPatternIndex + 1;
+      starNameIndex++;
+      nameIndex = starNameIndex;
+    } else {
+      return false;
+    }
+  }
+
+  while (patternIndex < pattern.length && pattern[patternIndex] === "*") {
+    patternIndex++;
+  }
+
+  return patternIndex === pattern.length;
 };
 
 /**
@@ -62,7 +95,7 @@ export const projectAppEvent = (
 
   const data = event.data as { name?: unknown };
 
-  return typeof data.name === "string" && globToRegExp(options.name).test(data.name) ? event : undefined;
+  return typeof data.name === "string" && matchesNameGlob(options.name, data.name) ? event : undefined;
 };
 
 export type EventsSinceQuery = {
