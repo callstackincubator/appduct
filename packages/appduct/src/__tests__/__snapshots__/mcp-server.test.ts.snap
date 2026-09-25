@@ -144,19 +144,12 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
-        "match": {
-          "additionalProperties": {
-            "type": [
-              "string",
-              "number",
-              "boolean",
-              "null",
-            ],
-          },
-          "type": "object",
-        },
         "name": {
           "type": "string",
+        },
+        "payloadMaxBytes": {
+          "exclusiveMinimum": 0,
+          "type": "integer",
         },
         "selector": {
           "type": "string",

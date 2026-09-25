@@ -24,12 +24,12 @@ const streamAnswering = (result: unknown): DaemonStream => {
 describe("AppClient.tools()", () => {
   test("unwraps the `{ tools, total }` tools.list result", async () => {
     const listed = { ...toolEntry, group: "diagnostics" };
-    const client = makeAppClient(streamAnswering({ tools: [listed], total: 1 }), "s1");
+    const client = makeAppClient(streamAnswering({ tools: [listed], total: 1 }), "s1", async () => streamAnswering({}));
     expect(await client.tools()).toEqual([listed]);
   });
 
   test("still accepts a bare array from a daemon that predates `{ tools, total }`", async () => {
-    const client = makeAppClient(streamAnswering([toolEntry]), "s1");
+    const client = makeAppClient(streamAnswering([toolEntry]), "s1", async () => streamAnswering({}));
     // That daemon predates tool groups too and sends no `group` key. Every entry carries one, so
     // `tool.group === null` answers "ungrouped" here as it does anywhere else.
     expect(await client.tools()).toEqual([{ ...toolEntry, group: null }]);
@@ -64,7 +64,7 @@ describe("AppClient.events()", () => {
       dropped: 0,
       remaining: 0,
     });
-    const client = makeAppClient(stream, "s1");
+    const client = makeAppClient(stream, "s1", async () => stream);
 
     const result = await client.events();
 
@@ -85,7 +85,7 @@ describe("AppClient.events()", () => {
       dropped: 3,
       remaining: 7,
     });
-    const client = makeAppClient(stream, "s1");
+    const client = makeAppClient(stream, "s1", async () => stream);
 
     const result = await client.events({ payloadMaxBytes: 10 });
 
@@ -117,7 +117,7 @@ describe("AppClient.events()", () => {
       dropped: 3,
       remaining: 7,
     });
-    const client = makeAppClient(stream, "s1");
+    const client = makeAppClient(stream, "s1", async () => stream);
 
     // Excess-property checks only apply to object literals passed directly as an argument, so a
     // capped options bag routed through a variable must still resolve to the capped overload —
@@ -140,7 +140,7 @@ describe("AppClient.events()", () => {
       dropped: 3,
       remaining: 7,
     });
-    const client = makeAppClient(stream, "s1");
+    const client = makeAppClient(stream, "s1", async () => stream);
 
     const opts: { since?: number; payloadMaxBytes?: number } = { since: 0, payloadMaxBytes: 64 };
     const result = await client.events(opts);
@@ -151,5 +151,92 @@ describe("AppClient.events()", () => {
     if (event.truncated) {
       expect(event.payloadPreview).toBe("{\"a");
     }
+  });
+});
+
+describe("AppClient.waitForEvent()", () => {
+  /** A `DaemonStream` fake that also records every `call()` and whether `close()` ran, for
+   * asserting `waitForEvent` opens and closes its own stream (issue #114). */
+  const makeFakeWaitStream = (
+    respond: (method: string, params: unknown) => unknown,
+  ): DaemonStream & { calls: Array<{ method: string; params: unknown }>; closed: () => boolean } => {
+    let closed = false;
+    const calls: Array<{ method: string; params: unknown }> = [];
+
+    return {
+      call: async <T>(method: string, params?: unknown): Promise<T> => {
+        calls.push({ method, params });
+        return respond(method, params) as T;
+      },
+      onNotification: () => () => {},
+      onClose: () => () => {},
+      close: () => {
+        closed = true;
+      },
+      calls,
+      closed: () => closed,
+    };
+  };
+
+  const answerWithEvent = (method: string, params: unknown): unknown => {
+    if (method === RPC_METHODS.eventsSubscribe) {
+      return { ok: true };
+    }
+
+    if (method === RPC_METHODS.eventsSince) {
+      return {
+        events: [{ kind: "app_event", sessionId: "s1", ts: 1, seq: 1, data: { name: "ping", payload: { n: 1 } } }],
+        cursor: 1,
+        dropped: 0,
+        remaining: 0,
+      };
+    }
+
+    throw new Error(`unexpected method ${method} (${JSON.stringify(params)})`);
+  };
+
+  test("opens its own stream for the wait, closes it once settled, and leaves the shared stream open", async () => {
+    let sharedClosed = false;
+    const sharedStream = streamAnswering({});
+    sharedStream.close = () => {
+      sharedClosed = true;
+    };
+
+    const waitStream = makeFakeWaitStream(answerWithEvent);
+    let openCount = 0;
+    const client = makeAppClient(sharedStream, "s1", async () => {
+      openCount++;
+      return waitStream;
+    });
+
+    const event = await client.waitForEvent("ping");
+
+    expect(openCount).toBe(1);
+    expect(event).toMatchObject({ name: "ping", payload: { n: 1 } });
+    expect(waitStream.closed()).toBe(true);
+    expect(sharedClosed).toBe(false);
+  });
+
+  test("never sends payloadMaxBytes to events.subscribe or events.since (issue #114: no payloadMaxBytes overload here)", async () => {
+    const waitStream = makeFakeWaitStream(answerWithEvent);
+    const client = makeAppClient(streamAnswering({}), "s1", async () => waitStream);
+
+    await client.waitForEvent("ping");
+
+    expect(waitStream.calls.find((call) => call.method === RPC_METHODS.eventsSubscribe)?.params).toMatchObject({
+      payloadMaxBytes: undefined,
+    });
+    expect(waitStream.calls.find((call) => call.method === RPC_METHODS.eventsSince)?.params).toMatchObject({
+      payloadMaxBytes: undefined,
+    });
+  });
+
+  test("WaitForEventOptions has no match (issue #114): passing one is a type error", async () => {
+    const waitStream = makeFakeWaitStream(answerWithEvent);
+    const client = makeAppClient(streamAnswering({}), "s1", async () => waitStream);
+
+    // @ts-expect-error -- `match` was removed from `WaitForEventOptions`; a payload predicate is
+    // no longer offered on any surface (loop on `waitForEvent` with `since` instead).
+    await client.waitForEvent("ping", { match: () => true });
   });
 });

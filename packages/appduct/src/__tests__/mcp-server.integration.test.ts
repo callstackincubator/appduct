@@ -1446,42 +1446,7 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
     app.socket.close();
   }, 10_000);
 
-  test("appduct_wait_for_event's match filters by shallow payload equality", async () => {
-    const { daemon, stateDir } = await startTestDaemon();
-    const app = await claimApp(daemon);
-
-    const handle = await createMcpHandle(stateDir);
-    const client = await connectInMemoryClient(handle);
-
-    const waitPromise = client.request(
-      {
-        method: "tools/call",
-        params: { name: "appduct_wait_for_event", arguments: { name: "screen_changed", match: { screen: "Checkout" }, timeoutMs: 5000 } },
-      },
-      CallToolResultSchema,
-    );
-
-    const nonMatching = waitForEvent(daemon, "app_event");
-    app.socket.send(
-      JSON.stringify({ type: "event", session_id: app.sessionId, name: "screen_changed", payload: { screen: "Home" }, ts: Date.now() }),
-    );
-    await nonMatching;
-
-    const matching = waitForEvent(daemon, "app_event");
-    app.socket.send(
-      JSON.stringify({ type: "event", session_id: app.sessionId, name: "screen_changed", payload: { screen: "Checkout", total: 42 }, ts: Date.now() }),
-    );
-    await matching;
-
-    const result = await waitPromise;
-    expect(result.isError).not.toBe(true);
-    const data = result.structuredContent as { payload: { screen: string; total: number } };
-    expect(data.payload).toEqual({ screen: "Checkout", total: 42 });
-
-    app.socket.close();
-  }, 10_000);
-
-  test("appduct_wait_for_event rejects match values that could never match (objects/arrays)", async () => {
+  test("appduct_wait_for_event rejects match as an unknown parameter (issue #114)", async () => {
     const { stateDir, daemon } = await startTestDaemon();
     const app = await claimApp(daemon);
 
@@ -1491,7 +1456,7 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
     const result = await client.request(
       {
         method: "tools/call",
-        params: { name: "appduct_wait_for_event", arguments: { name: "x", match: { nested: { a: 1 } } } },
+        params: { name: "appduct_wait_for_event", arguments: { name: "x", match: { screen: "Checkout" } } },
       },
       CallToolResultSchema,
     );
@@ -1501,6 +1466,94 @@ describe("mcp: appduct_events / appduct_wait_for_event", () => {
 
     app.socket.close();
   });
+
+  test("appduct_wait_for_event resolves on the next app event of any name when given name: \"*\" (issue #114)", async () => {
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const waitPromise = client.request(
+      { method: "tools/call", params: { name: "appduct_wait_for_event", arguments: { name: "*", timeoutMs: 5000 } } },
+      CallToolResultSchema,
+    );
+
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "whatever_this_is", payload: { ok: true }, ts: Date.now() }));
+    await emitted;
+
+    const result = await waitPromise;
+    expect(result.isError).not.toBe(true);
+    const data = result.structuredContent as { name: string; payload: { ok: boolean } };
+    expect(data.name).toBe("whatever_this_is");
+    expect(data.payload).toEqual({ ok: true });
+
+    app.socket.close();
+  }, 10_000);
+
+  test("appduct_wait_for_event truncates a payload over the default 4096-byte cap and reports it as such (issue #114)", async () => {
+    const { daemon, stateDir } = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    const waitPromise = client.request(
+      { method: "tools/call", params: { name: "appduct_wait_for_event", arguments: { name: "big", timeoutMs: 5000 } } },
+      CallToolResultSchema,
+    );
+
+    const bigPayload = { text: "x".repeat(5000) };
+    const emitted = waitForEvent(daemon, "app_event");
+    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "big", payload: bigPayload, ts: Date.now() }));
+    await emitted;
+
+    const result = await waitPromise;
+    expect(result.isError).not.toBe(true);
+    const data = result.structuredContent as {
+      name: string;
+      payload?: unknown;
+      payloadPreview?: string;
+      truncated?: boolean;
+      payloadBytes?: number;
+    };
+    expect(data.truncated).toBe(true);
+    expect(data.payload).toBeUndefined();
+    expect(data.payloadBytes).toBe(Buffer.byteLength(JSON.stringify(bigPayload), "utf8"));
+    expect(Buffer.byteLength(data.payloadPreview!, "utf8")).toBeLessThanOrEqual(4096);
+
+    app.socket.close();
+  }, 10_000);
+
+  test("appduct_wait_for_event reports dropped when its since cursor fell off the retained buffer (issue #114)", async () => {
+    const { daemon, stateDir } = await startTestDaemon({ eventBufferSize: 3 });
+    const app = await claimApp(daemon);
+
+    for (let i = 0; i < 5; i++) {
+      const emitted = waitForEvent(daemon, "app_event");
+      app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "ping", payload: { i }, ts: Date.now() }));
+      await emitted;
+    }
+
+    const handle = await createMcpHandle(stateDir);
+    const client = await connectInMemoryClient(handle);
+
+    // `since: 0` asks for everything, but only the last 3 (bufferSize 3) are still retained —
+    // e0 and e1 (seq 1 and 2) were evicted, so the drain resolves on the oldest still-retained one
+    // and reports both as dropped.
+    const result = await client.request(
+      { method: "tools/call", params: { name: "appduct_wait_for_event", arguments: { name: "ping", since: 0, timeoutMs: 5000 } } },
+      CallToolResultSchema,
+    );
+
+    expect(result.isError).not.toBe(true);
+    const data = result.structuredContent as { dropped: number; payload: { i: number } };
+    expect(data.dropped).toBe(2);
+    expect(data.payload).toEqual({ i: 2 });
+
+    app.socket.close();
+  }, 10_000);
 
   test("appduct_wait_for_event's since skips an already-retained match and waits for a fresh one", async () => {
     const { daemon, stateDir } = await startTestDaemon();
