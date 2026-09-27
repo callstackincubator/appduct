@@ -11,6 +11,8 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: the iOS SDK connects with the Expo development network inspector enabled.** Appduct's
+  WebSocket connection no longer fails with `NSURLErrorDomain -1005` when that inspector is on.
 - **Breaking: the CLI commands are now noun-verb, with no aliases.** `ls` is now `sessions ls`,
   `revoke` is `sessions revoke`, `link` is `sessions link`, `tools` is `tools ls`, `tools <name>`
   is `tools describe <name>`, `invoke` is `tools call`, `events` is `events tail`, and
