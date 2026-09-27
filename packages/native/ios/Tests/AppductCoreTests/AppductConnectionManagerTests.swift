@@ -1,3 +1,4 @@
+import ObjectiveC.runtime
 import XCTest
 @testable import AppductCore
 
@@ -5,6 +6,30 @@ final class AppductConnectionManagerTests: XCTestCase {
   override func setUp() {
     super.setUp()
     AppductProcessResumeLeaseStore.shared.resetForTests()
+  }
+
+  // MARK: - connect() and installed URLProtocol interceptors (#129)
+
+  /// Reproduces Expo's development network inspector, which swizzles the `URLSessionConfiguration
+  /// .default` getter to prepend an HTTP(S)-only `URLProtocol`. `connect()` used to build its
+  /// socket session from `.default`, so that interceptor picked up the WebSocket's `https://`
+  /// opening handshake and replayed it as a data task, breaking the upgrade (`NSURLErrorDomain
+  /// -1005`). `connect()` must never route through whatever is installed on `.default`.
+  func testConnectNeverRoutesThroughAnInterceptorInstalledOnTheDefaultConfiguration() async throws {
+    RecordingURLProtocol.resetForTests()
+    let defaultGetter = class_getClassMethod(URLSessionConfiguration.self, #selector(getter: URLSessionConfiguration.default))!
+    let swizzledGetter = class_getClassMethod(URLSessionConfiguration.self, #selector(URLSessionConfiguration.appductTests_interceptedDefault))!
+    method_exchangeImplementations(defaultGetter, swizzledGetter)
+    defer { method_exchangeImplementations(defaultGetter, swizzledGetter) }
+
+    let manager = AppductConnectionManager()
+    let options = try connectOptions(ip: "127.0.0.1", port: 65530, token: "claim-token")
+
+    // No server is listening, so the handshake itself is expected to fail; only the interceptor's
+    // silence is under test.
+    _ = try? await manager.connect(options: options)
+
+    XCTAssertEqual(RecordingURLProtocol.canInitCallCount, 0)
   }
 
   // MARK: - formatAppductWebSocketUrl (IPv6 bracketing, matches transport.ts's formatAgentWebSocketUrl)
@@ -719,6 +744,48 @@ private final class ThreadSafeStringArray: @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     storage.append(value)
+  }
+}
+
+/// Stands in for Expo's `ExpoRequestInterceptorProtocol`: records how many times it was asked to
+/// handle a request, without ever actually claiming one, so a test can assert an interceptor
+/// installed on `.default` was never reached.
+private final class RecordingURLProtocol: URLProtocol, @unchecked Sendable {
+  private static let lock = NSLock()
+  private static var _canInitCallCount = 0
+
+  static var canInitCallCount: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return _canInitCallCount
+  }
+
+  static func resetForTests() {
+    lock.lock()
+    defer { lock.unlock() }
+    _canInitCallCount = 0
+  }
+
+  override class func canInit(with request: URLRequest) -> Bool {
+    lock.lock()
+    _canInitCallCount += 1
+    lock.unlock()
+    return false
+  }
+
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+  override func startLoading() {}
+  override func stopLoading() {}
+}
+
+extension URLSessionConfiguration {
+  /// Swapped in for the `.default` getter by the test above, the same hook Expo's development
+  /// network inspector uses. Calling itself after `method_exchangeImplementations` reaches the
+  /// original getter.
+  @objc fileprivate class func appductTests_interceptedDefault() -> URLSessionConfiguration {
+    let configuration = appductTests_interceptedDefault()
+    configuration.protocolClasses = [RecordingURLProtocol.self] + (configuration.protocolClasses ?? [])
+    return configuration
   }
 }
 
