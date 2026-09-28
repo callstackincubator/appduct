@@ -49,7 +49,7 @@ private data class HeldSession(
      * pins) -- carried forward into every resume so a build with no embedded pins has a pin to
      * trust again instead of the transport rejecting the connect outright (issue #136). `null`
      * for a build with embedded pins, where it is never consulted. */
-    val linkPin: String? = null,
+    val linkPin: String?,
 )
 
 private data class ConnectOptionsInternal(
@@ -544,7 +544,7 @@ internal class AppductClient private constructor(
         kind: String,
         endpointIp: String,
         endpointPort: Int,
-        linkPin: String? = null,
+        linkPin: String?,
     ) {
         clearReconnectJob()
         clearGraceJob()
@@ -615,7 +615,7 @@ internal class AppductClient private constructor(
             emitError(
                 AppductUnifiedError(
                     phase = "socket",
-                    message = "Appduct resume attempt failed: ${e.message ?: e::class.simpleName}.",
+                    message = "Appduct resume attempt failed: ${(e.message ?: e::class.simpleName.orEmpty()).trimEnd('.')}.",
                     cause = e,
                 ),
             )

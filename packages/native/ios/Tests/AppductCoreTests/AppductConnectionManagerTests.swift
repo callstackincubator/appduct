@@ -262,7 +262,8 @@ final class AppductConnectionManagerTests: XCTestCase {
           endpoint: AppductResumeEndpoint(ip: "127.0.0.1", port: 8443),
           keepaliveIntervalS: 15,
           graceS: 600,
-          disconnectedAtMs: 1_234
+          disconnectedAtMs: 1_234,
+          linkPin: nil
         )
       )
     )
@@ -452,7 +453,8 @@ final class AppductConnectionManagerTests: XCTestCase {
       endpoint: AppductResumeEndpoint(ip: "127.0.0.1", port: 8443),
       keepaliveIntervalS: 15,
       graceS: 600,
-      disconnectedAtMs: nil
+      disconnectedAtMs: nil,
+      linkPin: nil
     )
   }
 

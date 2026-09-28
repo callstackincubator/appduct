@@ -609,7 +609,7 @@ class AppductClientTest {
 
     // --- restoreSession (issue #136) ---
 
-    /** A lease written by a pinned claim must resume with that same pin after a process relaunch
+    /** A lease written by a pinned claim must resume with that same pin after a JS reload
      * -- `restoreSession` has no claim/deep-link to read a pin from, only the lease, so the lease
      * itself has to carry it. */
     @Test

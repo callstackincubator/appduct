@@ -16,7 +16,7 @@ internal data class AppductParsedResumeLease(
     val graceS: Double,
     val disconnectedAtMs: Long?,
     /** The SPKI pin the claim that opened this session trusted, carried so a resume built from
-     * this lease (`restoreSession`, after a process relaunch) can trust it again (issue #136).
+     * this lease (`restoreSession`, after a JS reload) can trust it again (issue #136).
      * `null` for a build with embedded pins. */
     val linkPin: String? = null,
 )

@@ -27,7 +27,7 @@ struct AppductResumeLeaseV1: Equatable, Sendable {
   let graceS: Double
   let disconnectedAtMs: Int64?
   /// The SPKI pin the claim that opened this session trusted, carried so a resume built from
-  /// this lease (`restoreSession`, after a process relaunch) can trust it again instead of
+  /// this lease (`restoreSession`, after a JS reload) can trust it again instead of
   /// failing `configureFromBundle` (issue #136). `nil` for a build with embedded pins.
   let linkPin: String?
 
@@ -39,7 +39,7 @@ struct AppductResumeLeaseV1: Equatable, Sendable {
     keepaliveIntervalS: Double,
     graceS: Double,
     disconnectedAtMs: Int64?,
-    linkPin: String? = nil
+    linkPin: String?
   ) {
     self.sessionId = sessionId
     self.resumeToken = resumeToken

@@ -222,7 +222,7 @@ extension AppductClient {
     _ ack: SessionAck,
     kind: AppductSessionChangeKind,
     endpoint: (ip: String, port: Int),
-    linkPin: String? = nil
+    linkPin: String?
   ) {
     clearReconnectTimer()
     clearGraceTimer()

@@ -781,7 +781,8 @@ final class AppductClientTests: XCTestCase {
         endpoint: AppductResumeEndpoint(ip: "192.168.1.10", port: 8_443),
         keepaliveIntervalS: 30,
         graceS: 120,
-        disconnectedAtMs: nil
+        disconnectedAtMs: nil,
+        linkPin: nil
       )
     )
 
@@ -798,7 +799,7 @@ final class AppductClientTests: XCTestCase {
   }
 
   /// A lease written by a pinned claim (issue #136) must resume with that same pin after a
-  /// process relaunch -- `restoreSession` has no claim/deep-link to read a pin from, only the
+  /// JS reload -- `restoreSession` has no claim/deep-link to read a pin from, only the
   /// lease, so the lease itself has to carry it.
   func testRestoreSessionFromAPinnedLeaseResumesWithThatPin() async throws {
     let pin = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
@@ -837,7 +838,8 @@ final class AppductClientTests: XCTestCase {
         endpoint: AppductResumeEndpoint(ip: "192.168.1.10", port: 8_443),
         keepaliveIntervalS: 30,
         graceS: 1,
-        disconnectedAtMs: 0
+        disconnectedAtMs: 0,
+        linkPin: nil
       )
     )
 
