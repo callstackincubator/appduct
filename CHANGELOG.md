@@ -11,6 +11,8 @@ section into a versioned heading.
 
 ## Unreleased
 
+## 0.13.0 (2026-09-28)
+
 - **Fix: the iOS SDK connects with the Expo development network inspector enabled.** Appduct's
   WebSocket connection no longer fails with `NSURLErrorDomain -1005` when that inspector is on.
 - **Breaking: the CLI commands are now noun-verb, with no aliases.** `ls` is now `sessions ls`,
