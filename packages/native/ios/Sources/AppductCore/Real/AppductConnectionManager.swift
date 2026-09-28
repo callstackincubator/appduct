@@ -462,7 +462,14 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
     closeEventPending = true
     state = .connecting
 
-    let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+    // `.default` picks up any `URLProtocol` an app or its tooling has installed ahead of this
+    // session (notably Expo's development network inspector, which forwards the WebSocket's
+    // `https://` opening handshake as a plain HTTP data task and breaks the upgrade). `.ephemeral`
+    // with `protocolClasses` cleared isolates this transport from that interception while leaving
+    // the app's own requests unaffected — see issue #129.
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = []
+    let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
     let task = session.webSocketTask(with: url)
 
     self.session = session
