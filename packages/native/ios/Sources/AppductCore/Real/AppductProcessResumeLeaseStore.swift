@@ -26,6 +26,30 @@ struct AppductResumeLeaseV1: Equatable, Sendable {
   let keepaliveIntervalS: Double
   let graceS: Double
   let disconnectedAtMs: Int64?
+  /// The SPKI pin the claim that opened this session trusted, carried so a resume built from
+  /// this lease (`restoreSession`, after a process relaunch) can trust it again instead of
+  /// failing `configureFromBundle` (issue #136). `nil` for a build with embedded pins.
+  let linkPin: String?
+
+  init(
+    sessionId: String,
+    resumeToken: String,
+    alias: String,
+    endpoint: AppductResumeEndpoint,
+    keepaliveIntervalS: Double,
+    graceS: Double,
+    disconnectedAtMs: Int64?,
+    linkPin: String? = nil
+  ) {
+    self.sessionId = sessionId
+    self.resumeToken = resumeToken
+    self.alias = alias
+    self.endpoint = endpoint
+    self.keepaliveIntervalS = keepaliveIntervalS
+    self.graceS = graceS
+    self.disconnectedAtMs = disconnectedAtMs
+    self.linkPin = linkPin
+  }
 
   let schemaVersion = resumeLeaseSchemaVersion
 
@@ -40,6 +64,7 @@ struct AppductResumeLeaseV1: Equatable, Sendable {
       "keepaliveIntervalS": keepaliveIntervalS,
       "graceS": graceS,
       "disconnectedAtMs": disconnectedAtMs.map { $0 as Any } ?? NSNull(),
+      "linkPin": linkPin.map { $0 as Any } ?? NSNull(),
     ]
   }
 }
@@ -115,7 +140,8 @@ final class AppductProcessResumeLeaseStore: @unchecked Sendable {
           endpoint: current.lease.endpoint,
           keepaliveIntervalS: current.lease.keepaliveIntervalS,
           graceS: current.lease.graceS,
-          disconnectedAtMs: current.lease.disconnectedAtMs ?? disconnectedAtMs
+          disconnectedAtMs: current.lease.disconnectedAtMs ?? disconnectedAtMs,
+          linkPin: current.lease.linkPin
         )
       )
       return true
@@ -228,7 +254,8 @@ private func parseSessionAckLease(
     endpoint: AppductResumeEndpoint(ip: options.ip, port: options.port),
     keepaliveIntervalS: keepaliveIntervalS,
     graceS: graceS,
-    disconnectedAtMs: nil
+    disconnectedAtMs: nil,
+    linkPin: options.linkPin
   )
 }
 

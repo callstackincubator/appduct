@@ -25,8 +25,9 @@ enum AppductConnectionState: String {
   case error
 }
 
-private struct AppductModuleError: Error {
+private struct AppductModuleError: Error, LocalizedError {
   let message: String
+  var errorDescription: String? { message }
 }
 
 /// Composes the daemon connect URL, bracketing an IPv6 literal (`wss://[fd00::1]:8443`) and
