@@ -45,6 +45,11 @@ private data class HeldSession(
     var disconnectedAtMs: Long?,
     val ip: String,
     val port: Int,
+    /** The SPKI pin the claim that started this session trusted (`trust: link`, no embedded
+     * pins) -- carried forward into every resume so a build with no embedded pins has a pin to
+     * trust again instead of the transport rejecting the connect outright (issue #136). `null`
+     * for a build with embedded pins, where it is never consulted. */
+    val linkPin: String? = null,
 )
 
 private data class ConnectOptionsInternal(
@@ -289,6 +294,7 @@ internal class AppductClient private constructor(
                     disconnectedAtMs = lease.disconnectedAtMs ?: nowMs,
                     ip = lease.ip,
                     port = lease.port,
+                    linkPin = lease.linkPin,
                 )
             setClientState(AppductClientState.reconnecting, null)
             scheduleGraceExpiry(myEpoch)
@@ -415,7 +421,7 @@ internal class AppductClient private constructor(
             }
 
             connectingSessionId = null
-            onAckReceived(ack, "claimed", options.ip, options.port)
+            onAckReceived(ack, "claimed", options.ip, options.port, options.linkPin)
         } catch (e: Throwable) {
             if (myEpoch == epoch) {
                 connectingSessionId = null
@@ -538,6 +544,7 @@ internal class AppductClient private constructor(
         kind: String,
         endpointIp: String,
         endpointPort: Int,
+        linkPin: String? = null,
     ) {
         clearReconnectJob()
         clearGraceJob()
@@ -556,6 +563,7 @@ internal class AppductClient private constructor(
                 disconnectedAtMs = null,
                 ip = endpointIp,
                 port = endpointPort,
+                linkPin = linkPin,
             )
 
         setClientState(AppductClientState.active, null)
@@ -592,7 +600,9 @@ internal class AppductClient private constructor(
                 deviceManufacturer = null,
                 deviceModel = null,
                 deviceOs = null,
-                linkPin = null,
+                // The pin the original claim trusted (issue #136) -- without it, `trust: link`
+                // rejects every resume before a socket even opens.
+                linkPin = session.linkPin,
             )
 
         val ack: JSONObject
@@ -602,7 +612,13 @@ internal class AppductClient private constructor(
             resumeInFlight = false
             if (myEpoch != epoch || destroyed) return
 
-            emitError(AppductUnifiedError(phase = "socket", message = "Appduct resume attempt failed.", cause = e))
+            emitError(
+                AppductUnifiedError(
+                    phase = "socket",
+                    message = "Appduct resume attempt failed: ${e.message ?: e::class.simpleName}.",
+                    cause = e,
+                ),
+            )
 
             if (e is AppductHandshakeClosedException && isAppductTerminalCloseCode(e.code)) {
                 // The daemon rejected the resume itself. Retrying the identical frame until the
@@ -618,7 +634,7 @@ internal class AppductClient private constructor(
 
         resumeInFlight = false
         if (myEpoch != epoch || destroyed) return
-        onAckReceived(ack, "resumed", session.ip, session.port)
+        onAckReceived(ack, "resumed", session.ip, session.port, session.linkPin)
     }
 
     private fun scheduleReconnectAttempt(myEpoch: Int) {
