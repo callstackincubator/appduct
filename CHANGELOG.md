@@ -11,6 +11,10 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: a session backgrounded or disconnected in a build with `trust: link` (the zero-config
+  default) resumes automatically once the app comes back, instead of staying "Reconnecting"
+  until the 10-minute grace window expires and a new link is needed.**
+
 ## 0.13.0 (2026-09-28)
 
 - **Fix: the iOS SDK connects with the Expo development network inspector enabled.** Appduct's
