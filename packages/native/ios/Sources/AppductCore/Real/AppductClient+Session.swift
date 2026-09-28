@@ -366,7 +366,7 @@ extension AppductClient {
 
     resumeInFlight = false
     if myEpoch != epoch || destroyed { return }
-    onAckReceived(ack, kind: .resumed, endpoint: session.endpoint)
+    onAckReceived(ack, kind: .resumed, endpoint: session.endpoint, linkPin: session.linkPin)
   }
 
   // MARK: Transport event handlers

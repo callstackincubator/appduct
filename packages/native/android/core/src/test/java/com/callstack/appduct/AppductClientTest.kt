@@ -521,6 +521,28 @@ class AppductClientTest {
             assertEquals(pin, fake.connectCalls.last()["linkPin"])
         }
 
+    /** A resume ack rotates the resume token; the pin has to survive that, or only the first
+     * resume of a session ever works. */
+    @Test
+    fun `a second resume still carries the original link pin`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            val pin = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+            client.connectAndAck(fake, sessionId = "sess-1", graceS = 120.0, linkPin = pin)
+
+            val connectCallsBeforeFirstResume = fake.connectCalls.size
+            fake.simulateClose(1006, null)
+            waitUntil(timeoutMs = 3_000) { fake.connectCalls.size > connectCallsBeforeFirstResume }
+            fake.simulateAck("sess-1", graceS = 120.0)
+            waitUntil(timeoutMs = 3_000) { client.state == AppductClientState.active }
+
+            val connectCallsBeforeSecondResume = fake.connectCalls.size
+            fake.simulateClose(1006, null)
+            waitUntil(timeoutMs = 3_000) { fake.connectCalls.size > connectCallsBeforeSecondResume }
+
+            assertEquals(pin, fake.connectCalls.last()["linkPin"])
+        }
+
     /** Control for the fix above: a build with embedded pins never carried a link pin in the
      * first place, so a resume must keep connecting with no `linkPin`, exactly as before. */
     @Test
