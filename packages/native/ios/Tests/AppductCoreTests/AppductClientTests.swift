@@ -245,6 +245,43 @@ final class AppductClientTests: XCTestCase {
     XCTAssertEqual(transport.lastConnectOptions?.linkPin, pin)
   }
 
+  /// A resume ack rotates the resume token; the pin has to survive that, or only the first
+  /// resume of a session ever works.
+  func testSecondResumeStillCarriesTheOriginalLinkPin() async throws {
+    let timers = FakeClientTimers(random: 0)
+    let (client, transport) = makeClient(timers: timers)
+    let pin = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    let connectTaskInput = connectInput(linkPin: pin)
+    let connectTask = Task { try await client.connect(connectTaskInput) }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+    transport.simulateAck(sessionId: "session-1", resumeToken: "resume-1", graceS: 120)
+    try await connectTask.value
+
+    transport.simulateClose(code: 1_006, reason: nil)
+    try await waitUntil("the client moved to reconnecting after the socket closed") {
+      await client.state == .reconnecting
+    }
+    timers.advance(byMs: AppductBackoff.capMs)
+    try await waitUntil("the first resume attempt started a transport handshake") {
+      transport.isWired && transport.connectCallCount >= 2
+    }
+    transport.simulateAck(sessionId: "session-1", resumeToken: "resume-2", graceS: 120)
+    try await waitUntil("the client went active again after the resume ack") {
+      await client.state == .active
+    }
+
+    transport.simulateClose(code: 1_006, reason: nil)
+    try await waitUntil("the client moved to reconnecting after the second close") {
+      await client.state == .reconnecting
+    }
+    timers.advance(byMs: AppductBackoff.capMs)
+    try await waitUntil("the second resume attempt started a transport handshake") {
+      transport.isWired && transport.connectCallCount >= 3
+    }
+
+    XCTAssertEqual(transport.lastConnectOptions?.linkPin, pin)
+  }
+
   /// Control for the fix above: a build with embedded pins never carried a link pin in the first
   /// place, so a resume must keep connecting with `linkPin` absent, exactly as before.
   func testResumeWithNoLinkPinStaysPinless() async throws {
