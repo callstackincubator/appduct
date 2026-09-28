@@ -455,6 +455,7 @@ class AppductConnectionManagerTest {
                 "keepaliveIntervalS" to 15.0,
                 "graceS" to 600.0,
                 "disconnectedAtMs" to 1_234L,
+                "linkPin" to null,
             ),
             manager.getResumeLeaseRecord(),
         )

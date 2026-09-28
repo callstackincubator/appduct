@@ -21,13 +21,17 @@ import java.util.concurrent.CopyOnWriteArrayList
  * `docs/tasks/16-android-session-logic.md`'s "known gaps".
  */
 class AppductClientTest {
-    private fun newClient(): Pair<AppductClient, FakeAppductTransport> {
+    private fun newClient(
+        lifecycleObserverFactory: (onBackgroundedChanged: (Boolean) -> Unit) -> AppductAppLifecycleObserver =
+            { AppductNoopLifecycleObserver() },
+    ): Pair<AppductClient, FakeAppductTransport> {
         lateinit var fake: FakeAppductTransport
         val client =
             AppductClient(
                 transportFactory = { _, onMessage, onError, onClose ->
                     FakeAppductTransport(onMessage, onError, onClose).also { fake = it }
                 },
+                lifecycleObserverFactory = lifecycleObserverFactory,
             )
         return client to fake
     }
@@ -45,6 +49,7 @@ class AppductClientTest {
         token: String? = "claim-token",
         resumeToken: String? = null,
         expiresAt: Long = Long.MAX_VALUE / 2,
+        linkPin: String? = null,
     ) = AppductConnectInput.Explicit(
         ip = "127.0.0.1",
         port = 8443,
@@ -52,6 +57,7 @@ class AppductClientTest {
         token = token,
         resumeToken = resumeToken,
         expiresAt = expiresAt,
+        linkPin = linkPin,
     )
 
     /** Launches `connect()`, waits for the fake transport to observe the attempt, then acks it.
@@ -60,9 +66,10 @@ class AppductClientTest {
         fake: FakeAppductTransport,
         sessionId: String = "sess-1",
         graceS: Double = 600.0,
+        linkPin: String? = null,
     ) = runBlocking {
         val before = fake.connectCalls.size
-        val job = launch(Dispatchers.Default) { connect(explicitInput(sessionId = sessionId)) }
+        val job = launch(Dispatchers.Default) { connect(explicitInput(sessionId = sessionId, linkPin = linkPin)) }
         waitUntil { fake.connectCalls.size > before }
         fake.simulateAck(sessionId, graceS = graceS)
         job.join()
@@ -492,6 +499,143 @@ class AppductClientTest {
 
             waitUntil(timeoutMs = 3_000) { events.size >= 2 }
             assertEquals(SessionChangeEvent("resumed", "sess-1", "test-device", null), events[1])
+        }
+
+    // --- link pin carried across a resume (issue #136) ---
+
+    /** A build that trusts the link's pin (`trust: link`, no embedded pins) has nowhere else to
+     * get one for a resume -- the transport rejects the connect outright unless the pin the
+     * original claim trusted rides along. This is the red test the issue's root cause was
+     * confirmed with. */
+    @Test
+    fun `a resume after a socket loss carries the original link pin`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            val pin = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+            client.connectAndAck(fake, sessionId = "sess-1", graceS = 120.0, linkPin = pin)
+
+            val connectCallsBeforeReconnect = fake.connectCalls.size
+            fake.simulateClose(1006, null)
+            waitUntil(timeoutMs = 3_000) { fake.connectCalls.size > connectCallsBeforeReconnect }
+
+            assertEquals(pin, fake.connectCalls.last()["linkPin"])
+        }
+
+    /** Control for the fix above: a build with embedded pins never carried a link pin in the
+     * first place, so a resume must keep connecting with no `linkPin`, exactly as before. */
+    @Test
+    fun `a resume with no link pin stays pinless`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            client.connectAndAck(fake, sessionId = "sess-1", graceS = 120.0)
+
+            val connectCallsBeforeReconnect = fake.connectCalls.size
+            fake.simulateClose(1006, null)
+            waitUntil(timeoutMs = 3_000) { fake.connectCalls.size > connectCallsBeforeReconnect }
+
+            assertNull(fake.connectCalls.last()["linkPin"])
+        }
+
+    /** Returning to the foreground while `reconnecting` fires an immediate resume attempt
+     * (`onBackgroundedChanged`) -- that attempt must carry the original link pin exactly like a
+     * backoff-timer-driven one does, using a fake lifecycle observer the test can flip on demand
+     * rather than a real `ProcessLifecycleOwner`. */
+    @Test
+    fun `returning to the foreground resumes with the original link pin`() =
+        runBlocking {
+            lateinit var lifecycle: FakeAppductLifecycleObserver
+            val (client, fake) =
+                newClient(
+                    lifecycleObserverFactory = { onChanged ->
+                        FakeAppductLifecycleObserver(onChanged).also { lifecycle = it }
+                    },
+                )
+            val pin = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+            client.connectAndAck(fake, sessionId = "sess-1", graceS = 120.0, linkPin = pin)
+
+            // Background the app first: no reconnect timer fires while backgrounded, so the only
+            // thing that can trigger the resume below is the foreground transition itself.
+            lifecycle.simulateForegroundChange(background = true)
+            val connectCallsBeforeReconnect = fake.connectCalls.size
+            fake.simulateClose(1006, null)
+            waitUntil(timeoutMs = 3_000) { client.state == AppductClientState.reconnecting }
+            Thread.sleep(50)
+            assertEquals(connectCallsBeforeReconnect, fake.connectCalls.size)
+
+            lifecycle.simulateForegroundChange(background = false)
+            waitUntil(timeoutMs = 3_000) { fake.connectCalls.size > connectCallsBeforeReconnect }
+
+            assertEquals(pin, fake.connectCalls.last()["linkPin"])
+        }
+
+    /** A failed resume attempt no longer reports a bare "Appduct resume attempt failed." -- the
+     * underlying cause (here, the transport's own rejection) rides along in the message. */
+    @Test
+    fun `a failed resume attempt reports its underlying cause`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            client.connectAndAck(fake, sessionId = "sess-1", graceS = 120.0)
+
+            val errorMessages = CopyOnWriteArrayList<String>()
+            client.addErrorListener { error -> errorMessages.add(error.message) }
+
+            fake.nextConnectError = IllegalStateException("boom: no pin to trust")
+            fake.simulateClose(1006, null)
+
+            waitUntil(timeoutMs = 3_000) { errorMessages.any { it.contains("boom: no pin to trust") } }
+        }
+
+    // --- restoreSession (issue #136) ---
+
+    /** A lease written by a pinned claim must resume with that same pin after a process relaunch
+     * -- `restoreSession` has no claim/deep-link to read a pin from, only the lease, so the lease
+     * itself has to carry it. */
+    @Test
+    fun `restoreSession from a lease written by a pinned claim resumes with that pin`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            val pin = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+            fake.resumeLeaseRecordValue =
+                AppductResumeLeaseV1(
+                    sessionId = "sess-restored",
+                    resumeToken = "resume-token",
+                    alias = "iphone-1",
+                    endpoint = AppductResumeEndpoint("127.0.0.1", 8443),
+                    keepaliveIntervalS = 30.0,
+                    graceS = 120.0,
+                    disconnectedAtMs = null,
+                    linkPin = pin,
+                ).toRecord()
+
+            val restored = client.restoreSession()
+            assertTrue(restored)
+            waitUntil(timeoutMs = 3_000) { fake.connectCalls.isNotEmpty() }
+
+            assertEquals(pin, fake.connectCalls.last()["linkPin"])
+        }
+
+    /** Control for the fix above: a lease from a build with embedded pins carries no link pin,
+     * so `restoreSession` must keep resuming with no `linkPin`, exactly as before. */
+    @Test
+    fun `restoreSession from an unpinned lease stays pinless`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            fake.resumeLeaseRecordValue =
+                AppductResumeLeaseV1(
+                    sessionId = "sess-restored",
+                    resumeToken = "resume-token",
+                    alias = "iphone-1",
+                    endpoint = AppductResumeEndpoint("127.0.0.1", 8443),
+                    keepaliveIntervalS = 30.0,
+                    graceS = 120.0,
+                    disconnectedAtMs = null,
+                ).toRecord()
+
+            val restored = client.restoreSession()
+            assertTrue(restored)
+            waitUntil(timeoutMs = 3_000) { fake.connectCalls.isNotEmpty() }
+
+            assertNull(fake.connectCalls.last()["linkPin"])
         }
 
     @Test
