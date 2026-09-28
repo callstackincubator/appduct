@@ -23,7 +23,8 @@ final class AppductConnectionManagerTests: XCTestCase {
     defer { method_exchangeImplementations(defaultGetter, swizzledGetter) }
 
     let manager = AppductConnectionManager()
-    let options = try connectOptions(ip: "127.0.0.1", port: 65530, token: "claim-token")
+    // A link pin gets connect() past trust resolution, so it actually builds the socket session.
+    let options = try connectOptions(ip: "127.0.0.1", port: 65530, token: "claim-token", linkPin: "sha256/link-pin")
 
     // No server is listening, so the handshake itself is expected to fail; only the interceptor's
     // silence is under test.
@@ -416,7 +417,8 @@ final class AppductConnectionManagerTests: XCTestCase {
     ip: String = "127.0.0.1",
     port: Int = 8443,
     token: String? = nil,
-    resumeToken: String? = nil
+    resumeToken: String? = nil,
+    linkPin: String? = nil
   ) throws -> AppductConnectOptions {
     var value: [String: Any] = [
       "ip": ip,
@@ -426,6 +428,7 @@ final class AppductConnectionManagerTests: XCTestCase {
     ]
     value["token"] = token
     value["resumeToken"] = resumeToken
+    value["linkPin"] = linkPin
     return try AppductConnectOptions(value)
   }
 
@@ -751,25 +754,16 @@ private final class ThreadSafeStringArray: @unchecked Sendable {
 /// handle a request, without ever actually claiming one, so a test can assert an interceptor
 /// installed on `.default` was never reached.
 private final class RecordingURLProtocol: URLProtocol, @unchecked Sendable {
-  private static let lock = NSLock()
-  private static var _canInitCallCount = 0
+  private static let canInitCalls = ThreadSafeCounter()
 
-  static var canInitCallCount: Int {
-    lock.lock()
-    defer { lock.unlock() }
-    return _canInitCallCount
-  }
+  static var canInitCallCount: Int { canInitCalls.value }
 
   static func resetForTests() {
-    lock.lock()
-    defer { lock.unlock() }
-    _canInitCallCount = 0
+    canInitCalls.reset()
   }
 
   override class func canInit(with request: URLRequest) -> Bool {
-    lock.lock()
-    _canInitCallCount += 1
-    lock.unlock()
+    canInitCalls.increment()
     return false
   }
 
@@ -786,6 +780,29 @@ extension URLSessionConfiguration {
     let configuration = appductTests_interceptedDefault()
     configuration.protocolClasses = [RecordingURLProtocol.self] + (configuration.protocolClasses ?? [])
     return configuration
+  }
+}
+
+private final class ThreadSafeCounter: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storage = 0
+
+  var value: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return storage
+  }
+
+  func increment() {
+    lock.lock()
+    defer { lock.unlock() }
+    storage += 1
+  }
+
+  func reset() {
+    lock.lock()
+    defer { lock.unlock() }
+    storage = 0
   }
 }
 
