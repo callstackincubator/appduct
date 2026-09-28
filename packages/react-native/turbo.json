@@ -1,0 +1,16 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/native/ios/Sources/AppductCore/Real/**",
+        "$TURBO_ROOT$/packages/native/android/core/src/main/java/**",
+        "$TURBO_ROOT$/packages/native/android/core/consumer-rules.pro",
+        "$TURBO_ROOT$/packages/native/android/core-noop/src/main/java/**"
+      ],
+      "outputs": ["$TURBO_EXTENDS$", "ios/Core/**", "android/core/**", "android/core-noop/**"]
+    }
+  }
+}
