@@ -910,6 +910,23 @@ final class AppductClientTests: XCTestCase {
     XCTAssertEqual(transport.connectCallCount, 1)
   }
 
+  func testBackgroundingAnActiveSessionEmitsNoErrorEvent() async throws {
+    let foregroundObserver = FakeForegroundObserver()
+    let (client, transport) = makeClient(foregroundObserver: foregroundObserver)
+    let errors = EventCollector<AppductUnifiedErrorEvent>()
+    _ = await client.onError { errors.append($0) }
+    let connectTaskInput = connectInput()
+    let connectTask = Task { try await client.connect(connectTaskInput) }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+    transport.simulateAck(sessionId: "session-1", resumeToken: "resume-1", graceS: 120)
+    try await connectTask.value
+
+    foregroundObserver.simulateForegroundChange(background: true)
+    try await waitUntil("the client moved to reconnecting") { await client.state == .reconnecting }
+
+    XCTAssertEqual(errors.all.count, 0)
+  }
+
   func testForegroundingAfterABackgroundCloseResumesTheSession() async throws {
     let timers = FakeClientTimers(random: 0)
     let foregroundObserver = FakeForegroundObserver()

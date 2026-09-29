@@ -618,6 +618,20 @@ class AppductClientTest {
         }
 
     @Test
+    fun `backgrounding an active session emits no error event`() =
+        runBlocking {
+            val (client, fake, lifecycle) = newBackgroundableClient()
+            val errors = CopyOnWriteArrayList<AppductUnifiedError>()
+            client.addErrorListener { errors.add(it) }
+            client.connectAndAck(fake, sessionId = "sess-1", graceS = 120.0)
+
+            lifecycle().simulateForegroundChange(background = true)
+            waitUntil(timeoutMs = 3_000) { client.state == AppductClientState.reconnecting }
+
+            assertTrue("expected no error, got: $errors", errors.isEmpty())
+        }
+
+    @Test
     fun `foregrounding after a background close resumes the session`() =
         runBlocking {
             val (client, fake, lifecycle) = newBackgroundableClient()
