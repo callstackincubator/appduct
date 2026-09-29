@@ -226,6 +226,8 @@ public protocol AppductTransportSession: AnyObject, Sendable {
   func connect(options: AppductConnectOptions) async throws
   func send(message: String) async throws
   func close() async
+  /// Closes with `1001 app_backgrounded` and keeps the resume lease (`close()` clears it).
+  func closeForBackground() async
   func invalidate() async
 
   nonisolated func currentStateSnapshot() -> String

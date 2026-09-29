@@ -1229,3 +1229,144 @@ describe("tools.* selectors", () => {
     appB.socket.close();
   });
 });
+
+const BACKGROUND_MESSAGE = (alias: string): string =>
+  `Session "${alias}" is suspended because the app is in the background. Bring the app to the foreground to resume it.`;
+
+type DescribedSession = { state: string; suspendReason?: string };
+
+const describeSession = (daemon: RunningDaemon, selector: string): Promise<DescribedSession> => {
+  return rpcCall(daemon.paths.socketPath, "sessions.describe", { selector }) as Promise<DescribedSession>;
+};
+
+describe("a backgrounded app (1001 app_backgrounded)", () => {
+  test("suspends the session with suspendReason app_backgrounded and puts the reason on the event", async () => {
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    expect(await describeSession(daemon, app.alias)).not.toHaveProperty("suspendReason");
+
+    const suspended = waitForEvent(daemon, "session_suspended");
+    app.socket.close(1001, "app_backgrounded");
+    const event = await suspended;
+
+    expect(event.data).toEqual({ reason: "app_backgrounded" });
+    expect(await describeSession(daemon, app.alias)).toMatchObject({
+      state: "suspended",
+      suspendReason: "app_backgrounded",
+    });
+
+    const listed = (await rpcCall(daemon.paths.socketPath, "sessions.list")) as DescribedSession[];
+    expect(listed).toEqual([expect.objectContaining({ state: "suspended", suspendReason: "app_backgrounded" })]);
+  });
+
+  test.each([
+    ["a dropped socket", (app: ClaimedApp) => app.socket.terminate()],
+    ["a plain 1001 without the reason", (app: ClaimedApp) => app.socket.close(1001, "going_away")],
+    ["a clean close without a code", (app: ClaimedApp) => app.socket.close()],
+  ])("%s suspends with suspendReason connection_lost", async (_name, lose) => {
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const suspended = waitForEvent(daemon, "session_suspended");
+    lose(app);
+    const event = await suspended;
+
+    expect(event.data).toEqual({ reason: "connection_lost" });
+    expect(await describeSession(daemon, app.alias)).toMatchObject({
+      state: "suspended",
+      suspendReason: "connection_lost",
+    });
+  });
+
+  test("a call fails at once with session_suspended naming the background and the recovery", async () => {
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
+    await snapshotTools(daemon, app, [{ name: "echo" }]);
+
+    const suspended = waitForEvent(daemon, "session_suspended");
+    app.socket.close(1001, "app_backgrounded");
+    await suspended;
+
+    const startedAt = Date.now();
+    await expect(
+      rpcCall(daemon.paths.socketPath, "tools.call", { selector: app.alias, name: "echo", args: {} }),
+    ).rejects.toMatchObject({
+      message: BACKGROUND_MESSAGE(app.alias),
+      data: { type: "session_suspended" },
+    });
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+  });
+
+  test("a call pending at the close fails the same way", async () => {
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
+    await snapshotTools(daemon, app, [{ name: "echo" }]);
+
+    const gotToolCall = new Promise<void>((resolve) => {
+      app.socket.on("message", (data) => {
+        if ((JSON.parse(data.toString("utf8")) as Record<string, unknown>).type === "tool_call") {
+          resolve();
+        }
+      });
+    });
+    const pendingCall = rpcCall(daemon.paths.socketPath, "tools.call", {
+      selector: app.alias,
+      name: "echo",
+      args: {},
+    });
+    await gotToolCall;
+
+    app.socket.close(1001, "app_backgrounded");
+
+    await expect(pendingCall).rejects.toMatchObject({
+      message: BACKGROUND_MESSAGE(app.alias),
+      data: { type: "session_suspended" },
+    });
+  });
+
+  test("a call to an app whose connection was lost keeps the message it had before", async () => {
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
+    await snapshotTools(daemon, app, [{ name: "echo" }]);
+
+    const suspended = waitForEvent(daemon, "session_suspended");
+    app.socket.terminate();
+    await suspended;
+
+    await expect(
+      rpcCall(daemon.paths.socketPath, "tools.call", { selector: app.alias, name: "echo", args: {} }),
+    ).rejects.toMatchObject({
+      message: `Session "${app.alias}" is not active.`,
+      data: { type: "session_suspended" },
+    });
+  });
+
+  test("resuming makes the session active again and clears the reason", async () => {
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
+
+    const suspended = waitForEvent(daemon, "session_suspended");
+    app.socket.close(1001, "app_backgrounded");
+    await suspended;
+
+    const resumedSocket = await connectClient(daemon);
+    const resumed = waitForEvent(daemon, "session_resumed");
+    resumedSocket.send(
+      JSON.stringify({
+        type: "session_resume",
+        protocol_version: 2,
+        session_id: app.sessionId,
+        resume_token: app.resumeToken,
+      }),
+    );
+    await nextMessage(resumedSocket);
+    await resumed;
+
+    const described = await describeSession(daemon, app.alias);
+    expect(described.state).toBe("active");
+    expect(described).not.toHaveProperty("suspendReason");
+
+    resumedSocket.close();
+  });
+});

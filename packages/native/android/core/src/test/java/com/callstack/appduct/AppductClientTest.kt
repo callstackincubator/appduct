@@ -590,6 +590,74 @@ class AppductClientTest {
             assertEquals(pin, fake.connectCalls.last()["linkPin"])
         }
 
+    // --- background close (issue #138) ---
+
+    private fun newBackgroundableClient(): Triple<AppductClient, FakeAppductTransport, () -> FakeAppductLifecycleObserver> {
+        lateinit var lifecycle: FakeAppductLifecycleObserver
+        val (client, fake) =
+            newClient(
+                lifecycleObserverFactory = { onChanged -> FakeAppductLifecycleObserver(onChanged).also { lifecycle = it } },
+            )
+        return Triple(client, fake) { lifecycle }
+    }
+
+    @Test
+    fun `backgrounding an active session closes for the background, keeps the lease and schedules no reconnect`() =
+        runBlocking {
+            val (client, fake, lifecycle) = newBackgroundableClient()
+            client.connectAndAck(fake, sessionId = "sess-1", graceS = 120.0)
+
+            lifecycle().simulateForegroundChange(background = true)
+            waitUntil(timeoutMs = 3_000) { fake.closeForBackgroundCalls.get() == 1 }
+            waitUntil(timeoutMs = 3_000) { client.state == AppductClientState.reconnecting }
+
+            // `close()` would clear the resume lease; the session must stay resumable.
+            assertEquals(0, fake.closeCalls.get())
+            Thread.sleep(1_500)
+            assertEquals(1, fake.connectCalls.size)
+        }
+
+    @Test
+    fun `backgrounding an active session emits no error event`() =
+        runBlocking {
+            val (client, fake, lifecycle) = newBackgroundableClient()
+            val errors = CopyOnWriteArrayList<AppductUnifiedError>()
+            client.addErrorListener { errors.add(it) }
+            client.connectAndAck(fake, sessionId = "sess-1", graceS = 120.0)
+
+            lifecycle().simulateForegroundChange(background = true)
+            waitUntil(timeoutMs = 3_000) { client.state == AppductClientState.reconnecting }
+
+            assertTrue("expected no error, got: $errors", errors.isEmpty())
+        }
+
+    @Test
+    fun `foregrounding after a background close resumes the session`() =
+        runBlocking {
+            val (client, fake, lifecycle) = newBackgroundableClient()
+            client.connectAndAck(fake, sessionId = "sess-1", graceS = 120.0)
+
+            lifecycle().simulateForegroundChange(background = true)
+            waitUntil(timeoutMs = 3_000) { client.state == AppductClientState.reconnecting }
+
+            lifecycle().simulateForegroundChange(background = false)
+            waitUntil(timeoutMs = 3_000) { fake.connectCalls.size == 2 }
+            assertEquals("resume-token-sess-1", fake.connectCalls.last()["resumeToken"])
+            fake.simulateAck("sess-1", resumeToken = "resume-token-2")
+            waitUntil(timeoutMs = 3_000) { client.state == AppductClientState.active }
+        }
+
+    @Test
+    fun `backgrounding without an active session does not close the socket`() =
+        runBlocking {
+            val (_, fake, lifecycle) = newBackgroundableClient()
+
+            lifecycle().simulateForegroundChange(background = true)
+            Thread.sleep(100)
+
+            assertEquals(0, fake.closeForBackgroundCalls.get())
+        }
+
     /** A failed resume attempt no longer reports a bare "Appduct resume attempt failed." -- the
      * underlying cause (here, the transport's own rejection) rides along in the message. */
     @Test

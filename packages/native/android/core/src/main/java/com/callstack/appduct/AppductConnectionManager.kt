@@ -547,6 +547,22 @@ internal class AppductConnectionManager(
         }
     }
 
+    override fun closeForBackground(completion: () -> Unit) {
+        if (invalidationRequested.get()) {
+            completion()
+            return
+        }
+
+        executor.execute {
+            val socket = webSocket
+            if (socket != null) {
+                closeEventPending = true
+                socket.close(1001, "app_backgrounded")
+            }
+            completion()
+        }
+    }
+
     /** Metro/TurboModule teardown: preserve recovery data, release transport, and emit nothing. */
     override fun invalidate(completion: () -> Unit) {
         if (!invalidationRequested.compareAndSet(false, true)) {

@@ -227,7 +227,7 @@ Descriptor fields are snake_case. A camelCase `timeoutMs` on a descriptor is an 
 ```
 
 - **Pending:** the token is single-use. Five failed claims make the session unclaimable.
-- **Active → suspended:** on close, error, or missed pongs. The tool list, device info, and alias are kept. Pending calls fail with `session_suspended`.
+- **Active → suspended:** on close, error, or missed pongs. The tool list, device info, and alias are kept. Pending calls fail with `session_suspended`. A close with `1001 app_backgrounded` means the app went to the background; any other cause is a lost connection. `sessions ls` shows which.
 - **Suspended → active:** a `session_resume` on a new, pinned connection within `grace_s` (default 600 seconds), with the latest resume token. The app then sends a full snapshot.
 - **Discarded, expired, revoked** are final and free the alias.
 
@@ -251,6 +251,7 @@ Descriptor fields are snake_case. A camelCase `timeoutMs` on a descriptor is an 
 | 1008 | `invalid_resume_token` | Wrong or outdated resume token |
 | 1008 | `invalid_registry` | A snapshot or delta failed validation |
 | 1008 | `invalid_message` | A known message type with invalid fields |
+| 1001 | `app_backgrounded` | The app left the foreground. The session is suspended, and the app resumes it when it returns |
 | 1011 | `send_failed` | The service couldn't write to the socket |
 
 **Treat `1008` as final:** no retry of the same message can succeed, so end the session and report the reason. Other closes, including `1011` and `1001` (service shutting down), are worth retrying with backoff while the grace period lasts. The reference clients back off from 0.5 up to 30 seconds, with jitter.
@@ -279,7 +280,7 @@ These reach callers unchanged, as the `type` of a CLI `--json` error, an `Appduc
 | `ambiguous_session` | More than one device is connected; pass a selector |
 | `unknown_session` | No session matches the selector |
 | `session_not_active` | The session isn't active |
-| `session_suspended` | The device disconnected during the call |
+| `session_suspended` | The device disconnected during the call, or the app is in the background. The message says which; bring the app to the foreground to resume |
 | `policy_denied` | [Policy](/appduct/guides/security/#limit-what-callers-can-run) refused the call. Changing config, not retrying, fixes it. |
 | `invalid_request` | The request itself was malformed |
 

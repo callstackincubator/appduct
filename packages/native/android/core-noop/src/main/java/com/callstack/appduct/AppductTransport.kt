@@ -14,6 +14,8 @@ internal interface AppductTransport {
 
     fun close(completion: () -> Unit)
 
+    fun closeForBackground(completion: () -> Unit)
+
     fun invalidate(completion: () -> Unit)
 
     fun getState(): String

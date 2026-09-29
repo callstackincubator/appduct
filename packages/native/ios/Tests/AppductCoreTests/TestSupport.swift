@@ -53,6 +53,7 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   private var _connectCallCount = 0
   private var _lastConnectOptions: AppductConnectOptions?
   private var _closeCallCount = 0
+  private var _closeForBackgroundCallCount = 0
 
   /// Set by a test to make the next `connect(options:)` throw instead of succeeding.
   var connectError: (@Sendable () -> Error)?
@@ -86,6 +87,10 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
     withLock { _closeCallCount }
   }
 
+  var closeForBackgroundCallCount: Int {
+    withLock { _closeForBackgroundCallCount }
+  }
+
   func connect(options: AppductConnectOptions) async throws {
     withLock {
       _connectCallCount += 1
@@ -105,6 +110,13 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   func close() async {
     withLock { _closeCallCount += 1 }
     stateSnapshot = "closed"
+  }
+
+  /// Like the real transport: sends `1001 app_backgrounded`, keeps the lease, and reports the
+  /// close back to the client.
+  func closeForBackground() async {
+    withLock { _closeForBackgroundCallCount += 1 }
+    simulateClose(code: 1_001, reason: "app_backgrounded")
   }
 
   func invalidate() async {

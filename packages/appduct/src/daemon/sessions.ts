@@ -28,6 +28,7 @@ import {
   type SessionDeviceMetadata,
   type SessionResumeMessage,
   type SessionSummary,
+  type SessionSuspendReason,
   type ToolCallMessage,
   type ToolCallProgressMessage,
   type ToolCancelMessage,
@@ -94,6 +95,7 @@ type LiveSession = {
   createdAt: Date;
   claimedAt: Date;
   suspendedAt?: Date;
+  suspendReason?: SessionSuspendReason;
   resumeToken: Buffer;
   socket?: WebSocket;
   missedPongs: number;
@@ -182,6 +184,7 @@ export type SessionManager = {
     sessionId: string;
     alias: string;
     state: "active" | "suspended";
+    suspendReason?: SessionSuspendReason;
     registry: ToolRegistry;
   };
   /** Sends a `tool_call` frame to the session's active socket; `false` if the session has no
@@ -221,6 +224,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       createdAt: session.createdAt.toISOString(),
       claimedAt: session.claimedAt.toISOString(),
       ...(session.suspendedAt ? { suspendedAt: session.suspendedAt.toISOString() } : {}),
+      ...(session.suspendReason ? { suspendReason: session.suspendReason } : {}),
       toolCount: session.registry.count(),
     };
   };
@@ -278,7 +282,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
     });
   };
 
-  const suspend = (sessionId: string): void => {
+  const suspend = (sessionId: string, reason: SessionSuspendReason): void => {
     const session = sessions.get(sessionId);
 
     if (!session || session.state !== "active") {
@@ -287,11 +291,12 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
 
     session.state = "suspended";
     session.suspendedAt = clock.now();
+    session.suspendReason = reason;
     session.socket = undefined;
     session.missedPongs = 0;
     session.graceTimer = timers.setTimeout(() => expire(sessionId), options.graceSeconds * 1000);
 
-    emit("session_suspended", session.sessionId, session.alias, {});
+    emit("session_suspended", session.sessionId, session.alias, { reason });
   };
 
   const expire = (sessionId: string): void => {
@@ -317,9 +322,11 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       session.missedPongs = 0;
     });
 
-    socket.on("close", () => {
+    socket.on("close", (code, reason) => {
       if (session.socket === socket) {
-        suspend(session.sessionId);
+        // The SDKs send this close when the app leaves the foreground (PROTOCOL.md §7).
+        const backgrounded = code === 1001 && reason.toString("utf8") === "app_backgrounded";
+        suspend(session.sessionId, backgrounded ? "app_backgrounded" : "connection_lost");
       }
     });
   };
@@ -335,7 +342,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       if (session.missedPongs >= 2) {
         const staleSocket = session.socket;
         session.socket = undefined;
-        suspend(session.sessionId);
+        suspend(session.sessionId, "connection_lost");
         staleSocket.terminate();
         continue;
       }
@@ -464,6 +471,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
     session.resumeToken = randomBytes(RESUME_TOKEN_BYTES);
     session.state = "active";
     session.suspendedAt = undefined;
+    session.suspendReason = undefined;
     session.socket = socket;
     session.missedPongs = 0;
 
@@ -600,9 +608,21 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
 
   const resolveForTools = (
     selector?: string,
-  ): { sessionId: string; alias: string; state: "active" | "suspended"; registry: ToolRegistry } => {
+  ): {
+    sessionId: string;
+    alias: string;
+    state: "active" | "suspended";
+    suspendReason?: SessionSuspendReason;
+    registry: ToolRegistry;
+  } => {
     const session = resolveSession(selector);
-    return { sessionId: session.sessionId, alias: session.alias, state: session.state, registry: session.registry };
+    return {
+      sessionId: session.sessionId,
+      alias: session.alias,
+      state: session.state,
+      suspendReason: session.suspendReason,
+      registry: session.registry,
+    };
   };
 
   const sendToApp = (sessionId: string, message: ToolCallMessage | ToolCancelMessage): boolean => {

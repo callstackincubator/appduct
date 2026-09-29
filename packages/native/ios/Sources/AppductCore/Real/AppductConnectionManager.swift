@@ -384,6 +384,9 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
   private var lastErrorDetails: AppductErrorDetails?
   private var keepaliveTask: Task<Void, Never>?
   private var pingFailureCount = 0
+  #if canImport(UIKit)
+    private var closeBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+  #endif
 
   public override init() {
     ownerGeneration = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
@@ -540,6 +543,35 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
 
     closeEventPending = true
     socketTask.cancel(with: .normalClosure, reason: nil)
+  }
+
+  /// Closes the socket with `1001 app_backgrounded` because the app is leaving the foreground, and
+  /// keeps the resume lease so the session resumes on foreground (PROTOCOL.md §7). The close runs
+  /// under a background task so iOS does not suspend the app before the frame is sent; the task
+  /// ends when the close finishes or iOS calls its expiration handler.
+  public func closeForBackground() async {
+    guard let socketTask else {
+      return
+    }
+
+    closeEventPending = true
+    #if canImport(UIKit)
+      closeBackgroundTask = await MainActor.run {
+        UIApplication.shared.beginBackgroundTask(withName: "appduct.close-for-background") { [weak self] in
+          Task { await self?.endCloseBackgroundTask() }
+        }
+      }
+    #endif
+    socketTask.cancel(with: .goingAway, reason: Data("app_backgrounded".utf8))
+  }
+
+  private func endCloseBackgroundTask() async {
+    #if canImport(UIKit)
+      let task = closeBackgroundTask
+      closeBackgroundTask = .invalid
+      guard task != .invalid else { return }
+      await MainActor.run { UIApplication.shared.endBackgroundTask(task) }
+    #endif
   }
 
   /// TurboModule invalidation: called by React Native when the bridge is torn down (e.g. a Metro
@@ -1090,6 +1122,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
     }
     emitClose?(payload)
     closeEventPending = false
+    Task { await endCloseBackgroundTask() }
   }
 
   /// SPKI DER hash; pin strings must match Android `PinningTrustManager` for the same leaf certificate.

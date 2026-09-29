@@ -28,3 +28,7 @@ One note per PR that hit friction, four lines:
   Would have prevented it: tick off every bullet of the issue's Expected outcome, not just the numbered criteria. When a call moves off a shared resource onto its own, list what the shared resource did for free (close on shutdown, error typing) and test each against the new resource, including `close()` with no tick before it and an open that rejects.
   Cost: three review rounds, fix-loop limit hit, issue blocked with one should-fix open
   Seen: 2026-09-28
+- 2026-09-29 #140 skill: implement-issue
+  What went wrong: the app closing its own socket for the background went through `onSocketLost`, which emits an `error` event for any close other than 1000, so every app switch fired the app's error listener.
+  Would have prevented it: when adding a deliberate close or disconnect, list every event the existing loss path emits and write a red test for each one that must not fire.
+  Cost: review round

@@ -29,7 +29,7 @@ A plain re-run keeps the recorded scheme and adds a note if your project files n
 
 ### `appduct sessions ls`
 
-Lists sessions with alias, state, device, and tool count.
+Lists sessions with alias, state, device, and tool count. A suspended session shows why: `suspended (app in background)` or `suspended (connection lost)`. `--json` adds `suspendReason`.
 
 ### `appduct sessions link`
 

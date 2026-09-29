@@ -46,6 +46,10 @@ internal class AppductConnectionManager(
         completion()
     }
 
+    override fun closeForBackground(completion: () -> Unit) {
+        completion()
+    }
+
     override fun invalidate(completion: () -> Unit) {
         completion()
     }

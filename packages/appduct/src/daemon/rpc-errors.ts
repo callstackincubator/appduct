@@ -19,3 +19,8 @@ export class RpcApplicationError extends Error {
     this.name = "RpcApplicationError";
   }
 }
+
+/** The `session_suspended` message for an app that closed its socket because it went to the
+ * background: says why and how to recover. */
+export const appBackgroundedMessage = (alias: string): string =>
+  `Session "${alias}" is suspended because the app is in the background. Bring the app to the foreground to resume it.`;
