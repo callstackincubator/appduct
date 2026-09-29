@@ -885,4 +885,59 @@ final class AppductClientTests: XCTestCase {
 
     XCTAssertEqual(transport.lastConnectOptions?.linkPin, pin)
   }
+
+  // MARK: background close (issue #138)
+
+  func testBackgroundingAnActiveSessionClosesForBackgroundKeepsTheLeaseAndSchedulesNoReconnect() async throws {
+    let timers = FakeClientTimers(random: 0)
+    let foregroundObserver = FakeForegroundObserver()
+    let (client, transport) = makeClient(timers: timers, foregroundObserver: foregroundObserver)
+    let connectTaskInput = connectInput()
+    let connectTask = Task { try await client.connect(connectTaskInput) }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+    transport.simulateAck(sessionId: "session-1", resumeToken: "resume-1", graceS: 120)
+    try await connectTask.value
+
+    foregroundObserver.simulateForegroundChange(background: true)
+    try await waitUntil("the client closed the socket for the background") {
+      transport.closeForBackgroundCallCount == 1
+    }
+    try await waitUntil("the client moved to reconnecting") { await client.state == .reconnecting }
+
+    // `close()` would clear the resume lease; the session must stay resumable.
+    XCTAssertEqual(transport.closeCallCount, 0)
+    timers.advance(byMs: AppductBackoff.capMs)
+    XCTAssertEqual(transport.connectCallCount, 1)
+  }
+
+  func testForegroundingAfterABackgroundCloseResumesTheSession() async throws {
+    let timers = FakeClientTimers(random: 0)
+    let foregroundObserver = FakeForegroundObserver()
+    let (client, transport) = makeClient(timers: timers, foregroundObserver: foregroundObserver)
+    let connectTaskInput = connectInput()
+    let connectTask = Task { try await client.connect(connectTaskInput) }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+    transport.simulateAck(sessionId: "session-1", resumeToken: "resume-1", graceS: 120)
+    try await connectTask.value
+
+    foregroundObserver.simulateForegroundChange(background: true)
+    try await waitUntil("the client moved to reconnecting") { await client.state == .reconnecting }
+
+    foregroundObserver.simulateForegroundChange(background: false)
+    try await waitUntil("returning to the foreground started a resume attempt") { transport.connectCallCount >= 2 }
+    XCTAssertEqual(transport.lastConnectOptions?.resumeToken, "resume-1")
+    transport.simulateAck(sessionId: "session-1", resumeToken: "resume-2", graceS: 120)
+    try await waitUntil("the session is active again") { await client.state == .active }
+  }
+
+  func testBackgroundingWithoutAnActiveSessionDoesNotCloseTheSocket() async throws {
+    let foregroundObserver = FakeForegroundObserver()
+    let (_, transport) = makeClient(foregroundObserver: foregroundObserver)
+    try await waitUntil("the client wired its transport") { transport.isWired }
+
+    foregroundObserver.simulateForegroundChange(background: true)
+    try await Task.sleep(nanoseconds: 100_000_000)
+
+    XCTAssertEqual(transport.closeForBackgroundCallCount, 0)
+  }
 }

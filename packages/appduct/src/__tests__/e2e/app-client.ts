@@ -150,6 +150,12 @@ export class FakeAppClient {
     this.socket = undefined;
   }
 
+  /** Closes the socket the way the iOS and Android SDKs do when the app leaves the foreground. */
+  closeForBackground(): void {
+    this.socket?.close(1001, "app_backgrounded");
+    this.socket = undefined;
+  }
+
   /** Resolves the next close of whatever the currently-connected socket is (or the next socket to
    * connect and then close, if called before `claim`/`resume`). */
   waitForClose(): Promise<CloseInfo> {

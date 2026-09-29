@@ -23,6 +23,12 @@
     "note": "not in PROTOCOL.md's table verbatim, but a documented transport-level close worth retrying inside the grace window (see AppductTerminalClose.kt's doc comment)"
   },
   {
+    "code": 1001,
+    "reason": "app_backgrounded",
+    "terminal": false,
+    "note": "sent by the app when it leaves the foreground; the daemon suspends the session with suspendReason app_backgrounded"
+  },
+  {
     "code": 1006,
     "reason": null,
     "terminal": false,

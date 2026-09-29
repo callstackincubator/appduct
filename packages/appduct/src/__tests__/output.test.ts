@@ -355,6 +355,33 @@ describe("output rendering", () => {
     expect(rendered.stdout).toMatchSnapshot();
   });
 
+  test.each([
+    ["app_backgrounded", "suspended (app in background)"],
+    ["connection_lost", "suspended (connection lost)"],
+  ] as const)("ls human output says why a session is suspended: %s", (suspendReason, expected) => {
+    const rendered = renderResult(
+      {
+        ok: true,
+        data: [
+          {
+            sessionId: "LsOutputTestSess002",
+            alias: "pixel-8",
+            state: "suspended",
+            suspendReason,
+            device: { manufacturer: "Google", model: "Pixel 8", os: "Android 14" },
+            createdAt: new Date(FIXED_NOW.getTime() - 65_000).toISOString(),
+            claimedAt: new Date(FIXED_NOW.getTime() - 65_000).toISOString(),
+            suspendedAt: new Date(FIXED_NOW.getTime() - 5_000).toISOString(),
+            toolCount: 3,
+          },
+        ],
+      },
+      { command: "sessions ls", flags: flags(), now: FIXED_NOW },
+    );
+
+    expect(rendered.stdout).toContain(expected);
+  });
+
   test("ls human output handles an empty session list", () => {
     const rendered = renderResult(
       {
