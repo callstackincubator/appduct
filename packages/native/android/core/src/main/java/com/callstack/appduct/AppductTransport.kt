@@ -22,6 +22,9 @@ internal interface AppductTransport {
 
     fun close(completion: () -> Unit)
 
+    /** Closes with `1001 app_backgrounded` and keeps the resume lease ([close] clears it). */
+    fun closeForBackground(completion: () -> Unit)
+
     fun invalidate(completion: () -> Unit)
 
     fun getState(): String

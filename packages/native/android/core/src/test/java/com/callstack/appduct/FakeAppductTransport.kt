@@ -83,7 +83,7 @@ internal class FakeAppductTransport(
 
     /** Like the real transport: sends `1001 app_backgrounded`, keeps the lease, and reports the
      * close back to the client. */
-    fun closeForBackground(completion: () -> Unit) {
+    override fun closeForBackground(completion: () -> Unit) {
         closeForBackgroundCalls.incrementAndGet()
         simulateClose(1001, "app_backgrounded")
         completion()

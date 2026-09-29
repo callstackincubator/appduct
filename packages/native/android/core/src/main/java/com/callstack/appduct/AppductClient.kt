@@ -700,6 +700,10 @@ internal class AppductClient private constructor(
 
         if (nowBackground) {
             clearReconnectJob()
+            // Tell the daemon, so a call to this app fails at once naming the background instead
+            // of timing out. The close takes the usual non-terminal path: no reconnect while
+            // backgrounded, a resume on foreground.
+            if (clientState == AppductClientState.active && heldSession != null) closeTransportForBackground()
             return
         }
 
@@ -903,6 +907,11 @@ internal class AppductClient private constructor(
     private suspend fun closeTransport() =
         suspendCancellableCoroutine<Unit> { cont ->
             transport.close { cont.resume(Unit) }
+        }
+
+    private suspend fun closeTransportForBackground() =
+        suspendCancellableCoroutine<Unit> { cont ->
+            transport.closeForBackground { cont.resume(Unit) }
         }
 
     // --- listener emission / state ---
