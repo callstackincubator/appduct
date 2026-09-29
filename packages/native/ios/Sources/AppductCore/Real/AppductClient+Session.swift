@@ -480,6 +480,12 @@ extension AppductClient {
 
     if backgrounded {
       clearReconnectTimer()
+      // Tell the daemon, so a call to this app fails at once naming the background instead of
+      // timing out. The close takes the usual non-terminal path: no reconnect while backgrounded,
+      // a resume on foreground.
+      if clientState == .active, heldSession != nil {
+        await transport.closeForBackground()
+      }
       return
     }
 
