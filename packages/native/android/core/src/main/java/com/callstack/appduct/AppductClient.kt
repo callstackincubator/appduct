@@ -815,7 +815,9 @@ internal class AppductClient private constructor(
             return
         }
 
-        emitError(
+        // The app's own background close is deliberate, not a failure the app should hear about.
+        val deliberateBackgroundClose = code == 1001 && reason == "app_backgrounded"
+        if (!deliberateBackgroundClose) emitError(
             AppductUnifiedError(
                 phase = "socket",
                 message = reason ?: lastError?.message ?: "Appduct connection lost.",

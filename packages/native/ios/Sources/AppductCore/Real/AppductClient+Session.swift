@@ -445,17 +445,21 @@ extension AppductClient {
       return
     }
 
-    emitError(
-      AppductUnifiedErrorEvent(
-        phase: "socket",
-        message: event.reason ?? errorDetails?.message ?? "Appduct connection lost.",
-        code: errorDetails?.code,
-        nativeCode: errorDetails?.nativeCode,
-        closeReason: event.reason,
-        isRetryable: errorDetails?.isRetryable,
-        hint: errorDetails?.hint
+    // The app's own background close is deliberate, not a failure the app should hear about.
+    let deliberateBackgroundClose = event.code == 1_001 && event.reason == "app_backgrounded"
+    if !deliberateBackgroundClose {
+      emitError(
+        AppductUnifiedErrorEvent(
+          phase: "socket",
+          message: event.reason ?? errorDetails?.message ?? "Appduct connection lost.",
+          code: errorDetails?.code,
+          nativeCode: errorDetails?.nativeCode,
+          closeReason: event.reason,
+          isRetryable: errorDetails?.isRetryable,
+          hint: errorDetails?.hint
+        )
       )
-    )
+    }
 
     if isTerminalCloseEvent(event) {
       finalizeSessionLost(terminalCloseReason(event))
