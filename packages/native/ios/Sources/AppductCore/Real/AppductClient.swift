@@ -19,6 +19,7 @@ public actor AppductClient {
   let defaultToolTimeoutMs: Int
   let requirePrivateIp: Bool
   let foregroundObserver: any AppductForegroundObserving
+  let backgroundTime: any AppductBackgroundTime
 
   // MARK: Unified session state
 
@@ -101,8 +102,10 @@ public actor AppductClient {
     timers: any AppductClientTimers = SystemAppductClientTimers(),
     defaultToolTimeoutMs: Int = APPDUCT_DEFAULT_TOOL_TIMEOUT_MS,
     requirePrivateIp: Bool? = nil,
-    foregroundObserver: (any AppductForegroundObserving)? = nil
+    foregroundObserver: (any AppductForegroundObserving)? = nil,
+    backgroundTime: (any AppductBackgroundTime)? = nil
   ) {
+    self.backgroundTime = backgroundTime ?? FakeAppductBackgroundTime()
     self.transport = transport
     self.timers = timers
     self.defaultToolTimeoutMs = defaultToolTimeoutMs
