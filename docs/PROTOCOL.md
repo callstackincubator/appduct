@@ -332,7 +332,9 @@ entries.
   the `session_ack`.
 - `ACTIVE → SUSPENDED`: socket close, socket error, or two missed keepalive pongs. Tool
   registry, device metadata, and alias are retained; any tool call already in flight
-  fails fast with `session_suspended`.
+  fails fast with `session_suspended`. The session records why in `suspendReason`:
+  `app_backgrounded` when the socket closed with `1001 app_backgrounded` (§7), otherwise
+  `connection_lost`. Resuming clears it.
 - `SUSPENDED → ACTIVE`: a `session_resume` on a fresh pinned socket within
   `graceSeconds` (default 600) of suspension, with a valid (unrotated-since,
   unexpired) `resume_token`. The `resume_token` rotates again on this success, and the
@@ -367,6 +369,7 @@ not prose. Grouped by trigger:
 | 1008 | `invalid_resume_token` | resume token didn't match the session's current (rotated) token |
 | 1008 | `invalid_registry` | a `tool_registry_snapshot`/`tool_registry_delta` failed validation (§4) |
 | 1008 | `invalid_message` | a post-claim message matched a known `type` but failed that type's field guard |
+| 1001 | `app_backgrounded` | the app sent this because it left the foreground; the daemon suspends the session with `suspendReason: "app_backgrounded"`. The app keeps its resume token and resumes on foreground. Any other close suspends with `connection_lost` |
 | 1011 | `send_failed` | the daemon could not write to the socket (treated as socket loss, same as any other transport failure) |
 
 ## 8. Control-plane RPC (UDS)

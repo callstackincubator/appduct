@@ -281,7 +281,8 @@ Methods:
 | `events.since` | `{ selector?, since?, limit?, name?, payloadMaxBytes? }` | `{ events: EventNotification[], cursor, dropped, remaining }` — pull counterpart to `events.subscribe` for `app_event` only, draining the per-session retention buffer described below. An older client's `kinds` is ignored like any unknown param |
 
 `SessionSummary`: `{ sessionId, alias, state, device: { manufacturer?, model?, os? },
-createdAt, claimedAt?, suspendedAt?, toolCount }`.
+createdAt, claimedAt?, suspendedAt?, suspendReason?, toolCount }`. `suspendReason` is
+`"app_backgrounded"` or `"connection_lost"` and is set whenever `state` is `suspended`.
 
 **`tools.call` deadline.** The daemon's per-call deadline is `timeoutMs ?? tool.timeout_ms`
 — an explicit caller `timeoutMs` first, then the tool's own declared `timeout_ms` from its

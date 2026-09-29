@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **New: a call to a backgrounded app fails at once with `session_suspended`, and the message says the app is in the background.** `appduct sessions ls` shows `suspended (app in background)`; this needs an app built with this release.
 - **Fix: a session backgrounded or disconnected in a build with `trust: link` (the zero-config
   default) resumes automatically once the app comes back, instead of staying "Reconnecting"
   until the 10-minute grace window expires and a new link is needed.**
