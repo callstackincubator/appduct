@@ -53,7 +53,7 @@ import { startListener, type DaemonListener } from "./listener.js";
 import { evaluate as evaluatePolicy } from "./policy.js";
 import { acquirePidfile, type PidfileHandle } from "./pidfile.js";
 import { NodeAppendOnlyFile } from "./node-append-only-file.js";
-import { RpcApplicationError } from "./rpc-errors.js";
+import { appBackgroundedMessage, RpcApplicationError } from "./rpc-errors.js";
 import { startRpcServer, type RpcServer } from "./rpc-server.js";
 import { createSessionManager, type SessionManager } from "./sessions.js";
 import { ensureStateDir, getSocketPath, getStateDirPaths, type StateDirPaths } from "./state-dir.js";
@@ -736,7 +736,12 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           if (resolved.state !== "active") {
             const errorType = resolved.state === "suspended" ? "session_suspended" : "session_not_active";
             writeAudit("error", errorType);
-            throw new RpcApplicationError(errorType, `Session "${resolved.alias}" is not active.`);
+            throw new RpcApplicationError(
+              errorType,
+              resolved.suspendReason === "app_backgrounded"
+                ? appBackgroundedMessage(resolved.alias)
+                : `Session "${resolved.alias}" is not active.`,
+            );
           }
 
           const tool = resolved.registry.get(name);

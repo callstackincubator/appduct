@@ -28,6 +28,10 @@ export type SessionDeviceMetadata = {
   os?: string;
 };
 
+/** Why a session is `suspended`: the app closed its socket because it went to the background, or
+ * the connection was lost some other way. */
+export type SessionSuspendReason = "app_backgrounded" | "connection_lost";
+
 export type SessionSummary = {
   sessionId: string;
   alias: string;
@@ -37,6 +41,8 @@ export type SessionSummary = {
   createdAt: string;
   claimedAt?: string;
   suspendedAt?: string;
+  /** Set whenever `state` is `suspended`. */
+  suspendReason?: SessionSuspendReason;
   toolCount: number;
 };
 

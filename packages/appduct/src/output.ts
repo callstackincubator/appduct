@@ -128,6 +128,15 @@ const formatDevice = (device: SessionSummary["device"]): string => {
   return device.os ? `${label} (${device.os})` : label;
 };
 
+const SUSPEND_REASON_LABELS = {
+  app_backgrounded: "app in background",
+  connection_lost: "connection lost",
+} as const;
+
+const formatSessionState = (session: SessionSummary): string => {
+  return session.suspendReason ? `${session.state} (${SUSPEND_REASON_LABELS[session.suspendReason]})` : session.state;
+};
+
 const renderLsData = (colors: ColorPalette, data: LsCommandData, now: Date): string[] => {
   if (data.length === 0) {
     return [colors.dim("Sessions"), "  No Appduct sessions are registered."];
@@ -137,7 +146,7 @@ const renderLsData = (colors: ColorPalette, data: LsCommandData, now: Date): str
   const headers = ["Alias", "State", "Device", "Tools", "Age"] as const;
   const rows = data.map((session) => [
     session.alias,
-    session.state,
+    formatSessionState(session),
     formatDevice(session.device),
     String(session.toolCount),
     formatAge(session.claimedAt ?? session.createdAt, nowIso),

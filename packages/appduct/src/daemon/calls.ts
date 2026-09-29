@@ -28,7 +28,7 @@ import {
 } from "@appduct/shared";
 
 import type { EventBus } from "./event-bus.js";
-import { RpcApplicationError } from "./rpc-errors.js";
+import { appBackgroundedMessage, RpcApplicationError } from "./rpc-errors.js";
 import { systemTimers, type TimerFns, type TimerHandle } from "./timers.js";
 
 /** Re-exported under this module's historical names; the values live in `@appduct/shared` so the
@@ -88,7 +88,11 @@ export type CallsManager = {
    * session has no active socket to send the frame on right now. */
   cancel: (sessionId: string, callId: string, reason: string) => boolean;
   /** Rejects every pending call for a session immediately (suspend/revoke/expiry transitions). */
-  rejectSession: (sessionId: string, errorType: "session_suspended" | "unknown_session") => void;
+  rejectSession: (
+    sessionId: string,
+    errorType: "session_suspended" | "unknown_session",
+    options?: { backgrounded?: boolean },
+  ) => void;
   /** Rejects and clears every pending call across every session (daemon shutdown). */
   disposeAll: () => void;
 };
@@ -247,7 +251,11 @@ export const createCallsManager = (options: CallsManagerOptions): CallsManager =
     return options.sendCancel(sessionId, message);
   };
 
-  const rejectSession = (sessionId: string, errorType: "session_suspended" | "unknown_session"): void => {
+  const rejectSession = (
+    sessionId: string,
+    errorType: "session_suspended" | "unknown_session",
+    options: { backgrounded?: boolean } = {},
+  ): void => {
     const sessionMap = pendingBySession.get(sessionId);
 
     if (!sessionMap) {
@@ -258,7 +266,14 @@ export const createCallsManager = (options: CallsManagerOptions): CallsManager =
 
     for (const pending of sessionMap.values()) {
       timers.clearTimeout(pending.timer);
-      pending.reject(new RpcApplicationError(errorType, `Session transitioned while the call was pending.`));
+      pending.reject(
+        new RpcApplicationError(
+          errorType,
+          options.backgrounded
+            ? appBackgroundedMessage(pending.alias)
+            : "Session transitioned while the call was pending.",
+        ),
+      );
     }
   };
 
@@ -268,7 +283,9 @@ export const createCallsManager = (options: CallsManagerOptions): CallsManager =
     ];
 
     if (errorType && event.sessionId) {
-      rejectSession(event.sessionId, errorType);
+      const backgrounded =
+        event.kind === "session_suspended" && (event.data as { reason?: string }).reason === "app_backgrounded";
+      rejectSession(event.sessionId, errorType, { backgrounded });
     }
   });
 
