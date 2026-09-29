@@ -34,6 +34,11 @@ public actor AppductClient {
     var graceS: Double
     var disconnectedAtMs: Double?
     var endpoint: (ip: String, port: Int)
+    /// The SPKI pin the claim that started this session trusted (`trust: link`, no embedded
+    /// pins) — carried forward into every resume so `configureFromBundle` has a pin to trust
+    /// again instead of throwing `.linkTrustRequiresLinkPin` (issue #136). `nil` for a build with
+    /// embedded pins, where it is never consulted.
+    var linkPin: String?
   }
 
   var heldSession: HeldSession?

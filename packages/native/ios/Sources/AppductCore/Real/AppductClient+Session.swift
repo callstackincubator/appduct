@@ -77,7 +77,7 @@ extension AppductClient {
       }
 
       connectingSessionId = nil
-      onAckReceived(ack, kind: .claimed, endpoint: (input.ip, input.port))
+      onAckReceived(ack, kind: .claimed, endpoint: (input.ip, input.port), linkPin: input.linkPin)
     } catch {
       if myEpoch == epoch {
         connectingSessionId = nil
@@ -126,7 +126,8 @@ extension AppductClient {
       keepaliveIntervalS: lease.keepaliveIntervalS,
       graceS: lease.graceS,
       disconnectedAtMs: lease.disconnectedAtMs.map(Double.init) ?? now,
-      endpoint: (lease.endpoint.ip, lease.endpoint.port)
+      endpoint: (lease.endpoint.ip, lease.endpoint.port),
+      linkPin: lease.linkPin
     )
     updateSessionIdSnapshot()
     setClientState(.reconnecting)
@@ -217,7 +218,12 @@ extension AppductClient {
     }
   }
 
-  func onAckReceived(_ ack: SessionAck, kind: AppductSessionChangeKind, endpoint: (ip: String, port: Int)) {
+  func onAckReceived(
+    _ ack: SessionAck,
+    kind: AppductSessionChangeKind,
+    endpoint: (ip: String, port: Int),
+    linkPin: String?
+  ) {
     clearReconnectTimer()
     clearGraceTimer()
     reconnectAttempt = 0
@@ -230,7 +236,8 @@ extension AppductClient {
       keepaliveIntervalS: ack.keepaliveIntervalS,
       graceS: ack.graceS,
       disconnectedAtMs: nil,
-      endpoint: endpoint
+      endpoint: endpoint,
+      linkPin: linkPin
     )
     updateSessionIdSnapshot()
 
@@ -327,7 +334,10 @@ extension AppductClient {
       sessionId: session.sessionId,
       resumeToken: session.resumeToken,
       // Comfortably past native's own expiry guard, independent of the original claim's expiry.
-      expiresAt: resumeNowSeconds + max(Int(session.graceS), 60) + 60
+      expiresAt: resumeNowSeconds + max(Int(session.graceS), 60) + 60,
+      // The pin the original claim trusted (issue #136) -- without it, `trust: link` rejects
+      // every resume with `.linkTrustRequiresLinkPin` before a socket even opens.
+      linkPin: session.linkPin
     )
 
     let ack: SessionAck
@@ -339,7 +349,10 @@ extension AppductClient {
       if myEpoch != epoch || destroyed { return }
 
       emitError(
-        AppductUnifiedErrorEvent(phase: "socket", message: "Appduct resume attempt failed.")
+        AppductUnifiedErrorEvent(
+          phase: "socket",
+          message: "Appduct resume attempt failed: \(describeResumeError(error))"
+        )
       )
 
       if let handshakeError = error as? AppductHandshakeClosedError, isTerminalHandshakeRejection(handshakeError) {
@@ -353,7 +366,7 @@ extension AppductClient {
 
     resumeInFlight = false
     if myEpoch != epoch || destroyed { return }
-    onAckReceived(ack, kind: .resumed, endpoint: session.endpoint)
+    onAckReceived(ack, kind: .resumed, endpoint: session.endpoint, linkPin: session.linkPin)
   }
 
   // MARK: Transport event handlers
@@ -532,6 +545,19 @@ extension AppductClient {
     }
     if let jsonError = error as? AppductJSONError { return jsonError.message }
     return "Appduct connect failed."
+  }
+
+  /// The underlying cause folded into "Appduct resume attempt failed." (issue #136) -- a
+  /// handshake rejection's own reason, a `LocalizedError`'s description (covers the transport's
+  /// internal `configureFromBundle` failures, such as a build with no pin left to trust), or a
+  /// last-resort dump of the error for anything else.
+  private func describeResumeError(_ error: Error) -> String {
+    if let handshakeError = error as? AppductHandshakeClosedError { return handshakeError.message }
+    if let jsonError = error as? AppductJSONError { return jsonError.message }
+    if let localizedError = error as? LocalizedError, let description = localizedError.errorDescription {
+      return description
+    }
+    return String(describing: error)
   }
 }
 

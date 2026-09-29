@@ -12,7 +12,8 @@ final class AppductClientTests: XCTestCase {
 
   private func makeClient(
     timers: FakeClientTimers = FakeClientTimers(),
-    defaultToolTimeoutMs: Int = 10_000
+    defaultToolTimeoutMs: Int = 10_000,
+    foregroundObserver: any AppductForegroundObserving = NeverBackgroundedObserver()
   ) -> (AppductClient, FakeTransportSession) {
     let transport = FakeTransportSession()
     let client = AppductClient(
@@ -20,18 +21,23 @@ final class AppductClientTests: XCTestCase {
       timers: timers,
       defaultToolTimeoutMs: defaultToolTimeoutMs,
       requirePrivateIp: true,
-      foregroundObserver: NeverBackgroundedObserver()
+      foregroundObserver: foregroundObserver
     )
     return (client, transport)
   }
 
-  private func connectInput(sessionId: String = "session-1", expiresAt: Int = 9_999_999_999) -> AppductConnectInput {
+  private func connectInput(
+    sessionId: String = "session-1",
+    expiresAt: Int = 9_999_999_999,
+    linkPin: String? = nil
+  ) -> AppductConnectInput {
     AppductConnectInput(
       ip: "192.168.1.10",
       port: 8_443,
       sessionId: sessionId,
       token: "claim-token",
-      expiresAt: expiresAt
+      expiresAt: expiresAt,
+      linkPin: linkPin
     )
   }
 
@@ -209,6 +215,125 @@ final class AppductClientTests: XCTestCase {
     XCTAssertEqual(sessionChanges.last?.type, .resumed)
     XCTAssertEqual(sessionChanges.last?.sessionId, "session-1")
     XCTAssertNil(sessionChanges.last?.reason)
+  }
+
+  // MARK: link pin carried across a resume (issue #136)
+
+  /// A build that trusts the link's pin (`trust: link`, no embedded pins) has nowhere else to
+  /// get one for a resume -- `configureFromBundle` throws `.linkTrustRequiresLinkPin` before a
+  /// socket even opens unless the pin the original claim trusted rides along.
+  func testResumeAfterSocketLossCarriesTheOriginalLinkPin() async throws {
+    let timers = FakeClientTimers(random: 0)
+    let (client, transport) = makeClient(timers: timers)
+    let pin = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    let connectTaskInput = connectInput(linkPin: pin)
+    let connectTask = Task { try await client.connect(connectTaskInput) }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+    transport.simulateAck(sessionId: "session-1", graceS: 120)
+    try await connectTask.value
+
+    transport.simulateClose(code: 1_006, reason: nil)
+    try await waitUntil("the client moved to reconnecting after the socket closed") {
+      await client.state == .reconnecting
+    }
+
+    timers.advance(byMs: AppductBackoff.capMs)
+    try await waitUntil("the resume attempt started a second transport handshake") {
+      transport.isWired && transport.connectCallCount >= 2
+    }
+
+    XCTAssertEqual(transport.lastConnectOptions?.linkPin, pin)
+  }
+
+  /// A resume ack rotates the resume token; the pin has to survive that, or only the first
+  /// resume of a session ever works.
+  func testSecondResumeStillCarriesTheOriginalLinkPin() async throws {
+    let timers = FakeClientTimers(random: 0)
+    let (client, transport) = makeClient(timers: timers)
+    let pin = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    let connectTaskInput = connectInput(linkPin: pin)
+    let connectTask = Task { try await client.connect(connectTaskInput) }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+    transport.simulateAck(sessionId: "session-1", resumeToken: "resume-1", graceS: 120)
+    try await connectTask.value
+
+    transport.simulateClose(code: 1_006, reason: nil)
+    try await waitUntil("the client moved to reconnecting after the socket closed") {
+      await client.state == .reconnecting
+    }
+    timers.advance(byMs: AppductBackoff.capMs)
+    try await waitUntil("the first resume attempt started a transport handshake") {
+      transport.isWired && transport.connectCallCount >= 2
+    }
+    transport.simulateAck(sessionId: "session-1", resumeToken: "resume-2", graceS: 120)
+    try await waitUntil("the client went active again after the resume ack") {
+      await client.state == .active
+    }
+
+    transport.simulateClose(code: 1_006, reason: nil)
+    try await waitUntil("the client moved to reconnecting after the second close") {
+      await client.state == .reconnecting
+    }
+    timers.advance(byMs: AppductBackoff.capMs)
+    try await waitUntil("the second resume attempt started a transport handshake") {
+      transport.isWired && transport.connectCallCount >= 3
+    }
+
+    XCTAssertEqual(transport.lastConnectOptions?.linkPin, pin)
+  }
+
+  /// Control for the fix above: a build with embedded pins never carried a link pin in the first
+  /// place, so a resume must keep connecting with `linkPin` absent, exactly as before.
+  func testResumeWithNoLinkPinStaysPinless() async throws {
+    let timers = FakeClientTimers(random: 0)
+    let (client, transport) = makeClient(timers: timers)
+    let connectTaskInput = connectInput()
+    let connectTask = Task { try await client.connect(connectTaskInput) }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+    transport.simulateAck(sessionId: "session-1", graceS: 120)
+    try await connectTask.value
+
+    transport.simulateClose(code: 1_006, reason: nil)
+    try await waitUntil("the client moved to reconnecting after the socket closed") {
+      await client.state == .reconnecting
+    }
+
+    timers.advance(byMs: AppductBackoff.capMs)
+    try await waitUntil("the resume attempt started a second transport handshake") {
+      transport.isWired && transport.connectCallCount >= 2
+    }
+
+    XCTAssertNil(transport.lastConnectOptions?.linkPin)
+  }
+
+  /// A failed resume attempt no longer reports a bare "Appduct resume attempt failed." -- the
+  /// underlying cause (here, the transport's own rejection) rides along in the message.
+  func testFailedResumeAttemptReportsItsUnderlyingCause() async throws {
+    struct BoomError: Error, LocalizedError {
+      var errorDescription: String? { "boom: no pin to trust" }
+    }
+
+    let timers = FakeClientTimers(random: 0)
+    let (client, transport) = makeClient(timers: timers)
+    let connectTaskInput = connectInput()
+    let connectTask = Task { try await client.connect(connectTaskInput) }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+    transport.simulateAck(sessionId: "session-1", graceS: 120)
+    try await connectTask.value
+
+    let errors = EventCollector<AppductUnifiedErrorEvent>()
+    _ = await client.onError { event in errors.append(event) }
+
+    transport.connectError = { BoomError() }
+    transport.simulateClose(code: 1_006, reason: nil)
+    try await waitUntil("the client moved to reconnecting after the socket closed") {
+      await client.state == .reconnecting
+    }
+
+    timers.advance(byMs: AppductBackoff.capMs)
+    try await waitUntil("the failed resume attempt reported its cause") {
+      errors.all.contains { $0.message.contains("boom: no pin to trust") }
+    }
   }
 
   func testGraceExpiryFinalizesSessionAsLost() async throws {
@@ -656,7 +781,8 @@ final class AppductClientTests: XCTestCase {
         endpoint: AppductResumeEndpoint(ip: "192.168.1.10", port: 8_443),
         keepaliveIntervalS: 30,
         graceS: 120,
-        disconnectedAtMs: nil
+        disconnectedAtMs: nil,
+        linkPin: nil
       )
     )
 
@@ -672,6 +798,35 @@ final class AppductClientTests: XCTestCase {
     XCTAssertEqual(state, .active)
   }
 
+  /// A lease written by a pinned claim (issue #136) must resume with that same pin after a
+  /// JS reload -- `restoreSession` has no claim/deep-link to read a pin from, only the
+  /// lease, so the lease itself has to carry it.
+  func testRestoreSessionFromAPinnedLeaseResumesWithThatPin() async throws {
+    let pin = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    let ownerGeneration = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
+    AppductProcessResumeLeaseStore.shared.replace(
+      ownerGeneration: ownerGeneration,
+      lease: AppductResumeLeaseV1(
+        sessionId: "session-restored",
+        resumeToken: "resume-token",
+        alias: "iphone-1",
+        endpoint: AppductResumeEndpoint(ip: "192.168.1.10", port: 8_443),
+        keepaliveIntervalS: 30,
+        graceS: 120,
+        disconnectedAtMs: nil,
+        linkPin: pin
+      )
+    )
+
+    let timers = FakeClientTimers()
+    let (client, transport) = makeClient(timers: timers)
+    let restored = await client.restoreSession()
+    XCTAssertTrue(restored)
+    try await waitUntil("the resume attempt started a transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+
+    XCTAssertEqual(transport.lastConnectOptions?.linkPin, pin)
+  }
+
   func testRestoreSessionReturnsFalseForAnExpiredLease() async {
     let ownerGeneration = AppductProcessResumeLeaseStore.shared.newOwnerGeneration()
     AppductProcessResumeLeaseStore.shared.replace(
@@ -683,7 +838,8 @@ final class AppductClientTests: XCTestCase {
         endpoint: AppductResumeEndpoint(ip: "192.168.1.10", port: 8_443),
         keepaliveIntervalS: 30,
         graceS: 1,
-        disconnectedAtMs: 0
+        disconnectedAtMs: 0,
+        linkPin: nil
       )
     )
 
@@ -692,5 +848,41 @@ final class AppductClientTests: XCTestCase {
     let (client, _) = makeClient(timers: timers)
     let restored = await client.restoreSession()
     XCTAssertFalse(restored)
+  }
+
+  // MARK: foreground resume (issue #136)
+
+  /// Returning to the foreground while `reconnecting` fires an immediate resume attempt
+  /// (`handleForegroundChange`) -- that attempt must carry the original link pin exactly like a
+  /// timer-driven one does, using a fake foreground observer the test can flip on demand rather
+  /// than a real `UIApplication` notification.
+  func testForegroundResumeCarriesTheOriginalLinkPin() async throws {
+    let timers = FakeClientTimers(random: 0)
+    let foregroundObserver = FakeForegroundObserver()
+    let (client, transport) = makeClient(timers: timers, foregroundObserver: foregroundObserver)
+    let pin = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    let connectTaskInput = connectInput(linkPin: pin)
+    let connectTask = Task { try await client.connect(connectTaskInput) }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+    transport.simulateAck(sessionId: "session-1", graceS: 120)
+    try await connectTask.value
+
+    // Background the app first: `scheduleReconnectAttempt` skips its timer while backgrounded,
+    // so the only thing that can trigger the resume below is the foreground transition itself.
+    foregroundObserver.simulateForegroundChange(background: true)
+    transport.simulateClose(code: 1_006, reason: nil)
+    try await waitUntil("the client moved to reconnecting after the socket closed") {
+      await client.state == .reconnecting
+    }
+    // No reconnect timer while backgrounded (only the grace timer): the only thing that can
+    // still trigger a resume attempt from here is the foreground transition itself.
+    XCTAssertEqual(transport.connectCallCount, 1)
+
+    foregroundObserver.simulateForegroundChange(background: false)
+    try await waitUntil("returning to the foreground started a resume attempt") {
+      transport.isWired && transport.connectCallCount >= 2
+    }
+
+    XCTAssertEqual(transport.lastConnectOptions?.linkPin, pin)
   }
 }

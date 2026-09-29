@@ -21,6 +21,10 @@ internal data class AppductResumeLeaseV1(
     val keepaliveIntervalS: Double,
     val graceS: Double,
     val disconnectedAtMs: Long?,
+    /** The SPKI pin the claim that opened this session trusted, carried so a resume built from
+     * this lease can trust it again instead of the transport rejecting the connect outright
+     * (issue #136). `null` for a build with embedded pins. */
+    val linkPin: String? = null,
 ) {
     val schemaVersion: Int = RESUME_LEASE_SCHEMA_VERSION
 
@@ -35,6 +39,7 @@ internal data class AppductResumeLeaseV1(
             "keepaliveIntervalS" to keepaliveIntervalS,
             "graceS" to graceS,
             "disconnectedAtMs" to disconnectedAtMs,
+            "linkPin" to linkPin,
         )
 }
 
@@ -175,6 +180,7 @@ private fun parseSessionAckLease(
         keepaliveIntervalS = keepaliveIntervalS,
         graceS = graceS,
         disconnectedAtMs = null,
+        linkPin = options.linkPin,
     )
 }
 

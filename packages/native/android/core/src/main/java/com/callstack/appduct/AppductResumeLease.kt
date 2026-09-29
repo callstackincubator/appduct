@@ -15,6 +15,10 @@ internal data class AppductParsedResumeLease(
     val keepaliveIntervalS: Double,
     val graceS: Double,
     val disconnectedAtMs: Long?,
+    /** The SPKI pin the claim that opened this session trusted, carried so a resume built from
+     * this lease (`restoreSession`, after a JS reload) can trust it again (issue #136).
+     * `null` for a build with embedded pins. */
+    val linkPin: String? = null,
 )
 
 private fun isBoundedNonEmptyString(
@@ -64,6 +68,8 @@ internal fun parseAppductResumeLease(record: Map<String, Any?>?): AppductParsedR
             else -> return null
         }
 
+    val linkPin = record["linkPin"] as? String
+
     return AppductParsedResumeLease(
         sessionId = sessionId as String,
         resumeToken = resumeToken as String,
@@ -73,6 +79,7 @@ internal fun parseAppductResumeLease(record: Map<String, Any?>?): AppductParsedR
         keepaliveIntervalS = keepaliveIntervalS,
         graceS = graceS,
         disconnectedAtMs = disconnectedAtMs,
+        linkPin = linkPin,
     )
 }
 

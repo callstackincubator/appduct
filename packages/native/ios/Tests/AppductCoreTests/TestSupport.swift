@@ -218,6 +218,41 @@ final class FakeClientTimers: AppductClientTimers, @unchecked Sendable {
   }
 }
 
+/// Scripted fake standing in for `UIKitAppductForegroundObserver` in `AppductClient` tests --
+/// lets a test simulate the app returning to the foreground without any real `UIApplication`
+/// notification, beside `NeverBackgroundedObserver` (which can never do that at all).
+final class FakeForegroundObserver: AppductForegroundObserving, @unchecked Sendable {
+  private let lock = NSLock()
+  private var _isBackgrounded: Bool
+  private var handlers: [@Sendable (Bool) -> Void] = []
+
+  init(startBackgrounded: Bool = false) {
+    _isBackgrounded = startBackgrounded
+  }
+
+  func isBackgrounded() -> Bool {
+    lock.lock(); defer { lock.unlock() }
+    return _isBackgrounded
+  }
+
+  func onChange(_ handler: @escaping @Sendable (Bool) -> Void) -> any AppductDisposable {
+    lock.lock()
+    handlers.append(handler)
+    lock.unlock()
+    return NoopDisposable()
+  }
+
+  /// Test-side trigger: flips the observed state and notifies every subscriber, exactly like a
+  /// real `didEnterBackground`/`didBecomeActive` notification would.
+  func simulateForegroundChange(background: Bool) {
+    lock.lock()
+    _isBackgrounded = background
+    let toNotify = handlers
+    lock.unlock()
+    for handler in toNotify { handler(background) }
+  }
+}
+
 /// Thrown by `waitUntil` (right after it records an `XCTFail`) when its condition never held.
 struct WaitTimedOutError: Error, CustomStringConvertible {
   let description: String
