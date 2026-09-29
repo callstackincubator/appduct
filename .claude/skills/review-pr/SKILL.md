@@ -105,6 +105,9 @@ When running as a subagent, end with exactly this:
 ```
 PR: #N  Verdict: approve | comment | request-changes
 Findings: b blocker, s should-fix, n nit
-Top: <the single most important finding, one line>
+Fix: <every blocker and should-fix, one line each as `path:line what is wrong`, most important first, or "none">
 Unverified: <count, or "none">
 ```
+
+The orchestrator pastes the `Fix:` lines into the implementer's task, so each must make sense
+without the PR open.

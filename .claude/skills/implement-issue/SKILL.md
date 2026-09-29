@@ -54,7 +54,7 @@ One test per criterion, at the lowest tier that can observe it:
 | unit (TS) | `*.test.ts` | one module through its `index.ts`, fakes at the ports |
 | integration (TS) | `*.integration.test.ts` | several real modules in-process, fakes only at the ports |
 | e2e (TS) | `*.e2e.test.ts` | the real CLI subprocess and the fake app client |
-| unit (Swift) | `packages/native/ios/Tests`, `xcodebuild test -scheme AppductCore` | the public API of AppductCore with fakes behind its protocols |
+| unit (Swift) | `packages/native/ios/Tests`, `swift test` from the repo root (the package is the root `Package.swift`) | the public API of AppductCore with fakes behind its protocols |
 | unit (Kotlin) | `packages/native/android`, `./gradlew :core:testDebugUnitTest` | the public API of the Android core with fakes behind its interfaces |
 | conformance | `packages/native/fixtures` | a wire or descriptor shape all three SDKs must agree on; change the fixture first |
 | device | `e2e-device` skill | the real app on a simulator; never in CI |

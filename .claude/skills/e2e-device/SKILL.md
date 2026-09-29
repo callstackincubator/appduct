@@ -24,29 +24,52 @@ Pick from the paths the PR changes. Run every row that matches.
 | `packages/native/android/**` | `playground-native/android` on Android emulator |
 | `packages/appduct/**`, `packages/shared/**` only | iOS row only |
 
-## The Metro trap
+## Three traps
 
-`expo run:ios` and `expo run:android` start Metro in the foreground and never return, so a
-run that "waits for the build" is actually waiting on Metro. Always pass `--no-bundler` and
-start Metro yourself in the background. If any command here hangs or errors, run it with
-`--help` before improvising.
+- **Metro.** `expo run:ios` and `expo run:android` start Metro in the foreground and never
+  return, so a run that "waits for the build" is actually waiting on Metro. Start Metro
+  yourself in the background and pass `--no-bundler`.
+- **`expo run:ios`.** It can build the app and then hang at install until the tool times out.
+  Do not use it. Build, install and launch in separate steps as below, each under `timeout`.
+- **The shared daemon.** The daemon in `~/.appduct` may be running another branch's code and
+  will answer for this one. Always run against a state dir of your own.
+
+If any command here hangs or errors, run it with `--help` before improvising.
+
+## Set up, every target
+
+```bash
+export LANG=en_US.UTF-8                                   # `pod install` fails without it
+export APPDUCT_STATE_DIR=/tmp/appduct-e2e-$$              # this branch's daemon, not the shared one
+mkdir -p "$APPDUCT_STATE_DIR" && echo '{"wssPort": 0}' > "$APPDUCT_STATE_DIR/config.json"   # 0 picks a free port
+pnpm install --frozen-lockfile && pnpm build              # repo root; builds the CLI and SDK
+```
+
+Shell state does not carry over between commands, so write the state dir's path down and
+export both variables again in every command that runs the CLI or a build.
 
 ## iOS, Expo playground
 
 ```bash
-pnpm install --frozen-lockfile && pnpm build             # repo root; builds the CLI and SDK
 udid=$(xcrun simctl list devices available -j | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
 xcrun simctl boot "$udid" 2>/dev/null || true
+timeout 120 xcrun simctl bootstatus "$udid" -b
 cd playground
+[ -d ios ] || pnpm exec expo prebuild --platform ios      # generates ios/ and runs `pod install`
 pnpm exec expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
-pnpm exec expo run:ios --no-bundler --device "$udid"     # builds, installs, launches
+timeout 900 xcodebuild -workspace ios/playground.xcworkspace -scheme playground -configuration Debug \
+  -sdk iphonesimulator -destination "id=$udid" -derivedDataPath ios/build build | tail -3   # about 2 min warm
+timeout 120 xcrun simctl install "$udid" ios/build/Build/Products/Debug-iphonesimulator/playground.app
+xcrun simctl openurl "$udid" "playground://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"   # launches into Metro, no tapping
 cd ..
 ```
+
+If `simctl install` times out, shut the simulator down, boot it again and repeat the install.
 
 Connect and wait until the session is active:
 
 ```bash
-pnpm playground:appduct -- sessions link --open ios-sim
+pnpm playground:appduct -- sessions link --open ios-sim --device "$udid"
 until pnpm playground:appduct -- sessions ls --json | jq -e '.data[] | select(.state=="active")' >/dev/null; do sleep 2; done
 ```
 
@@ -58,7 +81,7 @@ emulator -avd <name> -no-snapshot-load > /tmp/emulator.log 2>&1 &
 adb wait-for-device
 cd playground
 pnpm exec expo start --dev-client --port 8081 > /tmp/metro.log 2>&1 &
-pnpm exec expo run:android --no-bundler
+timeout 900 pnpm exec expo run:android --no-bundler
 cd ..
 pnpm playground:appduct -- sessions link --open android   # app id comes from playground/.appduct/config.json
 ```
@@ -112,8 +135,8 @@ $ pnpm playground:appduct -- tools call <tool> --input '{...}'
 <output>
 ```
 
-Shut down what you started: kill Metro, `xcrun simctl shutdown "$udid"` or
-`adb emu kill`.
+Shut down what you started: kill Metro, `pnpm playground:appduct -- daemon stop` with your
+state dir still exported, `xcrun simctl shutdown "$udid"` or `adb emu kill`.
 
 ## Report
 
