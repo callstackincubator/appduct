@@ -11,7 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
-- **New: a call to a backgrounded app fails at once with `session_suspended`, and the message says the app is in the background.** On iOS, calls keep working for as long as iOS lets the app run after backgrounding, about 30 seconds, and fail once that ends; on Android they fail as soon as the app is backgrounded. Needs an app built with this release.
+- **New: a call to a backgrounded app fails at once with `session_suspended`, and the message says the app is in the background.** On iOS that happens once iOS stops letting the app run, about 30 seconds after backgrounding, and on Android as soon as it is backgrounded; needs an app built with this release.
 - **Fix: a session backgrounded or disconnected in a build with `trust: link` (the zero-config
   default) resumes automatically once the app comes back, instead of staying "Reconnecting"
   until the 10-minute grace window expires and a new link is needed.**

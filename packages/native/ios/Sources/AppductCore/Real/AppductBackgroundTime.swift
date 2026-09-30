@@ -9,7 +9,8 @@ import Foundation
 /// calls keep working; this is the only place UIKit's background-task API is touched.
 public protocol AppductBackgroundTime: Sendable {
   /// Asks for background time. `onExpire` runs when the OS is about to take it back (or refused
-  /// to grant any). Disposing the result ends the time; it is idempotent.
+  /// to grant any); the real adapter ends the time itself right after `onExpire` returns.
+  /// Disposing the result ends the time; it is idempotent.
   func begin(onExpire: @escaping @Sendable () -> Void) -> any AppductDisposable
 }
 
@@ -26,10 +27,10 @@ public protocol AppductBackgroundTime: Sendable {
       let id = Self.onMain {
         UIApplication.shared.beginBackgroundTask(withName: "appduct.background-window") {
           onExpire()
-          // iOS wants the task ended promptly after the handler runs. The client normally ends it
-          // once the close event arrives; this caps the wait so a close that never completes
-          // cannot get the app killed.
-          DispatchQueue.main.asyncAfter(deadline: .now() + 2) { grant.end() }
+          // UIKit suspends the app as soon as this handler returns, and terminates it if a task
+          // is still open. The client would normally end the hold once the close event arrives;
+          // this is the safety net for when it has not yet. Ending it again later is a no-op.
+          grant.end()
         }
       }
       guard id != .invalid else {

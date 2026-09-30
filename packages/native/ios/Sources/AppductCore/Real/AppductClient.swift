@@ -275,7 +275,6 @@ public actor AppductClient {
   /// Closes the socket, clears the lease, state → `closed`. Idempotent.
   public func disconnect() async {
     epoch += 1
-    releaseBackgroundTime()
     clearReconnectTimer()
     clearGraceTimer()
 
@@ -297,6 +296,9 @@ public actor AppductClient {
     }
 
     await transport.close()
+    // Only now: once the last background task ends iOS may suspend the app, and the close frame
+    // has to have left first.
+    releaseBackgroundTime()
   }
 
   public struct AppductClientClosedError: Error, Sendable {}
@@ -310,8 +312,8 @@ public actor AppductClient {
     settlePendingAttempt(.failure(AppductClientClosedError()))
     abortAllInFlight()
     foregroundSubscription?.dispose()
-    releaseBackgroundTime()
     await transport.invalidate()
+    releaseBackgroundTime()
   }
 
   func sendWire(_ value: JSONValue) async throws {

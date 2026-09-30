@@ -276,9 +276,10 @@ call from any thread and need no such hop.
 ## Backgrounding
 
 When the app goes to the background, tool calls keep working for as long as iOS lets the app
-run, about 30 seconds. A call already running finishes and returns its result. After that,
+run, about 30 seconds. A call that finishes within that time returns its result. After that,
 calls fail at once with `session_suspended` and a message saying the app is in the background,
-and `appduct sessions ls` shows the session as `suspended` with the reason `app_backgrounded`.
+including a call still running when the time ends. `appduct sessions ls` shows the session as
+`suspended (app in background)`.
 The session resumes on its own when the app returns to the foreground.
 
 Appduct asks iOS for this time the way any app can. It needs no background mode, entitlement or
