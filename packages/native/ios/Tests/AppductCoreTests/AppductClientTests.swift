@@ -1095,6 +1095,34 @@ final class AppductClientTests: XCTestCase {
     XCTAssertEqual(rig.backgroundTime.held, 0)
   }
 
+  func testDisconnectKeepsTheBackgroundTimeUntilTheSocketIsClosed() async throws {
+    let rig = try await activeBackgroundRig()
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+    let heldWhenClosing = EventCollector<Int>()
+    let backgroundTime = rig.backgroundTime
+    rig.transport.onClose = { heldWhenClosing.append(backgroundTime.held) }
+
+    await rig.client.disconnect()
+
+    XCTAssertEqual(heldWhenClosing.all, [1])
+    XCTAssertEqual(rig.backgroundTime.held, 0)
+  }
+
+  func testDestroyKeepsTheBackgroundTimeUntilTheSessionIsInvalidated() async throws {
+    let rig = try await activeBackgroundRig()
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+    let heldWhenInvalidating = EventCollector<Int>()
+    let backgroundTime = rig.backgroundTime
+    rig.transport.onInvalidate = { heldWhenInvalidating.append(backgroundTime.held) }
+
+    await rig.client.destroy()
+
+    XCTAssertEqual(heldWhenInvalidating.all, [1])
+    XCTAssertEqual(rig.backgroundTime.held, 0)
+  }
+
   func testALostSocketEndsTheBackgroundTime() async throws {
     let rig = try await activeBackgroundRig()
     rig.observer.simulateForegroundChange(background: true)

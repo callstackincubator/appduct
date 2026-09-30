@@ -111,8 +111,15 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
     withLock { _sentMessages.append(message) }
   }
 
+  /// Runs as `close()` is called, so a test can record what else was true at that moment.
+  var onClose: (@Sendable () -> Void)?
+
+  /// Runs as `invalidate()` is called.
+  var onInvalidate: (@Sendable () -> Void)?
+
   func close() async {
     withLock { _closeCallCount += 1 }
+    onClose?()
     stateSnapshot = "closed"
   }
 
@@ -125,6 +132,7 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   }
 
   func invalidate() async {
+    onInvalidate?()
     stateSnapshot = "closed"
   }
 
