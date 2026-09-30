@@ -68,6 +68,8 @@ public actor AppductClient {
   var destroyed = false
   var lastErrorDetails: AppductErrorDetails?
   var foregroundSubscription: (any AppductDisposable)?
+  /// The OS background time held while the app is backgrounded with an active session.
+  var backgroundHold: (any AppductDisposable)?
 
   // MARK: Tool registry (registration order preserved)
 
@@ -105,7 +107,11 @@ public actor AppductClient {
     foregroundObserver: (any AppductForegroundObserving)? = nil,
     backgroundTime: (any AppductBackgroundTime)? = nil
   ) {
-    self.backgroundTime = backgroundTime ?? FakeAppductBackgroundTime()
+    #if canImport(UIKit)
+      self.backgroundTime = backgroundTime ?? UIKitAppductBackgroundTime()
+    #else
+      self.backgroundTime = backgroundTime ?? NoBackgroundTime()
+    #endif
     self.transport = transport
     self.timers = timers
     self.defaultToolTimeoutMs = defaultToolTimeoutMs
@@ -269,6 +275,7 @@ public actor AppductClient {
   /// Closes the socket, clears the lease, state → `closed`. Idempotent.
   public func disconnect() async {
     epoch += 1
+    releaseBackgroundTime()
     clearReconnectTimer()
     clearGraceTimer()
 
@@ -303,6 +310,7 @@ public actor AppductClient {
     settlePendingAttempt(.failure(AppductClientClosedError()))
     abortAllInFlight()
     foregroundSubscription?.dispose()
+    releaseBackgroundTime()
     await transport.invalidate()
   }
 

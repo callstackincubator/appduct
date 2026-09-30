@@ -153,6 +153,8 @@ A physical device must be on the same local network as your computer. For every 
 
 Once connected, the session survives Metro reloads, backgrounding, and short network drops. If the app process is killed, connect again with a new link.
 
+On iOS, tool calls keep working for a short time after the app goes to the background (as long as iOS allows, about 30 seconds). After that, calls fail at once and say the app is in the background, until the app returns to the foreground. On Android, calls fail as soon as the app is in the background.
+
 ## What's in each build
 
 By default, Appduct's native code is in **debug** builds only. In a release build the library is inactive: every function still exists, but does nothing and never throws. To ship Appduct in an internal release build, or to strip its JavaScript too, see [Build variants](/appduct/guides/build-variants/).

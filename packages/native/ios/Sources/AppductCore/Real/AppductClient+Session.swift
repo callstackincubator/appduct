@@ -428,6 +428,7 @@ extension AppductClient {
 
   func onSocketLost(_ event: AppductCloseEvent, errorDetails: AppductErrorDetails?) {
     guard !destroyed else { return }
+    releaseBackgroundTime()
 
     // The socket is gone, so no `tool_cancel` frame could ever be delivered for whatever was still
     // in flight -- abort it directly.
@@ -484,19 +485,40 @@ extension AppductClient {
 
     if backgrounded {
       clearReconnectTimer()
-      // Tell the daemon, so a call to this app fails at once naming the background instead of
-      // timing out. The close takes the usual non-terminal path: no reconnect while backgrounded,
-      // a resume on foreground.
-      if clientState == .active, heldSession != nil {
-        await transport.closeForBackground()
+      // Keep the socket and the tool calls alive for as long as the OS grants background time.
+      // When the grant expires, `handleBackgroundTimeExpired` releases the session.
+      if clientState == .active, heldSession != nil, backgroundHold == nil {
+        backgroundHold = backgroundTime.begin { [weak self] in
+          Task { await self?.handleBackgroundTimeExpired() }
+        }
       }
       return
     }
+
+    releaseBackgroundTime()
 
     if heldSession != nil, clientState == .reconnecting, !resumeInFlight {
       clearReconnectTimer()
       await attemptResume(epoch)
     }
+  }
+
+  /// The OS is taking the background time back. Tell the daemon, so a call to this app fails at
+  /// once naming the background instead of timing out. The close takes the usual non-terminal
+  /// path: no reconnect while backgrounded, a resume on foreground. The hold is released when the
+  /// close event arrives (`onSocketLost`), so the frame has time to leave.
+  func handleBackgroundTimeExpired() async {
+    guard backgrounded, backgroundHold != nil else { return }
+    guard clientState == .active, heldSession != nil else {
+      releaseBackgroundTime()
+      return
+    }
+    await transport.closeForBackground()
+  }
+
+  func releaseBackgroundTime() {
+    backgroundHold?.dispose()
+    backgroundHold = nil
   }
 
   // MARK: Timers / wire sends
