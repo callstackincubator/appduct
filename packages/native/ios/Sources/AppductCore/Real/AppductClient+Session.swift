@@ -428,6 +428,7 @@ extension AppductClient {
 
   func onSocketLost(_ event: AppductCloseEvent, errorDetails: AppductErrorDetails?) {
     guard !destroyed else { return }
+    releaseBackgroundTime()
 
     // The socket is gone, so no `tool_cancel` frame could ever be delivered for whatever was still
     // in flight -- abort it directly.
@@ -484,19 +485,33 @@ extension AppductClient {
 
     if backgrounded {
       clearReconnectTimer()
-      // Tell the daemon, so a call to this app fails at once naming the background instead of
-      // timing out. The close takes the usual non-terminal path: no reconnect while backgrounded,
-      // a resume on foreground.
-      if clientState == .active, heldSession != nil {
-        await transport.closeForBackground()
+      // Keep the socket and the tool calls alive for as long as the OS grants background time.
+      // When the grant expires the socket is closed for the background. The handler runs on the
+      // main thread and iOS suspends the app right after it returns, so it goes straight to the
+      // transport instead of hopping through this actor first.
+      if clientState == .active, heldSession != nil, backgroundHold == nil {
+        let transport = transport
+        backgroundHold = backgroundTime.begin {
+          Task(priority: .userInitiated) { await transport.closeForBackground() }
+        }
       }
       return
     }
+
+    releaseBackgroundTime()
 
     if heldSession != nil, clientState == .reconnecting, !resumeInFlight {
       clearReconnectTimer()
       await attemptResume(epoch)
     }
+  }
+
+  /// The hold is released when the close event that the background close causes arrives
+  /// (`onSocketLost`), so the frame has time to leave. The close takes the usual non-terminal
+  /// path: no reconnect while backgrounded, a resume on foreground.
+  func releaseBackgroundTime() {
+    backgroundHold?.dispose()
+    backgroundHold = nil
   }
 
   // MARK: Timers / wire sends

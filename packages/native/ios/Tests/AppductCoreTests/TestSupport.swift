@@ -55,6 +55,10 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   private var _closeCallCount = 0
   private var _closeForBackgroundCallCount = 0
 
+  /// Set by a test to make `closeForBackground()` not report its close until the test calls
+  /// `simulateClose` itself, like a real socket whose close frame is still in flight.
+  var holdBackgroundClose = false
+
   /// Set by a test to make the next `connect(options:)` throw instead of succeeding.
   var connectError: (@Sendable () -> Error)?
 
@@ -107,8 +111,15 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
     withLock { _sentMessages.append(message) }
   }
 
+  /// Runs as `close()` is called, so a test can record what else was true at that moment.
+  var onClose: (@Sendable () -> Void)?
+
+  /// Runs as `invalidate()` is called.
+  var onInvalidate: (@Sendable () -> Void)?
+
   func close() async {
     withLock { _closeCallCount += 1 }
+    onClose?()
     stateSnapshot = "closed"
   }
 
@@ -116,10 +127,12 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   /// close back to the client.
   func closeForBackground() async {
     withLock { _closeForBackgroundCallCount += 1 }
+    if holdBackgroundClose { return }
     simulateClose(code: 1_001, reason: "app_backgrounded")
   }
 
   func invalidate() async {
+    onInvalidate?()
     stateSnapshot = "closed"
   }
 
