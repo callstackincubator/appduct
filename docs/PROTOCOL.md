@@ -345,7 +345,7 @@ type EventDescriptor = { name: string; description: string; payload_schema?: Rec
 
 Guard: `isEventDescriptor`; conformance vectors in `packages/native/fixtures/event-descriptors.json`.
 
-- `name`: any non-empty string up to 4096 characters. This is the rule for a posted `event`'s
+- `name`: any non-empty string up to 4096 UTF-16 code units (a JavaScript string's `length`). This is the rule for a posted `event`'s
   `name`, not the tool-name pattern, so a name an app already posts (`cart.item_added`) can be
   declared as is.
 - `description`: 1 to 4096 characters, like a tool's.

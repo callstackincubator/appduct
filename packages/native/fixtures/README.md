@@ -66,9 +66,9 @@ values, update the corresponding `appduct=` values here by hand and re-check `pa
 ### `event-descriptors.json`
 
 Array of `{ name, descriptor, valid }` covering `@appduct/shared`'s `isEventDescriptor`
-(`docs/PROTOCOL.md` §5a): a name is any non-empty string up to 4096 characters (dotted names and
+(`docs/PROTOCOL.md` §5a): a name is any non-empty string up to 4096 UTF-16 code units (dotted names and
 names with spaces are valid, unlike a tool name), a description is 1 to 4096 characters, and
-`payload_schema` must be a JSON object if present (rejecting a string, an array and `null`).
+`payload_schema` must be a JSON object if present (rejecting a string, an array and `null`). The 4096 limit is pinned in UTF-16 code units: 2048 non-BMP characters (😀) pass, 2049 fail.
 Currently asserted by the TypeScript suite only; the Swift and Kotlin suites join it with their
 `registerEvent` slices.
 

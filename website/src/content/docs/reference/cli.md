@@ -95,7 +95,7 @@ Ctrl-C cancels the call in the app.
 
 ### `appduct events ls [selector]`
 
-Lists the events your app declares, one line each: the event's name, its payload shape and its description. With `--json`, prints `{ "events": [...], "total": n }` with each event's full payload schema.
+Lists the events your app declares, each as a signature line (name and payload shape) with its description indented on the next line. With `--json`, prints `{ "events": [...], "total": n }` with each event's full payload schema.
 
 | Flag | Description |
 | --- | --- |
