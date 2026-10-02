@@ -186,7 +186,31 @@ registerEvent({
 
 `payloadSchema` takes the same forms as a tool's `inputSchema` ([above](#accepted-schema-forms)), and an event's name can be any string, dotted ones like `cart.item_added` included. `registerEvent` returns `{ remove() }`, which withdraws only that declaration.
 
-Declaring is advisory. An undeclared `postEvent` still reaches agents, and production builds post without any check. In development, `postEvent` warns about an undeclared name and about a payload that doesn't match a declared Standard Schema, and still sends the event. A raw JSON Schema is listed but never checked against payloads.
+Declare events at app start, not inside a screen that may never open, or `appduct events ls` stays empty until it does.
+
+The native SDKs declare the same way. In Swift, `payloadSchema` is a JSON Schema dictionary and the call throws on an invalid name:
+
+```swift
+try Appduct.shared.registerEvent(
+  name: "checkout_completed",
+  description: "An order was paid.",
+  payloadSchema: ["type": "object", "properties": ["orderId": ["type": "string"]]]
+)
+```
+
+In Kotlin, it is a `JSONObject`, and an invalid name throws `IllegalArgumentException`:
+
+```kotlin
+Appduct.registerEvent(
+  name = "checkout_completed",
+  description = "An order was paid.",
+  payloadSchema = JSONObject("""{"type":"object","properties":{"orderId":{"type":"string"}}}"""),
+)
+```
+
+Both return a handle whose `remove()` withdraws that declaration, and neither checks a payload against the schema.
+
+Declaring is advisory. An undeclared `postEvent` still reaches agents, and production builds post without any check. Only the React Native SDK warns in development: `postEvent` warns about an undeclared name and about a payload that doesn't match a declared Standard Schema, and still sends the event. A raw JSON Schema is listed but never checked against payloads. Swift and Kotlin send without a warning.
 
 An older `appduct` CLI doesn't know about declared events: the app keeps its session and tools, and the list stays empty.
 
