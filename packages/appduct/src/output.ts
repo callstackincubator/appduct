@@ -427,6 +427,21 @@ const renderToolsListData = (
   return full ? renderToolsFullListing(colors, data, flags) : renderToolSummaryTable(colors, data);
 };
 
+/** Like {@link renderTruncationLine} for tools: only when the page left events out. */
+const renderEventsTruncationLine = (data: EventsListing): string[] => {
+  const offset = data.offset ?? 0;
+
+  if (offset + data.events.length >= data.total) {
+    return [];
+  }
+
+  return [
+    "",
+    `Showing ${data.events.length} of ${data.total} events (offset ${offset}). ` +
+      "Narrow with --name <glob> or page with --offset <n>.",
+  ];
+};
+
 /** `appduct events ls`: one signature line plus the description per event; an exact `--name` that
  * matched an event prints that event's full descriptor instead, payload schema included. */
 const renderEventsListData = (colors: ColorPalette, data: EventsListing, flags: GlobalFlags): string[] => {
@@ -459,6 +474,7 @@ const renderEventsListData = (colors: ColorPalette, data: EventsListing, flags: 
   return [
     colors.green("Events"),
     ...lines,
+    ...renderEventsTruncationLine(data),
     "",
     "Run `appduct events ls --name <name>` for an event's full payload schema.",
   ];
