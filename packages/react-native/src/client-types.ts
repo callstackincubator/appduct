@@ -61,6 +61,8 @@ export type AppductNativeEvents = {
 export type AppductNativeModuleLike = {
   registerTool(descriptorJson: string): void;
   unregisterTool(name: string): void;
+  registerEvent(descriptorJson: string): void;
+  unregisterEvent(name: string): void;
   handleUrl(url: string): boolean;
   connect(inputJson: string, supersede: boolean): Promise<void>;
   restoreSession(): Promise<boolean>;

@@ -162,6 +162,9 @@ export const appductNativeModule: AppductNativeModuleLike = {
   registerTool: (descriptorJson) =>
     resolveNativeModule().registerTool(descriptorJson),
   unregisterTool: (name) => resolveNativeModule().unregisterTool(name),
+  registerEvent: (descriptorJson) =>
+    resolveNativeModule().registerEvent(descriptorJson),
+  unregisterEvent: (name) => resolveNativeModule().unregisterEvent(name),
   handleUrl: (url) => resolveNativeModule().handleUrl(url),
   connect: (inputJson, supersede) =>
     resolveNativeModule().connect(inputJson, supersede),

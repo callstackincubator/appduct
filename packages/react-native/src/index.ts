@@ -4,6 +4,7 @@ import type {
   AppductBuildConfig,
   AppductClientState,
   AppductConnectInput,
+  AppductEventDefinition,
   AppductListenerKind,
   AppductRuntimeSchema,
   AppductToolRegistration,
@@ -65,6 +66,22 @@ export function registerTool<
  * makes each registration throw, exactly like passing it as `registerTool`'s own `group`.
  */
 export const createToolGroup = createToolGroupFactory(registerTool);
+
+/**
+ * Declares an event the app posts, so an agent can list it (`appduct events ls`) with its
+ * description and payload shape before waiting on it. Advisory: an undeclared `postEvent` still
+ * reaches agents. In development, `postEvent` warns about an undeclared name and about a payload
+ * that fails a declared Standard Schema; production posts as-is. The returned disposer withdraws
+ * only this declaration.
+ */
+export function registerEvent<
+  TPayloadSchema extends AppductRuntimeSchema | undefined,
+>(definition: AppductEventDefinition<TPayloadSchema>) {
+  return noopIfNativeUnavailable(
+    () => appductClient.registerEvent(definition),
+    () => noop.registerEvent(definition),
+  );
+}
 
 /** Emits an `event` frame on the default client while active; drops (dev warning) otherwise. */
 export function postEvent(name: string, payload?: unknown): Promise<void> {

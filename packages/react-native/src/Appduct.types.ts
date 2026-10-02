@@ -335,6 +335,31 @@ export type AppductToolRegistration<
   >;
 };
 
+/**
+ * An event the app posts, declared so an agent can list it (`appduct events ls`) before waiting on
+ * it. Declaring is advisory: `postEvent` still sends an undeclared name.
+ */
+export type AppductEventDefinition<
+  TPayloadSchema extends AppductRuntimeSchema | undefined = undefined,
+> = {
+  /** Any string up to 4096 characters, dotted names such as `cart.item_added` included. */
+  name: string;
+  description: string;
+  /**
+   * The payload's shape: a Standard Schema, a `{ schema, jsonSchema }` pair or a raw JSON Schema,
+   * as for a tool's `inputSchema`. A Standard Schema is also checked against each payload in
+   * development builds; a raw JSON Schema is only listed.
+   */
+  payloadSchema?: TPayloadSchema;
+};
+
+export type AppductRegisteredEvent = {
+  /** Registration identity: `remove()` disposers compare this, not the event name. */
+  id: symbol;
+  /** Normalized at registration time, never the raw user value. */
+  payloadSchema?: AppductNormalizedToolSchema;
+};
+
 export type AppductRegisteredTool = {
   /** Registration identity: `remove()` disposers compare this, not the tool name (stale-disposer fix). */
   id: symbol;

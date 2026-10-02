@@ -1,7 +1,7 @@
 /**
  * Web / unsupported-platform stub for Metro resolution.
  *
- * `registerTool`, `connect`, `restoreSession`, `disconnect`, and `postEvent` throw — Appduct is
+ * `registerTool`, `registerEvent`, `connect`, `restoreSession`, `disconnect`, and `postEvent` throw — Appduct is
  * iOS/Android-only. `handleUrl`/`getState`/`getSessionId`/`getRegisteredToolsJson` return inert
  * values rather than throwing: they are called unconditionally from code paths that run on every
  * platform (e.g. the deep-link handler), and throwing there would crash any web bundle that merely
@@ -37,6 +37,10 @@ export const appductNativeModule: AppductNativeModuleLike = {
     unsupported("registerTool");
   },
   unregisterTool() {},
+  registerEvent() {
+    unsupported("registerEvent");
+  },
+  unregisterEvent() {},
   handleUrl(): boolean {
     return false;
   },

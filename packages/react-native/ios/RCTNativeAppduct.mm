@@ -79,6 +79,20 @@ RCT_EXPORT_MODULE(Appduct)
   [_swift unregisterToolWithName:name];
 }
 
+- (void)registerEvent:(NSString *)descriptorJson
+{
+  NSError *error = nil;
+  [_swift registerEventWithDescriptorJson:descriptorJson error:&error];
+  if (error != nil) {
+    @throw [NSException exceptionWithName:@"AppductError" reason:error.localizedDescription userInfo:nil];
+  }
+}
+
+- (void)unregisterEvent:(NSString *)name
+{
+  [_swift unregisterEventWithName:name];
+}
+
 - (NSNumber *)handleUrl:(NSString *)url
 {
   return @([_swift handleUrl:url]);

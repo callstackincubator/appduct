@@ -141,6 +141,16 @@ class NativeAppductModule(
         client.unregisterTool(name)
     }
 
+    override fun registerEvent(descriptorJson: String) {
+        // Throws AppductInvalidEventDescriptorException synchronously for an invalid descriptor,
+        // like registerTool above.
+        client.registerEvent(AppductEventDescriptor.fromJson(descriptorJson))
+    }
+
+    override fun unregisterEvent(name: String) {
+        client.unregisterEvent(name)
+    }
+
     override fun handleUrl(url: String): Boolean = client.handleUrl(url)
 
     override fun connect(

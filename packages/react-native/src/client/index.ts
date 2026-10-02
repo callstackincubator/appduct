@@ -1,10 +1,12 @@
-import type { ToolDescriptor } from "@appduct/shared";
+import type { EventDescriptor, ToolDescriptor } from "@appduct/shared";
 
 import type {
   AppductClientState,
   AppductConnectCallOptions,
   AppductConnectInput,
+  AppductEventDefinition,
   AppductListenerKind,
+  AppductRegisteredEvent,
   AppductRegisteredTool,
   AppductRuntimeSchema,
   AppductToolHandler,
@@ -15,8 +17,13 @@ import type {
   AppductNativeModuleLike,
   CreateAppductClientOptions,
 } from "../client-types";
-import { logger } from "../logger";
-import { normalizeOptionalToolSchema, toToolDescriptor } from "../schema";
+import { isDev, logger } from "../logger";
+import {
+  exportEventPayloadSchema,
+  normalizeOptionalToolSchema,
+  toToolDescriptor,
+  validateToolSchema,
+} from "../schema";
 import { createUnifiedListenerBus } from "./listeners";
 import { createToolMessageHandler } from "./tool-invocation";
 
@@ -55,8 +62,48 @@ export const createAppductClient = (
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for call-site compatibility; see CreateAppductClientOptions's doc comment.
   clientOptions: CreateAppductClientOptions = {},
 ) => {
+  /** Development-only: warns when `name` is undeclared or `payload` fails its declared schema.
+   * Never throws; the event is posted either way. */
+  const checkPostedEvent = async (
+    name: string,
+    payload: unknown,
+  ): Promise<void> => {
+    const declared = events.get(name);
+    if (!declared) {
+      logger.devWarn(
+        `postEvent("${name}"): this event is not declared, so agents cannot list it. ` +
+          "Declare it with registerEvent({ name, description, payloadSchema }).",
+      );
+      return;
+    }
+    if (!declared.payloadSchema) {
+      return;
+    }
+    try {
+      const result = await validateToolSchema(declared.payloadSchema, payload);
+      if (!result.ok) {
+        const issues = result.issues
+          .map((issue) =>
+            issue.path?.length
+              ? `${issue.path.map(String).join(".")}: ${issue.message}`
+              : issue.message,
+          )
+          .join("; ");
+        logger.devWarn(
+          `postEvent("${name}"): the payload does not match the declared payloadSchema (${issues}). It is posted anyway.`,
+        );
+      }
+    } catch (error) {
+      logger.devWarn(
+        `postEvent("${name}"): the declared payloadSchema threw while checking the payload.`,
+        error,
+      );
+    }
+  };
+
   const listenerBus = createUnifiedListenerBus();
   const tools = new Map<string, AppductRegisteredTool>();
+  const events = new Map<string, AppductRegisteredEvent>();
   let destroyed = false;
 
   const { handleToolCall, handleToolCancel, abortAllInFlight } =
@@ -182,6 +229,44 @@ export const createAppductClient = (
       };
     },
 
+    /**
+     * Declares (or replaces, by name) an event so agents can list it. Converts the payload schema,
+     * hands the wire descriptor to native (which validates it per PROTOCOL.md §5a and throws
+     * synchronously on an invalid one), and keeps the schema here for `postEvent`'s development
+     * check. The disposer removes only this declaration, even after a later one replaced it.
+     */
+    registerEvent<TPayloadSchema extends AppductRuntimeSchema | undefined>(
+      definition: AppductEventDefinition<TPayloadSchema>,
+    ) {
+      const payloadSchema = normalizeOptionalToolSchema(
+        definition.payloadSchema,
+        `Event "${definition.name}" payloadSchema`,
+      );
+      const exported = exportEventPayloadSchema(payloadSchema, definition.name);
+      const descriptor: EventDescriptor = {
+        name: definition.name,
+        description: definition.description,
+        ...(exported !== undefined ? { payload_schema: exported } : {}),
+      };
+
+      logger.debug("registerEvent", definition.name);
+      module.registerEvent(JSON.stringify(descriptor));
+
+      const id = Symbol(`appduct-event:${definition.name}`);
+      events.set(definition.name, { id, payloadSchema });
+
+      return {
+        remove: () => {
+          if (events.get(definition.name)?.id !== id) {
+            return;
+          }
+          logger.debug("unregisterEvent", definition.name);
+          events.delete(definition.name);
+          module.unregisterEvent(definition.name);
+        },
+      };
+    },
+
     unregisterTool(name: string): void {
       if (!tools.has(name)) {
         return;
@@ -231,6 +316,8 @@ export const createAppductClient = (
     /** Emits an `event` frame while active; drops (with a dev warning) when no session is active;
      * otherwise reports the failure on the `error` listener (phase `"socket"`). Never throws. */
     async postEvent(name: string, payload?: unknown): Promise<void> {
+      // Checked alongside the send, not before it, so a slow schema never delays or reorders posts.
+      const check = isDev() ? checkPostedEvent(name, payload) : undefined;
       try {
         await module.postEvent(
           name,
@@ -250,6 +337,8 @@ export const createAppductClient = (
           message: `Failed to send event "${name}".`,
           cause: error,
         });
+      } finally {
+        await check;
       }
     },
 

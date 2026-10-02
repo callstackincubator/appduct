@@ -87,6 +87,14 @@ export interface Spec extends TurboModule {
   unregisterTool(name: string): void;
 
   /**
+   * Declares (or replaces, by name) an event. `descriptorJson` is a PROTOCOL.md §5a
+   * `EventDescriptor` object; native validates it and throws on an invalid one. Native sends the
+   * declarations to the daemon only when the session ack says it accepts event frames.
+   */
+  registerEvent(descriptorJson: string): void;
+  unregisterEvent(name: string): void;
+
+  /**
    * Feeds a deep link to the core. Returns `true` iff the URL carried a `appduct` query param
    * (whatever the parse outcome — a bad payload is reported on `onError` with phase "bootstrap"),
    * `false` for any other URL so the app can route it itself. A valid payload supersedes whatever

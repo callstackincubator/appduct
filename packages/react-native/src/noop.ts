@@ -14,6 +14,7 @@ import type {
   AppductBuildConfig,
   AppductClientState,
   AppductConnectInput,
+  AppductEventDefinition,
   AppductListenerKind,
   AppductRuntimeSchema,
   AppductToolRegistration,
@@ -54,6 +55,13 @@ export const useAppductTool = createUseAppductTool(registerTool);
 /** Same signature as the real entry's; the bound registrar is the inert `registerTool` above, and
  * no group is validated since nothing is ever registered. */
 export const createToolGroup = createToolGroupFactory(registerTool);
+
+/** Accepts any declaration and returns a disposer; the event is never declared anywhere. */
+export function registerEvent<
+  TPayloadSchema extends AppductRuntimeSchema | undefined,
+>(_definition: AppductEventDefinition<TPayloadSchema>): AppductSubscription {
+  return noopSubscription;
+}
 
 /** No-op: never sends anything. */
 export async function postEvent(

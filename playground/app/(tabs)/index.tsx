@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { z } from "zod";
 import {
   getRegisteredTools,
+  registerEvent,
   useAppductTool,
   type AppductToolExecutionContext,
 } from "@appduct/react-native";
@@ -52,6 +53,18 @@ export default function ToolsScreen() {
   const bumpCallCount = () => {
     setCallCount((count) => count + 1);
   };
+
+  // Declared on the first tab, beside the tools, so `events ls` lists it from app start.
+  useEffect(() => {
+    const declaration = registerEvent({
+      name: "playground_ping",
+      description: "The Send playground_ping button on the Status tab was pressed.",
+      payloadSchema: z.object({
+        at: z.number().describe("Press time, milliseconds since the epoch"),
+      }),
+    });
+    return () => declaration.remove();
+  }, []);
 
   // Groups: `counter` and `diagnostics` (with a `diagnostics/progress` subgroup), plus `sum`
   // left ungrouped -- so `appduct tools ls` shows headings, `--groups` has something to list, and

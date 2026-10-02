@@ -15,6 +15,7 @@ section into a versioned heading.
 - **New: `appduct events ls` lists the events an app declares, with their descriptions and payload shapes.** `--name <glob>` narrows the list, `--limit <n>`/`--offset <n>` page through it, and an exact name prints the full payload schema.
 - **New: the iOS SDK declares events with `Appduct.shared.registerEvent(name:description:payloadSchema:)`.** `appduct events ls` then lists them; against an older CLI the app keeps its session and tools but has no event list.
 - **New: Kotlin apps declare events with `Appduct.registerEvent(name, description, payloadSchema)`, so `appduct events ls` lists them.** An older CLI ignores the declaration and the session keeps working.
+- **New: React Native apps declare events with `registerEvent({ name, description, payloadSchema })`, so `appduct events ls` lists them.** In development, `postEvent` warns about an undeclared name and about a payload that fails a declared Standard Schema; see `docs/TOOLS.md`.
 - **New: a call to a backgrounded app fails at once with `session_suspended`, and the message says the app is in the background.** Needs an app built with this release; on Android, calls to a backgrounded app now fail instead of running until Android freezes the app.
 - **Fix: a session backgrounded or disconnected in a build with `trust: link` (the zero-config
   default) resumes automatically once the app comes back, instead of staying "Reconnecting"

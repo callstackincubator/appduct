@@ -251,6 +251,20 @@ await postEvent("checkout_completed", { orderId: "ord_4821" });
 
 Tests can wait for it with `app.waitForEvent("checkout_completed")`, and agents with `appduct_wait_for_event`. Events posted while no device is connected are dropped.
 
+Declare each event you post, so agents can list it, with its description and payload shape, before they wait on it:
+
+```ts
+import { registerEvent } from "@appduct/react-native";
+
+registerEvent({
+  name: "checkout_completed",
+  description: "An order was paid.",
+  payloadSchema: z.object({ orderId: z.string() }),
+});
+```
+
+Agents see the list with `appduct events ls`. In development, `postEvent` warns about a name you didn't declare and about a payload that doesn't match the schema; the event is still sent.
+
 ## Handle errors
 
 If your handler throws, the call fails with `tool_execution_error` and your message. Validation failures report `tool_input_validation_error` or `tool_output_validation_error`. Callers see these types unchanged. See [Error types](/appduct/reference/protocol/#error-types).
