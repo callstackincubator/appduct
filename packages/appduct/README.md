@@ -46,7 +46,7 @@ Every command is `appduct <noun> <verb> [selector] [args]`, the same shape as `a
 | `appduct tools ls [selector] --groups` | list a session's tool groups with their tool counts |
 | `appduct tools describe [selector] <name>` | show one tool's full schema |
 | `appduct tools call [selector] <name> --input '<json>' [--timeout <ms>]` | call a tool |
-| `appduct events ls [selector] [--name <glob>]` | list the events the app declares, one signature line each; an exact `--name` prints the full payload schema; `--json` carries the full descriptors |
+| `appduct events ls [selector] [--name <glob>] [--limit <n>] [--offset <n>]` | list the events the app declares, one signature line each; an exact `--name` prints the full payload schema; `--limit`/`--offset` page a long list, ending with a `Showing n of total events (offset o).` line when events were left out; `--json` carries the full descriptors, with `total` counting matches before paging |
 | `appduct events tail [selector] [--follow]` | stream the events the app posts with `postEvent`; `--json` emits NDJSON |
 | `appduct events since [selector] <cursor>` | one-shot pull the events retained since `<cursor>`; `--json` emits NDJSON |
 | `appduct daemon run\|start\|stop\|status` | daemon lifecycle |

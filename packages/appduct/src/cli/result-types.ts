@@ -175,9 +175,9 @@ export type ToolGroupsListing = {
  * ungrouped tool. */
 export type ToolsCommandData = ToolsListing | ToolGroupsListing | ToolsListEntry;
 
-/** `appduct events ls`: the daemon's `events.list` result, plus the `--name` glob that produced it
- * when one was given. */
-export type EventsListing = EventsListResult & { name?: string };
+/** `appduct events ls`: the daemon's `events.list` result, plus the `--name`/`--limit`/`--offset`
+ * inputs that produced it (only the ones actually given). */
+export type EventsListing = EventsListResult & { name?: string; limit?: number; offset?: number };
 
 /** `appduct tools call`: the tool's raw result payload, printed as-is. */
 export type InvokeCommandData = unknown;
