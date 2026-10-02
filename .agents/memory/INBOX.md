@@ -32,3 +32,23 @@ One note per PR that hit friction, four lines:
   What went wrong: the app closing its own socket for the background went through `onSocketLost`, which emits an `error` event for any close other than 1000, so every app switch fired the app's error listener.
   Would have prevented it: when adding a deliberate close or disconnect, list every event the existing loss path emits and write a red test for each one that must not fire.
   Cost: review round
+- 2026-10-02 #143 skill: implement-issue
+  What went wrong: the new event-descriptors.json conformance fixture left out the non-object and description-non-string vectors that tool-descriptors.json has, and had no non-ASCII name to pin the 4096 limit in UTF-16 code units.
+  Would have prevented it: when adding a descriptor fixture, start from every vector class in the nearest existing fixture and add one boundary vector in non-BMP characters for any length limit.
+  Cost: review round
+- 2026-10-02 #145 skill: implement-issue
+  What went wrong: the Swift event registry sent the post-ack snapshot from an unstructured Task, so later deltas could overtake it, and the shared frames fixture pinned an order the SDK did not guarantee (test flaked 9 in 25).
+  Would have prevented it: when a fixture pins frame order across an async boundary, route those frames through one ordered queue and run the fixture test 25 times before committing.
+  Cost: review round
+- 2026-10-02 #146 skill: implement-issue
+  What went wrong: in Kotlin, a registerEvent called from a session-change listener during ack handling sent its delta before the ack's snapshot, which then erased it on the daemon.
+  Would have prevented it: when an SDK sends a snapshot on ack, test a declaration made from a listener and from another thread during ack handling, not just before and after it.
+  Cost: review round
+- 2026-10-02 #147 skill: implement-issue
+  What went wrong: the shipped skill's writing-tools.md and docs/TOOLS.md described declaring events for React Native only, and claimed dev warnings that only the React Native SDK gives.
+  Would have prevented it: when a feature ships in several SDKs, write the user docs with one snippet per SDK and scope each behaviour claim to the SDKs that have it.
+  Cost: review round
+- 2026-10-02 #143 skill: implement-issue
+  What went wrong: adding --limit/--offset to `events ls` "mirroring tools ls" copied the flags but not tools' empty-page message or footer rule, so a page past the end printed "No events declared." for a session that had events.
+  Would have prevented it: when mirroring another command's paging, port its renderer cases too (empty page with total > 0, last page footer) and test each against the original's output.
+  Cost: review round

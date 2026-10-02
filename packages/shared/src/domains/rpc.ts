@@ -1,4 +1,5 @@
 import type { ErrorType } from "./errors.js";
+import type { EventDescriptor } from "./event-descriptor.js";
 import type { AgentEndpoint } from "./transport.js";
 import type { ToolDescriptor, ToolGroupSummary } from "./tool-descriptor.js";
 
@@ -13,6 +14,7 @@ export const RPC_METHODS = {
   toolsList: "tools.list",
   toolsCall: "tools.call",
   toolsCancel: "tools.cancel",
+  eventsList: "events.list",
   eventsSubscribe: "events.subscribe",
   eventsSince: "events.since",
 } as const;
@@ -253,6 +255,29 @@ export type ToolsCancelResult = {
   cancelled: boolean;
 };
 
+// --- events.list ---
+
+export type EventsListParams = SessionSelectorParams & {
+  /** Whole-name, case-sensitive glob (issue #112's rule, reused here): `*` matches any run of
+   * characters, a pattern with no `*` is an exact name — and since a registry holds at most one
+   * event per name, an exact `name` narrows to zero or one result. */
+  name?: string;
+  /** Page size; omitted means everything from `offset` on. */
+  limit?: number;
+  /** Zero-based start index into the sorted, filtered list. */
+  offset?: number;
+};
+
+/**
+ * `events.list`'s result: the session's declared events sorted by `name` (plain code-point order),
+ * narrowed by `name`'s glob, then paged with `limit`/`offset` — `total` is the count *after* the
+ * glob but *before* paging, mirroring `ToolsListResult.total`.
+ */
+export type EventsListResult = {
+  events: EventDescriptor[];
+  total: number;
+};
+
 // --- events.subscribe ---
 
 /** The single source of truth for the `EventKind` union below — a `const` array (not just a type)
@@ -269,6 +294,7 @@ export const EVENT_KINDS = [
   "session_revoked",
   "session_expired",
   "tools_changed",
+  "events_changed",
   "app_event",
   "tool_call_started",
   "tool_call_progress",

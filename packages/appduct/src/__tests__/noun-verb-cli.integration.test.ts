@@ -39,7 +39,7 @@ describe("a bare noun with no verb, or an unknown verb, names its verbs (criteri
   test.each([
     ["sessions", "ls, revoke, or link"],
     ["tools", "ls, describe, or call"],
-    ["events", "tail or since"],
+    ["events", "ls, tail, or since"],
   ])('"appduct %s" alone exits 64 naming its verbs', async (noun, verbList) => {
     const result = await runCliWithCapture([noun, "--json"]);
 
@@ -52,7 +52,7 @@ describe("a bare noun with no verb, or an unknown verb, names its verbs (criteri
   test.each([
     ["sessions", "ls, revoke, or link"],
     ["tools", "ls, describe, or call"],
-    ["events", "tail or since"],
+    ["events", "ls, tail, or since"],
   ])('"appduct %s bogus-verb" exits 64 naming its verbs', async (noun, verbList) => {
     const result = await runCliWithCapture([noun, "bogus-verb", "--json"]);
 
@@ -67,7 +67,7 @@ describe("a bare noun with no verb, or an unknown verb, names its verbs (criteri
   test.each([
     ["sessions", ["ls", "revoke", "link"]],
     ["tools", ["ls", "describe", "call"]],
-    ["events", ["tail", "since"]],
+    ["events", ["ls", "tail", "since"]],
   ])('"appduct %s --help" exits 0 and names its verbs', (noun, verbs) => {
     const result = runCliBinary([noun, "--help"]);
 
@@ -82,7 +82,7 @@ describe("a bare noun with no verb, or an unknown verb, names its verbs (criteri
   test.each([
     ["sessions", ["ls", "revoke", "link"]],
     ["tools", ["ls", "describe", "call"]],
-    ["events", ["tail", "since"]],
+    ["events", ["ls", "tail", "since"]],
   ])('"appduct --help" prints %s\'s verbs in its description', (noun, verbs) => {
     const result = runCliBinary(["--help"]);
 
@@ -96,16 +96,5 @@ describe("a bare noun with no verb, or an unknown verb, names its verbs (criteri
     for (const verb of verbs) {
       expect(nounLine).toContain(verb);
     }
-  });
-});
-
-describe("events ls is reserved for #95, until then it is just an unknown verb (criterion 4)", () => {
-  test('"appduct events ls" exits 64 naming tail and since', async () => {
-    const result = await runCliWithCapture(["events", "ls", "--json"]);
-
-    expect(result.exitCode).toBe(64);
-    const parsed = JSON.parse(result.stdout);
-    expect(parsed.error.type).toBe("usage_error");
-    expect(parsed.error.message).toBe('The events command requires a verb: tail or since (got "ls").');
   });
 });

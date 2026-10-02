@@ -93,6 +93,18 @@ Calls a tool.
 
 Ctrl-C cancels the call in the app.
 
+### `appduct events ls [selector]`
+
+Lists the events your app declares, each as a signature line (name and payload shape) with its description indented on the next line. With `--json`, prints `{ "events": [...], "total": n }` with each event's full payload schema.
+
+| Flag | Description |
+| --- | --- |
+| `--name <glob>` | Only events whose name matches this glob (`*` matches any run of characters), e.g. `"cart.*"`. An exact name prints that event's full payload schema. |
+| `--limit <n>` | Show at most `n` events. |
+| `--offset <n>` | Skip the first `n` events of the name-sorted list. |
+
+A listing that leaves events out ends with a `Showing n of total events (offset o).` line so you know there are more. With `--json`, `total` counts matches before `--limit` and `--offset`. An app that declares no events lists none, even if it posts some.
+
 ### `appduct events tail [selector]`
 
 Streams the events your app posts with `postEvent` until you stop it. With `--json`, prints one JSON object per line, each with `kind: "app_event"`.

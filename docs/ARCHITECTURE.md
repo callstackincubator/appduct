@@ -277,6 +277,7 @@ Methods:
 | `tools.list` | `{ selector?, group?, filter?, limit?, offset? }` | `{ tools: ToolsListEntry[], total, groups }` — `tools` is the registry sorted by `name` (code-point order), narrowed to `group` (PROTOCOL.md §5 syntax, matched by segment: `checkout` includes `checkout/*` and never `checkoutx`; case-sensitive), `filter`ed (case-insensitive substring match against name/description) and paged with `limit`/`offset`; each entry is a `ToolDescriptor` (full schema + annotations, plus `group`, which an entry always carries — the tool's group or `null` for an ungrouped one, the same value the summary's ungrouped row uses) plus the tool's effective `policy: "allow" \| "deny" \| "prompt"` (§12), resolved daemon-side. `total` is the count matching `group` and `filter` *before* paging, so a caller can tell how much a page left out. `groups: { group: string \| null, total }[]` summarizes the **whole** registry — never narrowed by `group`, `filter` or paging: one entry per top-level group (its `total` includes its subgroups), one per subgroup, and `group: null` for ungrouped tools when there are any; sorted by group path with a parent right before its subgroups, `null` last. A malformed `group` is `invalid_request`, like a bad `limit` |
 | `tools.call` | `{ selector?, name, args, timeoutMs?, caller?: "cli" \| "mcp", consent?: "elicitation" }` | `{ result, callId }` on success — `callId` lets a caller with several in-flight calls match `tool_call_progress`/`tool_call_finished` events back to this call; JSON-RPC error with `data.type` preserving the wire error type on failure. `caller` attributes the audit record (§12); `consent` is the MCP server's evidence of a `"prompt"`-policy human gate (§12) — `"elicitation"` after the client accepted an elicitation prompt, absent otherwise (including for the CLI). |
 | `tools.cancel` | `{ selector?, callId, reason? }` | `{ cancelled: boolean }` — sends `tool_cancel` (§7) to the app for a still-pending call; `false` for an unknown/already-finished `callId` or no active socket (a no-op, not an error) |
+| `events.list` | `{ selector?, name?, limit?, offset? }` | `{ events: EventDescriptor[], total }` — the events the session's app declared (PROTOCOL.md §5a), sorted by `name` (code-point order), narrowed by the whole-name `name` glob (same rule as `events.since`), then paged; `total` is the count after the glob and before paging. Works for suspended sessions |
 | `events.subscribe` | `{ sessionSelector?, kinds?, name?, payloadMaxBytes? }` | `{ ok: true }`, then `event` notifications on this connection |
 | `events.since` | `{ selector?, since?, limit?, name?, payloadMaxBytes? }` | `{ events: EventNotification[], cursor, dropped, remaining }` — pull counterpart to `events.subscribe` for `app_event` only, draining the per-session retention buffer described below. An older client's `kinds` is ignored like any unknown param |
 
@@ -321,7 +322,7 @@ retentionDays, files, bytes } }` (§12, and §3 for the retention fields).
 Event notification payload: `{ kind, sessionId?, alias?, ts, data, seq }` where `kind` is one
 of `daemon_started`, `link_created`, `link_expired`, `session_claimed`,
 `session_suspended`, `session_resumed`, `session_revoked`, `session_expired`,
-`tools_changed`, `app_event`, `tool_call_started`, `tool_call_progress`,
+`tools_changed`, `events_changed`, `app_event`, `tool_call_started`, `tool_call_progress`,
 `tool_call_finished`. `seq` counts `app_event`s only (issue #113) — every other kind, whether
 session-scoped or daemon-wide, carries `seq: 0`.
 
@@ -577,7 +578,7 @@ server can't drift in behavior: they are the same calls.
 
 The per-command reference lives in the [`appduct` package README](../packages/appduct/README.md),
 which is where it stays current. Every command is `appduct <noun> <verb> [selector] [args]`
-(issue #96): `sessions ls|revoke|link`, `tools ls|describe|call`, `events tail|since`, with
+(issue #96): `sessions ls|revoke|link`, `tools ls|describe|call`, `events ls|tail|since`, with
 `daemon run|start|stop|status` as the model this was generalized from — `init`, `keygen`, `doctor`
 and `mcp` stay one-verb nouns. This is a clean break with no aliases (pre-1.0): a removed
 top-level word (`ls`, `revoke`, `link`, `invoke`) is a usage error naming its replacement

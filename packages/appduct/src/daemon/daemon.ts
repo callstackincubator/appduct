@@ -36,6 +36,8 @@ import {
   type ToolsCallResult,
   type ToolsCancelParams,
   type ToolsCancelResult,
+  type EventsListParams,
+  type EventsListResult,
   type ToolsListEntry,
   type ToolsListParams,
   type ToolsListResult,
@@ -47,7 +49,7 @@ import { detectAdvertisedAddress } from "./address.js";
 import { argsSha256, createAuditLogger, type AuditLogger } from "./audit.js";
 import { createCallsManager, type CallsManager } from "./calls.js";
 import { loadConfig, type AppductConfig, type ConfigWarnFn } from "./config.js";
-import { createEventBus, projectAppEvent, type EventBus } from "./event-bus.js";
+import { createEventBus, matchesNameGlob, projectAppEvent, type EventBus } from "./event-bus.js";
 import { createEventsLog } from "./events-log.js";
 import { startListener, type DaemonListener } from "./listener.js";
 import { evaluate as evaluatePolicy } from "./policy.js";
@@ -166,6 +168,35 @@ const asSelectorParams = (params: unknown): { selector?: string } => {
 };
 
 
+/** `limit`/`offset` as `tools.list` and `events.list` both take them. */
+const asPageParams = (record: Record<string, unknown>): { limit?: number; offset?: number } => {
+  const limit = record.limit;
+
+  if (limit !== undefined && (typeof limit !== "number" || !Number.isInteger(limit) || limit <= 0)) {
+    throw new RpcApplicationError("invalid_request", '"limit" must be a positive integer.');
+  }
+
+  const offset = record.offset;
+
+  if (offset !== undefined && (typeof offset !== "number" || !Number.isInteger(offset) || offset < 0)) {
+    throw new RpcApplicationError("invalid_request", '"offset" must be a non-negative integer.');
+  }
+
+  return { limit, offset };
+};
+
+const asEventsListParams = (params: unknown): EventsListParams => {
+  const { selector } = asSelectorParams(params);
+  const record = asRecordParams(params);
+  const name = record.name;
+
+  if (name !== undefined && typeof name !== "string") {
+    throw new RpcApplicationError("invalid_request", '"name" must be a string.');
+  }
+
+  return { selector, name, ...asPageParams(record) };
+};
+
 const asToolsListParams = (params: unknown): ToolsListParams => {
   const { selector } = asSelectorParams(params);
   const record = asRecordParams(params);
@@ -188,24 +219,14 @@ const asToolsListParams = (params: unknown): ToolsListParams => {
     );
   }
 
-  const limit = record.limit;
-
-  if (limit !== undefined && (typeof limit !== "number" || !Number.isInteger(limit) || limit <= 0)) {
-    throw new RpcApplicationError("invalid_request", '"limit" must be a positive integer.');
-  }
-
-  const offset = record.offset;
-
-  if (offset !== undefined && (typeof offset !== "number" || !Number.isInteger(offset) || offset < 0)) {
-    throw new RpcApplicationError("invalid_request", '"offset" must be a non-negative integer.');
-  }
+  const { limit, offset } = asPageParams(record);
 
   return {
     selector,
     group: group as string | undefined,
     filter: filter as string | undefined,
-    limit: limit as number | undefined,
-    offset: offset as number | undefined,
+    limit,
+    offset,
   };
 };
 
@@ -655,6 +676,20 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           const { selector } = asSelectorParams(params);
           activeSessionManager.revoke(selector);
           return { ok: true };
+        },
+        [RPC_METHODS.eventsList]: (params): EventsListResult => {
+          const { selector, name, limit, offset } = asEventsListParams(params);
+          // Like tools.list, works for ACTIVE and SUSPENDED sessions: the registry is retained.
+          const registered = activeSessionManager.resolveForTools(selector).eventRegistry.list();
+          // Plain code-point order, never `localeCompare`, so paging is stable across locales.
+          const sorted = registered.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+          const matching = name === undefined ? sorted : sorted.filter((event) => matchesNameGlob(name, event.name));
+          const start = offset ?? 0;
+
+          return {
+            events: limit === undefined ? matching.slice(start) : matching.slice(start, start + limit),
+            total: matching.length,
+          };
         },
         [RPC_METHODS.toolsList]: (params): ToolsListResult => {
           const { selector, group, filter, limit, offset } = asToolsListParams(params);

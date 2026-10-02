@@ -63,6 +63,8 @@ describe("route argument errors render as usage errors (no daemon required)", ()
     [["tools", "ls", "--limit", "0"], /"--limit" must be a positive integer/u],
     [["tools", "ls", "--limit", "-1"], /"--limit" must be a positive integer/u],
     [["tools", "ls", "--offset", "abc"], /"--offset" must be a non-negative integer/u],
+    [["events", "ls", "--limit", "0"], /"--limit" must be a positive integer/u],
+    [["events", "ls", "--offset", "abc"], /"--offset" must be a non-negative integer/u],
     [["tools", "ls", "--filter"], /"--filter" requires a value/u],
     [["tools", "ls", "a", "b", "c"], /Usage/u],
     [["tools", "call"], /Usage/u],

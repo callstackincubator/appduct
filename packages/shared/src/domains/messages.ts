@@ -1,3 +1,4 @@
+import { isEventDescriptor, type EventDescriptor } from "./event-descriptor.js";
 import { isToolErrorType } from "./errors.js";
 import { isToolDescriptor, type ToolDescriptor } from "./tool-descriptor.js";
 
@@ -68,6 +69,15 @@ export type SessionAckMessage = {
   resume_token: string;
   keepalive_interval_s: number;
   grace_s: number;
+  /**
+   * `true` when this daemon accepts `event_registry_snapshot`/`event_registry_delta` frames
+   * (issue #124). A daemon that predates event registries closes the session with `1008
+   * unknown_message_type` on either frame, the same as any other unrecognized type, so an SDK
+   * whose app declares events must wait for this flag before sending them — a claim can reach an
+   * older CLI's daemon whenever the app's SDK is newer. Omitted (never `false`) on such a daemon;
+   * present and `true` on every ack this daemon sends.
+   */
+  event_registry?: true;
 };
 
 export type ToolRegistrySnapshotMessage = {
@@ -91,6 +101,28 @@ export type ToolRegistryRemoveDeltaMessage = {
 };
 
 export type ToolRegistryDeltaMessage = ToolRegistryUpsertDeltaMessage | ToolRegistryRemoveDeltaMessage;
+
+export type EventRegistrySnapshotMessage = {
+  type: "event_registry_snapshot";
+  session_id: SessionId;
+  events: EventDescriptor[];
+};
+
+export type EventRegistryUpsertDeltaMessage = {
+  type: "event_registry_delta";
+  session_id: SessionId;
+  operation: "upsert";
+  event: EventDescriptor;
+};
+
+export type EventRegistryRemoveDeltaMessage = {
+  type: "event_registry_delta";
+  session_id: SessionId;
+  operation: "remove";
+  name: string;
+};
+
+export type EventRegistryDeltaMessage = EventRegistryUpsertDeltaMessage | EventRegistryRemoveDeltaMessage;
 
 export type ToolCallMessage = {
   type: "tool_call";
@@ -154,6 +186,8 @@ export type WireMessage =
   | SessionAckMessage
   | ToolRegistrySnapshotMessage
   | ToolRegistryDeltaMessage
+  | EventRegistrySnapshotMessage
+  | EventRegistryDeltaMessage
   | ToolCallMessage
   | ToolResultMessage
   | ToolErrorMessage
@@ -247,6 +281,10 @@ export const isSessionAckMessage = (value: unknown): value is SessionAckMessage 
     return false;
   }
 
+  if (value.event_registry !== undefined && value.event_registry !== true) {
+    return false;
+  }
+
   return (
     value.status === "ok" &&
     isBoundedNonEmptySessionId(value.session_id) &&
@@ -283,6 +321,39 @@ export const isToolRegistryDeltaMessage = (value: unknown): value is ToolRegistr
 
   if (value.operation === "upsert") {
     return isToolDescriptor(value.tool);
+  }
+
+  if (value.operation === "remove") {
+    return isBoundedString(value.name, MAX_WIRE_STRING_LENGTH);
+  }
+
+  return false;
+};
+
+export const isEventRegistrySnapshotMessage = (value: unknown): value is EventRegistrySnapshotMessage => {
+  if (!isRecord(value) || value.type !== "event_registry_snapshot") {
+    return false;
+  }
+
+  if (!isBoundedNonEmptySessionId(value.session_id) || !Array.isArray(value.events)) {
+    return false;
+  }
+
+  // Never index into unvalidated data: every element must itself pass the descriptor guard.
+  return value.events.every((event) => isEventDescriptor(event));
+};
+
+export const isEventRegistryDeltaMessage = (value: unknown): value is EventRegistryDeltaMessage => {
+  if (!isRecord(value) || value.type !== "event_registry_delta") {
+    return false;
+  }
+
+  if (!isBoundedNonEmptySessionId(value.session_id)) {
+    return false;
+  }
+
+  if (value.operation === "upsert") {
+    return isEventDescriptor(value.event);
   }
 
   if (value.operation === "remove") {
@@ -381,6 +452,8 @@ const WIRE_MESSAGE_TYPES = [
   "session_ack",
   "tool_registry_snapshot",
   "tool_registry_delta",
+  "event_registry_snapshot",
+  "event_registry_delta",
   "tool_call",
   "tool_result",
   "tool_error",
@@ -404,6 +477,8 @@ const WIRE_MESSAGE_GUARDS: {
   session_ack: isSessionAckMessage,
   tool_registry_snapshot: isToolRegistrySnapshotMessage,
   tool_registry_delta: isToolRegistryDeltaMessage,
+  event_registry_snapshot: isEventRegistrySnapshotMessage,
+  event_registry_delta: isEventRegistryDeltaMessage,
   tool_call: isToolCallMessage,
   tool_result: isToolResultMessage,
   tool_error: isToolErrorMessage,
