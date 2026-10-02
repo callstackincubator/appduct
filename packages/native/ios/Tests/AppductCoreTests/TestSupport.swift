@@ -142,10 +142,11 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
     resumeToken: String = "resume-token",
     alias: String = "alias-1",
     keepaliveIntervalS: Double = 30,
-    graceS: Double = 120
+    graceS: Double = 120,
+    eventRegistry: Bool = false
   ) {
     stateSnapshot = "active"
-    let payload: [String: Any] = [
+    var payload: [String: Any] = [
       "type": "session_ack",
       "session_id": sessionId,
       "status": "ok",
@@ -154,6 +155,7 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
       "keepalive_interval_s": keepaliveIntervalS,
       "grace_s": graceS,
     ]
+    if eventRegistry { payload["event_registry"] = true }
     let data = try! JSONSerialization.data(withJSONObject: payload)
     simulateIncoming(String(data: data, encoding: .utf8)!)
   }
