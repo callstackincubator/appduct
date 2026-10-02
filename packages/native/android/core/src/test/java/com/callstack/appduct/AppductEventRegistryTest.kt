@@ -313,6 +313,36 @@ class AppductEventRegistryTest {
         assertEquals("upsert", eventFrames().last().getString("operation"))
     }
 
+    @Test
+    fun `an event declared by a session change listener is in the snapshot and not sent as a delta before it`() {
+        client.addSessionChangeListener { _, _, _, _ -> client.registerEvent(event("from_listener")) }
+
+        connectAndAck(eventRegistry = true)
+
+        waitForEventFrames(1)
+        settle()
+        val all = eventFrames()
+        assertEquals(listOf("event_registry_snapshot"), all.map { it.getString("type") })
+        assertEquals(listOf("from_listener"), names(all[0]))
+    }
+
+    @Test
+    fun `an event declared from another thread while the ack is being handled is in the snapshot`() {
+        client.addSessionChangeListener { _, _, _, _ ->
+            val thread = Thread { client.registerEvent(event("from_thread")) }
+            thread.start()
+            thread.join()
+        }
+
+        connectAndAck(eventRegistry = true)
+
+        waitForEventFrames(1)
+        settle()
+        val all = eventFrames()
+        assertEquals(listOf("event_registry_snapshot"), all.map { it.getString("type") })
+        assertEquals(listOf("from_thread"), names(all[0]))
+    }
+
     // --- event-registry-frames.json ---
 
     private fun fixtureFrames(): JSONArray {

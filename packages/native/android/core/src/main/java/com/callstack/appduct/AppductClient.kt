@@ -150,6 +150,11 @@ internal class AppductClient private constructor(
     private val registry = AppductToolRegistry()
     private val eventRegistry = AppductEventRegistry()
     private val sendLock = Mutex()
+
+    // Dispatcher-confined. Counts acks; a declaration made while the newest ack's event snapshot
+    // has not been taken yet is covered by that snapshot, so it sends no delta of its own.
+    private var ackGeneration = 0
+    private var eventSnapshotPending = false
     private val toolInvoker =
         AppductToolInvoker(
             scope = scope,
@@ -247,6 +252,7 @@ internal class AppductClient private constructor(
         // an ack takes, in the order the calls were made.
         scope.launch {
             eventRegistry.upsert(descriptor)
+            if (eventSnapshotPending) return@launch
             sendEventDeltaIfAccepted { session ->
                 JSONObject()
                     .put("type", "event_registry_delta")
@@ -261,6 +267,7 @@ internal class AppductClient private constructor(
     fun unregisterEvent(name: String) {
         scope.launch {
             if (!eventRegistry.remove(name)) return@launch
+            if (eventSnapshotPending) return@launch
             sendEventDeltaIfAccepted { session ->
                 JSONObject()
                     .put("type", "event_registry_delta")
@@ -611,13 +618,23 @@ internal class AppductClient private constructor(
                 acceptsEventRegistry = ack.optBoolean("event_registry", false),
             )
 
+        // Set before the listeners run: a declaration they make is in the snapshot, not a delta.
+        val generation = ++ackGeneration
+        val acceptsEvents = heldSession?.acceptsEventRegistry == true
+        eventSnapshotPending = acceptsEvents
+
         setClientState(AppductClientState.active, null)
         emitSessionChange(kind, sessionId, alias)
 
-        // The event snapshot is the declarations as they stand at ack time; declarations made
-        // after it go out as deltas behind it.
-        val eventSnapshot = if (heldSession?.acceptsEventRegistry == true) eventRegistry.snapshotWireJson() else null
-        scope.launch { sendSnapshotSafely(eventSnapshot) }
+        scope.launch {
+            // A newer ack's task takes over.
+            if (generation != ackGeneration) return@launch
+            // Read and cleared in one step on the dispatcher, ahead of every later declaration's
+            // task, which then queues its delta behind the snapshot on the lock.
+            val eventSnapshot = if (acceptsEvents) eventRegistry.snapshotWireJson() else null
+            eventSnapshotPending = false
+            sendSnapshotSafely(eventSnapshot)
+        }
     }
 
     // --- reconnect / grace / lease restore ---
