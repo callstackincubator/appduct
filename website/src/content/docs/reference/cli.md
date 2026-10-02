@@ -93,6 +93,16 @@ Calls a tool.
 
 Ctrl-C cancels the call in the app.
 
+### `appduct events ls [selector]`
+
+Lists the events your app declares, one line each: the event's name, its payload shape and its description. With `--json`, prints `{ "events": [...], "total": n }` with each event's full payload schema.
+
+| Flag | Description |
+| --- | --- |
+| `--name <glob>` | Only events whose name matches this glob (`*` matches any run of characters), e.g. `"cart.*"`. An exact name prints that event's full payload schema. |
+
+An app that declares no events lists none, even if it posts some.
+
 ### `appduct events tail [selector]`
 
 Streams the events your app posts with `postEvent` until you stop it. With `--json`, prints one JSON object per line, each with `kind: "app_event"`.
