@@ -17,10 +17,13 @@ import {
   isEventMessage,
   isToolCallProgressMessage,
   isToolErrorMessage,
+  isEventRegistryDeltaMessage,
+  isEventRegistrySnapshotMessage,
   isToolRegistryDeltaMessage,
   isToolRegistrySnapshotMessage,
   isToolResultMessage,
   parseSessionClaimDeviceFields,
+  type EventDescriptor,
   type EventKind,
   type EventMessage,
   type SessionAckMessage,
@@ -32,6 +35,7 @@ import {
   type ToolCallMessage,
   type ToolCallProgressMessage,
   type ToolCancelMessage,
+  type ToolDescriptor,
   type ToolErrorMessage,
   type ToolResultMessage,
 } from "@appduct/shared";
@@ -41,7 +45,7 @@ import type { Clock } from "../cli/types.js";
 import type { EventBus } from "./event-bus.js";
 import { createPendingLinkRegistry, type CreatedLink, type PendingLinkRegistry } from "./links.js";
 import { RpcApplicationError } from "./rpc-errors.js";
-import { createToolRegistry, type ToolRegistry } from "./registry.js";
+import { createRegistry, type EventRegistry, type ToolRegistry } from "./registry.js";
 import { systemTimers, type TimerFns, type TimerHandle } from "./timers.js";
 
 const RESUME_TOKEN_BYTES = 32;
@@ -50,6 +54,8 @@ const RESUME_TOKEN_BYTES = 32;
 export const POST_CLAIM_MESSAGE_TYPES = new Set<string>([
   "tool_registry_snapshot",
   "tool_registry_delta",
+  "event_registry_snapshot",
+  "event_registry_delta",
   "tool_result",
   "tool_error",
   "tool_call_progress",
@@ -100,6 +106,7 @@ type LiveSession = {
   socket?: WebSocket;
   missedPongs: number;
   registry: ToolRegistry;
+  eventRegistry: EventRegistry;
   graceTimer?: TimerHandle;
 };
 
@@ -186,6 +193,7 @@ export type SessionManager = {
     state: "active" | "suspended";
     suspendReason?: SessionSuspendReason;
     registry: ToolRegistry;
+    eventRegistry: EventRegistry;
   };
   /** Sends a `tool_call` frame to the session's active socket; `false` if the session has no
    * active socket right now (caller has typically already checked ACTIVE state via
@@ -271,6 +279,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       resume_token: session.resumeToken.toString("base64url"),
       keepalive_interval_s: options.keepaliveIntervalSeconds,
       grace_s: options.graceSeconds,
+      event_registry: true,
     };
 
     socket.send(JSON.stringify(ack), (error) => {
@@ -427,8 +436,11 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       resumeToken: randomBytes(RESUME_TOKEN_BYTES),
       socket,
       missedPongs: 0,
-      registry: createToolRegistry(() => {
+      registry: createRegistry<ToolDescriptor>(() => {
         emit("tools_changed", sessionId, alias, { toolCount: session.registry.count() });
+      }),
+      eventRegistry: createRegistry<EventDescriptor>(() => {
+        emit("events_changed", sessionId, alias, { eventCount: session.eventRegistry.count() });
       }),
     };
 
@@ -515,6 +527,31 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
           session.registry.upsert(message.tool);
         } else {
           session.registry.remove(message.name);
+        }
+
+        return;
+      }
+
+      case "event_registry_snapshot": {
+        if (!isEventRegistrySnapshotMessage(message)) {
+          closeSocket(socket, 1008, "invalid_registry");
+          return;
+        }
+
+        session.eventRegistry.snapshot(message.events);
+        return;
+      }
+
+      case "event_registry_delta": {
+        if (!isEventRegistryDeltaMessage(message)) {
+          closeSocket(socket, 1008, "invalid_registry");
+          return;
+        }
+
+        if (message.operation === "upsert") {
+          session.eventRegistry.upsert(message.event);
+        } else {
+          session.eventRegistry.remove(message.name);
         }
 
         return;
@@ -614,6 +651,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
     state: "active" | "suspended";
     suspendReason?: SessionSuspendReason;
     registry: ToolRegistry;
+    eventRegistry: EventRegistry;
   } => {
     const session = resolveSession(selector);
     return {
@@ -622,6 +660,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       state: session.state,
       suspendReason: session.suspendReason,
       registry: session.registry,
+      eventRegistry: session.eventRegistry,
     };
   };
 
