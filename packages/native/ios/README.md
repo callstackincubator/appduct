@@ -215,6 +215,8 @@ without a listener — useful for a view's initial render before its first event
 try await Appduct.shared.postEvent("checkout_completed", payload: ["orderId": "abc123"])
 ```
 
+Read back with `appduct events tail`. Throws (does not send) unless a session is currently active.
+
 Declare the events your app posts so an agent can list them with `appduct events ls` before waiting
 on one. `payloadSchema` is an optional JSON Schema object; it is shown to the agent, not checked
 against what you post. A name is any string up to 4096 characters, dotted names included.
@@ -231,8 +233,6 @@ registration.remove()
 
 Against an older `appduct` CLI that predates event lists, the app keeps its session and tools and
 `appduct events ls` shows nothing.
-
-Read back with `appduct events tail`. Throws (does not send) unless a session is currently active.
 
 ## Hardened builds
 

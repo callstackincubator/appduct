@@ -79,19 +79,40 @@ public func parseEventDescriptor(_ value: JSONValue) throws -> EventDescriptor {
   return descriptor
 }
 
-/// Declared events in declaration order (an update to an existing name keeps its position).
-/// Lock-guarded rather than actor-isolated for the same reason as `AppductToolRegistryStore`:
-/// `registerEvent` is synchronous and throwing.
+/// One unit of event-registry wire work, in the order the calls were made.
+enum AppductEventRegistryOp: Sendable {
+  /// The declarations as they stood when a session ack arrived.
+  case snapshot([EventDescriptor])
+  case delta(AppductRegistryDelta<EventDescriptor>)
+}
+
+/// Declared events in declaration order (an update to an existing name keeps its position), plus
+/// the single ordered queue of wire work they produce. Every mutation and the op it implies are
+/// queued under one lock, so the queue order is the call order: a snapshot captured at ack time
+/// precedes every delta from a later `registerEvent` or `remove()`, and a `remove()` followed by a
+/// `registerEvent` of the same name can never be reordered. Lock-guarded rather than
+/// actor-isolated for the same reason as `AppductToolRegistryStore`: `registerEvent` is
+/// synchronous and throwing.
 final class AppductEventRegistryStore: @unchecked Sendable {
   private let lock = NSLock()
   private var order: [String] = []
   private var entries: [String: EventDescriptor] = [:]
+  private let continuation: AsyncStream<AppductEventRegistryOp>.Continuation
+  /// Consumed by exactly one task, which sends each op in turn.
+  let ops: AsyncStream<AppductEventRegistryOp>
+
+  init() {
+    (ops, continuation) = AsyncStream.makeStream(of: AppductEventRegistryOp.self)
+  }
+
+  deinit { continuation.finish() }
 
   func upsert(_ descriptor: EventDescriptor) {
     lock.lock()
     defer { lock.unlock() }
     if entries[descriptor.name] == nil { order.append(descriptor.name) }
     entries[descriptor.name] = descriptor
+    continuation.yield(.delta(.upsert(descriptor)))
   }
 
   @discardableResult
@@ -100,6 +121,7 @@ final class AppductEventRegistryStore: @unchecked Sendable {
     defer { lock.unlock() }
     guard entries.removeValue(forKey: name) != nil else { return false }
     order.removeAll { $0 == name }
+    continuation.yield(.delta(.remove(name)))
     return true
   }
 
@@ -107,6 +129,13 @@ final class AppductEventRegistryStore: @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return order.compactMap { entries[$0] }
+  }
+
+  /// Queues a snapshot of the declarations as they stand now.
+  func queueSnapshot() {
+    lock.lock()
+    defer { lock.unlock() }
+    continuation.yield(.snapshot(order.compactMap { entries[$0] }))
   }
 }
 
