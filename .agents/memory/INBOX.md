@@ -48,3 +48,7 @@ One note per PR that hit friction, four lines:
   What went wrong: the shipped skill's writing-tools.md and docs/TOOLS.md described declaring events for React Native only, and claimed dev warnings that only the React Native SDK gives.
   Would have prevented it: when a feature ships in several SDKs, write the user docs with one snippet per SDK and scope each behaviour claim to the SDKs that have it.
   Cost: review round
+- 2026-10-02 #143 skill: implement-issue
+  What went wrong: adding --limit/--offset to `events ls` "mirroring tools ls" copied the flags but not tools' empty-page message or footer rule, so a page past the end printed "No events declared." for a session that had events.
+  Would have prevented it: when mirroring another command's paging, port its renderer cases too (empty page with total > 0, last page footer) and test each against the original's output.
+  Cost: review round
