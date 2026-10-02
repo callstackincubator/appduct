@@ -43,6 +43,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
       "useAppductTool",
       "jsonSchema",
       "postEvent",
+      "registerEvent",
       "getRegisteredTools",
       "addAppductListener",
       "restoreSession",
@@ -251,5 +252,16 @@ describe("noop entry: runtime no-op behavior", () => {
         "appduct_disabled",
       );
     }
+  });
+});
+
+describe("noop parity: registerEvent", () => {
+  test("registerEvent returns a disposer that does nothing", async () => {
+    const noopModule = await import("../noop");
+    const registration = noopModule.registerEvent({
+      name: "checkout_completed",
+      description: "An order was paid.",
+    });
+    expect(() => registration.remove()).not.toThrow();
   });
 });

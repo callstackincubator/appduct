@@ -41,6 +41,11 @@ describe("AppductModule.web stub", () => {
     await expect(appductNativeModule.postEvent("x", null)).rejects.toThrow();
   });
 
+  test("registerEvent throws and unregisterEvent is a no-op, like their tool counterparts", () => {
+    expect(() => appductNativeModule.registerEvent("{}")).toThrow();
+    expect(() => appductNativeModule.unregisterEvent("x")).not.toThrow();
+  });
+
   test("respondToToolCall/reportToolProgress/unregisterTool are no-ops, not throwing", () => {
     expect(() =>
       appductNativeModule.respondToToolCall("id", null, null),
