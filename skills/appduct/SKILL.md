@@ -90,8 +90,13 @@ whole sequence, then pick the smallest form that fits:
 Same loop, through built-in tools whose descriptions say how to use them: `appduct_connect`
 then `appduct_wait_for_session` to connect a device; `appduct_list_tools`,
 `appduct_describe_tool` and `appduct_call_tool` for the app's tools (the app's tools are not
-MCP tools of their own). With several devices connected, pass `selector`. A tool with policy
-`"prompt"` asks the user to approve each call; if they decline, do not call it again.
+MCP tools of their own); `appduct_list_events` for the events the app declares. With several
+devices connected, pass `selector`. A tool with policy `"prompt"` asks the user to approve each
+call; if they decline, do not call it again.
+
+Before you wait on an event, list what the app declares with `appduct_list_events` (CLI:
+`appduct events ls`; `name` takes a glob like `"cart.*"`, and an exact name also returns the
+event's `payload_schema`), so you wait on a name the app really posts. An empty list means the app declares none, not that it posts none.
 
 To see what the app reported after a call, use `appduct_events` (drain) or
 `appduct_wait_for_event` (wait for one expected event).
