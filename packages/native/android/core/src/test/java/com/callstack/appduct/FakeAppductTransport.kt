@@ -113,6 +113,7 @@ internal class FakeAppductTransport(
         alias: String = "test-device",
         keepaliveIntervalS: Double = 15.0,
         graceS: Double = 600.0,
+        eventRegistry: Boolean = false,
     ) {
         rawState = "active"
         onMessage(
@@ -124,6 +125,7 @@ internal class FakeAppductTransport(
                 .put("resume_token", resumeToken)
                 .put("keepalive_interval_s", keepaliveIntervalS)
                 .put("grace_s", graceS)
+                .apply { if (eventRegistry) put("event_registry", true) }
                 .toString(),
         )
     }

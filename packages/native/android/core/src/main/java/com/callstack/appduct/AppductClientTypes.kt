@@ -265,3 +265,21 @@ internal typealias AppductSessionChangeListener = (
 ) -> Unit
 
 internal typealias AppductErrorListener = (error: AppductUnifiedError) -> Unit
+
+/** An event descriptor per PROTOCOL.md §5a. */
+internal data class AppductEventDescriptor(
+    val name: String,
+    val description: String,
+    val payloadSchema: JSONObject? = null,
+) {
+    internal fun toWireJson(): JSONObject = TODO()
+
+    companion object {
+        fun fromJson(json: String): AppductEventDescriptor = TODO()
+    }
+}
+
+/** Thrown by `registerEvent` when a descriptor fails PROTOCOL.md §5a validation. */
+internal class AppductInvalidEventDescriptorException(message: String) : IllegalArgumentException(message)
+
+internal fun validateAppductEventDescriptor(descriptor: AppductEventDescriptor): Unit = TODO()

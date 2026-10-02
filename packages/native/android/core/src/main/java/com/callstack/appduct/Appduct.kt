@@ -122,6 +122,12 @@ object Appduct {
     ): ToolRegistration =
         register(name, description, inputSchema, outputSchema, annotations, timeoutMs, group) { args, _ -> handler(args) }
 
+    fun registerEvent(
+        name: String,
+        description: String,
+        payloadSchema: JSONObject? = null,
+    ): EventRegistration = TODO()
+
     // --- deep links ---
 
     /** Reads [intent]'s `data` URI and forwards to [handle]. Returns `false` for a `null` data URI
@@ -220,6 +226,13 @@ private fun AppductClientState.toPublic(): ClientState = ClientState.valueOf(nam
  * tool; a no-op if called more than once, or after [name] was already replaced by a later
  * [Appduct.register] call. */
 class ToolRegistration internal constructor(
+    val name: String,
+    private val onRemove: () -> Unit,
+) {
+    fun remove() = onRemove()
+}
+
+class EventRegistration internal constructor(
     val name: String,
     private val onRemove: () -> Unit,
 ) {

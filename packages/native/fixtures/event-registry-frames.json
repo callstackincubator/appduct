@@ -1,0 +1,67 @@
+[
+  {
+    "name": "snapshot-two-events",
+    "frame": {
+      "type": "event_registry_snapshot",
+      "session_id": "session-1",
+      "events": [
+        {
+          "name": "app_ready",
+          "description": "The app finished starting."
+        },
+        {
+          "name": "checkout_completed",
+          "description": "Fired once an order finishes checkout.",
+          "payload_schema": {
+            "type": "object",
+            "properties": {
+              "orderId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "orderId"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "snapshot-empty",
+    "frame": {
+      "type": "event_registry_snapshot",
+      "session_id": "session-1",
+      "events": []
+    }
+  },
+  {
+    "name": "delta-upsert",
+    "frame": {
+      "type": "event_registry_delta",
+      "session_id": "session-1",
+      "operation": "upsert",
+      "event": {
+        "name": "cart.item_added",
+        "description": "An item went into the cart.",
+        "payload_schema": {
+          "type": "object",
+          "properties": {
+            "sku": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "delta-remove",
+    "frame": {
+      "type": "event_registry_delta",
+      "session_id": "session-1",
+      "operation": "remove",
+      "name": "cart.item_added"
+    }
+  }
+]

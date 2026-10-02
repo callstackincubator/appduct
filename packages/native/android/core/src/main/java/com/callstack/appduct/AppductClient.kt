@@ -227,6 +227,10 @@ internal class AppductClient private constructor(
         sendDeltaIfActive(delta)
     }
 
+    fun registerEvent(descriptor: AppductEventDescriptor): Unit = TODO()
+
+    fun unregisterEvent(name: String): Unit = TODO()
+
     /**
      * Feeds a deep link to the core (`deep-link-core.ts`'s `handleAppductDeepLinkUrl`). Returns
      * `true` iff the URL carried a `appduct` query param -- whatever the parse outcome; a bad
