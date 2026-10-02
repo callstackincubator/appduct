@@ -125,6 +125,7 @@ Omit the session selector when only one session is active; pass an alias or sess
 | `createToolGroup` | `(group)` → a `registerTool` that puts every tool it registers in `group`. |
 | `useAppductTool` | `(definition, deps?, { enabled? })`. Registers once per mount, re-registering only when the descriptor changes; `deps` overrides that derivation. `enabled` defaults to `true`; `false` never registers, and removes any registration that hook owns. |
 | `handler` | `(args, context)`. `context.signal` is an `AbortSignal`, aborted when the caller cancels or the connection drops mid-call. Forward it (`fetch(url, { signal })`), check `signal.aborted`, or listen for `"abort"` — ignoring it is fine, the handler replies normally. |
+| `registerEvent` | `({ name, description, payloadSchema? })` → `{ remove() }`. Lists an event you post, so `appduct events ls` and `appduct_list_events` show it before an agent waits on it. `payloadSchema` is a Standard Schema or raw JSON Schema, as for a tool; see [Declare the events you post](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#declare-the-events-you-post). |
 | `postEvent` | `(name, payload?)` — pushes an app event, read by `appduct events tail` and the MCP event tools. |
 | `addAppductListener` | `(kind, callback)` → `{ remove() }`. Kinds `"stateChange"`, `"sessionChange"`, `"error"` — the last one is a unified channel for bootstrap-parse, connect, socket, and tool-handler failures. |
 | `getRegisteredTools` | → `ToolDescriptor[]`, the current registry. |

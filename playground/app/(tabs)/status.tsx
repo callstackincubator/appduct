@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { z } from "zod";
 import {
   getAppductState,
   getAppductBuildConfig,
   postEvent,
+  registerEvent,
   addAppductListener,
   type AppductClientState,
   type AppductSessionChangeEvent,
@@ -69,6 +71,17 @@ export default function StatusScreen() {
       }),
     [connectionState, success, warning, danger, textTertiary]
   );
+
+  useEffect(() => {
+    const declaration = registerEvent({
+      name: "playground_ping",
+      description: "The Ping button on the Status tab was pressed.",
+      payloadSchema: z.object({
+        at: z.number().describe("Press time, milliseconds since the epoch"),
+      }),
+    });
+    return () => declaration.remove();
+  }, []);
 
   useEffect(() => {
     const stateSubscription = addAppductListener("stateChange", (event) => {

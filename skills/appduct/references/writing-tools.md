@@ -66,6 +66,25 @@ Appduct.register(
 - `timeoutMs` (1,000–600,000; default 10,000) is the only way to give a call more time. Callers
   can shorten it, never extend it.
 
+## Declare the events the app posts
+
+Agents list events before they wait on one, so declare every event the app posts:
+
+```ts
+registerEvent({
+  name: "checkout_completed",
+  description: "An order was paid.",
+  payloadSchema: z.object({ orderId: z.string() }),
+});
+```
+
+- `payloadSchema` takes the same forms as `inputSchema`; a raw JSON Schema is listed but never
+  checked. `name` can be any string, dotted names included.
+- Declaring is advisory: an undeclared `postEvent` still arrives. In dev, `postEvent` warns about
+  an undeclared name and about a payload that fails a declared Standard Schema; production posts
+  as-is.
+- Verify with `appduct events ls`; an empty list means nothing is declared.
+
 ## Design tools for the agent that will call them
 
 An agent sees `name(params) -> result` plus the first line of the description, and decides from

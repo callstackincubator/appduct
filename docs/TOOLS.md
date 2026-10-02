@@ -170,6 +170,26 @@ That deadline is enforced end to end: the app aborts the handler's `signal` at i
 
 The SDK clamps the value to `[1_000, 600_000]` ms before either timer is set, so the handler's abort timer and the daemon's call deadline are always the same number (a value outside that range is clamped with a dev warning). A caller that passes its own timeout (`appduct tools call --timeout`, `app.call(name, args, { timeoutMs })`) can only **shorten** the deadline, never extend it past this one — the app aborts the handler at its own timer regardless, so for a tool that declares nothing, a caller asking for 60 seconds still gets the app's 10-second default. That app-side fallback is fixed natively (`AppductClient`'s own `defaultToolTimeoutMs`, `APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`) and JS cannot override it — `createAppductClient`'s options are empty, and the TurboModule spec has no channel for it. Declare `timeoutMs` per tool when a call needs longer than the default.
 
+## Declare the events you post
+
+An agent that wants to wait on an event has to know its name. Declare each event your app posts with `registerEvent`, and `appduct events ls` (or `appduct_list_events`) lists it with its description and payload shape:
+
+```ts
+import { registerEvent } from "@appduct/react-native";
+
+registerEvent({
+  name: "checkout_completed",
+  description: "An order was paid.",
+  payloadSchema: z.object({ orderId: z.string() }),
+});
+```
+
+`payloadSchema` takes the same forms as a tool's `inputSchema` ([above](#accepted-schema-forms)), and an event's name can be any string, dotted ones like `cart.item_added` included. `registerEvent` returns `{ remove() }`, which withdraws only that declaration.
+
+Declaring is advisory. An undeclared `postEvent` still reaches agents, and production builds post without any check. In development, `postEvent` warns about an undeclared name and about a payload that doesn't match a declared Standard Schema, and still sends the event. A raw JSON Schema is listed but never checked against payloads.
+
+An older `appduct` CLI doesn't know about declared events: the app keeps its session and tools, and the list stays empty.
+
 ## Designing tools for agents
 
 Everything above is mechanics. This section is about the reader: the agent that runs

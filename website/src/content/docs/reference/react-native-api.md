@@ -111,6 +111,20 @@ Returns the tool descriptors currently registered, for example to show them in y
 
 ## Events
 
+### `registerEvent`
+
+```ts
+registerEvent({
+  name: "checkout_completed",
+  description: "An order was paid.",
+  payloadSchema: z.object({ orderId: z.string() }),
+});
+```
+
+Lists an event your app posts, so callers see it with `appduct events ls` or `appduct_list_events` before they wait on it. `name` is any string up to 4096 characters, dotted names included. `payloadSchema` takes the same forms as a tool's `inputSchema`. Returns `{ remove() }`, which withdraws only this declaration.
+
+Declaring is optional: an undeclared event is still delivered. In development, `postEvent` warns about an undeclared name, and about a payload that doesn't match a declared Standard Schema. Production builds post without checking. A raw JSON Schema is listed but never checked.
+
 ### `postEvent`
 
 ```ts
