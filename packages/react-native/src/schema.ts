@@ -43,23 +43,16 @@ const missingExporterReason =
  */
 const reportShapelessSchema = (
   reason: string,
-  mode: "input" | "output",
-  toolName: string | undefined,
+  label: string,
+  warningKey: string,
+  thing: "tool" | "event" = "tool",
 ): undefined => {
-  const label =
-    toolName !== undefined
-      ? `Tool "${toolName}" ${mode}Schema`
-      : `The tool ${mode}Schema`;
-
   if (isDev()) {
     throw new TypeError(
-      `${label} cannot publish a JSON Schema: ${reason}. Agents would see the tool as shapeless. ${SHAPE_REMEDY}`,
+      `${label} cannot publish a JSON Schema: ${reason}. Agents would see the ${thing} as shapeless. ${SHAPE_REMEDY}`,
     );
   }
 
-  // Keyed by slot as well as tool: a tool whose input and output schemas both fail has two
-  // distinct problems to fix, and reporting only the first would hide the second.
-  const warningKey = `${toolName ?? "<unnamed>"}:${mode}`;
   if (!shapelessToolWarningsSeen.has(warningKey)) {
     shapelessToolWarningsSeen.add(warningKey);
     logger.warn(
@@ -386,7 +379,39 @@ export const exportToolSchema = (
   const outcome = exportNormalizedSchema(schema, mode);
   return outcome.ok
     ? outcome.schema
-    : reportShapelessSchema(outcome.reason, mode, toolName);
+    : reportShapelessSchema(
+        outcome.reason,
+        toolName !== undefined
+          ? `Tool "${toolName}" ${mode}Schema`
+          : `The tool ${mode}Schema`,
+        // Keyed by slot as well as tool: a tool whose input and output schemas both fail has two
+        // distinct problems to fix, and reporting only the first would hide the second.
+        `${toolName ?? "<unnamed>"}:${mode}`,
+      );
+};
+
+/**
+ * JSON Schema to publish for an event's payload, or `undefined` when none is declared. A payload
+ * schema that cannot produce a shape is reported like a tool's: thrown in dev, warned once per
+ * event name otherwise.
+ */
+export const exportEventPayloadSchema = (
+  schema: AppductNormalizedToolSchema | undefined,
+  eventName: string,
+): ToolSchemaDescriptor | undefined => {
+  if (!schema) {
+    return undefined;
+  }
+
+  const outcome = exportNormalizedSchema(schema, "input");
+  return outcome.ok
+    ? outcome.schema
+    : reportShapelessSchema(
+        outcome.reason,
+        `Event "${eventName}" payloadSchema`,
+        `event:${eventName}`,
+        "event",
+      );
 };
 
 /**

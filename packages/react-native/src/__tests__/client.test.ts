@@ -60,6 +60,8 @@ const createFakeNativeModule = () => {
   const module: AppductNativeModuleLike = {
     registerTool: (descriptorJson) => registerToolCalls.push(descriptorJson),
     unregisterTool: (name) => unregisterToolCalls.push(name),
+    registerEvent: () => {},
+    unregisterEvent: () => {},
     handleUrl: (url) => url.includes("appduct="),
     connect: async (inputJson, supersede) => {
       connectCalls.push({ inputJson, supersede });

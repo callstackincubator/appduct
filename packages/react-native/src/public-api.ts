@@ -5,6 +5,7 @@ import type {
   AppductBuildConfig,
   AppductClientState,
   AppductConnectInput,
+  AppductEventDefinition,
   AppductJsonSchemaObject,
   AppductListenerKind,
   AppductRuntimeSchema,
@@ -58,6 +59,14 @@ export type CordierePublicApi = {
   jsonSchema<T = Record<string, unknown>>(
     schema: Record<string, unknown>,
   ): AppductJsonSchemaObject<T>;
+
+  /**
+   * Declares an event the app posts so agents can list it. Advisory: `postEvent` still sends an
+   * undeclared name, with a development warning.
+   */
+  registerEvent<TPayloadSchema extends AppductRuntimeSchema | undefined>(
+    definition: AppductEventDefinition<TPayloadSchema>,
+  ): AppductSubscription;
 
   postEvent(name: string, payload?: unknown): Promise<void>;
 

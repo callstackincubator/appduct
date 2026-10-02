@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { z } from "zod";
+import { z } from "zod4";
 
 import type { AppductNativeModuleLike } from "../client-types";
 import { createAppductClient } from "../client";
