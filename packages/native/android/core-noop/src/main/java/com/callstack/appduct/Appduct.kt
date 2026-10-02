@@ -39,6 +39,12 @@ object Appduct {
         handler: suspend (args: JSONObject) -> Any?,
     ): ToolRegistration = ToolRegistration(name) {}
 
+    fun registerEvent(
+        name: String,
+        description: String,
+        payloadSchema: JSONObject? = null,
+    ): EventRegistration = EventRegistration(name) {}
+
     fun handle(intent: Intent): Boolean = false
 
     fun handle(uri: Uri): Boolean = false
@@ -60,6 +66,14 @@ object Appduct {
     suspend fun disconnect() {}
 
     fun addListener(listener: (AppductEvent) -> Unit): Subscription = Subscription {}
+}
+
+/** No-op mirror of `core`'s `EventRegistration` -- [remove] does nothing. */
+class EventRegistration internal constructor(
+    val name: String,
+    private val onRemove: () -> Unit,
+) {
+    fun remove() = onRemove()
 }
 
 /** No-op mirror of `core`'s `ToolRegistration` -- same shape, [remove] just does nothing. */

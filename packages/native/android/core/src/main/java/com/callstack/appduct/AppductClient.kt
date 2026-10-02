@@ -50,6 +50,9 @@ private data class HeldSession(
      * trust again instead of the transport rejecting the connect outright (issue #136). `null`
      * for a build with embedded pins, where it is never consulted. */
     val linkPin: String?,
+    /** Whether the ack that opened this session carried `event_registry: true`; a session
+     * restored from a lease has not been acked yet. */
+    val acceptsEventRegistry: Boolean = false,
 )
 
 private data class ConnectOptionsInternal(
@@ -143,6 +146,7 @@ internal class AppductClient private constructor(
         )
 
     private val registry = AppductToolRegistry()
+    private val eventRegistry = AppductEventRegistry()
     private val toolInvoker =
         AppductToolInvoker(
             scope = scope,
@@ -227,9 +231,35 @@ internal class AppductClient private constructor(
         sendDeltaIfActive(delta)
     }
 
-    fun registerEvent(descriptor: AppductEventDescriptor): Unit = TODO()
+    /**
+     * Declares (or replaces, by name) an event -- validates per PROTOCOL.md §5a, throwing
+     * [AppductInvalidEventDescriptorException] on an invalid descriptor. Declared events reach the
+     * daemon only when it accepted event frames in its ack (`event_registry: true`): as a snapshot
+     * after each such ack, and as a delta for each later declaration while the session is active.
+     * Against an older daemon nothing is sent and the session is unaffected.
+     */
+    fun registerEvent(descriptor: AppductEventDescriptor) {
+        eventRegistry.upsert(descriptor)
+        sendEventFrameIfAccepted { session ->
+            JSONObject()
+                .put("type", "event_registry_delta")
+                .put("session_id", session.sessionId)
+                .put("operation", "upsert")
+                .put("event", descriptor.toWireJson())
+        }
+    }
 
-    fun unregisterEvent(name: String): Unit = TODO()
+    /** No-op for an undeclared name. */
+    fun unregisterEvent(name: String) {
+        if (!eventRegistry.remove(name)) return
+        sendEventFrameIfAccepted { session ->
+            JSONObject()
+                .put("type", "event_registry_delta")
+                .put("session_id", session.sessionId)
+                .put("operation", "remove")
+                .put("name", name)
+        }
+    }
 
     /**
      * Feeds a deep link to the core (`deep-link-core.ts`'s `handleAppductDeepLinkUrl`). Returns
@@ -568,6 +598,7 @@ internal class AppductClient private constructor(
                 ip = endpointIp,
                 port = endpointPort,
                 linkPin = linkPin,
+                acceptsEventRegistry = ack.optBoolean("event_registry", false),
             )
 
         setClientState(AppductClientState.active, null)
@@ -870,6 +901,33 @@ internal class AppductClient private constructor(
             rawSend(message.toString())
         } catch (e: Throwable) {
             emitError(AppductUnifiedError(phase = "tool", message = "Failed to send the tool registry snapshot.", cause = e))
+        }
+
+        if (!session.acceptsEventRegistry) return
+        val events = JSONArray()
+        for (event in eventRegistry.snapshotWireJson()) events.put(event)
+        sendEventFrame(
+            JSONObject()
+                .put("type", "event_registry_snapshot")
+                .put("session_id", session.sessionId)
+                .put("events", events),
+        )
+    }
+
+    private fun sendEventFrameIfAccepted(frame: (HeldSession) -> JSONObject) {
+        scope.launch {
+            if (clientState != AppductClientState.active) return@launch
+            val session = heldSession ?: return@launch
+            if (!session.acceptsEventRegistry) return@launch
+            sendEventFrame(frame(session))
+        }
+    }
+
+    private suspend fun sendEventFrame(frame: JSONObject) {
+        try {
+            rawSend(frame.toString())
+        } catch (e: Throwable) {
+            emitError(AppductUnifiedError(phase = "tool", message = "Failed to sync the event registry.", cause = e))
         }
     }
 
