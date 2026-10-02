@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
 import { decodeBootstrap } from "../domains/bootstrap.js";
+import { isEventDescriptor } from "../domains/event-descriptor.js";
 import { isToolDescriptor } from "../domains/tool-descriptor.js";
 
 /**
@@ -101,6 +102,24 @@ describe("fixtures-conformance: tool-descriptors.json (isToolDescriptor)", () =>
 
   test.each(vectors.map((vector) => [vector.name, vector] as const))("%s", (_name, vector) => {
     expect(isToolDescriptor(vector.descriptor)).toBe(vector.valid);
+  });
+});
+
+type EventDescriptorVector = {
+  name: string;
+  descriptor: unknown;
+  valid: boolean;
+};
+
+describe("fixtures-conformance: event-descriptors.json (isEventDescriptor)", () => {
+  const vectors = loadFixture<EventDescriptorVector[]>("event-descriptors.json");
+
+  test("the fixture is non-empty", () => {
+    expect(vectors.length).toBeGreaterThan(0);
+  });
+
+  test.each(vectors.map((vector) => [vector.name, vector] as const))("%s", (_name, vector) => {
+    expect(isEventDescriptor(vector.descriptor)).toBe(vector.valid);
   });
 });
 

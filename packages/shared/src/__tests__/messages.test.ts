@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 
 import {
   isEventMessage,
+  isEventRegistryDeltaMessage,
+  isEventRegistrySnapshotMessage,
   isKnownWireMessageType,
   isSessionAckMessage,
   isSessionClaimMessage,
@@ -16,6 +18,9 @@ import {
   isWireMessage,
   MAX_WIRE_STRING_LENGTH,
   type EventMessage,
+  type EventRegistryRemoveDeltaMessage,
+  type EventRegistrySnapshotMessage,
+  type EventRegistryUpsertDeltaMessage,
   type SessionAckMessage,
   type SessionClaimMessage,
   type SessionResumeMessage,
@@ -71,6 +76,26 @@ const validDeltaRemove = (): ToolRegistryRemoveDeltaMessage => ({
   session_id: "session-1",
   operation: "remove",
   name: "ping",
+});
+
+const validEventSnapshot = (): EventRegistrySnapshotMessage => ({
+  type: "event_registry_snapshot",
+  session_id: "session-1",
+  events: [{ name: "checkout_completed", description: "Order finished." }],
+});
+
+const validEventDeltaUpsert = (): EventRegistryUpsertDeltaMessage => ({
+  type: "event_registry_delta",
+  session_id: "session-1",
+  operation: "upsert",
+  event: { name: "checkout_completed", description: "Order finished." },
+});
+
+const validEventDeltaRemove = (): EventRegistryRemoveDeltaMessage => ({
+  type: "event_registry_delta",
+  session_id: "session-1",
+  operation: "remove",
+  name: "checkout_completed",
 });
 
 const validToolCall = (): ToolCallMessage => ({
@@ -196,6 +221,18 @@ describe("session_ack", () => {
   test("rejects a wrong field type", () => {
     expect(isSessionAckMessage({ ...validAck(), keepalive_interval_s: "15" })).toBe(false);
   });
+
+  test("accepts an omitted event_registry flag", () => {
+    expect(isSessionAckMessage(validAck())).toBe(true);
+  });
+
+  test("accepts event_registry: true", () => {
+    expect(isSessionAckMessage({ ...validAck(), event_registry: true })).toBe(true);
+  });
+
+  test("rejects event_registry: false", () => {
+    expect(isSessionAckMessage({ ...validAck(), event_registry: false })).toBe(false);
+  });
 });
 
 describe("tool_registry_snapshot", () => {
@@ -264,6 +301,75 @@ describe("tool_registry_delta", () => {
 
   test("rejects an unknown operation", () => {
     expect(isToolRegistryDeltaMessage({ ...validDeltaUpsert(), operation: "replace" })).toBe(false);
+  });
+});
+
+describe("event_registry_snapshot", () => {
+  test("accepts a valid message", () => {
+    expect(isEventRegistrySnapshotMessage(validEventSnapshot())).toBe(true);
+  });
+
+  test("accepts an empty events list", () => {
+    expect(isEventRegistrySnapshotMessage({ ...validEventSnapshot(), events: [] })).toBe(true);
+  });
+
+  test("rejects the wrong type", () => {
+    expect(isEventRegistrySnapshotMessage({ ...validEventSnapshot(), type: "event_registry_delta" })).toBe(false);
+  });
+
+  test("rejects a missing field", () => {
+    const { events: _events, ...rest } = validEventSnapshot();
+    expect(isEventRegistrySnapshotMessage(rest)).toBe(false);
+  });
+
+  test("rejects a wrong field type (events not an array)", () => {
+    expect(isEventRegistrySnapshotMessage({ ...validEventSnapshot(), events: {} })).toBe(false);
+  });
+
+  test("rejects a [null] events element without throwing", () => {
+    expect(() => isEventRegistrySnapshotMessage({ ...validEventSnapshot(), events: [null] })).not.toThrow();
+    expect(isEventRegistrySnapshotMessage({ ...validEventSnapshot(), events: [null] })).toBe(false);
+  });
+
+  test("rejects an events element missing required fields", () => {
+    expect(isEventRegistrySnapshotMessage({ ...validEventSnapshot(), events: [{ name: "ping" }] })).toBe(false);
+  });
+});
+
+describe("event_registry_delta", () => {
+  test("accepts a valid upsert message", () => {
+    expect(isEventRegistryDeltaMessage(validEventDeltaUpsert())).toBe(true);
+  });
+
+  test("accepts a valid remove message", () => {
+    expect(isEventRegistryDeltaMessage(validEventDeltaRemove())).toBe(true);
+  });
+
+  test("rejects the wrong type", () => {
+    expect(isEventRegistryDeltaMessage({ ...validEventDeltaUpsert(), type: "event_registry_snapshot" })).toBe(false);
+  });
+
+  test("rejects a missing field (event) on upsert", () => {
+    const { event: _event, ...rest } = validEventDeltaUpsert();
+    expect(isEventRegistryDeltaMessage(rest)).toBe(false);
+  });
+
+  test("rejects a missing field (name) on remove", () => {
+    const { name: _name, ...rest } = validEventDeltaRemove();
+    expect(isEventRegistryDeltaMessage(rest)).toBe(false);
+  });
+
+  test("rejects a wrong field type (event not an object) on upsert", () => {
+    expect(isEventRegistryDeltaMessage({ ...validEventDeltaUpsert(), event: "ping" })).toBe(false);
+  });
+
+  test("rejects an invalid event descriptor on upsert without throwing", () => {
+    expect(() => isEventRegistryDeltaMessage({ ...validEventDeltaUpsert(), event: null })).not.toThrow();
+    expect(isEventRegistryDeltaMessage({ ...validEventDeltaUpsert(), event: null })).toBe(false);
+  });
+
+  test("rejects an unknown operation", () => {
+    expect(isEventRegistryDeltaMessage({ ...validEventDeltaUpsert(), operation: "replace" })).toBe(false);
   });
 });
 
@@ -432,6 +538,9 @@ describe("isKnownWireMessageType / isWireMessage", () => {
       validSnapshot(),
       validDeltaUpsert(),
       validDeltaRemove(),
+      validEventSnapshot(),
+      validEventDeltaUpsert(),
+      validEventDeltaRemove(),
       validToolCall(),
       validToolResult(),
       validToolError(),

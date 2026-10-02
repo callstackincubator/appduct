@@ -63,6 +63,15 @@ Hand-written, not generated: these are URL strings, not binary payloads, so ther
 encode programmatically. When `bootstrap-payloads.json` is regenerated with different `base64url`
 values, update the corresponding `appduct=` values here by hand and re-check `payloadIndex`.
 
+### `event-descriptors.json`
+
+Array of `{ name, descriptor, valid }` covering `@appduct/shared`'s `isEventDescriptor`
+(`docs/PROTOCOL.md` §5a): a name is any non-empty string up to 4096 characters (dotted names and
+names with spaces are valid, unlike a tool name), a description is 1 to 4096 characters, and
+`payload_schema` must be a JSON object if present (rejecting a string, an array and `null`).
+Currently asserted by the TypeScript suite only; the Swift and Kotlin suites join it with their
+`registerEvent` slices.
+
 ### `tool-descriptors.json`
 
 Array of `{ name, descriptor, valid }` covering every rule in `docs/PROTOCOL.md` §5
