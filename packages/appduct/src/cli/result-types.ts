@@ -9,6 +9,7 @@ import type {
   AgentEndpoint,
   EffectivePolicyDecision,
   EventNotification,
+  EventsListResult,
   SessionSummary,
   ToolGroupSummary,
   ToolsListEntry,
@@ -173,6 +174,10 @@ export type ToolGroupsListing = {
  * listing entry, picked out of `tools.list` — not a registration, so its `group` is `null` for an
  * ungrouped tool. */
 export type ToolsCommandData = ToolsListing | ToolGroupsListing | ToolsListEntry;
+
+/** `appduct events ls`: the daemon's `events.list` result, plus the `--name` glob that produced it
+ * when one was given. */
+export type EventsListing = EventsListResult & { name?: string };
 
 /** `appduct tools call`: the tool's raw result payload, printed as-is. */
 export type InvokeCommandData = unknown;

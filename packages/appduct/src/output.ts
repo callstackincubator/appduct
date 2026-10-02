@@ -1,8 +1,10 @@
 import pc from "picocolors";
 import {
   formatAgentWebSocketUrl,
+  renderEventSignature,
   renderToolSignature,
   summarizeToolDescription,
+  type EventDescriptor,
   type EventNotification,
   type ListedToolDescriptor,
   type SessionSummary,
@@ -19,6 +21,7 @@ import type {
   DaemonStatusCommandData,
   DaemonStopCommandData,
   DoctorCommandData,
+  EventsListing,
   InitCommandData,
   InvokeCommandData,
   KeygenCommandData,
@@ -424,6 +427,43 @@ const renderToolsListData = (
   return full ? renderToolsFullListing(colors, data, flags) : renderToolSummaryTable(colors, data);
 };
 
+/** `appduct events ls`: one signature line plus the description per event; an exact `--name` that
+ * matched an event prints that event's full descriptor instead, payload schema included. */
+const renderEventsListData = (colors: ColorPalette, data: EventsListing, flags: GlobalFlags): string[] => {
+  const [only] = data.events;
+
+  if (data.name !== undefined && !data.name.includes("*") && only !== undefined) {
+    return renderFields(
+      colors.green(`Event: ${only.name}`),
+      [
+        ["Signature", renderEventSignature(only)],
+        ["Description", only.description],
+        ["Payload schema", only.payload_schema],
+      ],
+      flags,
+    );
+  }
+
+  if (data.events.length === 0) {
+    return [
+      colors.green("Events"),
+      data.name === undefined ? "  No events declared." : `  No events match ${JSON.stringify(data.name)}.`,
+    ];
+  }
+
+  const lines = data.events.flatMap((event: EventDescriptor) => [
+    `  ${renderEventSignature(event)}`,
+    `    ${summarizeToolDescription(event.description)}`,
+  ]);
+
+  return [
+    colors.green("Events"),
+    ...lines,
+    "",
+    "Run `appduct events ls --name <name>` for an event's full payload schema.",
+  ];
+};
+
 const renderInvokeData = (colors: ColorPalette, data: InvokeCommandData, flags: GlobalFlags): string[] => {
   return [colors.green("Result"), formatScalar(data, flags)];
 };
@@ -658,6 +698,8 @@ const renderSuccessData = (colors: ColorPalette, command: string, data: unknown,
       return renderToolsListData(colors, data as ToolsListing | ToolGroupsListing, flags, options.full);
     case "tools describe":
       return renderToolDetail(colors, data as ListedToolDescriptor, flags);
+    case "events ls":
+      return renderEventsListData(colors, data as EventsListing, flags);
     case "tools call":
       return renderInvokeData(colors, data as InvokeCommandData, flags);
     case "sessions revoke":
