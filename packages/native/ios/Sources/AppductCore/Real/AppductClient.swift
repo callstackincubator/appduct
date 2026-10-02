@@ -32,6 +32,7 @@ public actor AppductClient {
     var alias: String
     var keepaliveIntervalS: Double
     var graceS: Double
+    var eventRegistry: Bool
     var disconnectedAtMs: Double?
     var endpoint: (ip: String, port: Int)
     /// The SPKI pin the claim that started this session trusted (`trust: link`, no embedded
@@ -55,6 +56,8 @@ public actor AppductClient {
     let alias: String
     let keepaliveIntervalS: Double
     let graceS: Double
+    /// The ack carried `event_registry: true`: the daemon accepts `event_registry_*` frames.
+    let eventRegistry: Bool
   }
 
   var epoch: Int = 0
@@ -72,6 +75,13 @@ public actor AppductClient {
 
   /// Not actor-isolated -- see `AppductToolRegistryStore`'s doc comment.
   let registryStore = AppductToolRegistryStore()
+
+  // MARK: Event registry (declaration order preserved)
+
+  let eventStore = AppductEventRegistryStore()
+  /// The session whose event snapshot has gone out; deltas queued before it are dropped, since the
+  /// snapshot already holds them.
+  var eventSnapshotSentFor: String?
 
   // MARK: In-flight tool calls
 
@@ -123,6 +133,15 @@ public actor AppductClient {
     // caller already holds a reference returned by this initializer.
     let instance = self
     Task { await instance.wireTransportAndForeground() }
+
+    // One consumer sends event-registry frames in the order the store queued them.
+    let ops = eventStore.ops
+    Task { [weak self] in
+      for await op in ops {
+        guard let self else { return }
+        await self.sendEventRegistryOp(op)
+      }
+    }
   }
 
   private func wireTransportAndForeground() {
@@ -231,6 +250,20 @@ public actor AppductClient {
   public nonisolated func unregisterTool(_ name: String) {
     guard registryStore.remove(name) else { return }
     Task { await self.sendToolRegistryDelta(.remove(name)) }
+  }
+
+  /// Declares (or replaces, by name) an event the app posts. Validates like `@appduct/shared`'s
+  /// `isEventDescriptor` (PROTOCOL.md §5a) and throws on an invalid one. Sends an
+  /// `event_registry_delta` while a session is active and its ack carried `event_registry: true`;
+  /// otherwise the declaration waits for the next such ack's snapshot. `remove()` on the returned
+  /// registration withdraws it.
+  public nonisolated func registerEvent(_ descriptor: EventDescriptor) throws -> EventRegistration {
+    try validateEventDescriptor(descriptor)
+    eventStore.upsert(descriptor)
+    let name = descriptor.name
+    return EventRegistration { [weak self] in
+      _ = self?.eventStore.remove(name)
+    }
   }
 
   // MARK: postEvent

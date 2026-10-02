@@ -62,6 +62,25 @@ public struct ToolDescriptor: Sendable, Equatable {
   }
 }
 
+// MARK: Event descriptor (mirrors Real/AppductEventDescriptor.swift's public surface)
+
+public struct EventDescriptor: Sendable, Equatable {
+  public var name: String
+  public var description: String
+  public var payloadSchema: JSONObject?
+
+  public init(name: String, description: String, payloadSchema: JSONObject? = nil) {
+    self.name = name
+    self.description = description
+    self.payloadSchema = payloadSchema
+  }
+}
+
+public struct EventRegistration: Sendable {
+  init(_ unregister: @escaping @Sendable () -> Void) {}
+  public func remove() {}
+}
+
 // MARK: Tool invocation
 
 public struct ToolCallContext: Sendable {
@@ -166,6 +185,7 @@ public actor AppductClient {
 
   public nonisolated func registerTool(_ descriptor: ToolDescriptor, handler: @escaping ToolHandler) throws {}
   public nonisolated func unregisterTool(_ name: String) {}
+  public nonisolated func registerEvent(_ descriptor: EventDescriptor) throws -> EventRegistration { EventRegistration {} }
   public nonisolated var registeredTools: [ToolDescriptor] { [] }
 
   public nonisolated func handleUrl(_ url: String) -> Bool { false }

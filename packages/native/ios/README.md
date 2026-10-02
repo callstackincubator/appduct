@@ -217,6 +217,23 @@ try await Appduct.shared.postEvent("checkout_completed", payload: ["orderId": "a
 
 Read back with `appduct events tail`. Throws (does not send) unless a session is currently active.
 
+Declare the events your app posts so an agent can list them with `appduct events ls` before waiting
+on one. `payloadSchema` is an optional JSON Schema object; it is shown to the agent, not checked
+against what you post. A name is any string up to 4096 characters, dotted names included.
+
+```swift
+let registration = try Appduct.shared.registerEvent(
+  name: "checkout_completed",
+  description: "Fired once an order finishes checkout.",
+  payloadSchema: ["type": "object", "properties": ["orderId": ["type": "string"]], "required": ["orderId"]]
+)
+// later, to withdraw it:
+registration.remove()
+```
+
+Against an older `appduct` CLI that predates event lists, the app keeps its session and tools and
+`appduct events ls` shows nothing.
+
 ## Hardened builds
 
 By default a build trusts whatever pin the deep link itself carries for that session
