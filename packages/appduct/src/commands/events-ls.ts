@@ -1,5 +1,5 @@
 /**
- * `appduct events ls [selector] [--name <glob>]` (issue #124): lists the events an app declared,
+ * `appduct events ls [selector] [--name <glob>] [--limit <n>] [--offset <n>]` (issue #124): lists the events an app declared,
  * from the daemon's `events.list`. The listing carries each event's full descriptor, so `--json`
  * has the payload schemas too; the human renderer prints signature lines, and the full schema when
  * `--name` is an exact name (no `*`) that matched an event.
@@ -14,6 +14,10 @@ export type EventsLsOptions = {
   selector?: string;
   /** Whole-name, case-sensitive glob, forwarded to `events.list`. */
   name?: string;
+  /** Page size; omitted lists everything from `offset` on. */
+  limit?: number;
+  /** Zero-based start index into the name-sorted, filtered list. */
+  offset?: number;
 };
 
 export const handleEventsLsCommand = async (
@@ -22,10 +26,19 @@ export const handleEventsLsCommand = async (
 ): Promise<CliResult<EventsListing>> => {
   const result = await callDaemon<EventsListResult>(
     RPC_METHODS.eventsList,
-    { selector: options.selector, name: options.name },
+    { selector: options.selector, name: options.name, limit: options.limit, offset: options.offset },
     { stateDir: context.stateDir, spawn: context.spawn },
   );
 
-  // `name` is echoed so the human renderer can tell an exact-name lookup from a listing.
-  return { ok: true, data: { ...result, ...(options.name !== undefined ? { name: options.name } : {}) } };
+  // The inputs actually given are echoed so the human renderer can tell an exact-name lookup from
+  // a listing and report the page, and `--json` consumers see what produced it (as `tools ls` does).
+  return {
+    ok: true,
+    data: {
+      ...result,
+      ...(options.name !== undefined ? { name: options.name } : {}),
+      ...(options.limit !== undefined ? { limit: options.limit } : {}),
+      ...(options.offset !== undefined ? { offset: options.offset } : {}),
+    },
+  };
 };

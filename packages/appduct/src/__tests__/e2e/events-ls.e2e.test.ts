@@ -130,4 +130,53 @@ describe("e2e: events ls", () => {
     },
     30_000,
   );
+
+  test(
+    "--limit and --offset page through more events than one page, in --json and in the human footer",
+    async () => {
+      const { stateDir } = await makeTempStateDir();
+      const app = await connectApp(stateDir);
+      app.declareEvents([checkout, itemAdded, itemRemoved]);
+      await waitForTotal(stateDir, 3);
+
+      type Page = { events: Array<{ name: string }>; total: number; limit?: number; offset?: number };
+      const first = await runCliJson<Page>(["events", "ls", "--limit", "2"], stateDir);
+      expect(first.data).toMatchObject({ events: [itemAdded, itemRemoved], total: 3, limit: 2 });
+
+      const second = await runCliJson<Page>(["events", "ls", "--limit", "2", "--offset", "2"], stateDir);
+      expect(second.data).toMatchObject({ events: [checkout], total: 3, limit: 2, offset: 2 });
+
+      const human = await runCliText(["events", "ls", "--limit", "2"], stateDir);
+      expect(human.stdout).toContain("cart.item_removed");
+      expect(human.stdout).not.toContain("checkout_completed {");
+      expect(human.stdout).toContain(
+        "Showing 2 of 3 events (offset 0). Narrow with --name <glob> or page with --offset <n>.",
+      );
+
+      const last = await runCliText(["events", "ls", "--limit", "2", "--offset", "2"], stateDir);
+      expect(last.stdout).toContain("checkout_completed");
+      expect(last.stdout).toContain("Showing 1 of 3 events (offset 2).");
+    },
+    30_000,
+  );
+
+  test(
+    "an offset past the end says how many events match instead of claiming none are declared",
+    async () => {
+      const { stateDir } = await makeTempStateDir();
+      const app = await connectApp(stateDir);
+      app.declareEvents([checkout, itemAdded, itemRemoved]);
+      await waitForTotal(stateDir, 3);
+
+      const past = await runCliText(["events", "ls", "--offset", "5"], stateDir);
+      expect(past.exitCode).toBe(0);
+      expect(past.stdout).toContain("No events at offset 5; 3 matching events in total.");
+      expect(past.stdout).not.toContain("No events declared");
+
+      const pastNamed = await runCliText(["events", "ls", "--name", "checkout_completed", "--offset", "1"], stateDir);
+      expect(pastNamed.stdout).toContain("No events at offset 1; 1 matching event in total.");
+      expect(pastNamed.stdout).not.toContain("No events match");
+    },
+    30_000,
+  );
 });

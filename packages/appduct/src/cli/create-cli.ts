@@ -95,6 +95,8 @@ export const createCli = () => {
       "Only events whose name matches this whole-name, case-sensitive glob (\"*\" matches any run of characters). " +
         "ls: an exact name prints that event's full payload schema.",
     )
+    .option("--limit <n>", "ls: show at most n events.")
+    .option("--offset <n>", "ls: skip the first n events of the name-sorted list.")
     .option(
       "--payload-max-bytes <n>",
       "Cap each event's payload at this many UTF-8 bytes of its JSON; over the cap, the event carries " +
