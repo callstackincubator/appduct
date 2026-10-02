@@ -125,6 +125,7 @@ extension AppductClient {
       alias: lease.alias,
       keepaliveIntervalS: lease.keepaliveIntervalS,
       graceS: lease.graceS,
+      eventRegistry: false,  // learned from the ack that resumes this lease
       disconnectedAtMs: lease.disconnectedAtMs.map(Double.init) ?? now,
       endpoint: (lease.endpoint.ip, lease.endpoint.port),
       linkPin: lease.linkPin
@@ -235,6 +236,7 @@ extension AppductClient {
       alias: ack.alias,
       keepaliveIntervalS: ack.keepaliveIntervalS,
       graceS: ack.graceS,
+      eventRegistry: ack.eventRegistry,
       disconnectedAtMs: nil,
       endpoint: endpoint,
       linkPin: linkPin
@@ -244,7 +246,10 @@ extension AppductClient {
     setClientState(.active)
     emitSessionChange(type: kind, sessionId: ack.sessionId, alias: ack.alias)
 
-    Task { await self.sendSnapshot() }
+    Task {
+      await self.sendSnapshot()
+      await self.sendEventSnapshot()
+    }
   }
 
   func finalizeSessionLost(_ reason: String) {
@@ -400,7 +405,8 @@ extension AppductClient {
       resumeToken: resumeToken,
       alias: alias,
       keepaliveIntervalS: keepaliveIntervalS,
-      graceS: graceS
+      graceS: graceS,
+      eventRegistry: object["event_registry"]?.boolValue == true
     )
   }
 
@@ -526,7 +532,46 @@ extension AppductClient {
     try? await sendWire(message)
   }
 
-  func sendToolRegistryDelta(_ delta: AppductRegistryDelta) async {
+  /// Event frames go out only on a session whose ack said the daemon accepts them: an older
+  /// daemon closes the session on an unknown frame type.
+  private var eventFramesAllowed: String? {
+    guard clientState == .active, let held = heldSession, held.eventRegistry else { return nil }
+    return held.sessionId
+  }
+
+  func sendEventSnapshot() async {
+    guard let sessionId = eventFramesAllowed else { return }
+    let message = JSONValue.object([
+      "type": .string("event_registry_snapshot"),
+      "session_id": .string(sessionId),
+      "events": .array(eventStore.snapshot().map { $0.wireValue }),
+    ])
+    try? await sendWire(message)
+  }
+
+  func sendEventRegistryDelta(_ delta: AppductRegistryDelta<EventDescriptor>) async {
+    guard let sessionId = eventFramesAllowed else { return }
+
+    var object: JSONObject = ["type": .string("event_registry_delta"), "session_id": .string(sessionId)]
+    switch delta {
+    case .upsert(let descriptor):
+      object["operation"] = .string("upsert")
+      object["event"] = descriptor.wireValue
+    case .remove(let name):
+      object["operation"] = .string("remove")
+      object["name"] = .string(name)
+    }
+
+    do {
+      try await sendWire(.object(object))
+    } catch {
+      emitError(
+        AppductUnifiedErrorEvent(phase: "socket", message: "Failed to sync the event registry.")
+      )
+    }
+  }
+
+  func sendToolRegistryDelta(_ delta: AppductRegistryDelta<ToolDescriptor>) async {
     guard clientState == .active, let sessionId = heldSession?.sessionId else { return }
 
     var object: JSONObject = ["type": .string("tool_registry_delta"), "session_id": .string(sessionId)]

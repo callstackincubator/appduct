@@ -4,8 +4,8 @@
 
 import Foundation
 
-public enum AppductRegistryDelta: Sendable, Equatable {
-  case upsert(ToolDescriptor)
+public enum AppductRegistryDelta<Descriptor: Sendable & Equatable>: Sendable, Equatable {
+  case upsert(Descriptor)
   case remove(String)
 }
 

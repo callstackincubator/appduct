@@ -48,6 +48,15 @@ public final class Appduct: Sendable {
     ToolRegistration {}
   }
 
+  @discardableResult
+  public func registerEvent(
+    name: String,
+    description: String,
+    payloadSchema: [String: Any]? = nil
+  ) throws -> EventRegistration {
+    EventRegistration {}
+  }
+
   public func handle(_ url: URL) -> Bool { false }
 
   public func postEvent(_ name: String, payload: Any? = nil) async throws {}

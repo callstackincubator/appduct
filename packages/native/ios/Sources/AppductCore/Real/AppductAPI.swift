@@ -104,6 +104,28 @@ public final class Appduct: Sendable {
     )
   }
 
+  // MARK: Event declaration
+
+  /// Declares an event the app posts, so an agent can list it (`appduct events ls`) before waiting
+  /// on it. `name` is any string up to 4096 characters, dotted names included. `payloadSchema` is a
+  /// plain JSON Schema object; it is only listed, never checked against what `postEvent` sends. The
+  /// returned `EventRegistration.remove()` withdraws the declaration.
+  @discardableResult
+  public func registerEvent(
+    name: String,
+    description: String,
+    payloadSchema: [String: Any]? = nil
+  ) throws -> EventRegistration {
+    var schemaObject: JSONObject?
+    if let payloadSchema {
+      guard let converted = try? Appduct.jsonValue(fromFoundation: payloadSchema), let object = converted.objectValue else {
+        throw ToolDescriptorValidationError("Event \"\(name)\" payloadSchema is not a valid JSON object.")
+      }
+      schemaObject = object
+    }
+    return try client.registerEvent(EventDescriptor(name: name, description: description, payloadSchema: schemaObject))
+  }
+
   // MARK: Deep links
 
   /// Feeds a deep link to the core. Returns `true` iff `url` carried an Appduct bootstrap payload
