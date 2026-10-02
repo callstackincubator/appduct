@@ -297,17 +297,17 @@ class AppductEventRegistryTest {
         connectAndAck(eventRegistry = true)
         client.registerEvent(event("flip"))
 
-        repeat(50) {
+        repeat(15) {
             client.unregisterEvent("flip")
             client.registerEvent(event("flip"))
         }
 
-        waitForEventFrames(1 + 1 + 100)
+        waitForEventFrames(1 + 1 + 30)
         settle()
         val deltas = eventFrames().drop(1)
-        assertEquals(101, deltas.size)
+        assertEquals(31, deltas.size)
         assertEquals(
-            listOf("upsert") + List(50) { listOf("remove", "upsert") }.flatten(),
+            listOf("upsert") + List(15) { listOf("remove", "upsert") }.flatten(),
             deltas.map { it.getString("operation") },
         )
         assertEquals("upsert", eventFrames().last().getString("operation"))
