@@ -77,6 +77,29 @@ public final class AppductTurboBridge: NSObject, @unchecked Sendable {
     client.unregisterTool(name as String)
   }
 
+  // MARK: registerEvent / unregisterEvent (sync, throwing, like the tool pair)
+
+  private let eventRegistrationsLock = NSLock()
+  /// The live registration per declared name, so `unregisterEvent(name)` can withdraw it.
+  private var eventRegistrations: [String: EventRegistration] = [:]
+
+  @objc public func registerEvent(descriptorJson: NSString) throws {
+    let descriptor = try parseEventDescriptor(try JSONValue.parse(descriptorJson as String))
+    let registration = try client.registerEvent(descriptor)
+
+    eventRegistrationsLock.lock()
+    eventRegistrations[descriptor.name] = registration
+    eventRegistrationsLock.unlock()
+  }
+
+  @objc public func unregisterEvent(name: NSString) {
+    eventRegistrationsLock.lock()
+    let registration = eventRegistrations.removeValue(forKey: name as String)
+    eventRegistrationsLock.unlock()
+
+    registration?.remove()
+  }
+
   /// The handler every JS-registered tool runs: emit `onToolCall`, then await the JS answer
   /// delivered through `respondToToolCall`. Cancellation (explicit `tool_cancel`, a core timeout, or
   /// session suspension) surfaces to JS as `onToolCancel` before the underlying
