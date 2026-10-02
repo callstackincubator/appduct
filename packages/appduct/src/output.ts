@@ -431,7 +431,7 @@ const renderToolsListData = (
 const renderEventsTruncationLine = (data: EventsListing): string[] => {
   const offset = data.offset ?? 0;
 
-  if (offset + data.events.length >= data.total) {
+  if (data.events.length >= data.total) {
     return [];
   }
 
@@ -457,6 +457,13 @@ const renderEventsListData = (colors: ColorPalette, data: EventsListing, flags: 
       ],
       flags,
     );
+  }
+
+  if (data.events.length === 0 && data.total > 0) {
+    return [
+      colors.green("Events"),
+      `  No events at offset ${data.offset ?? 0}; ${data.total} matching event${data.total === 1 ? "" : "s"} in total.`,
+    ];
   }
 
   if (data.events.length === 0) {
