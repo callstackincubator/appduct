@@ -45,6 +45,7 @@ const BUILTIN_TOOL_NAMES = [
   "appduct_connect",
   "appduct_describe_tool",
   "appduct_events",
+  "appduct_list_events",
   "appduct_list_tools",
   "appduct_wait_for_event",
   "appduct_wait_for_session",
@@ -339,6 +340,145 @@ describe("mcp: appduct_list_tools", () => {
 
     const nulls = await callBuiltin(client, "appduct_list_tools", { selector: null, filter: null, limit: null, offset: null });
     expect(nulls.structuredContent).toMatchObject({ session: "pixel-8", tools: [{ name: "echo" }] });
+  });
+});
+
+describe("mcp: appduct_list_events", () => {
+  const checkoutCompleted = {
+    name: "checkout_completed",
+    description: "Fires once an order is paid.\nSecond line.",
+    payload_schema: {
+      type: "object",
+      properties: { orderId: { type: "string" } },
+      required: ["orderId"],
+    },
+  };
+  const cartItemAdded = { name: "cart.item_added", description: "An item landed in the cart." };
+  const cartCleared = { name: "cart.cleared", description: "The cart was emptied." };
+
+  test("returns one signature line with its description per declared event, sorted by name, with total", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setEvents([checkoutCompleted, cartItemAdded]);
+
+    const client = await startServerWithClient(daemon);
+    const result = await callBuiltin(client, "appduct_list_events", {});
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({
+      session: "pixel-8",
+      total: 2,
+      limit: 50,
+      events: [
+        { name: "cart.item_added", signature: "cart.item_added", description: "An item landed in the cart." },
+        {
+          name: "checkout_completed",
+          signature: "checkout_completed { orderId: string }",
+          description: checkoutCompleted.description,
+        },
+      ],
+    });
+  });
+
+  test("a glob name returns only the matching events, and total counts the matches", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setEvents([checkoutCompleted, cartItemAdded, cartCleared]);
+
+    const client = await startServerWithClient(daemon);
+    const result = await callBuiltin(client, "appduct_list_events", { name: "cart.*" });
+    const listing = result.structuredContent as { total: number; events: Array<{ name: string; payload_schema?: unknown }> };
+
+    expect(listing.total).toBe(2);
+    expect(listing.events.map((event) => event.name)).toEqual(["cart.cleared", "cart.item_added"]);
+    expect(listing.events.every((event) => event.payload_schema === undefined)).toBe(true);
+  });
+
+  test("an exact name that matches one declared event also returns its payload schema", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setEvents([checkoutCompleted, cartItemAdded]);
+
+    const client = await startServerWithClient(daemon);
+    const result = await callBuiltin(client, "appduct_list_events", { name: "checkout_completed" });
+    const listing = result.structuredContent as { total: number; events: unknown[] };
+
+    expect(listing.total).toBe(1);
+    expect(listing.events).toEqual([
+      {
+        name: "checkout_completed",
+        signature: "checkout_completed { orderId: string }",
+        description: checkoutCompleted.description,
+        payload_schema: checkoutCompleted.payload_schema,
+      },
+    ]);
+  });
+
+  test("an exact name that matches no declared event returns an empty list, not an error", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setEvents([cartItemAdded]);
+
+    const client = await startServerWithClient(daemon);
+    const result = await callBuiltin(client, "appduct_list_events", { name: "nope" });
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ total: 0, events: [] });
+  });
+
+  test("a session with no declared events returns an empty list and total 0, not an error", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" });
+
+    const client = await startServerWithClient(daemon);
+    const result = await callBuiltin(client, "appduct_list_events", {});
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ session: "pixel-8", total: 0, events: [] });
+  });
+
+  test("limit and offset page the name-sorted list while total counts every match", async () => {
+    const daemon = createFakeDaemon();
+    daemon
+      .addSession({ alias: "pixel-8" })
+      .setEvents(Array.from({ length: 5 }, (_, index) => ({ name: `event_${index}`, description: "An event." })));
+
+    const client = await startServerWithClient(daemon);
+    const result = await callBuiltin(client, "appduct_list_events", { limit: 2, offset: 1 });
+    const listing = result.structuredContent as { total: number; limit: number; events: Array<{ name: string }> };
+
+    expect(listing.total).toBe(5);
+    expect(listing.limit).toBe(2);
+    expect(listing.events.map((event) => event.name)).toEqual(["event_1", "event_2"]);
+  });
+
+  test("selector picks the session; without one and with several, says which are live", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setEvents([cartItemAdded]);
+    daemon.addSession({ alias: "iphone-15" }).setEvents([cartCleared]);
+
+    const client = await startServerWithClient(daemon);
+
+    expect(errorText(await callBuiltin(client, "appduct_list_events", {}))).toContain("ambiguous_session");
+
+    const result = await callBuiltin(client, "appduct_list_events", { selector: "iphone-15" });
+    expect(result.structuredContent).toMatchObject({ session: "iphone-15", events: [{ name: "cart.cleared" }] });
+  });
+
+  test("with no session at all, says so", async () => {
+    const client = await startServerWithClient(createFakeDaemon());
+    expect(errorText(await callBuiltin(client, "appduct_list_events", {}))).toContain("no_session");
+  });
+
+  test("an empty selector or an unknown key is an invalid request; null optional fields count as absent", async () => {
+    const daemon = createFakeDaemon();
+    daemon.addSession({ alias: "pixel-8" }).setEvents([cartItemAdded]);
+
+    const client = await startServerWithClient(daemon);
+    expect(errorText(await callBuiltin(client, "appduct_list_events", { selector: "" }))).toContain("invalid_request");
+
+    const unknownKey = errorText(await callBuiltin(client, "appduct_list_events", { filter: "cart" }));
+    expect(unknownKey).toContain("invalid_request");
+    expect(unknownKey).toContain('"filter"');
+
+    const nulls = await callBuiltin(client, "appduct_list_events", { selector: null, name: null, limit: null, offset: null });
+    expect(nulls.structuredContent).toMatchObject({ session: "pixel-8", events: [{ name: "cart.item_added" }] });
   });
 });
 
