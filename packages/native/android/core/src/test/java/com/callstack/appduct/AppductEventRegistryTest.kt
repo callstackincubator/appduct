@@ -84,11 +84,12 @@ class AppductEventRegistryTest {
     private fun names(snapshot: JSONObject): List<String> =
         (0 until snapshot.getJSONArray("events").length()).map { snapshot.getJSONArray("events").getJSONObject(it).getString("name") }
 
-    /** Sends a tool registration and waits for its frame: every frame is sent from one dispatcher
-     * in order, so once this one is out, an event frame that was going to be sent already was. */
+    /** Sends a tool registration and waits for a tool frame carrying it (a delta, or the snapshot
+     * of a session whose ack had not been handled yet): frames go out in call order, so once it is
+     * out, an event frame that was going to be sent for an earlier call already was. */
     private fun settle() {
         client.registerTool(AppductToolDescriptor("settle_marker", "Marks the end of the frames.")) { _, _ -> null }
-        waitUntil { frames().any { it.optString("type") == "tool_registry_delta" } }
+        waitUntil { fake.sentMessages.any { it.contains("settle_marker") } }
     }
 
     // --- snapshot after the ack ---
@@ -269,6 +270,47 @@ class AppductEventRegistryTest {
     fun `Appduct registerEvent throws for an invalid name`() {
         Appduct.attachForTest(client)
         assertThrows(IllegalArgumentException::class.java) { Appduct.registerEvent("", "x") }
+    }
+
+    // --- ordering ---
+
+    @Test
+    fun `a declaration made right after the ack is sent as a delta after the ack-time snapshot`() {
+        fake.deferSendCompletion = true
+        client.registerEvent(event("before"))
+        connectAndAck(eventRegistry = true)
+
+        client.registerEvent(event("after"))
+
+        val sent = waitForEventFrames(2)
+        settle()
+        val all = eventFrames()
+        assertEquals(listOf("event_registry_snapshot", "event_registry_delta"), all.map { it.getString("type") })
+        assertEquals(listOf("before"), names(all[0]))
+        assertEquals("after", all[1].getJSONObject("event").getString("name"))
+        assertEquals(2, sent.size)
+    }
+
+    @Test
+    fun `removing and re-registering one name in a loop ends with the upsert, in call order`() {
+        fake.deferSendCompletion = true
+        connectAndAck(eventRegistry = true)
+        client.registerEvent(event("flip"))
+
+        repeat(50) {
+            client.unregisterEvent("flip")
+            client.registerEvent(event("flip"))
+        }
+
+        waitForEventFrames(1 + 1 + 100)
+        settle()
+        val deltas = eventFrames().drop(1)
+        assertEquals(101, deltas.size)
+        assertEquals(
+            listOf("upsert") + List(50) { listOf("remove", "upsert") }.flatten(),
+            deltas.map { it.getString("operation") },
+        )
+        assertEquals("upsert", eventFrames().last().getString("operation"))
     }
 
     // --- event-registry-frames.json ---
