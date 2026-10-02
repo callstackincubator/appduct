@@ -55,6 +55,12 @@ internal class AppductClient(
 
     fun unregisterTool(name: String) {}
 
+    fun registerEvent(descriptor: AppductEventDescriptor) {
+        // Stores nothing: a release build resolving this module never sends an event registry.
+    }
+
+    fun unregisterEvent(name: String) {}
+
     fun handleUrl(url: String): Boolean = false
 
     suspend fun connect(
