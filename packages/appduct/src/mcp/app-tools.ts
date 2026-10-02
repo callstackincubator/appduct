@@ -144,7 +144,7 @@ const asRecord = (value: unknown): Record<string, unknown> => {
 /** Every key an agent sends must be one the tool declares. A misspelled key (`arguments` for
  * `args`, `timeout_ms` for `timeoutMs`) would otherwise be dropped silently, and the tool would run
  * without what the agent meant to pass. */
-const rejectUnknownKeys = (args: Record<string, unknown>, tool: string, allowed: readonly string[]): void => {
+export const rejectUnknownKeys = (args: Record<string, unknown>, tool: string, allowed: readonly string[]): void => {
   const unknown = Object.keys(args).filter((key) => !allowed.includes(key));
 
   if (unknown.length > 0) {
@@ -157,7 +157,7 @@ const rejectUnknownKeys = (args: Record<string, unknown>, tool: string, allowed:
 
 /** `null` counts as absent for every optional field: some clients fill unset optional
  * parameters with `null` rather than leaving them out. */
-const asOptionalString = (value: unknown, field: string): string | undefined => {
+export const asOptionalString = (value: unknown, field: string): string | undefined => {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -202,7 +202,7 @@ const toDescriptor = (entry: ToolsListEntry): ListedToolDescriptor => {
  * alias when a session ends and gives it to the next device of the same model, so routing by alias
  * could land a call — one the user may already have approved — on a different device. If the
  * session goes away mid-call, the next daemon call fails with `unknown_session` instead. */
-const resolveSession = async (call: DaemonCall, selector: string | undefined): Promise<ResolvedSession> => {
+export const resolveSession = async (call: DaemonCall, selector: string | undefined): Promise<ResolvedSession> => {
   const session = await call<SessionsDescribeResult>(RPC_METHODS.sessionsDescribe, { selector });
   return { sessionId: session.sessionId, alias: session.alias };
 };

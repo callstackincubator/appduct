@@ -12,8 +12,10 @@
 
 import {
   RPC_METHODS,
+  renderEventSignature,
   toAppEvent,
   type AppEvent,
+  type EventsListResult,
   type EventsSinceResult,
   type SessionsDescribeResult,
 } from "@appduct/shared";
@@ -24,9 +26,15 @@ import {
   WaitForAppEventTimeoutError,
 } from "../events/index.js";
 import { openDaemonStream, type SpawnFn } from "../rpc/client.js";
+import {
+  asOptionalString as asNullableString,
+  rejectUnknownKeys,
+  resolveSession,
+} from "./app-tools.js";
 import type { DaemonCall } from "./daemon-tools.js";
 import { McpBuiltinToolError } from "./connect-tool.js";
 
+export const LIST_EVENTS_TOOL_NAME = "appduct_list_events";
 export const EVENTS_TOOL_NAME = "appduct_events";
 export const WAIT_FOR_EVENT_TOOL_NAME = "appduct_wait_for_event";
 
@@ -39,6 +47,9 @@ const DEFAULT_EVENTS_LIMIT = 50;
  * `app.events()` (the SDK) sets no default; a script reading its own app's events already knows
  * what it expects. */
 const DEFAULT_EVENTS_PAYLOAD_MAX_BYTES = 4096;
+
+/** `appduct_list_events`'s default `limit`, matching `appduct_list_tools`. */
+const DEFAULT_LIST_EVENTS_LIMIT = 50;
 
 const DEFAULT_WAIT_FOR_EVENT_TIMEOUT_MS = 120_000;
 /** Kept safely under the 30-minute idle window a stdio MCP server gets before Claude Code aborts a
@@ -56,6 +67,34 @@ const WAIT_FOR_EVENT_PROGRESS_INTERVAL_MS = 60_000;
 export const clampWaitForEventTimeoutMs = (requestedMs: number | undefined): number => {
   return Math.min(requestedMs ?? DEFAULT_WAIT_FOR_EVENT_TIMEOUT_MS, MAX_WAIT_FOR_EVENT_TIMEOUT_MS);
 };
+
+export const LIST_EVENTS_TOOL_DESCRIPTOR = {
+  name: LIST_EVENTS_TOOL_NAME,
+  description:
+    "List the events the connected app declared, as one-line signatures (`name { field: type }`) " +
+    "with each event's description. Call this before appduct_wait_for_event or appduct_events so " +
+    "you wait on a name the app really posts instead of guessing one. An app that declares no " +
+    "events returns an empty list, which does not mean it posts none. name is a whole-name, " +
+    "case-sensitive glob (* matches any run of characters), e.g. \"cart.*\"; a name without * that " +
+    "matches a declared event also returns that event's payload_schema. limit (default " +
+    `${DEFAULT_LIST_EVENTS_LIMIT}) and offset page the name-sorted list, and total counts every ` +
+    "match before paging. Returns { session, total, limit, events }, each event " +
+    "{ name, signature, description }.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      selector: {
+        type: "string",
+        minLength: 1,
+        description: "Session alias or id. Omit to target the sole active/suspended session.",
+      },
+      name: { type: "string", minLength: 1 },
+      limit: { type: "integer", exclusiveMinimum: 0 },
+      offset: { type: "integer", minimum: 0 },
+    },
+    additionalProperties: false,
+  },
+} as const;
 
 export const EVENTS_TOOL_DESCRIPTOR = {
   name: EVENTS_TOOL_NAME,
@@ -208,6 +247,38 @@ const rejectMatch = (args: Record<string, unknown>): void => {
       '"match" is not supported: "name" is a glob, and a payload predicate is not offered on any surface — loop on appduct_wait_for_event with "since" instead.',
     );
   }
+};
+
+export const handleListEventsTool = async (rawArgs: unknown, call: DaemonCall) => {
+  const args = asRecord(rawArgs);
+  rejectUnknownKeys(args, LIST_EVENTS_TOOL_NAME, ["selector", "name", "limit", "offset"]);
+  const session = await resolveSession(call, asNullableString(args.selector, "selector"));
+  const name = asNullableString(args.name, "name");
+
+  // `limit`/`offset` are validated by the daemon, which rejects a bad value with `invalid_request`
+  // exactly as it does for the CLI.
+  const limit = args.limit ?? DEFAULT_LIST_EVENTS_LIMIT;
+  const result = await call<EventsListResult>(RPC_METHODS.eventsList, {
+    selector: session.sessionId,
+    ...(name !== undefined ? { name } : {}),
+    limit,
+    ...(args.offset !== undefined && args.offset !== null ? { offset: args.offset } : {}),
+  });
+  // An exact name that matched an event is a lookup: it also gets the payload schema, as
+  // `appduct events ls --name <name>` does.
+  const lookup = name !== undefined && !name.includes("*");
+
+  return {
+    session: session.alias,
+    total: result.total,
+    limit,
+    events: result.events.map((event) => ({
+      name: event.name,
+      signature: renderEventSignature(event),
+      description: event.description,
+      ...(lookup && event.payload_schema !== undefined ? { payload_schema: event.payload_schema } : {}),
+    })),
+  };
 };
 
 export type EventsToolResult = {

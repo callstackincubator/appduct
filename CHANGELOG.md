@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **New: `appduct_list_events` MCP tool lists the events an app declares, with descriptions.** `name` takes a glob like `"cart.*"`, and an exact name also returns the payload schema.
 - **New: `appduct events ls` lists the events an app declares, with their descriptions and payload shapes.** `--name <glob>` narrows the list, and an exact name prints the full payload schema.
 - **New: the iOS SDK declares events with `Appduct.shared.registerEvent(name:description:payloadSchema:)`.** `appduct events ls` then lists them; against an older CLI the app keeps its session and tools but has no event list.
 - **New: a call to a backgrounded app fails at once with `session_suspended`, and the message says the app is in the background.** Needs an app built with this release; on Android, calls to a backgrounded app now fail instead of running until Android freezes the app.
