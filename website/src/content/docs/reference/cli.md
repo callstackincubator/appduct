@@ -100,8 +100,10 @@ Lists the events your app declares, each as a signature line (name and payload s
 | Flag | Description |
 | --- | --- |
 | `--name <glob>` | Only events whose name matches this glob (`*` matches any run of characters), e.g. `"cart.*"`. An exact name prints that event's full payload schema. |
+| `--limit <n>` | Show at most `n` events. |
+| `--offset <n>` | Skip the first `n` events of the name-sorted list. |
 
-An app that declares no events lists none, even if it posts some.
+A listing that leaves events out ends with a `Showing n of total events (offset o).` line so you know there are more. With `--json`, `total` counts matches before `--limit` and `--offset`. An app that declares no events lists none, even if it posts some.
 
 ### `appduct events tail [selector]`
 
