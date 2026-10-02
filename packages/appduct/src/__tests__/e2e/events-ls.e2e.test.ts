@@ -155,7 +155,27 @@ describe("e2e: events ls", () => {
 
       const last = await runCliText(["events", "ls", "--limit", "2", "--offset", "2"], stateDir);
       expect(last.stdout).toContain("checkout_completed");
-      expect(last.stdout).not.toContain("Showing");
+      expect(last.stdout).toContain("Showing 1 of 3 events (offset 2).");
+    },
+    30_000,
+  );
+
+  test(
+    "an offset past the end says how many events match instead of claiming none are declared",
+    async () => {
+      const { stateDir } = await makeTempStateDir();
+      const app = await connectApp(stateDir);
+      app.declareEvents([checkout, itemAdded, itemRemoved]);
+      await waitForTotal(stateDir, 3);
+
+      const past = await runCliText(["events", "ls", "--offset", "5"], stateDir);
+      expect(past.exitCode).toBe(0);
+      expect(past.stdout).toContain("No events at offset 5; 3 matching events in total.");
+      expect(past.stdout).not.toContain("No events declared");
+
+      const pastNamed = await runCliText(["events", "ls", "--name", "checkout_completed", "--offset", "1"], stateDir);
+      expect(pastNamed.stdout).toContain("No events at offset 1; 1 matching event in total.");
+      expect(pastNamed.stdout).not.toContain("No events match");
     },
     30_000,
   );
