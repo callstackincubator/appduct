@@ -82,7 +82,14 @@ descriptor in `declaredBeforeAck` (valid `EventDescriptor`s in wire form), conne
 (`{ "op": "register", "event": <descriptor> }` or `{ "op": "remove", "name": <string> }`, where
 `remove` is the disposer of the event registered under that name). `frames` is the complete, ordered
 list of `event_registry_*` frames the SDK must have sent, compared as JSON (key order does not
-matter); other frames, such as `tool_registry_snapshot`, are ignored. Covers the snapshot of
+matter); other frames, such as `tool_registry_snapshot`, are ignored.
+
+Ordering contract: after a `session_ack` carrying `event_registry: true`, the SDK sends the
+snapshot of the declarations as they stood at ack time before any later delta, and deltas go out in
+the order the calls were made (a `remove` followed by a `register` of the same name sends the
+remove first). Deltas for declarations made before the ack are covered by the snapshot and are not
+sent. Every SDK, the Kotlin one included, must meet this; the fixture steps run back to back with no
+wait between them, so an SDK that sends from unordered tasks fails it intermittently. Covers the snapshot of
 several events, the empty snapshot, an upsert delta and a remove delta.
 
 ### `tool-descriptors.json`

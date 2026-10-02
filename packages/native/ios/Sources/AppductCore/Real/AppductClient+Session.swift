@@ -246,10 +246,9 @@ extension AppductClient {
     setClientState(.active)
     emitSessionChange(type: kind, sessionId: ack.sessionId, alias: ack.alias)
 
-    Task {
-      await self.sendSnapshot()
-      await self.sendEventSnapshot()
-    }
+    eventSnapshotSentFor = nil
+    eventStore.queueSnapshot()
+    Task { await self.sendSnapshot() }
   }
 
   func finalizeSessionLost(_ reason: String) {
@@ -539,31 +538,30 @@ extension AppductClient {
     return held.sessionId
   }
 
-  func sendEventSnapshot() async {
-    guard let sessionId = eventFramesAllowed else { return }
-    let message = JSONValue.object([
-      "type": .string("event_registry_snapshot"),
-      "session_id": .string(sessionId),
-      "events": .array(eventStore.snapshot().map { $0.wireValue }),
-    ])
-    try? await sendWire(message)
-  }
-
-  func sendEventRegistryDelta(_ delta: AppductRegistryDelta<EventDescriptor>) async {
+  func sendEventRegistryOp(_ op: AppductEventRegistryOp) async {
     guard let sessionId = eventFramesAllowed else { return }
 
-    var object: JSONObject = ["type": .string("event_registry_delta"), "session_id": .string(sessionId)]
-    switch delta {
-    case .upsert(let descriptor):
-      object["operation"] = .string("upsert")
-      object["event"] = descriptor.wireValue
-    case .remove(let name):
-      object["operation"] = .string("remove")
-      object["name"] = .string(name)
+    var object: JSONObject = ["session_id": .string(sessionId)]
+    switch op {
+    case .snapshot(let events):
+      object["type"] = .string("event_registry_snapshot")
+      object["events"] = .array(events.map { $0.wireValue })
+    case .delta(let delta):
+      guard eventSnapshotSentFor == sessionId else { return }
+      object["type"] = .string("event_registry_delta")
+      switch delta {
+      case .upsert(let descriptor):
+        object["operation"] = .string("upsert")
+        object["event"] = descriptor.wireValue
+      case .remove(let name):
+        object["operation"] = .string("remove")
+        object["name"] = .string(name)
+      }
     }
 
     do {
       try await sendWire(.object(object))
+      if case .snapshot = op { eventSnapshotSentFor = sessionId }
     } catch {
       emitError(
         AppductUnifiedErrorEvent(phase: "socket", message: "Failed to sync the event registry.")

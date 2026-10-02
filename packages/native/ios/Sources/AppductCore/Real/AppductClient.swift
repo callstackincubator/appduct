@@ -79,6 +79,9 @@ public actor AppductClient {
   // MARK: Event registry (declaration order preserved)
 
   let eventStore = AppductEventRegistryStore()
+  /// The session whose event snapshot has gone out; deltas queued before it are dropped, since the
+  /// snapshot already holds them.
+  var eventSnapshotSentFor: String?
 
   // MARK: In-flight tool calls
 
@@ -130,6 +133,15 @@ public actor AppductClient {
     // caller already holds a reference returned by this initializer.
     let instance = self
     Task { await instance.wireTransportAndForeground() }
+
+    // One consumer sends event-registry frames in the order the store queued them.
+    let ops = eventStore.ops
+    Task { [weak self] in
+      for await op in ops {
+        guard let self else { return }
+        await self.sendEventRegistryOp(op)
+      }
+    }
   }
 
   private func wireTransportAndForeground() {
@@ -248,11 +260,9 @@ public actor AppductClient {
   public nonisolated func registerEvent(_ descriptor: EventDescriptor) throws -> EventRegistration {
     try validateEventDescriptor(descriptor)
     eventStore.upsert(descriptor)
-    Task { await self.sendEventRegistryDelta(.upsert(descriptor)) }
     let name = descriptor.name
     return EventRegistration { [weak self] in
-      guard let self, self.eventStore.remove(name) else { return }
-      Task { await self.sendEventRegistryDelta(.remove(name)) }
+      _ = self?.eventStore.remove(name)
     }
   }
 

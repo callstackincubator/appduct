@@ -145,6 +145,25 @@ final class AppductEventRegistryTests: XCTestCase {
     XCTAssertEqual(eventFrames(transport).count, 2)
   }
 
+  func testRemoveThenRegisterOfTheSameNameInALoopEndsWithTheUpsert() async throws {
+    let (client, transport) = makeClient()
+    var registration = try client.registerEvent(descriptor("a"))
+    try await connect(client, transport, eventRegistry: true)
+
+    for _ in 0..<50 {
+      registration.remove()
+      registration = try client.registerEvent(descriptor("a"))
+    }
+    try await waitUntil("every frame reached the wire") { self.eventFrames(transport).count >= 101 }
+    await allowQueuedWorkToRun()
+
+    let frames = eventFrames(transport)
+    XCTAssertEqual(frames.count, 101)
+    XCTAssertEqual(frames.last?["operation"]?.stringValue, "upsert")
+    let operations = frames.dropFirst().compactMap { $0["operation"]?.stringValue }
+    XCTAssertEqual(operations, Array(repeating: ["remove", "upsert"], count: 50).flatMap { $0 })
+  }
+
   func testRegisterEventRejectsAnInvalidDescriptorAndDeclaresNothing() async throws {
     let (client, transport) = makeClient()
     XCTAssertThrowsError(try client.registerEvent(EventDescriptor(name: "", description: "d")))
