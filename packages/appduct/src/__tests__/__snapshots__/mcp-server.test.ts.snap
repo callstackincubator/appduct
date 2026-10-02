@@ -114,6 +114,32 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "limit": {
+          "exclusiveMinimum": 0,
+          "type": "integer",
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string",
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer",
+        },
+        "selector": {
+          "description": "Session alias or id. Omit to target the sole active/suspended session.",
+          "minLength": 1,
+          "type": "string",
+        },
+      },
+      "type": "object",
+    },
+    "name": "appduct_list_events",
+  },
+  {
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
         "filter": {
           "maxLength": 256,
           "type": "string",

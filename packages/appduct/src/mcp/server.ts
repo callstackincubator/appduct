@@ -69,7 +69,10 @@ import {
   EVENTS_TOOL_DESCRIPTOR,
   EVENTS_TOOL_NAME,
   handleEventsTool,
+  handleListEventsTool,
   handleWaitForEventTool,
+  LIST_EVENTS_TOOL_DESCRIPTOR,
+  LIST_EVENTS_TOOL_NAME,
   WAIT_FOR_EVENT_TOOL_DESCRIPTOR,
   WAIT_FOR_EVENT_TOOL_NAME,
 } from "./events-tool.js";
@@ -507,6 +510,7 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
         LIST_TOOLS_TOOL_DESCRIPTOR,
         DESCRIBE_TOOL_TOOL_DESCRIPTOR,
         CALL_TOOL_TOOL_DESCRIPTOR,
+        LIST_EVENTS_TOOL_DESCRIPTOR,
         EVENTS_TOOL_DESCRIPTOR,
         WAIT_FOR_EVENT_TOOL_DESCRIPTOR,
       ],
@@ -537,6 +541,10 @@ export const createMcpServer = async (options: CreateMcpServerOptions): Promise<
         return toolSuccessContent(
           await handleWaitForSessionTool(args, { stateDir: options.stateDir, spawn: options.spawn }),
         );
+      }
+
+      if (name === LIST_EVENTS_TOOL_NAME) {
+        return toolSuccessContent(await handleListEventsTool(args, stream.call));
       }
 
       if (name === EVENTS_TOOL_NAME) {
