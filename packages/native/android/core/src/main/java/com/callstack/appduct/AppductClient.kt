@@ -11,6 +11,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -50,6 +52,9 @@ private data class HeldSession(
      * trust again instead of the transport rejecting the connect outright (issue #136). `null`
      * for a build with embedded pins, where it is never consulted. */
     val linkPin: String?,
+    /** Whether the ack that opened this session carried `event_registry: true`; a session
+     * restored from a lease has not been acked yet. */
+    val acceptsEventRegistry: Boolean = false,
 )
 
 private data class ConnectOptionsInternal(
@@ -143,6 +148,13 @@ internal class AppductClient private constructor(
         )
 
     private val registry = AppductToolRegistry()
+    private val eventRegistry = AppductEventRegistry()
+    private val sendLock = Mutex()
+
+    // Dispatcher-confined. Counts acks; a declaration made while the newest ack's event snapshot
+    // has not been taken yet is covered by that snapshot, so it sends no delta of its own.
+    private var ackGeneration = 0
+    private var eventSnapshotPending = false
     private val toolInvoker =
         AppductToolInvoker(
             scope = scope,
@@ -225,6 +237,45 @@ internal class AppductClient private constructor(
     fun unregisterTool(name: String) {
         val delta = registry.remove(name) ?: return
         sendDeltaIfActive(delta)
+    }
+
+    /**
+     * Declares (or replaces, by name) an event -- validates per PROTOCOL.md §5a, throwing
+     * [AppductInvalidEventDescriptorException] on an invalid descriptor. Declared events reach the
+     * daemon only when it accepted event frames in its ack (`event_registry: true`): as a snapshot
+     * after each such ack, and as a delta for each later declaration while the session is active.
+     * Against an older daemon nothing is sent and the session is unaffected.
+     */
+    fun registerEvent(descriptor: AppductEventDescriptor) {
+        validateAppductEventDescriptor(descriptor)
+        // Mutating and sending from the one dispatcher puts every declaration, and the snapshot
+        // an ack takes, in the order the calls were made.
+        scope.launch {
+            eventRegistry.upsert(descriptor)
+            if (eventSnapshotPending) return@launch
+            sendEventDeltaIfAccepted { session ->
+                JSONObject()
+                    .put("type", "event_registry_delta")
+                    .put("session_id", session.sessionId)
+                    .put("operation", "upsert")
+                    .put("event", descriptor.toWireJson())
+            }
+        }
+    }
+
+    /** No-op for an undeclared name. */
+    fun unregisterEvent(name: String) {
+        scope.launch {
+            if (!eventRegistry.remove(name)) return@launch
+            if (eventSnapshotPending) return@launch
+            sendEventDeltaIfAccepted { session ->
+                JSONObject()
+                    .put("type", "event_registry_delta")
+                    .put("session_id", session.sessionId)
+                    .put("operation", "remove")
+                    .put("name", name)
+            }
+        }
     }
 
     /**
@@ -564,12 +615,26 @@ internal class AppductClient private constructor(
                 ip = endpointIp,
                 port = endpointPort,
                 linkPin = linkPin,
+                acceptsEventRegistry = ack.optBoolean("event_registry", false),
             )
+
+        // Set before the listeners run: a declaration they make is in the snapshot, not a delta.
+        val generation = ++ackGeneration
+        val acceptsEvents = heldSession?.acceptsEventRegistry == true
+        eventSnapshotPending = acceptsEvents
 
         setClientState(AppductClientState.active, null)
         emitSessionChange(kind, sessionId, alias)
 
-        scope.launch { sendSnapshotSafely() }
+        scope.launch {
+            // A newer ack's task takes over.
+            if (generation != ackGeneration) return@launch
+            // Read and cleared in one step on the dispatcher, ahead of every later declaration's
+            // task, which then queues its delta behind the snapshot on the lock.
+            val eventSnapshot = if (acceptsEvents) eventRegistry.snapshotWireJson() else null
+            eventSnapshotPending = false
+            sendSnapshotSafely(eventSnapshot)
+        }
     }
 
     // --- reconnect / grace / lease restore ---
@@ -849,9 +914,9 @@ internal class AppductClient private constructor(
 
     // --- wire helpers ---
 
-    private suspend fun sendSnapshotSafely() {
-        if (clientState != AppductClientState.active) return
-        val session = heldSession ?: return
+    private suspend fun sendSnapshotSafely(eventSnapshot: List<JSONObject>?) = sendLock.withLock {
+        if (clientState != AppductClientState.active) return@withLock
+        val session = heldSession ?: return@withLock
 
         val tools = JSONArray()
         for (tool in registry.snapshotWireJson()) tools.put(tool)
@@ -866,6 +931,34 @@ internal class AppductClient private constructor(
             rawSend(message.toString())
         } catch (e: Throwable) {
             emitError(AppductUnifiedError(phase = "tool", message = "Failed to send the tool registry snapshot.", cause = e))
+        }
+
+        if (eventSnapshot == null) return@withLock
+        val events = JSONArray()
+        for (event in eventSnapshot) events.put(event)
+        sendEventFrame(
+            JSONObject()
+                .put("type", "event_registry_snapshot")
+                .put("session_id", session.sessionId)
+                .put("events", events),
+        )
+    }
+
+    /** Runs on the dispatcher. Holding [sendLock] keeps a delta from slipping between the frames
+     * of a snapshot that is still being written. */
+    private suspend fun sendEventDeltaIfAccepted(frame: (HeldSession) -> JSONObject) =
+        sendLock.withLock {
+            if (clientState != AppductClientState.active) return@withLock
+            val session = heldSession ?: return@withLock
+            if (!session.acceptsEventRegistry) return@withLock
+            sendEventFrame(frame(session))
+        }
+
+    private suspend fun sendEventFrame(frame: JSONObject) {
+        try {
+            rawSend(frame.toString())
+        } catch (e: Throwable) {
+            emitError(AppductUnifiedError(phase = "tool", message = "Failed to sync the event registry.", cause = e))
         }
     }
 

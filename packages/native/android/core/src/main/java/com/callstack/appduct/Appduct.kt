@@ -122,6 +122,24 @@ object Appduct {
     ): ToolRegistration =
         register(name, description, inputSchema, outputSchema, annotations, timeoutMs, group) { args, _ -> handler(args) }
 
+    /**
+     * Declares (or replaces, by [name]) an event the app posts with [postEvent], so an agent can
+     * list it with its [description] and [payloadSchema] (a JSON Schema object) before waiting on
+     * it. [name] is any string up to 4096 UTF-16 characters, like a posted name: `cart.item_added`
+     * is fine. Throws `IllegalArgumentException` synchronously for an invalid [name] or
+     * [description] (PROTOCOL.md §5a). Nothing is validated against [payloadSchema] and no
+     * warning is logged for a posted event that was never declared. Against an older CLI that
+     * does not accept declarations, this is a silent no-op on the wire.
+     */
+    fun registerEvent(
+        name: String,
+        description: String,
+        payloadSchema: JSONObject? = null,
+    ): EventRegistration {
+        client().registerEvent(AppductEventDescriptor(name, description, payloadSchema))
+        return EventRegistration(name) { client().unregisterEvent(name) }
+    }
+
     // --- deep links ---
 
     /** Reads [intent]'s `data` URI and forwards to [handle]. Returns `false` for a `null` data URI
@@ -220,6 +238,15 @@ private fun AppductClientState.toPublic(): ClientState = ClientState.valueOf(nam
  * tool; a no-op if called more than once, or after [name] was already replaced by a later
  * [Appduct.register] call. */
 class ToolRegistration internal constructor(
+    val name: String,
+    private val onRemove: () -> Unit,
+) {
+    fun remove() = onRemove()
+}
+
+/** A live event declaration returned by [Appduct.registerEvent]. [remove] withdraws the event
+ * declaration; a no-op if it is already gone. */
+class EventRegistration internal constructor(
     val name: String,
     private val onRemove: () -> Unit,
 ) {

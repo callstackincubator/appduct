@@ -110,6 +110,25 @@ A handler's return value is converted to JSON the same way the underlying client
 `null` convert automatically. Anything else fails that one call with `tool_serialization_error`
 rather than crashing the caller.
 
+### Declaring events
+
+To let an agent list an event before waiting on it (`appduct events ls`), declare it. A name is any
+string up to 4096 characters, so `cart.item_added` works as it is posted. `payloadSchema` is an
+optional JSON Schema object, passed on as is. Declaring needs an up-to-date CLI; against an older
+one the declaration is silently ignored and the session works as before.
+
+```kotlin
+val registration = Appduct.registerEvent(
+  name = "cart.item_added",
+  description = "An item went into the cart.",
+  payloadSchema = JSONObject("""{"type":"object","properties":{"sku":{"type":"string"}}}"""),
+)
+registration.remove() // withdraws the declaration
+```
+
+An empty name or description makes `registerEvent` throw `IllegalArgumentException`. Nothing warns
+about an undeclared name or a payload that doesn't match its schema; React Native does.
+
 ### Threading
 
 Handlers run on this client's own background dispatcher — never the main thread. Hop to
