@@ -546,6 +546,10 @@ proxies daemon RPC (auto-spawning the daemon like any client):
   "ios-device"` extends the same path to a paired physical iPhone/iPad (§8), but only when the
   agent names it and supplies `appId`; the "nothing detected" note says so, so an agent that
   finds no simulator knows the option exists rather than defaulting to a QR nobody scans.
+- `appduct_list_events` (issue #125; `appduct events ls`) is a thin proxy over `events.list`: the
+  session is resolved first and the call routed by its id, `limit` defaults to 50, and each event
+  comes back as `{ name, signature, description }` with `renderEventSignature`'s line. An exact
+  `name` (no `*`) also adds `payload_schema`.
 - Two more built-in tools, `appduct_events` and `appduct_wait_for_event` (issue #6),
   give an agent a pull surface over `postEvent()`-pushed `app_event`s: `appduct_events`
   is a thin proxy over `events.since` — flattening its `EventNotification[]` to

@@ -294,44 +294,35 @@ class AppductEventRegistryTest {
         }
 
     @Test
-    fun `the frames sent match every vector in event-registry-frames fixture`() {
-        val vectors = fixtureFrames()
-        assertTrue(vectors.length() > 0)
+    fun `the frames sent match every scenario in event-registry-frames fixture`() {
+        val scenarios = fixtureFrames()
+        assertTrue(scenarios.length() > 0)
 
-        for (i in 0 until vectors.length()) {
+        for (i in 0 until scenarios.length()) {
             setUp()
-            val vector = vectors.getJSONObject(i)
-            val name = vector.getString("name")
-            val frame = vector.getJSONObject("frame")
-            val sessionId = frame.getString("session_id")
+            val scenario = scenarios.getJSONObject(i)
+            val name = scenario.getString("name")
 
-            val sent: JSONObject =
-                when (frame.getString("type")) {
-                    "event_registry_snapshot" -> {
-                        val events = frame.getJSONArray("events")
-                        for (j in 0 until events.length()) {
-                            client.registerEvent(AppductEventDescriptor.fromJson(events.getJSONObject(j).toString()))
-                        }
-                        connectAndAck(sessionId, eventRegistry = true)
-                        waitForEventFrames(1).single()
-                    }
-                    else -> {
-                        connectAndAck(sessionId, eventRegistry = true)
-                        waitForEventFrames(1)
-                        if (frame.getString("operation") == "upsert") {
-                            client.registerEvent(AppductEventDescriptor.fromJson(frame.getJSONObject("event").toString()))
-                        } else {
-                            client.registerEvent(event(frame.getString("name")))
-                            waitForEventFrames(2)
-                            client.unregisterEvent(frame.getString("name"))
-                            waitForEventFrames(3)
-                        }
-                        waitForEventFrames(if (frame.getString("operation") == "upsert") 2 else 3)
-                        eventFrames().last()
-                    }
+            val declared = scenario.getJSONArray("declaredBeforeAck")
+            for (j in 0 until declared.length()) {
+                client.registerEvent(AppductEventDescriptor.fromJson(declared.getJSONObject(j).toString()))
+            }
+            connectAndAck(scenario.getString("sessionId"), eventRegistry = true)
+
+            val expected = scenario.getJSONArray("frames")
+            val steps = scenario.getJSONArray("afterAck")
+            for (j in 0 until steps.length()) {
+                val step = steps.getJSONObject(j)
+                when (step.getString("op")) {
+                    "register" -> client.registerEvent(AppductEventDescriptor.fromJson(step.getJSONObject("event").toString()))
+                    "remove" -> client.unregisterEvent(step.getString("name"))
+                    else -> throw AssertionError("$name: unknown step ${step.getString("op")}")
                 }
+            }
 
-            assertEquals(name, canonical(frame), canonical(sent))
+            waitForEventFrames(expected.length())
+            settle()
+            assertEquals(name, canonical(expected), canonical(JSONArray(eventFrames())))
         }
     }
 }

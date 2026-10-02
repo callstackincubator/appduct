@@ -1,67 +1,154 @@
 [
   {
-    "name": "snapshot-two-events",
-    "frame": {
-      "type": "event_registry_snapshot",
-      "session_id": "session-1",
-      "events": [
-        {
-          "name": "app_ready",
-          "description": "The app finished starting."
-        },
-        {
-          "name": "checkout_completed",
-          "description": "Fired once an order finishes checkout.",
-          "payload_schema": {
-            "type": "object",
-            "properties": {
-              "orderId": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "orderId"
-            ]
-          }
-        }
-      ]
-    }
-  },
-  {
-    "name": "snapshot-empty",
-    "frame": {
-      "type": "event_registry_snapshot",
-      "session_id": "session-1",
-      "events": []
-    }
-  },
-  {
-    "name": "delta-upsert",
-    "frame": {
-      "type": "event_registry_delta",
-      "session_id": "session-1",
-      "operation": "upsert",
-      "event": {
-        "name": "cart.item_added",
-        "description": "An item went into the cart.",
+    "name": "snapshot-lists-every-declared-event-in-declaration-order",
+    "sessionId": "XzAERP54_Goh74hZ",
+    "declaredBeforeAck": [
+      {
+        "name": "checkout_completed",
+        "description": "Fired once an order finishes checkout.",
         "payload_schema": {
           "type": "object",
           "properties": {
-            "sku": {
+            "orderId": {
               "type": "string"
             }
-          }
+          },
+          "required": [
+            "orderId"
+          ]
         }
+      },
+      {
+        "name": "cart.item_added",
+        "description": "An item went into the cart."
       }
-    }
+    ],
+    "afterAck": [],
+    "frames": [
+      {
+        "type": "event_registry_snapshot",
+        "session_id": "XzAERP54_Goh74hZ",
+        "events": [
+          {
+            "name": "checkout_completed",
+            "description": "Fired once an order finishes checkout.",
+            "payload_schema": {
+              "type": "object",
+              "properties": {
+                "orderId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "orderId"
+              ]
+            }
+          },
+          {
+            "name": "cart.item_added",
+            "description": "An item went into the cart."
+          }
+        ]
+      }
+    ]
   },
   {
-    "name": "delta-remove",
-    "frame": {
-      "type": "event_registry_delta",
-      "session_id": "session-1",
-      "operation": "remove",
-      "name": "cart.item_added"
-    }
+    "name": "snapshot-with-no-declared-events-is-empty",
+    "sessionId": "XzAERP54_Goh74hZ",
+    "declaredBeforeAck": [],
+    "afterAck": [],
+    "frames": [
+      {
+        "type": "event_registry_snapshot",
+        "session_id": "XzAERP54_Goh74hZ",
+        "events": []
+      }
+    ]
+  },
+  {
+    "name": "declaring-after-the-ack-sends-an-upsert-delta",
+    "sessionId": "XzAERP54_Goh74hZ",
+    "declaredBeforeAck": [],
+    "afterAck": [
+      {
+        "op": "register",
+        "event": {
+          "name": "cart.item_added",
+          "description": "An item went into the cart."
+        }
+      }
+    ],
+    "frames": [
+      {
+        "type": "event_registry_snapshot",
+        "session_id": "XzAERP54_Goh74hZ",
+        "events": []
+      },
+      {
+        "type": "event_registry_delta",
+        "session_id": "XzAERP54_Goh74hZ",
+        "operation": "upsert",
+        "event": {
+          "name": "cart.item_added",
+          "description": "An item went into the cart."
+        }
+      }
+    ]
+  },
+  {
+    "name": "disposing-sends-a-remove-delta",
+    "sessionId": "XzAERP54_Goh74hZ",
+    "declaredBeforeAck": [
+      {
+        "name": "checkout_completed",
+        "description": "Fired once an order finishes checkout.",
+        "payload_schema": {
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "orderId"
+          ]
+        }
+      }
+    ],
+    "afterAck": [
+      {
+        "op": "remove",
+        "name": "checkout_completed"
+      }
+    ],
+    "frames": [
+      {
+        "type": "event_registry_snapshot",
+        "session_id": "XzAERP54_Goh74hZ",
+        "events": [
+          {
+            "name": "checkout_completed",
+            "description": "Fired once an order finishes checkout.",
+            "payload_schema": {
+              "type": "object",
+              "properties": {
+                "orderId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "orderId"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "type": "event_registry_delta",
+        "session_id": "XzAERP54_Goh74hZ",
+        "operation": "remove",
+        "name": "checkout_completed"
+      }
+    ]
   }
 ]
