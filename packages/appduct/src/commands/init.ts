@@ -315,25 +315,42 @@ const wiringNextSteps = async (
   const ios =
     "Forward every opened URL to Appduct: `_ = Appduct.shared.handle(url)` in SwiftUI's " +
     "`.onOpenURL` (UIKit: `scene(_:openURLContexts:)`). It is what receives the connection link.";
-  // Named rather than commanded, because a scheme found in `app/build.gradle` *is* this placeholder:
-  // ordering the user to set it again would be wrong exactly when it is already right. A scheme from
-  // an intent filter, on the other hand, is the app's own deep link and the placeholder really is
-  // missing, so the sentence has to work both ways.
-  const android =
+  // Names the scheme rather than commanding the assignment, because a scheme the `android-gradle`
+  // probe resolved *is* this placeholder: ordering the user to set it again would be wrong exactly
+  // when it is already right.
+  const androidPlaceholder =
     "Check that `app/build.gradle(.kts)` sets " +
     `\`manifestPlaceholders["appductScheme"] = "${scheme}"\` — Appduct's own activity receives the ` +
     "connection link on that scheme. Placeholders are fixed at build time, so rebuild and " +
     "reinstall after changing one.";
+  // No scheme named, because the scheme `android-manifest` resolves is the app's *own* deep link:
+  // that probe reads `app/src/main/AndroidManifest.xml`, and Appduct's `${appductScheme}` filter
+  // lives in `core`'s library manifest and is never written into an app's. Filling this value in
+  // would advise the collision the Android guide warns about — Appduct's activity takes every link
+  // on its scheme and forwards nothing that carries no Appduct payload, so the app's own links stop
+  // reaching the app. The unknown-platform case takes this one too: its scheme came from `--scheme`,
+  // which is usually the app's own deep link for the same reason, and no probe saw a placeholder.
+  const androidOwnScheme =
+    'Appduct receives links on the scheme in `manifestPlaceholders["appductScheme"]` in ' +
+    "`app/build.gradle(.kts)`. Give it a scheme of your own, not one your app already handles: " +
+    "on a shared scheme Appduct's activity can't tell your links from its own and yours stop " +
+    "reaching your app. That scheme is what the CLI opens too, so record it with `appduct init " +
+    "--scheme <scheme> --force` and rebuild. Both options: " +
+    "https://callstackincubator.github.io/appduct/install/android/#deep-links.";
 
-  if (discovered.source === "android-gradle" || discovered.source === "android-manifest") {
-    return [android];
+  if (discovered.source === "android-gradle") {
+    return [androidPlaceholder];
+  }
+
+  if (discovered.source === "android-manifest") {
+    return [androidOwnScheme];
   }
 
   if (discovered.source === "ios-info-plist" || discovered.source === "ios-project-yml") {
     return [ios];
   }
 
-  return [ios, android];
+  return [ios, androidOwnScheme];
 };
 
 export const handleInitCommand = async (
