@@ -55,6 +55,7 @@ One note per PR that hit friction, four lines:
 - 2026-10-06 #170 skill: implement-issue
   What went wrong: the web core closed sockets with 1008 and 1011, which a browser WebSocket.close() rejects with InvalidAccessError; only codes 1000 and 3000 to 4999 are allowed.
   Would have prevented it: when porting a core to a new runtime, type the transport port's close codes to what that runtime's real API accepts, and make the fake throw on the rest.
+  Cost: review round
 - 2026-10-06 #168 skill: implement-issue
   What went wrong: a session's resume path wasn't checked against the listener it was claimed on, so a loopback-only web session could be resumed through the all-interfaces TLS listener; found only in review round 2, along with a missed PROTOCOL.md update.
   Would have prevented it: when a feature adds a second listener or transport, list every entry point that accepts a token (claim, resume) and write a refusal test for each, and grep docs/PROTOCOL.md for the old single-transport wording.
