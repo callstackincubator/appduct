@@ -1,7 +1,6 @@
 {
   "name": "@appduct/web",
   "version": "0.14.0",
-  "private": true,
   "description": "Web SDK for Appduct: register tools an agent, test or terminal can call in your running web app.",
   "type": "module",
   "scripts": {
@@ -25,15 +24,27 @@
     "typescript": "~5.9.2",
     "esbuild": "^0.25.12"
   },
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
+  "main": "./dist/inert.js",
+  "module": "./dist/inert.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
+      "development": "./dist/enabled.js",
+      "default": "./dist/inert.js"
+    },
+    "./enabled": {
+      "types": "./dist/enabled.d.ts",
+      "default": "./dist/enabled.js"
     },
     "./package.json": "./package.json"
-  }
+  },
+  "homepage": "https://github.com/callstackincubator/appduct/tree/main/packages/web#readme",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "appduct",
+    "web"
+  ]
 }

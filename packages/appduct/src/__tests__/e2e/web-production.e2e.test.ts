@@ -107,18 +107,18 @@ const openPage = async (url: string): Promise<{ page: Page; sockets: () => Promi
   const context = await browser.newContext();
   trackCleanup(() => context.close());
   const page = await context.newPage();
-  await page.addInitScript(() => {
+  await page.addInitScript(`
+    window.__sockets = 0;
     const Native = window.WebSocket;
-    (window as unknown as { __sockets: number }).__sockets = 0;
     window.WebSocket = class extends Native {
-      constructor(...args: ConstructorParameters<typeof WebSocket>) {
-        (window as unknown as { __sockets: number }).__sockets += 1;
+      constructor(...args) {
+        window.__sockets += 1;
         super(...args);
       }
     };
-  });
+  `);
   await page.goto(url);
-  return { page, sockets: () => page.evaluate(() => (window as unknown as { __sockets: number }).__sockets) };
+  return { page, sockets: () => page.evaluate<number>("window.__sockets") };
 };
 
 describe.each(bundlers)("%s", (_name, bundle) => {

@@ -1,5 +1,5 @@
 /**
- * Bundles `@appduct/web` with esbuild into `dist/index.js`: one browser-ready ES module with
+ * Bundles `@appduct/web` with esbuild into `dist/enabled.js` (real) and `dist/inert.js` (production no-op): browser-ready ES modules with
  * `@appduct/shared` inlined, so a page or bundler imports it by name with no further resolution.
  * Types come from `tsc -p tsconfig.build.json` (declarations only).
  */
@@ -7,8 +7,8 @@
 import { build } from "esbuild";
 
 await build({
-  entryPoints: ["src/index.ts"],
-  outfile: "dist/index.js",
+  entryPoints: ["src/enabled.ts", "src/inert.ts"],
+  outdir: "dist",
   bundle: true,
   format: "esm",
   platform: "browser",
