@@ -24,6 +24,7 @@ Run from the repo root. Node 24, pnpm 11 via corepack.
 ```bash
 pnpm install --frozen-lockfile   # once
 pnpm build                       # turbo; tests depend on it
+pnpm --filter appduct exec playwright-core install chromium   # once, for the web e2e
 pnpm test                        # vitest, all packages
 pnpm lint && pnpm typecheck
 pnpm --filter appduct test -- src/__tests__/<file>   # one file

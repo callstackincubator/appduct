@@ -60,3 +60,7 @@ One note per PR that hit friction, four lines:
   What went wrong: a session's resume path wasn't checked against the listener it was claimed on, so a loopback-only web session could be resumed through the all-interfaces TLS listener; found only in review round 2, along with a missed PROTOCOL.md update.
   Would have prevented it: when a feature adds a second listener or transport, list every entry point that accepts a token (claim, resume) and write a refusal test for each, and grep docs/PROTOCOL.md for the old single-transport wording.
   Cost: review round
+- 2026-10-06 #171 skill: implement-issue
+  What went wrong: a browser-based test was added without adding the browser install to CI and contributor setup, so `pnpm test` failed on a fresh clone and a second review round was needed.
+  Would have prevented it: when a test needs a new external binary, add its install to CI and AGENTS.md Commands in the same commit.
+  Cost: review round
