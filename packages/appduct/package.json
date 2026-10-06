@@ -54,6 +54,7 @@
     "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@appduct/web": "workspace:*",
     "@types/node": "^22.10.0",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.25.12",

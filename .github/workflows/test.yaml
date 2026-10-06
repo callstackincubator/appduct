@@ -46,6 +46,8 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build packages
         run: pnpm build
+      - name: Install Chromium for the web e2e
+        run: pnpm --filter appduct exec playwright-core install --with-deps chromium
       - name: Run JavaScript tests
         run: pnpm test
 

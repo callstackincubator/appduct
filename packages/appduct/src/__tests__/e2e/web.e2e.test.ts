@@ -3,13 +3,13 @@
  * daemon subprocess, a real Chromium page loading the real `@appduct/web` bundle from a local
  * server, and the real CLI, MCP server and `appduct/client` as the callers. Nothing is faked.
  */
+import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
-import { build } from "esbuild";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { afterEach, beforeAll, afterAll, describe, expect, test } from "vitest";
 
@@ -27,7 +27,8 @@ import {
 
 afterEach(cleanupAfterEach);
 
-const WEB_ENTRY = path.resolve(packageRoot, "..", "web", "src", "index.ts");
+/** The built `@appduct/web` entry, resolved by package name the way an app would. */
+const WEB_ENTRY = fileURLToPath(import.meta.resolve("@appduct/web"));
 
 /** The page's own code, as an app author writes it: import the entry, register a tool and an event. */
 const APP_SCRIPT = `
@@ -51,16 +52,7 @@ let origin = "";
 let browser: Browser;
 
 beforeAll(async () => {
-  const built = await build({
-    entryPoints: [WEB_ENTRY],
-    bundle: true,
-    write: false,
-    format: "esm",
-    platform: "browser",
-    target: "es2022",
-    logLevel: "silent",
-  });
-  bundle = built.outputFiles[0]!.text;
+  bundle = readFileSync(WEB_ENTRY, "utf8");
 
   server = createServer((request, response) => {
     if (request.url === "/appduct-web.js") {
