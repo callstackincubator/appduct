@@ -18,6 +18,12 @@ describe("importing @appduct/web where there is no browser", () => {
     await expect(web.connect("anything")).rejects.toThrow(/browser/iu);
   });
 
+  it("has an SDK client that resumes nothing and refuses to connect", async () => {
+    const web = await import("../index.js");
+    await expect(web.appductClient.restoreSession()).resolves.toBe(false);
+    await expect(web.appductClient.connect({} as never)).rejects.toThrow(/browser/iu);
+  });
+
   it("exposes useAppductTool from @appduct/web/react without a browser", async () => {
     const react = await import("../react/index.js");
     expect(typeof react.useAppductTool).toBe("function");

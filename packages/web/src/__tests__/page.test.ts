@@ -1,4 +1,4 @@
-import { encodeBootstrap } from "@appduct/shared";
+import { decodeBootstrap, encodeBootstrap } from "@appduct/shared";
 import { jsonSchema } from "@appduct/shared/sdk";
 import { describe, expect, it } from "vitest";
 
@@ -67,6 +67,17 @@ describe("the plain-JS entry", () => {
     expect(page.href()).toBe(PAGE);
     expect(page.replaceCount).toBe(0);
     expect(ports.transport.connections).toHaveLength(1);
+  });
+
+  it("claims a session from a decoded payload passed to the SDK client's connect", async () => {
+    const { appduct, socket } = load(PAGE);
+
+    const connecting = appduct.appductClient.connect(decodeBootstrap(payload)!);
+    socket().open();
+    socket().receive(ack());
+    await connecting;
+
+    expect(socket().frames()[0]).toMatchObject({ type: "session_claim", session_id: SESSION_ID });
   });
 
   it("rejects a link that is not a bootstrap payload", async () => {
