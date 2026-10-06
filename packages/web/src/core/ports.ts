@@ -1,0 +1,55 @@
+/** What the core needs from outside the process. Each port has a memory fake beside it. */
+
+/** Callbacks the transport invokes for one socket. A socket that fails reports `error` and then
+ * `close` with no code, like a browser WebSocket. */
+export type SocketEvents = {
+  open(): void;
+  /** One text frame. */
+  message(text: string): void;
+  close(code: number | undefined, reason: string | undefined): void;
+  error(message: string): void;
+};
+
+export type Socket = {
+  /** Throws unless the socket is open. */
+  send(text: string): void;
+  close(code: number, reason: string): void;
+};
+
+/** Opens a WebSocket to the daemon. */
+export type Transport = {
+  open(url: string, events: SocketEvents): Socket;
+};
+
+/** Keeps the one value a resume needs. The browser keeps it in `sessionStorage`. */
+export type SessionStore = {
+  read(): string | null;
+  write(value: string): void;
+  clear(): void;
+};
+
+/** Opaque handle returned by [Clock.setTimeout]. */
+export type TimerHandle = unknown;
+
+export type Clock = {
+  /** Unix time in milliseconds. */
+  now(): number;
+  setTimeout(run: () => void, ms: number): TimerHandle;
+  clearTimeout(handle: TimerHandle): void;
+};
+
+/** Sent on every `session_claim`. */
+export type DeviceFields = {
+  manufacturer: string;
+  model: string;
+  os: string;
+};
+
+export type WebCorePorts = {
+  transport: Transport;
+  sessionStore: SessionStore;
+  clock: Clock;
+  /** A number in [0, 1), used for reconnect jitter. */
+  random: () => number;
+  device: DeviceFields;
+};
