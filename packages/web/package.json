@@ -5,7 +5,7 @@
   "description": "Web SDK for Appduct: register tools an agent, test or terminal can call in your running web app.",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/bundle.mjs",
     "clean": "rm -rf dist",
     "lint": "eslint src",
     "test": "vitest run --config ../../vitest.config.ts src",
@@ -22,6 +22,18 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "esbuild": "^0.25.12"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
   }
 }

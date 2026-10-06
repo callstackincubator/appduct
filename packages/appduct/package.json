@@ -54,10 +54,12 @@
     "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@appduct/web": "workspace:*",
     "@types/node": "^22.10.0",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.25.12",
     "eslint": "^10",
+    "playwright-core": "1.56.1",
     "typescript": "~5.9.2"
   },
   "files": [
