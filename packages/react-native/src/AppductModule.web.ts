@@ -19,7 +19,7 @@
  * inert noop behavior instead, which is the "misfire on web" the task explicitly rules out.
  */
 import type { AppductBuildConfig } from "./Appduct.types";
-import type { AppductNativeModuleLike } from "./client-types";
+import type { AppductCore } from "@appduct/shared/sdk";
 import { logger } from "./logger";
 
 /** Always `true` on web — see the file-level doc comment above. */
@@ -32,7 +32,7 @@ const unsupported = (what: string): never => {
   );
 };
 
-export const appductNativeModule: AppductNativeModuleLike = {
+export const appductNativeModule: AppductCore = {
   registerTool() {
     unsupported("registerTool");
   },

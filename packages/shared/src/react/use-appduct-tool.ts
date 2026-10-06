@@ -1,4 +1,4 @@
-import type { ToolSchemaDescriptor } from "@appduct/shared";
+import type { ToolSchemaDescriptor } from "../index.js";
 import { useEffect, useRef, type DependencyList } from "react";
 
 import type {
@@ -7,8 +7,8 @@ import type {
   AppductToolRegistration,
   InferToolArgs,
   InferToolResult,
-} from "./Appduct.types";
-import type { AppductSubscription } from "./public-api";
+} from "../sdk/index.js";
+import type { AppductSubscription } from "../sdk/index.js";
 
 type ToolRegistrar = <
   TInputSchema extends AppductRuntimeSchema | undefined,

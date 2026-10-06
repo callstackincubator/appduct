@@ -1,13 +1,13 @@
 import type {
   AppductRegisteredTool,
   AppductToolExecutionContext,
-} from "../Appduct.types";
+} from "./types.js";
 import type {
   AppductNativeToolCallEvent,
   AppductNativeToolCancelEvent,
-} from "../client-types";
-import { logger } from "../logger";
-import { validateToolSchema } from "../schema";
+} from "./core.js";
+import { logger } from "./logger.js";
+import { validateToolSchema } from "./schema.js";
 
 /**
  * The thin half of what `client/tool-invocation.ts` used to own (issue #48 phase 2): the native

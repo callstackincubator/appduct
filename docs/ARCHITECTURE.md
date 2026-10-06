@@ -1048,7 +1048,12 @@ it.
 packages/
   shared/          @appduct/shared — wire protocol v2 (messages, bootstrap codec,
                    tool descriptors, error types), RPC method/param/result types,
-                   Standard Schema helpers. No runtime deps.
+                   Standard Schema helpers. No runtime deps. Also the TypeScript SDK
+                   layer every JS binding builds on, as two separate entries so the CLI
+                   (root entry only) never loads it: `/sdk` (`createAppduct(core)`, the
+                   `AppductCore` interface a platform binding implements, schema
+                   conversion, tool groups; never imports react) and `/react`
+                   (`createUseAppductTool`; `react` is an optional peer dependency).
   appduct/      CLI + daemon + MCP:
     src/daemon/    lifecycle (pidfile, UDS server, auto-spawn helpers), session engine,
                    link minter, tls (key loading and leaf-cert minting on top of
@@ -1062,7 +1067,8 @@ packages/
     src/mcp/       stdio MCP server
     src/events/    waitForAppEvent, the drain-then-live event wait shared by mcp/ and client/
     src/client/    appduct/client, the programmatic client for test runners
-  react-native/    @appduct/react-native (entries: ., /auto, /noop, /metro, app.plugin.js). Depends only on
+  react-native/    @appduct/react-native (entries: ., /auto, /noop, /metro, app.plugin.js). Implements
+                   `AppductCore` with its TurboModule and keeps the public API; depends only on
                    @appduct/shared — no third-party runtime deps, which is why no
                    JSON Schema validator ships with it (§11's raw schema form). Vendors
                    packages/native at build time (see below) rather than depending on it.

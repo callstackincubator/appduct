@@ -53,11 +53,11 @@ export type AppductNativeEvents = {
 };
 
 /**
- * Structural seam for the phase-2 TurboModule spec (`NativeAppduct.ts`): the native core owns
+ * What a platform binding provides to the SDK layer. React Native's TurboModule (`NativeAppduct.ts`) implements it: the native core owns
  * session lifecycle, the tool registry, and per-call timeout/cancel/progress, so this is the entire
  * JS-facing surface — everything crosses as JSON strings.
  */
-export type AppductNativeModuleLike = {
+export type AppductCore = {
   registerTool(descriptorJson: string): void;
   unregisterTool(name: string): void;
   registerEvent(descriptorJson: string): void;

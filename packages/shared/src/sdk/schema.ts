@@ -6,15 +6,15 @@ import {
   type StandardSchemaV1JsonSchema,
   type ToolDescriptor,
   type ToolSchemaDescriptor,
-} from "@appduct/shared";
+} from "../index.js";
 
 import type {
   AppductJsonSchemaConverter,
   AppductNormalizedToolSchema,
   AppductRuntimeSchema,
   AppductToolDefinition,
-} from "./Appduct.types";
-import { isDev, logger } from "./logger";
+} from "./types.js";
+import { isDev, logger } from "./logger.js";
 
 const JSON_SCHEMA_TARGET = "draft-2020-12";
 
