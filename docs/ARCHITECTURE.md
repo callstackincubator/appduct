@@ -65,7 +65,11 @@ Browsers reach the daemon on a second listener, `ws://127.0.0.1:<webPort>`, not 
 - Web pages connect to a second listener: plain `ws://` on `127.0.0.1` and `webPort`, never
   reachable from other machines. A browser can't pin the key, so the listener refuses an upgrade
   with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`. A link is claimable
-  only on the listener of its transport (`link.create`'s `transport`, §5).
+  only on the listener of its transport (`link.create`'s `transport`, §5). The page side is
+  `packages/web` (`@appduct/web`, not yet published): a TypeScript port of the native session core
+  under the same SDK layer as React Native. Its entry reads `#appduct=` on load, removes it from the
+  address bar and claims, resumes from `sessionStorage` after a reload, and publishes
+  `window.__APPDUCT__.connect` for the `script` that `appduct_connect` returns.
 - The CLI and MCP server never touch sockets, keys, or state files directly; everything
   goes through the daemon RPC.
 

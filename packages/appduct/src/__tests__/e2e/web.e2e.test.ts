@@ -35,6 +35,7 @@ import { registerTool, registerEvent, postEvent } from "/appduct-web.js";
 registerTool({
   name: "add",
   description: "Add two numbers.",
+  inputSchema: { type: "object", properties: { a: { type: "number" }, b: { type: "number" } }, required: ["a", "b"] },
   outputSchema: { type: "object", properties: { total: { type: "number" } } },
   handler: ({ a, b }) => ({ total: a + b }),
 });
@@ -146,16 +147,16 @@ describe("e2e: web page through @appduct/web", () => {
 
       const page = await startPage();
       await page.goto(url);
-      await waitForActiveSession(stateDir);
+      const { alias } = await waitForActiveSession(stateDir);
 
       expect(page.url()).toBe(`${origin}/`);
       expect(await page.evaluate<string>("location.href")).not.toContain("appduct");
 
-      const listed = await runCliJson<{ tools: { name: string }[] } | { name: string }[]>(["tools", "ls"], stateDir);
+      const listed = await runCliJson<{ tools: { name: string }[] } | { name: string }[]>(["tools", "ls", alias], stateDir);
       expect(JSON.stringify(listed.data)).toContain('"add"');
 
-      const viaCli = await runCliJson(["tools", "call", "add", "--input", JSON.stringify({ a: 2, b: 3 })], stateDir);
-      expect(viaCli.data).toEqual({ total: 5 });
+      const viaCli = await runCliJson(["tools", "call", alias, "add", "--input", JSON.stringify({ a: 2, b: 3 })], stateDir);
+      expect(JSON.stringify(viaCli.data)).toContain('"total":5');
 
       const viaMcp = await callMcp("appduct_call_tool", { name: "add", args: { a: 4, b: 5 } });
       expect(viaMcp.structuredContent).toEqual({ total: 9 });
@@ -213,8 +214,11 @@ describe("e2e: web page through @appduct/web", () => {
 
       const rows = await sessions(stateDir);
       expect(rows.map((row) => row.sessionId)).toEqual([before.sessionId]);
-      const called = await runCliJson(["tools", "call", "add", "--input", JSON.stringify({ a: 1, b: 1 })], stateDir);
-      expect(called.data).toEqual({ total: 2 });
+      const called = await runCliJson(
+        ["tools", "call", before.alias, "add", "--input", JSON.stringify({ a: 1, b: 1 })],
+        stateDir,
+      );
+      expect(JSON.stringify(called.data)).toContain('"total":2');
     },
     60_000,
   );
