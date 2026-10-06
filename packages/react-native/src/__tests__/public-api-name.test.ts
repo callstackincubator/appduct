@@ -1,15 +1,17 @@
 /**
  * The name React Native users see for the type shared by the `.` (real) and `./noop` (inert)
  * entries (issue #155). It shipped as `CordierePublicApi`, the product's old name, misspelled; it
- * is now `AppductPublicApi`, with the old name kept as a deprecated alias for one release so an
- * existing import warns instead of breaking.
+ * is now `AppductPublicApi`, with the old name kept as a deprecated alias until 0.15.0 removes it
+ * (#161) so an existing import warns instead of breaking. When #161 runs, the three tests below that
+ * name `CordierePublicApi` go: delete them with the alias.
  *
  * Which name resolves as a type is enforced by `tsc` (`pnpm typecheck` / `pnpm build`), not by
  * Vitest, which strips types — the pattern of `schema-inference.test.ts`, so each type-level test
  * keeps one runtime assertion to stay a real test. Whether the old name *carries* `@deprecated` is
- * not a type-level fact, so those two tests read it through the compiler API the way an editor
- * resolves it: on the exported symbol of each entry, through the export alias.
+ * not a type-level fact, so the tests that check it read it through the compiler API the way an
+ * editor resolves it: on the exported symbol of each entry, through the export alias.
  */
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
@@ -26,6 +28,9 @@ type Equals<A, B> =
 
 /** The three entries an app can import the package by, i.e. everything that must name the type. */
 const ENTRIES = ["index", "noop", "auto"] as const;
+
+/** The release that removes the alias (#161), as the `@deprecated` tag and `CHANGELOG.md` name it. */
+const REMOVED_IN = "0.15.0";
 
 const entryPath = (entry: string): string =>
   fileURLToPath(new URL(`../${entry}.ts`, import.meta.url));
@@ -95,7 +100,7 @@ describe("public API type name (issue #155)", () => {
   });
 
   test("the old name stays available as an alias, not a copy that can drift", () => {
-    // One release of grace: `CordierePublicApi` keeps resolving, on every entry, to exactly the
+    // Grace until 0.15.0 (#161): `CordierePublicApi` keeps resolving, on every entry, to exactly the
     // renamed type rather than a second declaration someone can update on its own.
     const aliasIsTheRenamedType: Equals<
       RealEntry.CordierePublicApi,
@@ -107,7 +112,7 @@ describe("public API type name (issue #155)", () => {
     expect(aliasIsTheRenamedType).toBe(true);
   });
 
-  test("the old name is marked deprecated on every entry, naming the new one", () => {
+  test("the old name is marked deprecated on every entry, naming the new one and the release that removes it", () => {
     for (const entry of ENTRIES) {
       const tags = tagsOfExportedType(entry, "CordierePublicApi");
       expect(tags, `${entry} does not export CordierePublicApi`).toBeDefined();
@@ -116,7 +121,27 @@ describe("public API type name (issue #155)", () => {
         deprecated?.message,
         `${entry} does not mark CordierePublicApi @deprecated`,
       ).toContain("AppductPublicApi");
+      expect(
+        deprecated?.message,
+        `${entry} does not say which release removes CordierePublicApi`,
+      ).toContain(REMOVED_IN);
     }
+  });
+
+  test("the changelog names the same removal release as the deprecation does", () => {
+    // The alias outlives this repo, so the promise is what a consumer reads. This is the one check
+    // that the two places stating it cannot drift. Nothing here tries to stop the deletion itself:
+    // that is #161's job, and the guarantee that matters there is its `Breaking:` changelog line,
+    // which is what makes the removing release a minor bump instead of a patch that breaks apps.
+    const changelog = readFileSync(
+      fileURLToPath(new URL("../../../../CHANGELOG.md", import.meta.url)),
+      "utf8",
+    );
+    const from = changelog.indexOf("## Unreleased");
+    expect(from).toBeGreaterThan(-1);
+    const unreleased = changelog.slice(from, changelog.indexOf("\n## ", from + 1));
+    expect(unreleased).toContain("CordierePublicApi");
+    expect(unreleased).toContain(REMOVED_IN);
   });
 
   test("the new name is exported without a deprecation warning", () => {
