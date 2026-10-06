@@ -56,10 +56,16 @@ Deliberately out of scope, so the boundaries of the design are explicit:
 └──────────────────────────────────────────────────────────┘
 ```
 
+Browsers reach the daemon on a second listener, `ws://127.0.0.1:<webPort>`, not drawn above.
+
 - One daemon per operator machine (per user). It is long-lived and never exits because
   of anything a device does.
 - Devices connect **to** the daemon over pinned `wss://`; that direction is what works for
   physical phones.
+- Web pages connect to a second listener: plain `ws://` on `127.0.0.1` and `webPort`, never
+  reachable from other machines. A browser can't pin the key, so the listener refuses an upgrade
+  with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`. A link is claimable
+  only on the listener of its transport (`link.create`'s `transport`, §5).
 - The CLI and MCP server never touch sockets, keys, or state files directly; everything
   goes through the daemon RPC.
 
@@ -404,14 +410,15 @@ Rules:
   successful resume the resume token is **rotated** (old one invalid immediately).
 - `ACTIVE → SUSPENDED` (socket close/error/heartbeat loss): the tool registry, device
   metadata, and alias are retained. Pending tool calls fail fast with `session_suspended`.
-- `SUSPENDED → ACTIVE` via `session_resume` on a fresh pinned socket within
-  `graceSeconds`. After resume the app re-sends a full `tool_registry_snapshot`
+- `SUSPENDED → ACTIVE` via `session_resume` on a fresh socket within
+  `graceSeconds`. Either listener accepts `session_resume`: it carries no transport check, and
+  the resume token is the credential. After resume the app re-sends a full `tool_registry_snapshot`
   (authoritative; replaces the retained registry).
 - Session ids and aliases never collide across live sessions. Terminal states
   (`DISCARDED`, `EXPIRED`, `REVOKED`) free the alias.
-- There is **no limit** on concurrent sessions; all share the single wss listener.
+- There is **no limit** on concurrent sessions; all share the two listeners (pinned wss and local web).
 
-## 7. Wire protocol v2 (app ↔ daemon, over pinned wss)
+## 7. Wire protocol v2 (app ↔ daemon, over pinned wss or the local web listener)
 
 **[PROTOCOL.md](PROTOCOL.md) is the normative reference** for the message catalog, frame
 rules, close codes, keepalive, and the `ToolDescriptor` shape. Don't duplicate it here; the

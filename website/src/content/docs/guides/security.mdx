@@ -25,7 +25,7 @@ With the defaults, Appduct is only in debug builds, so a release build has no Ap
 
 ## Web pages
 
-A browser can't pin your computer's key, so a web page connects to a separate port instead: plain `ws://` on `127.0.0.1`, which `appduct daemon status --json` reports as `webPort`. The page can't check that it's talking to Appduct, so this port is never reachable from other machines. Treat it like any local port: any process on your computer can open it.
+A browser can't pin your computer's key, so a web page connects to a separate port instead: plain `ws://` on `127.0.0.1`, which `appduct daemon status --json` reports as `data.daemon.web_port`. The page can't check that it's talking to Appduct, so this port is never reachable from other machines. Treat it like any local port: any process on your computer can open it.
 
 What keeps other websites out is the `Origin` header the browser sends. The daemon refuses a connection with a 403 unless the origin is `localhost`, `127.0.0.1`, or `[::1]` on any port, or is listed in `webOrigins` in `~/.appduct/config.json`:
 

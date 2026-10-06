@@ -61,7 +61,7 @@ The link has the form `<scheme>:///?appduct=<payload>&pin=<sha256/...>`. Pass it
 
 `appduct sessions link --open web <url>` creates a link for a page served at `<url>`. It needs no device, scheme, or app id, and prints `url` (the page URL with `#appduct=<payload>` added, replacing any fragment) and `script`. Open `url` in a browser, or run `script` in a page that's already open: `window.__APPDUCT__.connect("<payload>")`. The `--ttl` flag applies; `--device`, `--app-id`, and `--relaunch` don't.
 
-A web link points at `127.0.0.1` and the web port, which `appduct daemon status --json` reports as `webPort`. It only works on that port, and a link for a device only works for devices. See [Web pages](/appduct/guides/security/#web-pages) for what the web port accepts.
+A web link points at `127.0.0.1` and the web port, which `appduct daemon status --json` reports as `data.daemon.web_port`. It only works on that port, and a link for a device only works for devices. See [Web pages](/appduct/guides/security/#web-pages) for what the web port accepts.
 
 ### `appduct sessions revoke [selector]`
 
