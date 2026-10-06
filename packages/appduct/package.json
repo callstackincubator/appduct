@@ -60,7 +60,9 @@
     "esbuild": "^0.25.12",
     "eslint": "^10",
     "playwright-core": "1.56.1",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vite": "^8.1.4",
+    "webpack": "^5.111.1"
   },
   "files": [
     "bin.js",
