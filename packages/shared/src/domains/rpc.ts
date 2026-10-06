@@ -75,6 +75,8 @@ export type DaemonStatusResult = {
   /** ISO 8601. */
   startedAt: string;
   wssPort: number;
+  /** The port of the plain-HTTP listener on `127.0.0.1` that web pages connect to. */
+  webPort: number;
   pinnedKeys: string[];
   sessions: SessionSummary[];
   /**
@@ -109,8 +111,14 @@ export type DaemonShutdownResult = { ok: true };
 
 // --- link.create ---
 
+/** Which listener may claim a link: the pinned-TLS one (`native`) or the `127.0.0.1` web one. */
+export type LinkTransport = "native" | "web";
+
 export type LinkCreateParams = {
   ttlSeconds?: number;
+  /** Defaults to `native`. A `web` link encodes `127.0.0.1` and the web port, ignores
+   * `addressOverride`, and can only be claimed on the web listener. */
+  transport?: LinkTransport;
   /** Forces the advertised address encoded into the bootstrap payload (ARCHITECTURE.md §8's
    * emulator/simulator fast path: `127.0.0.1`, since the wss listener already binds all
    * interfaces). Omitted for the normal LAN/QR delivery path. */

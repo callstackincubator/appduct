@@ -12,7 +12,15 @@
  * ```
  */
 export { connect, type ConnectOptions } from "./connect.js";
-export { link, waitForSession, type LinkOptions, type LinkResult, type WaitForSessionOptions } from "./bootstrap.js";
+export {
+  link,
+  waitForSession,
+  type LinkOptions,
+  type LinkResult,
+  type WaitForSessionOptions,
+  type WebLinkOptions,
+  type WebLinkResult,
+} from "./bootstrap.js";
 export { AppductError, type AppductErrorType } from "./errors.js";
 export type {
   AppClient,

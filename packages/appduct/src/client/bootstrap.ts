@@ -9,7 +9,7 @@ import { RPC_METHODS, type EventNotification, type SessionsDescribeResult } from
 
 import { type ExecFn, type OpenTarget } from "../cli/open-target.js";
 import { resolveStateDir } from "../daemon/state-dir.js";
-import { mintLink, type MintLinkResult } from "../link.js";
+import { mintLink, mintWebLink, type MintLinkResult, type WebLinkResult } from "../link.js";
 import { openDaemonStream, DaemonRpcError, type DaemonStream, type SpawnFn } from "../rpc/client.js";
 import { makeAppClient, type AppClient, type ToolMap } from "./app-client.js";
 import { AppductError, toAppductError } from "./errors.js";
@@ -48,10 +48,37 @@ export type LinkOptions = {
 
 export type LinkResult = MintLinkResult;
 
+export type WebLinkOptions = {
+  stateDir?: string;
+  spawn?: SpawnFn;
+  /** Auto-spawn a daemon on a missing connection. Defaults to `true`. */
+  autoSpawn?: boolean;
+  ttlSeconds?: number;
+  target: "web";
+  /** The page the link will be opened in. */
+  url: string;
+};
+
+export type { WebLinkResult };
+
 /** Mints a session link via `link.create` and composes the deep link. With `target` set, delivers
- * it directly to a booted emulator/simulator instead of leaving delivery to the caller. */
-export const link = async (options: LinkOptions = {}): Promise<LinkResult> => {
+ * it directly to a booted emulator/simulator instead of leaving delivery to the caller. With
+ * `target: "web"` and the page's `url`, returns `{ url, script }` for a web page instead: `url`
+ * with `#appduct=<payload>` appended, and the script that connects an already-open page. */
+export function link(options: WebLinkOptions): Promise<WebLinkResult>;
+export function link(options?: LinkOptions): Promise<LinkResult>;
+export async function link(options: LinkOptions | WebLinkOptions = {}): Promise<LinkResult | WebLinkResult> {
   try {
+    if (options.target === "web") {
+      return await mintWebLink({
+        stateDir: resolveStateDir(options.stateDir),
+        spawn: options.spawn,
+        autoSpawn: options.autoSpawn,
+        ttlSeconds: options.ttlSeconds,
+        url: options.url,
+      });
+    }
+
     return await mintLink({
       stateDir: resolveStateDir(options.stateDir),
       spawn: options.spawn,
@@ -70,7 +97,7 @@ export const link = async (options: LinkOptions = {}): Promise<LinkResult> => {
   } catch (error) {
     throw toAppductError(error);
   }
-};
+}
 
 export type WaitForSessionOptions = {
   stateDir?: string;

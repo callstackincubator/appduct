@@ -7,6 +7,7 @@ Daemon
   PID          4242
   Started at   2026-03-17T10:00:00.000Z
   WSS port     8443
+  Web port     8444
   Pinned keys  1
   Sessions     1
 
@@ -28,6 +29,7 @@ Daemon
   PID          4242
   Started at   2026-03-17T10:00:00.000Z
   WSS port     8443
+  Web port     8444
   Pinned keys  1
   Sessions     1
 

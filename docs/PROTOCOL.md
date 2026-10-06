@@ -10,9 +10,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for design rationale.
 
 ## Topology in one sentence
 
-One long-lived `appduct daemon` process holds the TLS private key and a single `wss://`
-listener; any number of devices connect to it concurrently, each over its own pinned
-socket, and each gets its own session.
+One long-lived `appduct daemon` process holds the TLS private key and a `wss://` listener
+for devices, plus a plain-HTTP `ws://` listener on loopback for browser pages; any number of
+clients connect concurrently, each over its own socket, and each gets its own session.
 
 ## 1. Trust model
 
@@ -383,7 +383,7 @@ Guard: `isEventDescriptor`; conformance vectors in `packages/native/fixtures/eve
   fails fast with `session_suspended`. The session records why in `suspendReason`:
   `app_backgrounded` when the socket closed with `1001 app_backgrounded` (§7), otherwise
   `connection_lost`. Resuming clears it.
-- `SUSPENDED → ACTIVE`: a `session_resume` on a fresh pinned socket within
+- `SUSPENDED → ACTIVE`: a `session_resume` on a fresh socket within
   `graceSeconds` (default 600) of suspension, with a valid (unrotated-since,
   unexpired) `resume_token`. The `resume_token` rotates again on this success, and the
   app is expected to re-send a full `tool_registry_snapshot` right after (§4) — the
@@ -392,7 +392,7 @@ Guard: `isEventDescriptor`; conformance vectors in `packages/native/fixtures/eve
 - Any state → `REVOKED`: `sessions.revoke` (CLI `appduct sessions revoke`, or the equivalent
   RPC call). Terminal states (`DISCARDED`, `EXPIRED`, `REVOKED`) free the session's alias
   for reuse by a future session.
-- There is no cap on concurrent sessions; every session shares the one `wss://` listener.
+- There is no cap on concurrent sessions; sessions share the two listeners, and each stays on the one it was claimed on.
 
 ## 7. Close-code table
 
@@ -410,6 +410,7 @@ not prose. Grouped by trigger:
 | 1008 | `unknown_message_type` | a post-claim message's `type` isn't in the known set (§4) |
 | 1008 | `session_mismatch` | a post-claim message's `session_id` doesn't match this socket's session |
 | 1008 | `already_claimed` | claim attempted against a session that already has an active socket |
+| 1008 | `wrong_transport` | a claim was presented on the listener its link was not minted for, or a resume on a listener other than the one the session was claimed on (§2, §6); the link or session is untouched and stays usable on its own listener |
 | 1008 | `unknown_session` | claim/resume referenced a session id the daemon has no record of |
 | 1008 | `link_expired` | claim attempted after the pending link's TTL elapsed |
 | 1008 | `claim_attempts_exceeded` | the 5th failed claim attempt against a pending session — it is now unclaimable |
