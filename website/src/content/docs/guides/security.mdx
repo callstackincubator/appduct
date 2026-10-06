@@ -27,14 +27,14 @@ With the defaults, Appduct is only in debug builds, so a release build has no Ap
 
 Each build trusts your computer in one of two ways.
 
-**Link trust (`"link"`)** is the default when a build has no pins configured, in any build type. The connection link carries your computer's key fingerprint, and the app trusts it for that one session. It needs no setup, which is why the quick start works right away. It's weaker than pinned trust: someone on your local network who gets you to open their link or scan their QR code can stand in for your computer for that session. Links still expire and work once.
+**Link trust (`"link"`)** is the default when a build has no pins configured, in any build type. The connection link carries your computer's key fingerprint, and the app trusts it for that one session. It needs no setup, which is why the quick start works right away. It's weaker than pinned trust: someone on your local network who gets you to open their link or scan their QR code can stand in for your computer for that session. Links still expire and work once. Each time a build connects this way, it logs `Appduct: trust=link — trusting the SPKI pin carried by the bootstrap link for this session.`, so a build that should have been pinned shows up in the device log.
 
 **Pinned trust (`"pin"`)** embeds your key's fingerprint in the build. The app then refuses any other computer, whatever the link says. Use it for every build that goes to anyone outside your own machine.
 
 Once a build has pins, they always win, and the link's fingerprint is ignored. Configuration can only make trust stricter, never looser. A `trust` value other than `"link"` or `"pin"`, such as a typo, is an error, never treated as the default.
 
 :::caution
-A new link also replaces a session the app already has. Under link trust, someone who can get a malicious link opened can interrupt your session as well as take its place.
+A new link also replaces a session the app already has. Under link trust, someone who can get a malicious link opened can interrupt your session as well as take its place. The app checks the whole link, including its address and expiry, before it drops the current session, so a malformed or expired link interrupts nothing.
 :::
 
 ## Pin a build to your key
@@ -133,6 +133,7 @@ Rotate on a schedule, not only after a suspected leak. It keeps the process prac
 - **Use one key per developer or environment.** Don't share one key across a team.
 - **Keep the fingerprint.** It's what you ship in `cliPins`. Losing the key file just means generating a new one and shipping a new build, which is the rotation path anyway.
 - **Never point `--state-dir` at a committed directory**, such as your project's `.appduct/`. The state directory holds the private key.
+- **Run Appduct as your own user**, never as a more privileged one. Any process running as the same user can reach its control socket and do anything the CLI can.
 - **On shared machines**, such as CI runners, give each user their own `APPDUCT_STATE_DIR`. Anyone who can reach another user's control socket has that user's access.
 
 ## Limit what callers can run
@@ -164,7 +165,7 @@ Each value is `"allow"`, `"deny"`, or `"prompt"`:
 
 The background service reads this file when it starts. After changing it, run `appduct daemon stop`; this disconnects every device.
 
-Every call attempt is also recorded in `~/.appduct/audit/`, one file per day: time, device, tool, a hash of the arguments (never the arguments themselves), outcome, and who called (`cli`, `mcp`, or `client`). Files older than 30 days are deleted; change that with `auditRetentionDays`.
+Every call attempt is also recorded in `~/.appduct/audit/`, one file per day: time, device, tool, a hash of the arguments (never the arguments themselves), outcome, and who called (`cli`, `mcp`, or `client`). Files older than 30 days are deleted; change that with `auditRetentionDays`. The log is always on. To confirm entries reach the disk, for example on a full or read-only disk, check "Failed writes" in `appduct daemon status`.
 
 :::note
 Policy and the audit log run on your computer, so they help a trusted person working across many tools. They don't stop someone who already controls your computer. The protection that lives inside your app is which tools it registers at all, below.

@@ -79,6 +79,14 @@ When stripping, every import of `@appduct/react-native` resolves to `@appduct/re
 
 **Call `withAppduct` last.** If something else sets `resolver.resolveRequest` after it, the strip is silently lost. `withAppduct` keeps any resolver set before it.
 
+If you'd rather not change your Metro config, pick the entry at each import site instead. `/noop` has the same types, so this is a drop-in swap:
+
+```ts
+const { registerTool, useAppductTool } = __DEV__
+  ? require("@appduct/react-native")
+  : require("@appduct/react-native/noop");
+```
+
 Removing both the native module and the JavaScript is what an app store reviewer who expects no remote-control code at all will want to see. Either half alone still gives you a working app where Appduct does nothing.
 
 ## Leave Appduct out permanently
@@ -127,6 +135,8 @@ To make sure a project never includes Appduct on a platform, regardless of envir
     ```
 
     `@appduct/react-native` must not appear under `dependencies`.
+
+    Excluding the package on iOS also skips its generated native code. If your app still adds the `Appduct` pod by hand, for example for an XCTest target, that build fails.
   </TabItem>
 </Tabs>
 

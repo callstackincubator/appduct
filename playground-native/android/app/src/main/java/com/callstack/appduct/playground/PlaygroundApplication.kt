@@ -9,7 +9,7 @@ import org.json.JSONObject
 
 /**
  * Registers the same tool set as the Expo playground (`playground/app/(tabs)/index.tsx`) so the
- * two can be driven identically from `appduct tools ls`/`tools call` (docs/tasks/19-android-entry-points.md).
+ * two can be driven identically from `appduct tools ls`/`tools call`.
  * By the time [onCreate] runs, [com.callstack.appduct.AppductInitProvider] has
  * already captured this process's application `Context` and started lease recovery -- nothing
  * else needs to happen before [Appduct.register] works.
@@ -18,7 +18,7 @@ import org.json.JSONObject
  * every call below still compiles and runs, but does nothing: `Appduct.register` returns an
  * inert [com.callstack.appduct.ToolRegistration] and the listener below is never
  * invoked, matching every other Appduct consumer's compiled-out release behavior
- * (`docs/BUILD-VARIANTS.md`).
+ * (https://callstackincubator.github.io/appduct/guides/build-variants/).
  */
 class PlaygroundApplication : Application() {
     override fun onCreate() {

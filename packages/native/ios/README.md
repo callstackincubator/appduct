@@ -4,40 +4,42 @@ Tools and state from outside a plain iOS app — no React Native, no Expo requir
 Swift SDK behind `@appduct/react-native`'s iOS half, usable directly from any SwiftUI/UIKit app:
 register tools, forward a deep link, and a CLI or agent can claim a session, list your tools, and
 invoke them over a pinned `wss://` handshake, the same way `@appduct/react-native` does for a
-React Native app. See the [repo README](../../../README.md) and
-[`docs/PROTOCOL.md`](../../../docs/PROTOCOL.md) for what Appduct is; this document is the iOS
-integration guide.
+React Native app. See the [repo README](../../../README.md) for what Appduct is; this document is
+the iOS integration guide.
 
 If you're integrating from React Native instead, see
 [`packages/react-native/README.md`](../../react-native/README.md) — this package is what that one
 vendors under the hood.
+
+## Requirements
+
+- iOS 15.1 or later.
+- Xcode 16.3 or later for Swift Package Manager (the package manifest needs Swift 6.1). CocoaPods
+  has no extra Xcode requirement.
 
 ## Install
 
 ### Swift Package Manager
 
 ```swift
-.package(url: "https://github.com/callstackincubator/appduct", from: "0.10.0")
+.package(url: "https://github.com/callstackincubator/appduct", from: "0.14.0")
 ```
 
-`0.10.0` is a floor, not a pin — it's the first release carrying the Swift manifest, and `from:`
-resolves to the newest `0.x` tag, so this line stays current without edits.
+`from:` resolves to the newest `0.x` release at or above `0.14.0`, the first with `registerEvent`.
 
-Add the `AppductCore` product to your app target. No further configuration is needed to ship the
-real implementation only in `Debug`, matching the RN package's own default (see [Compiling out of
-Release](#compiling-out-of-release) below) — by default a `Release` build links the same-API
-`Stub/` implementation instead, so your app never carries the real connection code in what you
-ship to the App Store unless you opt in.
+Add the `AppductCore` product to your app target. Nothing else is needed to ship Appduct only in
+`Debug`: a `Release` build gets an inert version with the same API, so your code compiles in both
+and what you ship to the App Store carries no connection code (see [Compiling out of
+Release](#compiling-out-of-release)).
 
 To carry the real implementation into a `Release` build too (an internal/QA build, say), depend on
 the `AlwaysEnabled` package trait instead:
 
 ```swift
-.package(url: "https://github.com/callstackincubator/appduct", from: "0.10.0", traits: ["AlwaysEnabled"])
+.package(url: "https://github.com/callstackincubator/appduct", from: "0.14.0", traits: ["AlwaysEnabled"])
 ```
 
-There is no environment-variable equivalent on this path — see
-[Compiling out of Release](#compiling-out-of-release) for why.
+There is no environment-variable switch on this path; the trait is the only way to opt in.
 
 ### CocoaPods
 
@@ -151,9 +153,8 @@ try Appduct.shared.register(
 }
 ```
 
-- `inputSchema`/`outputSchema` are plain JSON Schema, as `[String: Any]` — there is no schema
-  library on this SDK's boundary; the daemon does no input validation either, matching
-  `@appduct/react-native`'s own native behavior.
+- `inputSchema`/`outputSchema` are plain JSON Schema, as `[String: Any]`. Nothing validates call
+  arguments against `inputSchema`, so check what your handler needs before using it.
 - `handler` is `async throws`, and receives converted `[String: Any]` args; return any
   JSON-representable value (`nil`, a number/string/bool, an `[Any]`, a `[String: Any]`, or nested
   combinations). A value that isn't representable this way (a `Date`, `Data`, or a custom type)
@@ -175,7 +176,7 @@ try Appduct.shared.register(
   are optional, exactly like the JS API's `registerTool`.
   Set them the way an agent needs them: `readOnlyHint` on every observer, `destructiveHint` on
   anything that deletes, signs out or pays, and an `outputSchema` on every tool, so `appduct tools ls`
-  shows a complete signature. [`docs/TOOLS.md`](../../../docs/TOOLS.md#designing-tools-for-agents)
+  shows a complete signature. [Write tools](https://callstackincubator.github.io/appduct/guides/writing-tools/#design-tools-for-the-agent-that-calls-them)
   has the full list of rules, with examples.
 - `group` is optional too. On an app with many tools, set it so agents can list them one area at a
   time (`appduct tools ls --group cart`). A group is `"cart"` or one subgroup below it, like
@@ -238,9 +239,8 @@ Against an older `appduct` CLI that predates event lists, the app keeps its sess
 
 By default a build trusts whatever pin the deep link itself carries for that session
 (`trust: "link"`) — no configuration needed. To pin a build to keys you embedded ahead of time
-instead, set these `Info.plist` keys (mirrors `packages/react-native/README.md`'s Expo/bare-RN
-config exactly — see [`docs/SECURITY.md`](../../../docs/SECURITY.md#configuring-trust) for the full
-threat model):
+instead, set these `Info.plist` keys. They are the same settings React Native apps configure; see
+[Configuring trust](https://callstackincubator.github.io/appduct/guides/security/#pin-a-build-to-your-key) for what each one protects against:
 
 | Key | Purpose |
 | --- | ------- |
@@ -257,20 +257,19 @@ with `Appduct.shared.buildConfig`.
 
 ## Compiling out of Release
 
-The real implementation is **absent, not merely inert**, from a default `Release` build — see
-[Install](#install) above for the two mechanisms (SwiftPM's `.when(configuration: .debug)` build
-setting, CocoaPods' `:configurations => ['Debug']`). Verify against the built artifact rather than
-trusting the build log:
+A default `Release` build doesn't contain Appduct's connection code at all, with either install
+method: SwiftPM compiles it only for a configuration named `Debug` unless you opt into
+`AlwaysEnabled`, and CocoaPods links it only into `Debug`. A custom configuration name (say,
+`Staging`) counts as `Release` here. Check the built app rather than the build settings:
 
 ```bash
 appduct doctor path/to/YourApp.app --assert-present   # Debug
 appduct doctor path/to/YourApp.app --assert-absent    # Release
 ```
 
-`doctor` decides presence from a marker symbol (`AppductCoreMarker`) compiled only into the real
-implementation — never into `Stub/` — so a build genuinely either carries the real code or doesn't;
-there is no runtime `#if DEBUG` check to bypass. See
-[`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) for the full mechanism.
+`doctor` exits non-zero when the assertion fails, so you can run it as a release-pipeline step. See
+[Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/) for how other build variants are
+handled.
 
 ## Threading
 
@@ -311,7 +310,5 @@ CocoaPods' `:configurations` restriction, most likely on purpose for an internal
 ## Going further
 
 - [`playground-native/ios`](../../../playground-native/ios) — a full example app built on this SDK.
-- [`docs/SECURITY.md`](../../../docs/SECURITY.md) — trust modes, pins, the threat model.
-- [`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) — how inclusion is decided per build.
-- [`docs/internal/native-core.md`](../../../docs/internal/native-core.md) — this core's layout and
-  how `@appduct/react-native` vendors it.
+- [Security](https://callstackincubator.github.io/appduct/guides/security/) — trust modes, pins, the threat model.
+- [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/) — how inclusion is decided per build.

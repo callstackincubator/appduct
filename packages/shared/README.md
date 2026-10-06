@@ -4,7 +4,9 @@
 
 [![MIT license][license-badge]][license] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-`@appduct/shared` is the wire protocol v2 implementation shared by the `appduct` daemon/CLI/MCP server and `@appduct/react-native`: the bootstrap payload codec, every post-claim message type and its strict runtime guard, the control-plane RPC method/param/result types, the shared error-type enum, and Standard Schema helpers — with no runtime dependencies. Depend on it directly if you're writing a new client or server that speaks the Appduct wire protocol (see [`docs/PROTOCOL.md`][protocol] for the field-level spec this package implements). Most consumers of Appduct never need to import it directly — `appduct` and `@appduct/react-native` already re-export what they need from it.
+`@appduct/shared` is an internal dependency of [`appduct`](../appduct/README.md) and [`@appduct/react-native`](../react-native/README.md). It's installed along with them; you don't add it to a project yourself, and its exports can change in any release.
+
+If you're writing your own Appduct client or server, the wire protocol is specified in [`docs/PROTOCOL.md`][protocol].
 
 ## Made with ❤️ at Callstack
 

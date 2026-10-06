@@ -47,9 +47,8 @@ targets:
         Debug:
           # No override needed: Xcode passes the `Debug` configuration name straight through to
           # SwiftPM, which is exactly the name `Package.swift`'s `.when(configuration: .debug)`
-          # checks -- so this target's Debug build gets the real `AppductCore` implementation
-          # (Decision 2, docs/tasks/14-native-core-extraction.md), same as Appduct.podspec's
-          # `:configurations => ['Debug']` restriction on the RN side.
+          # checks -- so this target's Debug build gets the real `AppductCore` implementation same
+          # as Appduct.podspec's `:configurations => ['Debug']` restriction on the RN side.
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
         Release:
           # Deliberately no `AlwaysEnabled` trait wiring here: this target links the plain

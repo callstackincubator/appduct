@@ -519,7 +519,7 @@ final class AppductConnectionManagerTests: XCTestCase {
     XCTAssertEqual(options.resumeToken, "resume-token-value")
   }
 
-  // MARK: - Explicit trust mode (resolveTrustedPins) — docs/tasks/05-explicit-trust-mode.md
+  // MARK: - Explicit trust mode (resolveTrustedPins)
 
   private let embeddedPins = ["sha256/embedded-pin"]
   private let linkPinValue = "sha256/link-pin"
@@ -649,7 +649,7 @@ final class AppductConnectionManagerTests: XCTestCase {
     }
   }
 
-  // MARK: - getConstants()'s build config (docs/tasks/07-native-module-constants.md)
+  // MARK: - getConstants()'s build config
 
   // Every table row from the resolveTrustedPins matrix above must map to a build config that
   // agrees on `hasEmbeddedPins` with whether a real connect() would have used embedded pins, and

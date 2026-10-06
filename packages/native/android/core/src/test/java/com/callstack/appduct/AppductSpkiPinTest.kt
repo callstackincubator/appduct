@@ -21,8 +21,7 @@ import java.util.Base64
  * a stub in the plain-JVM android.jar and throws "not mocked", which is why these tests live apart
  * from [AppductConnectionManagerTest] (still a plain-JVM class, still the fast path) and pull in
  * Robolectric to provide a real android.jar runtime. No emulator is involved: this runs inside the
- * same `:core:testDebugUnitTest` task, in the standalone `packages/native/android` Gradle project
- * (docs/tasks/14-native-core-extraction.md).
+ * same `:core:testDebugUnitTest` task, in the standalone `packages/native/android` Gradle project.
  *
  * The SDK level is pinned rather than inherited from the consuming app's `compileSdk` so the pin
  * math is exercised at a level Robolectric ships an android-all jar for, no matter which

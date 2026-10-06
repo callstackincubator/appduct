@@ -64,10 +64,10 @@ describe("AppductModule.web stub", () => {
   });
 
   test("getAppductNativeBuildConfig() throws: no native module to read on web", () => {
-    // Regression test (task 07 self-review): `index.ts`'s `getAppductBuildConfig` imports
-    // `getAppductNativeBuildConfig` from `./AppductModule`, which Metro resolves to this
-    // `.web.ts` file on web bundles. Since `isAppductNativeModuleAvailable()` is forced `true`
-    // above, `noopIfNativeUnavailable` always takes this "available" branch on web — an omitted
+    // Regression test: `index.ts`'s `getAppductBuildConfig` imports `getAppductNativeBuildConfig`
+    // from `./AppductModule`, which Metro resolves to this `.web.ts` file on web bundles. Since
+    // `isAppductNativeModuleAvailable()` is forced `true` above, `noopIfNativeUnavailable` always
+    // takes this "available" branch on web — an omitted
     // export here would throw an unactionable "is not a function" instead of this file's
     // intentional "unsupported platform" error.
     expect(() => getAppductNativeBuildConfig()).toThrow();

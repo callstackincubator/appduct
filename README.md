@@ -1,24 +1,61 @@
-### Let agents and tests reach into your running app — without shipping a debug menu
+<a href="https://callstackincubator.github.io/appduct/"><img src=".github/assets/readme-banner.png" alt="Appduct by Callstack: let agents and tests reach into your running iOS, Android or React Native app" width="100%" /></a>
 
 [![MIT license][license-badge]][license] [![npm downloads][npm-downloads-badge]][npm-downloads] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-Appduct lets a terminal, a test runner, or an AI agent call functions inside your app while it's running — React Native, iOS, or Android. You pick what's callable — a few functions you write yourself — and nothing else is reachable.
+Appduct lets a terminal, a test runner, or an AI agent call functions inside your running iOS, Android, or React Native app. Appduct calls these functions tools. Only the tools you register are reachable.
 
 ## Why you'd want this
 
-**Your E2E tests stop tapping through setup.** Most of an end-to-end test isn't the thing you're testing. It's logging in, dismissing onboarding, seeding a cart, waiting for a spinner. With Appduct, the test calls `login(userId)` or `seedCart(items)` directly and jumps straight to the part that matters. Faster runs, less flakiness, and fewer screenshots for an agent to burn tokens on.
+- **E2E tests skip the setup.** Instead of tapping through login, onboarding and an empty cart, a test calls `log_in` or `seed_cart` and starts at the screen it's testing.
+- **Agents can drive your app.** Over MCP or the CLI, an agent can flip a feature flag, open a screen, or read some state through your tools.
+- **No hidden debug UI.** There's no secret gesture or admin panel for someone to find.
+- **Release builds leave it out.** By default Appduct is only in debug builds. You can opt in for internal builds such as TestFlight; see [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/).
 
-**Agents can drive your app.** Add one line to Claude Code's or Cursor's config and your app's functions show up as tools the agent can call. It can flip a feature flag, jump to a screen, or check some state without you wiring up a single prompt.
+## How it works
 
-**No hidden debug UI.** No secret gestures, no long-press-the-logo admin panel, nothing extra in the app for someone to go find. The only things reachable are functions you deliberately registered.
+1. You add the Appduct library to your app and register tools. Each tool has a name, a description, an input schema and a handler.
+2. You install the `appduct` CLI on your computer. To connect, the CLI gives your app a link, either opened on the device for you or scanned as a QR code. The app then connects back to your computer over an encrypted connection. The connection survives reloads, backgrounding and dropped Wi-Fi.
+3. You call tools from the terminal, a test, or an agent.
 
-**Nothing ships in your release build by default.** Appduct is included in debug builds only — a release build compiles it out entirely, not just switches it off. Want it in a TestFlight or other internal build too? You can opt in per build — see [Build variants](docs/BUILD-VARIANTS.md).
+Register a tool in your app:
 
-**Your dev loop doesn't fight you.** Reloads, backgrounding the app, flaky Wi-Fi — the session survives all of it and picks back up on its own. One background service handles as many devices as you've got plugged in.
+<details open>
+<summary>iOS (Swift)</summary>
 
-## What it looks like
+```swift
+import AppductCore
 
-Register something you want reachable:
+try Appduct.shared.register(
+  name: "seed_cart",
+  description: "Fill the cart with test items.",
+  inputSchema: ["type": "object", "properties": ["items": ["type": "number"]], "required": ["items"]]
+) { args in
+  ["added": (args["items"] as? NSNumber)?.intValue ?? 0]
+}
+```
+
+</details>
+
+<details>
+<summary>Android (Kotlin)</summary>
+
+```kotlin
+import com.callstack.appduct.Appduct
+import org.json.JSONObject
+
+Appduct.register(
+  name = "seed_cart",
+  description = "Fill the cart with test items.",
+  inputSchema = JSONObject("""{"type":"object","properties":{"items":{"type":"number"}},"required":["items"]}"""),
+) { args ->
+  JSONObject().put("added", args.optInt("items"))
+}
+```
+
+</details>
+
+<details>
+<summary>React Native</summary>
 
 ```ts
 import { useAppductTool } from "@appduct/react-native";
@@ -32,7 +69,7 @@ useAppductTool({
 });
 ```
 
-The hook registers once per mount — re-rendering costs nothing, and the handler always sees the latest state it closes over. Apps without React Native register tools from Swift or Kotlin instead — see [Getting started](#getting-started).
+</details>
 
 Call it from your terminal:
 
@@ -40,90 +77,31 @@ Call it from your terminal:
 appduct tools call seed_cart --input '{"items":3}'
 ```
 
-Or hand it to an agent — see [Use it with an agent](#use-it-with-an-agent). The CLI and the MCP server both read your app's deep-link scheme from its project files — `app.json` in an Expo app, `Info.plist` on iOS, `build.gradle` on Android — so there's nothing to configure.
+## Get started
 
-That's the whole idea. Everything else is about which builds include it and what they trust.
+1. Install the CLI:
 
-## Is this safe to ship?
+   ```bash
+   npm install -g appduct
+   ```
 
-By default, yes — nothing here ships in a release build, so there's no code on the device to attack in the first place. If you opt into carrying Appduct in a build that reaches people outside your team (see [Build variants](docs/BUILD-VARIANTS.md)), the connection is still encrypted, your app checks the identity of the machine on the other end rather than trusting whoever's on the network, and a link someone intercepts isn't a way in.
+2. Add Appduct to your app:
+   - [iOS](packages/native/ios/README.md), with Swift Package Manager or CocoaPods
+   - [Android](packages/native/android/README.md), from Maven Central
+   - [React Native](packages/react-native/README.md). You need a development build; Expo Go doesn't work.
 
-[`docs/SECURITY.md`](docs/SECURITY.md) walks through what it protects against, what it doesn't, and how to configure and rotate keys for that case.
+To try it before touching your own app, run a playground app: [iOS](playground-native/ios/README.md), [Android](playground-native/android/README.md) or [React Native](playground/README.md).
 
-## Getting started
+## Learn more
 
-Install the CLI on the machine you'll run it from:
-
-```bash
-npm install -g appduct
-```
-
-The [CLI guide](packages/appduct/README.md) covers connecting to a device, listing and calling tools, and checking a built artifact. Then add Appduct to your app.
-
-### React Native
-
-```bash
-npm install @appduct/react-native zod
-```
-
-- **[Set up your app](packages/react-native/README.md)** — registering tools, deep-link setup, and the API reference.
-- **[Try the playground](playground/README.md)** — a working app you can run end to end in a few minutes. Fastest way to see whether this fits your project.
-
-You'll need a development build or a bare React Native app — Expo Go can't do it.
-
-### iOS or Android, without React Native
-
-Call Appduct directly from Swift or Kotlin. You get the same tools, deep links, and reconnect behavior as the React Native package, with nothing from React Native in your app.
-
-- **[Set up an iOS app](packages/native/ios/README.md)** — install with Swift Package Manager or CocoaPods.
-- **[Set up an Android app](packages/native/android/README.md)** — install from Maven Central.
-- **Try the native playgrounds** — a [SwiftUI app](playground-native/ios/README.md) and a [Jetpack Compose app](playground-native/android/README.md) that register the same tools as the React Native playground.
-
-## Use it with an agent
-
-There are two ways to connect an agent. Pick whichever fits how your agent works.
-
-**Over MCP.** Add Appduct to your agent's MCP config — Claude Code, Cursor, or any other MCP client. Your app's tools aren't registered as MCP tools of their own: the agent reaches them through `appduct_list_tools`, `appduct_describe_tool` and `appduct_call_tool`, so a registry of hundreds costs the client three fixed tool definitions. Those tools and the connection tools explain themselves, so there's nothing else to install:
-
-```json
-{
-  "mcpServers": {
-    "appduct": { "command": "appduct", "args": ["mcp"] }
-  }
-}
-```
-
-**Through the CLI.** For agents that work in a shell, and for scripts or CI. Install the Appduct skill so the agent knows the commands:
-
-```bash
-npx skills add callstackincubator/appduct --skill appduct
-```
-
-Asking an agent to add Appduct to your app or write its tools? Install the skill either way — it covers setup and the rules your tool schemas have to follow.
-
-## Packages
-
-| Package | What it is |
-| --- | --- |
-| [`appduct`](packages/appduct/README.md) | The CLI, the background service, and the MCP server |
-| [`@appduct/react-native`](packages/react-native/README.md) | The app-side library and Expo config plugin |
-| [`@appduct/shared`](packages/shared/README.md) | Types shared by the CLI and the React Native library |
-| [`AppductCore`](packages/native/ios/README.md) | The iOS library, for apps without React Native (Swift Package Manager or CocoaPods) |
-| [`com.callstack.appduct:core`](packages/native/android/README.md) | The Android library, for apps without React Native, paired with `core-noop` for release builds (Maven Central) |
-
-## Support
-
-- **React Native:** iOS 15.1+ and Android, both on the New Architecture. Web gets a no-op stub so shared code doesn't break.
-- **iOS without React Native:** iOS 15.1+. Installing with Swift Package Manager needs Xcode 16.3 or newer.
-- **Android without React Native:** Android 7.0 (API 24) or newer.
-- **CLI:** Node 20 or newer. Windows should work but hasn't been verified.
-
-## Docs
-
-- [`docs/SECURITY.md`](docs/SECURITY.md) — what it protects against, configuring trust, and key rotation
-- [`docs/BUILD-VARIANTS.md`](docs/BUILD-VARIANTS.md) — which builds carry Appduct, and how to compile it out
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the pieces fit together
-- [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the wire protocol, if you're implementing a client
+- [Documentation site](https://callstackincubator.github.io/appduct/): guides and reference for every platform
+- [CLI guide](packages/appduct/README.md): connect to a device, list and call tools
+- [Use Appduct with an agent](https://callstackincubator.github.io/appduct/guides/agents/): MCP config and the agent skill
+- [Call tools from tests](packages/appduct/README.md#test-runners-appductclient): the `appduct/client` API
+- [Registering tools](https://callstackincubator.github.io/appduct/guides/writing-tools/): schemas, long-running tools and events
+- [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/): which builds include Appduct
+- [Security](https://callstackincubator.github.io/appduct/guides/security/): what it protects against, trust and key rotation
+- [Packages and platform support](https://callstackincubator.github.io/appduct/start/introduction/#packages)
 
 ## Made with ❤️ at Callstack
 

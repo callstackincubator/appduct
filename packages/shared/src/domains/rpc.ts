@@ -227,7 +227,7 @@ export type ToolsCallParams = SessionSelectorParams & {
    *
    * The daemon cannot itself re-verify the client-side prompt, so this is not a defense against
    * another local process (one with access to the same `daemon.sock`) sending this param directly —
-   * see `docs/SECURITY.md`'s threat model, which already treats socket access as full daemon
+   * see https://callstackincubator.github.io/appduct/guides/security/ (the threat model), which already treats socket access as full daemon
    * control. `"prompt"` fails closed by design when the client has no elicitation support.
    */
   consent?: "elicitation";

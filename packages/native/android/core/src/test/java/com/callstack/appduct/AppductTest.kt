@@ -17,9 +17,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Exercises the public [Appduct] facade (docs/tasks/19-android-entry-points.md) against a
- * scripted [FakeAppductTransport], substituted via [Appduct.attachForTest] instead of the
- * real [AppductInitProvider] path -- no real `Context`, no OkHttp. Complements
+ * Exercises the public [Appduct] facade against a scripted [FakeAppductTransport], substituted via
+ * [Appduct.attachForTest] instead of the real [AppductInitProvider] path -- no real `Context`, no
+ * OkHttp. Complements
  * [AppductClientTest], which covers the same session/reconnect behaviors one layer down; this
  * suite only checks that the facade converts to/from [AppductClient]'s types correctly.
  * Robolectric-backed (like [AppductSpkiPinTest]) because [Appduct.handle] takes real

@@ -10,9 +10,8 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
- * Public entry point for a plain Android app that wants Appduct without React Native
- * (docs/tasks/19-android-entry-points.md, issue #48 phase 3). A thin facade over the internal
- * [AppductClient] this module already ships (docs/tasks/16-android-session-logic.md) -- every
+ * Public entry point for a plain Android app that wants Appduct without React Native (issue #48
+ * phase 3). A thin facade over the internal [AppductClient] this module already ships -- every
  * method here just converts to/from that class's own types, so session logic (reconnect, grace,
  * lease restore, registry sync, per-call timeout/cancel/progress) is never duplicated.
  *
@@ -25,10 +24,9 @@ import org.json.JSONObject
  * application [Context] and constructed the real client -- see that class's own doc comment for
  * why that ordering is guaranteed by the platform.
  *
- * `core-noop` mirrors every declaration below as an inert no-op with no [AppductInitProvider]
- * and no `kotlinx.coroutines` import (docs/tasks/19-android-entry-points.md) -- a release build
- * that resolves `core-noop` instead of `core` never captures a `Context` and never touches the
- * network, matching issue #48 decision 2.
+ * `core-noop` mirrors every declaration below as an inert no-op with no [AppductInitProvider] and
+ * no `kotlinx.coroutines` import -- a release build that resolves `core-noop` instead of `core`
+ * never captures a `Context` and never touches the network, matching issue #48 decision 2.
  */
 object Appduct {
     @Volatile
@@ -177,7 +175,7 @@ object Appduct {
         get() = client().sessionId
 
     /** This build's effective trust/pin configuration, read from the same manifest meta-data a
-     * real `connect()` uses (`docs/SECURITY.md`'s trust modes). */
+     * real `connect()` uses (see https://callstackincubator.github.io/appduct/guides/security/#choose-what-a-build-trusts). */
     val buildConfig: BuildConfig
         get() = client().buildConfig.let { BuildConfig(it.trust, it.hasEmbeddedPins, it.allowPrivateLanOnly) }
 
@@ -273,10 +271,9 @@ data class ToolAnnotations(
 }
 
 /** Passed to a [Appduct.register] handler. Cancellation is coroutine-native -- see
- * `AppductToolCallContext`'s doc comment (docs/tasks/16-android-session-logic.md): a handler
- * that calls further suspend functions observes a `tool_cancel` frame or session suspension as an
- * ordinary `CancellationException`; one that does no further suspending work just runs to
- * completion. */
+ * `AppductToolCallContext`'s doc comment: a handler that calls further suspend functions observes
+ * a `tool_cancel` frame or session suspension as an ordinary `CancellationException`; one that does
+ * no further suspending work just runs to completion. */
 class ToolCallContext internal constructor(private val inner: AppductToolCallContext) {
     val callId: String get() = inner.callId
     val toolName: String get() = inner.toolName
