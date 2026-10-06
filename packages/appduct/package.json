@@ -64,7 +64,9 @@
     "playwright-core": "1.56.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vite": "^8.1.4",
+    "webpack": "^5.111.1"
   },
   "files": [
     "bin.js",

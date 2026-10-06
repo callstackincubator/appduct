@@ -49,6 +49,7 @@ beforeAll(async () => {
     platform: "browser",
     target: "es2022",
     define: { "process.env.NODE_ENV": '"development"' },
+    conditions: ["development"],
   });
   appBundle = result.outputFiles[0]!.text;
 

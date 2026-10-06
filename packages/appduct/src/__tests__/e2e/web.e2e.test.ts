@@ -28,7 +28,7 @@ import {
 afterEach(cleanupAfterEach);
 
 /** The built `@appduct/web` entry, resolved by package name the way an app would. */
-const WEB_ENTRY = fileURLToPath(import.meta.resolve("@appduct/web"));
+const WEB_ENTRY = fileURLToPath(import.meta.resolve("@appduct/web/enabled"));
 
 /** The page's own code, as an app author writes it: import the entry, register a tool and an event. */
 const APP_SCRIPT = `

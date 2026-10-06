@@ -3,7 +3,8 @@
  * is exported for web with Expo's own Metro pipeline, so `@appduct/react-native` is resolved the way
  * a React Native app's web build resolves it, then loaded in a real Chromium against a real daemon.
  * The app has no web-specific Appduct code; the same five demo tools it registers on a device must
- * be callable here. Nothing is faked.
+ * be callable here. Nothing is faked. The export is a development bundle (`--dev`): a production web
+ * bundle keeps `@appduct/web` inert.
  */
 import { spawn } from "node:child_process";
 import { createReadStream, existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
@@ -29,7 +30,7 @@ let browser: Browser;
 
 const exportPlaygroundForWeb = (outputDir: string): Promise<void> =>
   new Promise((resolve, reject) => {
-    const child = spawn("pnpm", ["exec", "expo", "export", "--platform", "web", "--output-dir", outputDir], {
+    const child = spawn("pnpm", ["exec", "expo", "export", "--dev", "--platform", "web", "--output-dir", outputDir], {
       cwd: playgroundRoot,
       env: { ...process.env, CI: "1", EXPO_NO_TELEMETRY: "1" },
       stdio: ["ignore", "pipe", "pipe"],

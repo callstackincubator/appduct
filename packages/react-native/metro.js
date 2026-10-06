@@ -69,6 +69,30 @@ function deriveRedirectSpecifiers(exportsField) {
 }
 
 /**
+ * `@appduct/web` hands out its real entry only under the `development` export condition, and
+ * Metro never sets that condition. A development web bundle gets it here, so the page connects;
+ * a production web bundle does not, and keeps the inert entry.
+ */
+function withWebDevelopment(context, moduleName, platform) {
+  const isWeb =
+    moduleName === "#appduct-web" ||
+    moduleName === "@appduct/web" ||
+    moduleName.startsWith("@appduct/web/");
+  if (
+    platform !== "web" ||
+    !context.dev ||
+    !isWeb ||
+    !Array.isArray(context.unstable_conditionNames)
+  ) {
+    return context;
+  }
+  return {
+    ...context,
+    unstable_conditionNames: [...context.unstable_conditionNames, "development"],
+  };
+}
+
+/**
  * `withAppduct(config, options?)` — wraps a Metro `config` so that, when Appduct is excluded,
  * every specifier derived from this package's `exports` (see `deriveRedirectSpecifiers`) resolves
  * to `@appduct/react-native/noop` instead, stripping the deep-link listener, tool registry, and
@@ -96,12 +120,8 @@ function withAppduct(config, options) {
     options && options.include !== undefined
       ? options.include
       : isAppductAutolinkEnabled();
-  if (include) {
-    return config;
-  }
-
   const redirectSpecifiers = new Set(
-    deriveRedirectSpecifiers(require("./package.json").exports),
+    include ? [] : deriveRedirectSpecifiers(require("./package.json").exports),
   );
   const existingResolveRequest =
     config.resolver && config.resolver.resolveRequest;
@@ -111,7 +131,7 @@ function withAppduct(config, options) {
     const target = redirectSpecifiers.has(moduleName)
       ? NOOP_SPECIFIER
       : moduleName;
-    return resolveNext(context, target, platform);
+    return resolveNext(withWebDevelopment(context, target, platform), target, platform);
   };
 
   return {
