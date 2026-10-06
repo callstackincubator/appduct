@@ -39,11 +39,11 @@ APPDUCT_ENABLED=0 npx expo prebuild && APPDUCT_ENABLED=0 npx expo run:ios
 
 ### A custom build type or configuration name
 
-Both platforms key inclusion off the name, and each fails differently when your project uses names other than `Debug`/`Release`.
+Both platforms key inclusion off the name, and each handles an unfamiliar name differently.
 
-On iOS, the default links Appduct only into a configuration named `Debug`, so a `Staging` configuration is left unlinked. `APPDUCT_ENABLED=1` lifts the restriction instead of adding a name, so it covers `Staging`, `Internal`, whatever you call it. One exception: if your app already lists its own `configurations` for this package in its `react-native.config.js`, that list replaces ours entirely, variable or not.
+On iOS, the default links Appduct only into a configuration named `Debug`, so a `Staging` configuration is left unlinked. `APPDUCT_ENABLED=1` lifts the restriction instead of adding a name, so it covers `Staging`, `Internal`, whatever you call it. One exception: if your app lists its own `configurations` for this package in its `react-native.config.js`, that list replaces ours entirely, variable or not. Delete that entry, or add your configuration names to it.
 
-On Android you need one line first. Appduct publishes only `debug` and `release` variants, so an app with a `staging` **build type** fails at dependency resolution — `No matching variant of project :appduct_react-native was found` — with or without the variable:
+On Android you need one line first. Appduct publishes only `debug` and `release` variants, so when Appduct is in the build — the variable unset, `1` or `true` — an app with a `staging` **build type** fails at dependency resolution with `No matching variant of project :appduct_react-native was found`:
 
 ```groovy title="android/app/build.gradle"
 buildTypes {
@@ -54,7 +54,7 @@ buildTypes {
 }
 ```
 
-The fallback picks which of Appduct's two variants `staging` compiles against. A `release` fallback follows `APPDUCT_ENABLED`: Appduct ships only when it's `1` or `true`. A `debug` fallback always carries the real implementation, because that variant is a debug build. A `staging` **product flavor** is something else and needs nothing — `stagingDebug` and `stagingRelease` behave like `debug` and `release`.
+At `0` or `false` the package is excluded from the build altogether, so nothing fails and no line is needed. The fallback picks which of Appduct's two variants `staging` compiles against. A `release` fallback follows `APPDUCT_ENABLED`: Appduct ships only when it's `1` or `true`. A `debug` fallback always carries the real implementation, because that variant is a debug build. A `staging` **product flavor** is something else and needs nothing — `stagingDebug` and `stagingRelease` behave like `debug` and `release`.
 
 **A misspelled value falls back to the default.** On Expo, prebuild fails with an error. In a bare React Native project, nothing reports it. Check the built app with [`appduct doctor`](#verify-the-built-app).
 

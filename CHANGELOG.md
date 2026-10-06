@@ -12,7 +12,7 @@ section into a versioned heading.
 ## Unreleased
 
 - **Fix: `APPDUCT_ENABLED=1` now carries Appduct into an iOS configuration whatever you call it**, rather than only into ones named `Debug` or `Release`; see [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/).
-- **Docs: an Android app with a custom build type needs one `matchingFallbacks` line before Appduct applies to it.** Without it, the build fails at dependency resolution instead of quietly building without Appduct.
+- **Docs: an Android app with a custom build type needs one `matchingFallbacks` line before Appduct applies to it.** Without it, any build that includes Appduct fails at dependency resolution rather than building without it.
 - **Docs: the README is a short overview of Appduct on iOS, Android and React Native, and the guides for registering tools, security and build variants live only on the [docs site](https://callstackincubator.github.io/appduct/).** The `docs/TOOLS.md`, `docs/SECURITY.md` and `docs/BUILD-VARIANTS.md` files are gone.
 - **Docs: the shipped `appduct` skill covers native iOS and Android setup, and no longer tells you to set `APPDUCT_ENABLED=0` for production.** Release builds leave Appduct out by default.
 
