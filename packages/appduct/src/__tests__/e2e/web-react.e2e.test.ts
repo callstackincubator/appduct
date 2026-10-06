@@ -116,7 +116,7 @@ describe("e2e: React web app through @appduct/web/react", () => {
       expect(registryFrames).toEqual(["tool_registry_snapshot"]);
 
       for (let clicks = 1; clicks <= 3; clicks += 1) await page.click("#bump");
-      await page.waitForFunction(() => document.getElementById("bump")?.textContent === "clicks: 3");
+      await page.waitForFunction('document.getElementById("bump")?.textContent === "clicks: 3"');
 
       expect(await call()).toContain('"count":3');
       expect(registryFrames).toEqual(["tool_registry_snapshot"]);

@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **New: a React Native app's web build registers its tools with the same `@appduct/react-native` calls, including `useAppductTool`, and they are callable once the page is opened with `appduct sessions link --open web <url>`.** Web used to throw; see [Security](https://callstackincubator.github.io/appduct/guides/security/#web-pages).
 - **New: the background service listens for web pages on `127.0.0.1`, and `appduct sessions link --open web <url>` returns the page URL and a connect script.** `appduct_connect` takes `target: "web"`, and `webOrigins` in `config.json` allows origins beyond localhost; see [Security](https://callstackincubator.github.io/appduct/guides/security/#web-pages).
 - **Docs: the README is a short overview of Appduct on iOS, Android and React Native, and the guides for registering tools, security and build variants live only on the [docs site](https://callstackincubator.github.io/appduct/).** The `docs/TOOLS.md`, `docs/SECURITY.md` and `docs/BUILD-VARIANTS.md` files are gone.
 - **Docs: the shipped `appduct` skill covers native iOS and Android setup, and no longer tells you to set `APPDUCT_ENABLED=0` for production.** Release builds leave Appduct out by default.
