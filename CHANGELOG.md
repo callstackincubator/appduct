@@ -12,7 +12,7 @@ section into a versioned heading.
 ## Unreleased
 
 - **Fix: events posted from an iOS app now report their time in milliseconds, like Android's.**
-  A script reading that `ts` from `appduct events tail` or `appduct events since` no longer needs to multiply it by 1,000.
+  A script reading `data.ts` from `appduct events tail` or `appduct events since` no longer needs to multiply it by 1,000.
 - **Docs: the README is a short overview of Appduct on iOS, Android and React Native, and the guides for registering tools, security and build variants live only on the [docs site](https://callstackincubator.github.io/appduct/).** The `docs/TOOLS.md`, `docs/SECURITY.md` and `docs/BUILD-VARIANTS.md` files are gone.
 - **Docs: the shipped `appduct` skill covers native iOS and Android setup, and no longer tells you to set `APPDUCT_ENABLED=0` for production.** Release builds leave Appduct out by default.
 
