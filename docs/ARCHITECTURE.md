@@ -100,6 +100,7 @@ The daemon refuses to load a key file that is group/world-readable.
   "policy": { "default": "allow", "destructive": "allow" },
   "advertisedIp": null,
   "scheme": null,
+  "webOrigins": [],
   "restartDaemonOnVersionMismatch": false
 }
 ```
@@ -265,9 +266,9 @@ Methods:
 
 | Method | Params | Result |
 | --- | --- | --- |
-| `daemon.status` | — | `{ version, pid, startedAt, wssPort, pinnedKeys: [spkiPin], sessions: SessionSummary[], pendingLinks }` — `pendingLinks` counts minted-but-unclaimed links (not sessions, §6, but live state a restart destroys; §4's version drift check reads it). Absent from daemons that predate this field. |
+| `daemon.status` | — | `{ version, pid, startedAt, wssPort, webPort, pinnedKeys: [spkiPin], sessions: SessionSummary[], pendingLinks }` — `pendingLinks` counts minted-but-unclaimed links (not sessions, §6, but live state a restart destroys; §4's version drift check reads it). Absent from daemons that predate this field. |
 | `daemon.shutdown` | — | `{ ok: true }` (then exits) |
-| `link.create` | `{ ttlSeconds?, addressOverride? }` | `{ sessionId, deepLinkPayload, endpoint: { family, address, port }, expiresAt }` — `deepLinkPayload` is the base64url bootstrap blob; callers compose `<scheme>:///?appduct=<payload>`. `addressOverride` forces the advertised address (the emulator/simulator fast path uses it to force `127.0.0.1`). |
+| `link.create` | `{ ttlSeconds?, addressOverride?, transport? }` | `{ sessionId, deepLinkPayload, endpoint: { family, address, port }, expiresAt }` — `deepLinkPayload` is the base64url bootstrap blob; callers compose `<scheme>:///?appduct=<payload>`. `addressOverride` forces the advertised address (the emulator/simulator fast path uses it to force `127.0.0.1`). `transport` is `"native"` (default) or `"web"`: a web link encodes `127.0.0.1` and `daemon.status`'s `webPort`, ignores `addressOverride`, and can only be claimed on the plain-HTTP web listener (which refuses an upgrade with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`); a link presented on the other transport's listener closes `1008 wrong_transport`. |
 | `sessions.list` | — | `SessionSummary[]` |
 | `sessions.describe` | `{ selector? }` | full session detail incl. device metadata, state timestamps, tool count |
 | `sessions.revoke` | `{ selector? }` | `{ ok: true }` — closes socket (code 1000), frees alias |

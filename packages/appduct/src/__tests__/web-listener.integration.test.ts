@@ -13,7 +13,6 @@ import WebSocket from "ws";
 import { decodeBootstrap } from "@appduct/shared";
 
 import { link } from "../client/index.js";
-import { handleLinkCommand } from "../commands/link.js";
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import { handleConnectTool } from "../mcp/connect-tool.js";
 import { callDaemon } from "../rpc/client.js";
@@ -344,13 +343,20 @@ describe("web target surfaces", () => {
   test("appduct sessions link --open web replaces a fragment already on the URL", async () => {
     const { stateDir } = await startTestDaemon();
 
-    const result = await handleLinkCommand({ open: "web", url: `${PAGE_URL}#old` }, { stateDir });
+    const result = await runCliWithCapture([
+      "sessions",
+      "link",
+      "--open",
+      "web",
+      `${PAGE_URL}#old`,
+      "--json",
+      "--state-dir",
+      stateDir,
+    ]);
 
-    expect(result.ok).toBe(true);
-    if (!result.ok || !("url" in result.data)) {
-      throw new Error("expected a web link");
-    }
-    expect(result.data.url).toMatch(/^http:\/\/localhost:5173\/dashboard#appduct=[\w-]+$/u);
+    expect(result.exitCode).toBe(0);
+    const { data } = JSON.parse(result.stdout) as { data: { url: string } };
+    expect(data.url).toMatch(/^http:\/\/localhost:5173\/dashboard#appduct=[\w-]+$/u);
   });
 
   test("appduct_connect with target web returns the URL and the script, with no scheme configured", async () => {

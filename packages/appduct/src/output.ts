@@ -26,6 +26,7 @@ import type {
   InvokeCommandData,
   KeygenCommandData,
   LinkCommandData,
+  WebLinkCommandData,
   LsCommandData,
   RevokeCommandData,
   ToolGroupsListing,
@@ -493,10 +494,26 @@ const renderInvokeData = (colors: ColorPalette, data: InvokeCommandData, flags: 
 
 const renderLinkData = (
   colors: ColorPalette,
-  data: LinkCommandData,
+  data: LinkCommandData | WebLinkCommandData,
   flags: GlobalFlags,
   qr?: boolean,
 ): string[] => {
+  if ("script" in data) {
+    return [
+      colors.green("Link Created"),
+      ...renderFields(
+        "Link",
+        [
+          ["Session", data.sessionId],
+          ["URL", data.url],
+          ["Script", data.script],
+          ["Expires", new Date(data.expiresAt * 1000).toISOString()],
+        ],
+        flags,
+      ),
+    ];
+  }
+
   const lines = [
     colors.green("Link Created"),
     ...renderFields(
@@ -714,7 +731,7 @@ const renderSuccessData = (colors: ColorPalette, command: string, data: unknown,
     case "keygen":
       return renderKeygenData(colors, data as KeygenCommandData, flags);
     case "sessions link":
-      return renderLinkData(colors, data as LinkCommandData, flags, options.qr);
+      return renderLinkData(colors, data as LinkCommandData | WebLinkCommandData, flags, options.qr);
     case "sessions ls":
       return renderLsData(colors, data as LsCommandData, options.now ?? new Date());
     case "tools ls":

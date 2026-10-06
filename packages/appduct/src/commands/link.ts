@@ -4,9 +4,9 @@
  * command and `appduct/client`'s `link()` use so the deep-link shape can't drift between them.
  */
 
-import type { CliResult, LinkCommandData } from "../cli/result-types.js";
+import type { CliResult, LinkCommandData, WebLinkCommandData } from "../cli/result-types.js";
 import { isOpenTarget, OPEN_TARGETS, type ExecFn, type OpenTarget } from "../cli/open-target.js";
-import { mintLink } from "../link.js";
+import { mintLink, mintWebLink } from "../link.js";
 import { usageError } from "../errors.js";
 import type { SpawnFn } from "../rpc/client.js";
 
@@ -17,6 +17,8 @@ export type LinkCommandOptions = {
   device?: string;
   appId?: string;
   relaunch?: boolean;
+  /** The page to open, with `--open web`. */
+  url?: string;
 };
 
 export type LinkCommandContext = {
@@ -77,6 +79,30 @@ export const handleLinkCommand = async (
     exec: context.exec,
     env: context.env,
     schemeEnv: context.schemeEnv,
+  });
+
+  return { ok: true, data: result };
+};
+
+/** `appduct sessions link --open web <url>`: no device and no scheme, just the page URL carrying
+ * the link and the script that connects an already-open page. */
+export const handleWebLinkCommand = async (
+  options: LinkCommandOptions,
+  context: LinkCommandContext,
+): Promise<CliResult<WebLinkCommandData>> => {
+  if (options.url === undefined) {
+    throw usageError('"--open web" needs the page URL: appduct sessions link --open web <url>.');
+  }
+
+  if (options.device !== undefined || options.appId !== undefined || options.relaunch !== undefined) {
+    throw usageError('"--device", "--app-id" and "--relaunch" do not apply with "--open web".');
+  }
+
+  const result = await mintWebLink({
+    stateDir: context.stateDir,
+    spawn: context.spawn,
+    ttlSeconds: options.ttlSeconds,
+    url: options.url,
   });
 
   return { ok: true, data: result };
