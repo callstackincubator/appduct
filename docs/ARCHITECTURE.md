@@ -73,6 +73,9 @@ Browsers reach the daemon on a second listener, `ws://127.0.0.1:<webPort>`, not 
   `./enabled` is the real client, importable explicitly. It reads `#appduct=` on load, removes it
   from the address bar and claims, resumes from `sessionStorage` after a reload, and publishes
   `window.__APPDUCT__.connect` for the `script` that `appduct_connect` returns.
+  `@appduct/web/react` adds `useAppductTool`, built from the same `createUseAppductTool` as React
+  Native's; React Native's `browser` export condition resolves to `@appduct/web` so a web build
+  needs no web-specific code. Without a `window` (server rendering) every call does nothing.
 - The CLI and MCP server never touch sockets, keys, or state files directly; everything
   goes through the daemon RPC.
 

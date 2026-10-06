@@ -68,3 +68,7 @@ One note per PR that hit friction, four lines:
   What went wrong: making a package public updated its docs entry points but left docs/ARCHITECTURE.md calling it "not yet published" and didn't describe what a plain-esbuild dev user sees with the inert entry; caught in review, needing a second round.
   Would have prevented it: when changing a package's exports or publish state, grep the repo for its name in docs/ and skills/ and update every description, including the failure symptoms of each entry.
   Cost: review round
+- 2026-10-06 #172 skill: implement-issue
+  What went wrong: a new entry (React Native's web entry) re-exported a subset of the API its shared types promise, so a documented setup type-checked but crashed on web; and after merging #173, a new requirement (`withAppduct` to connect RN web in development) went undocumented. Both needed extra review rounds.
+  Would have prevented it: when adding a platform entry behind shared types, add it to the export-parity tests in the same commit; when a merge changes what setup is required, grep docs/, website/ and skills/ for the setup steps and update them in the merge.
+  Cost: review round

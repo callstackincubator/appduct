@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
   private?: boolean;
   main: string;
+  imports: Record<string, Record<string, string>>;
   exports: Record<string, Record<string, string>>;
 };
 
@@ -30,5 +31,10 @@ describe("the @appduct/web package manifest", () => {
 
   it("gives both entries the same types", () => {
     expect(manifest.exports["."]!.types).toBe("./dist/index.d.ts");
+  });
+
+  it("gives @appduct/web/react the same entry per condition as the root, so the hook and the plain API share one session", () => {
+    const root = manifest.exports["."]!;
+    expect(manifest.imports["#appduct-web"]).toEqual({ development: root.development, default: root.default });
   });
 });

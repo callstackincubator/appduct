@@ -29,6 +29,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
   test("both entries structurally satisfy CordierePublicApi", async () => {
     const realModule = await import("../index");
     const noopModule = await import("../noop");
+    const webModule = await import("../index.web");
 
     // The meaningful check here is `tsc` (`pnpm run build`) accepting these two assignments —
     // Vitest strips types at runtime, so this is a signpost for the reader, not the enforcement,
@@ -36,6 +37,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
     // `connect-options-parity.test.ts`'s pattern.
     const realSatisfiesPublicApi: CordierePublicApi = realModule;
     const noopSatisfiesPublicApi: CordierePublicApi = noopModule;
+    const webSatisfiesPublicApi: CordierePublicApi = webModule;
 
     const names: (keyof CordierePublicApi)[] = [
       "registerTool",
@@ -54,6 +56,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
     for (const name of names) {
       expect(typeof realSatisfiesPublicApi[name]).toBe("function");
       expect(typeof noopSatisfiesPublicApi[name]).toBe("function");
+      expect(typeof webSatisfiesPublicApi[name]).toBe("function");
     }
   });
 

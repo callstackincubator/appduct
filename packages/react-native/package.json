@@ -8,12 +8,14 @@
   "exports": {
     ".": {
       "types": "./build/index.d.ts",
+      "browser": "./build/index.web.js",
       "react-native": "./build/index.js",
       "import": "./build/index.js",
       "default": "./build/index.js"
     },
     "./auto": {
       "types": "./build/auto.d.ts",
+      "browser": "./build/index.web.js",
       "react-native": "./build/auto.js",
       "import": "./build/auto.js",
       "default": "./build/auto.js"
@@ -69,7 +71,8 @@
     }
   },
   "dependencies": {
-    "@appduct/shared": "workspace:*"
+    "@appduct/shared": "workspace:*",
+    "@appduct/web": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

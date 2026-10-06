@@ -1,5 +1,5 @@
 import { decodeBootstrap } from "@appduct/shared";
-import { createAppduct, logger, type AppductClient } from "@appduct/shared/sdk";
+import { createAppduct, logger, type AppductClient, type AppductCore } from "@appduct/shared/sdk";
 
 import { createWebCore, type WebCorePorts } from "../core/index.js";
 import type { PageEnv } from "./memory-page.js";
@@ -7,9 +7,18 @@ import type { PageEnv } from "./memory-page.js";
 export { createMemoryPage, type MemoryPage, type PageEnv } from "./memory-page.js";
 
 /** The plain-JS surface of `@appduct/web`. */
-export type WebAppduct = Pick<AppductClient, "registerTool" | "registerEvent" | "postEvent" | "disconnect"> & {
+export type WebAppduct = Pick<
+  AppductClient,
+  "registerTool" | "registerEvent" | "postEvent" | "disconnect" | "getRegisteredTools" | "addAppductListener"
+> & {
+  /** `idle | connecting | active | reconnecting | closed`. */
+  getAppductState: AppductClient["getClientState"];
   /** Claims a session with the link from `appduct_connect`: the value after `#appduct=`. */
   connect(link: string): Promise<void>;
+  /** The SDK client behind the functions above, for a binding that exposes the full client API. */
+  appductClient: AppductClient;
+  /** The web session core the client runs on. */
+  appductCore: AppductCore;
 };
 
 /**
@@ -18,7 +27,8 @@ export type WebAppduct = Pick<AppductClient, "registerTool" | "registerEvent" | 
  * resumed. Also publishes `window.__APPDUCT__.connect` for a page that is already loaded.
  */
 export const createWebAppduct = ({ ports, page }: { ports: WebCorePorts; page: PageEnv }): WebAppduct => {
-  const { client } = createAppduct(createWebCore(ports));
+  const core = createWebCore(ports);
+  const { client } = createAppduct(core);
 
   const connect = async (link: string): Promise<void> => {
     const payload = typeof link === "string" ? decodeBootstrap(link) : null;
@@ -47,6 +57,11 @@ export const createWebAppduct = ({ ports, page }: { ports: WebCorePorts; page: P
     registerEvent: client.registerEvent,
     postEvent: client.postEvent,
     disconnect: client.disconnect,
+    getRegisteredTools: client.getRegisteredTools,
+    addAppductListener: client.addAppductListener,
+    getAppductState: client.getClientState,
     connect,
+    appductClient: client,
+    appductCore: core,
   };
 };

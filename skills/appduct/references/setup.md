@@ -116,8 +116,10 @@ Appduct out by default on both platforms.
    expires after 5 minutes. Reloading the page resumes the session; a new tab does not.
 4. Production builds need nothing: the root entry is inert unless the bundler sets the
    `development` export condition. To include Appduct in another build, import
-   `@appduct/web/enabled`. In a bundler with no `development` condition (plain esbuild),
-   `connect()` warns once and does nothing. Running the `script` then throws a `TypeError`
+   `@appduct/web/enabled`. A React Native app's web build in `expo start --web` needs the Metro
+   config wrapped in `withAppduct` (`@appduct/react-native/metro`) to connect in development,
+   because Metro sets no `development` condition; without it the page stays inert. In a bundler
+   with no `development` condition (plain esbuild), `connect()` warns once and does nothing. Running the `script` then throws a `TypeError`
    because `window.__APPDUCT__` is undefined, and opening the `url` silently connects nothing.
    Fix it with `--conditions=development` (esbuild), or import `@appduct/web/enabled`.
 5. If the connection is refused: the page's origin must be `localhost`, `127.0.0.1` or `[::1]`,

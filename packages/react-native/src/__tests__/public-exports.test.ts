@@ -16,4 +16,15 @@ describe("@appduct/react-native public exports", () => {
     const names = Object.keys(await import(entry)).sort();
     expect(names).toMatchSnapshot();
   });
+
+  test("../index.web exports the same names as ../index", async () => {
+    vi.resetModules();
+    vi.doMock("react-native", () => ({
+      AppState: { currentState: "active", addEventListener: () => ({ remove() {} }) },
+      Linking: { getInitialURL: () => Promise.resolve(null), addEventListener: () => ({ remove() {} }) },
+    }));
+    const web = Object.keys(await import("../index.web")).sort();
+    const native = Object.keys(await import("../index")).sort();
+    expect(web).toEqual(native);
+  });
 });

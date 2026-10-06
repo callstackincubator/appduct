@@ -22,11 +22,19 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "~5.9.2",
-    "esbuild": "^0.25.12"
+    "esbuild": "^0.25.12",
+    "@types/react": "~19.1.1",
+    "react": "19.1.0"
   },
   "main": "./dist/inert.js",
   "module": "./dist/inert.js",
   "types": "./dist/index.d.ts",
+  "imports": {
+    "#appduct-web": {
+      "development": "./dist/enabled.js",
+      "default": "./dist/inert.js"
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -37,7 +45,27 @@
       "types": "./dist/enabled.d.ts",
       "default": "./dist/enabled.js"
     },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react.js",
+      "default": "./dist/react.js"
+    },
     "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "react": [
+        "dist/react/index.d.ts"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "react": "*"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "homepage": "https://github.com/callstackincubator/appduct/tree/main/packages/web#readme",
   "files": [
