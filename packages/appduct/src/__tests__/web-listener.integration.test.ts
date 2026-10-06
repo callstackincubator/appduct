@@ -160,6 +160,15 @@ describe("web links", () => {
     expect(await webPortOf(daemon)).toBeGreaterThan(0);
   });
 
+  test("appduct daemon status --json reports the web port", async () => {
+    const { daemon, stateDir } = await startTestDaemon();
+
+    const result = await runCliWithCapture(["daemon", "status", "--json", "--state-dir", stateDir]);
+
+    const { data } = JSON.parse(result.stdout) as { data: { daemon: { web_port: number } } };
+    expect(data.daemon.web_port).toBe(await webPortOf(daemon));
+  });
+
   test("a native link still encodes the TLS port", async () => {
     const { daemon } = await startTestDaemon();
 

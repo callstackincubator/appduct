@@ -248,6 +248,7 @@ export type DaemonStatusCommandData = {
     pid: number;
     started_at: string;
     wss_port: number;
+    web_port: number;
     pinned_keys: string[];
     session_count: number;
   };

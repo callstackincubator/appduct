@@ -690,6 +690,7 @@ describe("daemon status rendering", () => {
             pid: 4242,
             started_at: FIXED_NOW.toISOString(),
             wss_port: 8443,
+            web_port: 8444,
             pinned_keys: ["sha256/abc"],
             session_count: 1,
           },

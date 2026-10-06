@@ -668,6 +668,7 @@ const renderDaemonStatusData = (
         ["PID", data.daemon.pid],
         ["Started at", data.daemon.started_at],
         ["WSS port", data.daemon.wss_port],
+        ["Web port", data.daemon.web_port],
         ["Pinned keys", data.daemon.pinned_keys.length],
         ["Sessions", data.daemon.session_count],
       ],
