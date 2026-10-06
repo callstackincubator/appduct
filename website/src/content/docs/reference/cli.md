@@ -16,7 +16,7 @@ exactly one device is connected.
 
 ### `appduct init`
 
-Sets up the current app directory: writes `.appduct/config.json` (mode `0600`) and prints an MCP config entry for this app. Safe to re-run. Never creates keys.
+Sets up the current app directory: writes `.appduct/config.json` (mode `0600`) and prints an MCP config entry for this app. Its first next step matches the project it found: the `@appduct/react-native/auto` import for a React Native or Expo app, or the wiring your iOS or Android app needs. Safe to re-run. Never creates keys.
 
 | Flag | Description |
 | --- | --- |

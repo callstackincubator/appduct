@@ -11,6 +11,9 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: `appduct init`'s next steps now match the project it found.** A React Native app still gets
+  the `@appduct/react-native/auto` import; a plain iOS or Android app gets the wiring that app needs.
+
 ## 0.14.0 (2026-10-02)
 
 - **New: `appduct_list_events` MCP tool lists the events an app declares, with descriptions.** `name` takes a glob like `"cart.*"`, and an exact name also returns the payload schema.
