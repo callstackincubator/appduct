@@ -49,7 +49,7 @@ For more detail, see [How it works](/appduct/reference/architecture/).
 
 | Where | Requirement |
 | --- | --- |
-| React Native app | iOS 15.1+ and Android, New Architecture. A development build or bare React Native app; Expo Go isn't supported. The web build of the same app registers the same tools; open the page with `appduct sessions link --open web <url>`. |
+| React Native app | iOS 15.1+ and Android, New Architecture. A development build or bare React Native app; Expo Go isn't supported. The web build of the same app registers the same tools once `metro.config.js` wraps your config in `withAppduct`; open the page with `appduct sessions link --open web <url>`. |
 | iOS app without React Native | iOS 15.1+. Installing with Swift Package Manager needs Xcode 16.3 or newer. |
 | Android app without React Native | Android 7.0 (API 24) or newer. |
 | CLI | Node 20 or newer, on macOS or Linux. Windows hasn't been verified. |

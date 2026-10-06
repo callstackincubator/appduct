@@ -54,22 +54,22 @@ describe("the inert @appduct/web entry", () => {
 
   it("warns when connect is called on appductClient, which is what React Native web calls", async () => {
     const { appduct, warnings } = setup();
-    await appduct.appductClient.connect("any-link");
+    await appduct.appductClient.connect({} as never);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("@appduct/web/enabled");
   });
 
   it("warns when connect is called on appductCore", async () => {
     const { appduct, warnings } = setup();
-    await appduct.appductCore.connect("any-link");
+    await appduct.appductCore.connect("{}", false);
     expect(warnings).toHaveLength(1);
   });
 
   it("warns once in total across connect, appductClient.connect and appductCore.connect", async () => {
     const { appduct, warnings } = setup();
     await appduct.connect("a");
-    await appduct.appductClient.connect("b");
-    await appduct.appductCore.connect("c");
+    await appduct.appductClient.connect({} as never);
+    await appduct.appductCore.connect("{}", false);
     expect(warnings).toHaveLength(1);
   });
 
