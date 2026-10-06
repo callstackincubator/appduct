@@ -58,6 +58,9 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.1
+      '@types/react':
+        specifier: ~19.1.17
+        version: 19.1.17
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
@@ -70,6 +73,12 @@ importers:
       playwright-core:
         specifier: 1.56.1
         version: 1.56.1
+      react:
+        specifier: 19.1.0
+        version: 19.1.0
+      react-dom:
+        specifier: 19.1.0
+        version: 19.1.0(react@19.1.0)
       typescript:
         specifier: ~5.9.2
         version: 5.9.3

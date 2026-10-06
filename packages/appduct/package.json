@@ -56,10 +56,13 @@
   "devDependencies": {
     "@appduct/web": "workspace:*",
     "@types/node": "^22.10.0",
+    "@types/react": "~19.1.17",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.25.12",
     "eslint": "^10",
     "playwright-core": "1.56.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
     "typescript": "~5.9.2"
   },
   "files": [
