@@ -127,14 +127,14 @@ describe("claiming a session", () => {
     expect(h.core.getState()).toBe("closed");
   });
 
-  it("refuses an ack for another session by closing the socket with 1008 invalid_ack", async () => {
+  it("refuses an ack for another session by closing the socket with 4008 invalid_ack", async () => {
     const h = setup();
     const connecting = h.startClaim();
     const rejected = expect(connecting).rejects.toThrow("invalid_ack");
     h.last().open();
     h.last().receive(ack({ sessionId: "someone-else" }));
     await rejected;
-    expect(h.transport.connections[0]?.closedByCore).toEqual({ code: 1008, reason: "invalid_ack" });
+    expect(h.transport.connections[0]?.closedByCore).toEqual({ code: 4008, reason: "invalid_ack" });
   });
 
   it("ignores a url because link handling belongs to the browser entry", () => {
@@ -362,11 +362,23 @@ describe("answering tool calls", () => {
     expect(ofType(socket, "tool_error")).toEqual([]);
   });
 
-  it("closes the socket with 1008 session_mismatch on a frame for another session", async () => {
+  it("closes the socket with 4008 session_mismatch on a frame for another session", async () => {
     const h = setup();
     const socket = await h.claim();
     socket.receive({ type: "tool_cancel", session_id: "other", id: "x", reason: "client_cancelled" });
-    expect(socket.closedByCore).toEqual({ code: 1008, reason: "session_mismatch" });
+    expect(socket.closedByCore).toEqual({ code: 4008, reason: "session_mismatch" });
+  });
+
+  it("ends the session without retrying after it closed the socket for a session mismatch", async () => {
+    const h = setup();
+    const socket = await h.claim();
+    socket.receive({ type: "tool_cancel", session_id: "other", id: "x", reason: "client_cancelled" });
+    await settle();
+
+    expect(h.recorded.sessions.at(-1)).toMatchObject({ type: "lost", reason: "session_mismatch" });
+    expect(h.core.getState()).toBe("closed");
+    h.clock.advance(60_000);
+    expect(h.transport.connections).toHaveLength(1);
   });
 });
 

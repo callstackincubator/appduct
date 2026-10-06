@@ -82,6 +82,10 @@ export const createMemoryTransport = (): MemoryTransport => {
           sent.push(text);
         },
         close(code, reason) {
+          // A browser WebSocket throws InvalidAccessError for any other code.
+          if (code !== 1000 && !(code >= 3000 && code <= 4999)) {
+            throw new Error(`InvalidAccessError: close code ${code} is not 1000 or 3000-4999`);
+          }
           if (closed || closedByCore) return;
           closedByCore = { code, reason };
           // A real socket reports the close after the call returns.
