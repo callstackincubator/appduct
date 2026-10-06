@@ -83,7 +83,7 @@ An object mentioning `schema` or `jsonSchema` that is not a valid pair is reject
 
 All of these throw a `TypeError` at registration naming what to fix.
 
-**A Standard Schema with no exporter throws in development.** A bare zod 3 or plain valibot schema on its own has no JSON Schema to export — used to register a tool with no shape at all, which agents saw as "takes any object" while the tool looked fine and was unusable. In `__DEV__` this now throws at `registerTool` with a message pointing at the two forms above, including when the call comes from `useAppductTool`, where the throw surfaces from the component's effect. Release builds keep a softer fallback (one console warning per tool name, tool registered without a schema), so an app already shipping such a tool doesn't break on upgrade.
+**A Standard Schema with no exporter throws in development.** A bare zod 3 or plain valibot schema on its own has no JSON Schema to export, so agents would see the tool as "takes any object" and could not use it. In development this throws at `registerTool` with a message pointing at the two forms above, including when the call comes from `useAppductTool`, where the throw surfaces from the component's effect. Release builds keep a softer fallback (one console warning per tool name, tool registered without a schema), so an app already shipping such a tool doesn't break on upgrade.
 
 ## Registration is per mount, not per render
 
@@ -103,9 +103,9 @@ useAppductTool({
 });
 ```
 
-**Hoisting schemas is a small optimization, not a requirement.** Schemas are compared by object identity first, so a schema defined at module scope (or wrapped in `useMemo`) is never re-exported to JSON Schema. A schema built inline in the component body is re-exported once per render to compare its shape — the same cost the old unconditional re-registration already paid — and still does not re-register unless the shape actually changed. Hoisting is worth a moment's thought for a hot component. (Builds that swap in the inert `/noop` entry never do any of this: that entry has no exporter at all, so it neither runs nor bundles JSON Schema export.)
+**Hoisting schemas is a small optimization, not a requirement.** Schemas are compared by object identity first, so a schema defined at module scope (or wrapped in `useMemo`) is never re-exported to JSON Schema. A schema built inline in the component body is re-exported once per render to compare its shape, and still does not re-register unless the shape actually changed. Hoisting is worth a moment's thought for a hot component. (Builds that swap in the inert `/noop` entry never do any of this: that entry has no exporter at all, so it neither runs nor bundles JSON Schema export.)
 
-A schema that does **not** export JSON Schema (zod 3, plain valibot — the same ones that get the "shapeless tool" dev warning) has no shape to compare, so it falls back to object identity: adding, swapping, or removing one always re-registers, and one rebuilt inline on every render therefore re-registers on every render. Hoist it, or move to zod v4, whose built-in exporter puts it back on the cheap by-shape path.
+A schema that does **not** export JSON Schema (zod 3, plain valibot — the same ones that throw the "shapeless tool" error in development) has no shape to compare, so it falls back to object identity: adding, swapping, or removing one always re-registers, and one rebuilt inline on every render therefore re-registers on every render. Hoist it, or move to zod v4, whose built-in exporter puts it back on the cheap by-shape path.
 
 Because exportable schemas are compared by their *exported* JSON Schema, the registry keeps the schema objects from the most recent registration: replacing one with an identity-different schema that exports the same JSON Schema keeps validating against the earlier object. That only matters for a validation rule JSON Schema cannot express *and* that closes over changing state (a `.refine()` reading component state, say) — pass `deps` for that case.
 
@@ -168,7 +168,7 @@ useAppductTool(
 
 That deadline is enforced end to end: the app aborts the handler's `signal` at it, and it also travels to the daemon as the descriptor's `timeout_ms`, so an agent calling the tool over MCP (or `appduct tools call` with no `--timeout`) gets the same budget instead of a `tool_timeout` at 10 seconds.
 
-The SDK clamps the value to `[1_000, 600_000]` ms before either timer is set, so the handler's abort timer and the daemon's call deadline are always the same number (a value outside that range is clamped with a dev warning). A caller that passes its own timeout (`appduct tools call --timeout`, `app.call(name, args, { timeoutMs })`) can only **shorten** the deadline, never extend it past this one — the app aborts the handler at its own timer regardless, so for a tool that declares nothing, a caller asking for 60 seconds still gets the app's 10-second default. That app-side fallback is fixed natively (`AppductClient`'s own `defaultToolTimeoutMs`, `APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`) and JS cannot override it — `createAppductClient`'s options are empty, and the TurboModule spec has no channel for it. Declare `timeoutMs` per tool when a call needs longer than the default.
+The SDK clamps the value to `[1_000, 600_000]` ms before either timer is set, so the handler's abort timer and the daemon's call deadline are always the same number (a value outside that range is clamped with a dev warning). A caller that passes its own timeout (`appduct tools call --timeout`, `app.call(name, args, { timeoutMs })`) can only **shorten** the deadline, never extend it past this one — the app aborts the handler at its own timer regardless, so for a tool that declares nothing, a caller asking for 60 seconds still gets the app's 10-second default. Declare `timeoutMs` per tool when a call needs longer than the default.
 
 ## Declare the events you post
 

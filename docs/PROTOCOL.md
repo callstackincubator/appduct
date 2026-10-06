@@ -26,8 +26,8 @@ socket, and each gets its own session.
 ## 2. Bootstrap payload (v2)
 
 Deep link shape: `<scheme>:///?appduct=<base64url-no-padding>&pin=<sha256/...>`. The
-`appduct` payload is unchanged from v1; `pin` is a separate, percent-encoded query param
-carrying the daemon's SPKI fingerprint (see `docs/ARCHITECTURE.md` §8), appended by both
+`appduct` payload is the binary blob described below; `pin` is a separate, percent-encoded
+query param carrying the daemon's SPKI fingerprint (see `docs/ARCHITECTURE.md` §8), appended by both
 `appduct sessions link` and `appduct_connect`. **Anything reading the payload must stop at the
 `&`** — slicing to the end of the string swallows the pin and corrupts the blob.
 
@@ -259,9 +259,9 @@ connection that issued `tools.call` dropping (CLI Ctrl-C, MCP client disconnect)
 explicit `tools.cancel` RPC call. A cancel for an unknown or already-finished `id` is a
 no-op, not a protocol violation — the daemon never knows for certain which calls the app
 still considers in flight. The app is expected to abort the matching handler (its
-`AbortSignal`, §11) and reply `tool_error` with `error.type: "tool_cancelled"`; a handler
-that ignores the signal keeps running and replies normally, exactly as before this
-message existed.
+`AbortSignal`, `docs/ARCHITECTURE.md` §11) and reply `tool_error` with
+`error.type: "tool_cancelled"`; a handler that ignores the signal keeps running and replies
+normally.
 
 ### `event` — app → daemon, app-originated telemetry outside the tool-call/result cycle
 
@@ -460,11 +460,10 @@ types also establish these details:
   `events.subscribe` fan-out, so a caller that only finds out it wants to know "what
   happened?" after the fact (every MCP tool call, since MCP is strictly request/response)
   doesn't need to have been subscribed in advance. Every `EventNotification` carries a
-  `seq`: a cursor that increases monotonically per session, assigned to every
-  session-scoped event as it is emitted, so the retained app events' `seq`s can have gaps
-  where unretained kinds went by. Pass the highest `seq` seen back as `since` on the next call
-  to resume without re-reading; a session-scoped event whose session hits a terminal state
+  `seq`, but only `app_event` gets a real one: a cursor that increases by one per app event
+  in a session, with no gaps, which is how `events.since` works out how many fell off the
+  ring buffer (`dropped`). Every other kind, session-scoped or not, carries `seq: 0`. Pass the
+  highest `seq` seen back as `since` on the next call to resume without re-reading; a session-scoped event whose session hits a terminal state
   (`session_expired`/`session_revoked`) discards that session's buffer, matching "terminal
   states free the alias" (ARCHITECTURE.md §6) — there is no persisted history past that
-  point. Daemon-wide events (no `sessionId`, e.g. `daemon_started`) are never buffered and
-  carry `seq: 0`.
+  point. Daemon-wide events (no `sessionId`, e.g. `daemon_started`) are never buffered.

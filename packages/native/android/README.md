@@ -6,6 +6,10 @@ use [`@appduct/react-native`](../../react-native/README.md) instead — it vendo
 sources and gives you the same functionality behind a JS API. This README is for a plain
 Kotlin/Java Android app.
 
+## Requirements
+
+- `minSdkVersion` 24 (Android 7.0) or higher.
+
 ## 1. Install
 
 Two artifacts, same public API, one real, one inert:
@@ -23,6 +27,18 @@ dependencies {
 the real implementation's bytecode off a release build's classpath by default (the same pairing
 `@appduct/react-native`'s own Android bridge uses internally). Opt a release build back in by
 resolving `core` for it instead, the same way you'd override any other dependency per variant.
+
+### The `INTERNET` permission
+
+Appduct's library manifest declares no permissions, so your app's own `AndroidManifest.xml` needs
+`INTERNET` for a debug build to reach the daemon. Most apps already have it; if yours doesn't, add
+it:
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+```
+
+Without it, the app opens the link but never claims the session.
 
 ### The `appductScheme` placeholder
 
@@ -85,9 +101,11 @@ Appduct.register(name = "slow_task", description = "...") { args, context ->
 ```
 
 Schemas are raw JSON Schema (`org.json.JSONObject`), not `kotlinx.serialization` or any other
-schema library — the native SDK does no app-side input/output validation (the daemon does none
-either). `annotations` takes a `ToolAnnotations(readOnlyHint?, destructiveHint?, idempotentHint?)`
-matching `PROTOCOL.md` §5.
+schema library. Nothing validates call arguments against `inputSchema`, so check what your handler
+needs before using it. `annotations` takes a
+`ToolAnnotations(readOnlyHint?, destructiveHint?, idempotentHint?)`: `appduct tools ls` and MCP
+clients show them, and a `config.json` policy can require approval for every tool marked
+`destructiveHint`.
 
 Tools are read by agents from a one-line signature and the first line of the description: name
 them by intent, set `readOnlyHint` on observers and `destructiveHint` on anything that deletes,
@@ -128,6 +146,41 @@ registration.remove() // withdraws the declaration
 
 An empty name or description makes `registerEvent` throw `IllegalArgumentException`. Nothing warns
 about an undeclared name or a payload that doesn't match its schema; React Native does.
+
+### Posting an event
+
+`postEvent` is a suspend function; call it from a coroutine:
+
+```kotlin
+lifecycleScope.launch {
+  Appduct.postEvent("cart.item_added", mapOf("sku" to "SKU-1042"))
+}
+```
+
+Read it back with `appduct events tail`. The payload converts to JSON the same way a handler's
+return value does. While no session is active the event is dropped; it doesn't throw, and a
+failure to send shows up as an `AppductEvent.Error` on `addListener` instead.
+
+### Observing connection state, session, and errors
+
+```kotlin
+val subscription = Appduct.addListener { event ->
+  when (event) {
+    is AppductEvent.StateChange -> Log.d("Appduct", "state -> ${event.state} ${event.reason ?: ""}")
+    is AppductEvent.SessionChange -> Log.d("Appduct", "session -> ${event.sessionId ?: "none"}")
+    is AppductEvent.Error -> Log.w("Appduct", "error [${event.phase}]: ${event.message}")
+  }
+}
+
+// later, to stop listening:
+subscription.remove()
+```
+
+`state` is one of `idle`, `connecting`, `active`, `reconnecting` or `closed`. A `SessionChange`
+carries `type` (`claimed`, `resumed` or `lost`), `sessionId` and `alias`. `Appduct.state` and
+`Appduct.sessionId` are snapshots you can read at any time without a listener, for example for a
+view's first render. A listener can be called off the main thread, so hop to `Dispatchers.Main`
+before touching UI, as in [Threading](#threading).
 
 ### Threading
 
@@ -172,12 +225,10 @@ code knows whether to keep handling it.
 
 ## 4. Initialization: the init provider
 
-There is no explicit `Appduct.init(context)` call. A dependency-free `ContentProvider`,
-`AppductInitProvider`, is declared in `core`'s manifest and captures your app's `Context` before
-any app code runs — the platform constructs every manifest-declared `ContentProvider` strictly
-before `Application.onCreate()`, so by the time your own `onCreate()` calls
-`Appduct.register(...)`, this has already happened, and a resume attempt for any lease left from
-a previous process is already under way in the background.
+There is no `Appduct.init(context)` call. `core` sets itself up before
+`Application.onCreate()` runs, through a `ContentProvider` named `AppductInitProvider`, so you can
+call `Appduct.register(...)` from your own `onCreate()`. At the same point it starts resuming the
+session a previous process held, if one is still valid.
 
 ### Opting out of the init provider and trampoline
 
@@ -243,15 +294,10 @@ appduct doctor path/to/app-release.apk --assert-absent
 appduct doctor path/to/app-debug.apk --assert-present
 ```
 
-`doctor`'s Android detection trusts only a keep-rule-protected marker class
-(`AppductNativeMarker`, compiled only into `core`, never `core-noop`) to decide presence — not
-just whether the `com.callstack.appduct` package name appears anywhere in the dex, since
-`core-noop`'s classes share that same Kotlin package and would otherwise look present to a naive
-scan. See [`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) for the full mechanism.
-
-If you run `appduct` both globally installed and from a workspace build, `pnpm exec appduct` can
-silently resolve the global one instead of the workspace build — confirm with `pnpm exec which
-appduct`, or invoke the workspace build directly if the two might disagree.
+`doctor` reports `core-noop` as absent and works on minified (R8) builds. It exits non-zero when
+the assertion fails, so you can run it as a release-pipeline step. See
+[`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) for how other build variants are
+handled.
 
 ## Troubleshooting
 
@@ -267,11 +313,8 @@ If the app was built before that placeholder was set, rebuild and reinstall — 
 baked in at build time, not read at runtime.
 
 **A bootstrap link reaches the trampoline but the app never claims the session, failing with an
-EPERM-style connect error.** Your app's manifest is missing
-`<uses-permission android:name="android.permission.INTERNET" />`. `core`'s own manifest can't add
-this for you — `<uses-permission>` is an app-level concern a library can't grant on a consumer's
-behalf, and Appduct's library manifest intentionally declares no permissions of its own so as
-never to grant an app more than it asked for — add it to your own `AndroidManifest.xml`.
+EPERM-style connect error.** Your app's manifest is missing the `INTERNET` permission; see
+[The `INTERNET` permission](#the-internet-permission).
 
 **"Appduct is not initialized" `IllegalStateException`.** `AppductInitProvider` never ran — most
 likely you removed it (`tools:node="remove"`) without wiring up an alternative. See

@@ -147,7 +147,7 @@ marker-only rule already documents.
   `Appduct.podspec` — both are deleted now that all native tests live in the SwiftPM
   package. `playground/plugins/with-native-tests.js`, which existed solely to hand-add the
   `Appduct` pod for that now-gone test target (and to skip doing so when the package was
-  excluded — see `docs/tasks/13-ios-ci-doctor-gate.md`), is deleted too, along with its entry
+  excluded), is deleted too, along with its entry
   in `playground/app.json`'s plugin list. The codegen-coupling problem that plugin worked
   around no longer applies: there is no longer a hand-added pod to interact with an excluded
   build at all.

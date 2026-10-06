@@ -11,6 +11,9 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Docs: the README is a short overview of Appduct on iOS, Android and React Native, with agent setup and platform support on their own pages.**
+- **Docs: the shipped `appduct` skill covers native iOS and Android setup, and no longer tells you to set `APPDUCT_ENABLED=0` for production.** Release builds leave Appduct out by default.
+
 ## 0.14.0 (2026-10-02)
 
 - **New: `appduct_list_events` MCP tool lists the events an app declares, with descriptions.** `name` takes a glob like `"cart.*"`, and an exact name also returns the payload schema.

@@ -53,9 +53,8 @@ in this resolution on either platform.
 
 **`trust: "pin"`** is everything described above: the app embeds a key fingerprint set
 (`cliPins`) ahead of time and refuses anything else. Requires non-empty `cliPins`; the config
-plugin rejects `trust: "pin"` with empty/missing `cliPins` at prebuild time, and the native
-trust-resolution logic (`resolveTrustedPins` on both platforms) rejects the same combination
-again if that check is ever bypassed by hand-editing native config.
+plugin rejects `trust: "pin"` with empty/missing `cliPins` at prebuild time, and the app
+rejects the same combination again if you hand-edit the native config past that check.
 
 **`trust: "link"`** — the default whenever `cliPins` is absent, and available in **any**
 build type, not just a locally-run debug build — is a deliberately weaker flow so that a
@@ -110,9 +109,8 @@ availability effect, bounded the same way. It is not a cheap one: the payload is
 validated in full, against the same address policy and expiry, *before* anything is torn down,
 so a malformed or expired link costs the existing session nothing.
 
-**What actually contains link trust now, since there is no build-type gate:** it is opt-in
-configuration alone. Set `cliPins` (which makes `trust: "pin"` the default) on any build you
-don't want accepting a link-carried pin. Separately, if you don't want Appduct's native
+**Link trust is limited by your configuration, not the build type.** Set `cliPins` (which
+makes `trust: "pin"` the default) on any build you don't want accepting a link-carried pin. Separately, if you don't want Appduct's native
 code present in a build at all — regardless of trust mode — exclude it from autolinking (see
 [Compiling Appduct out of production
 builds](BUILD-VARIANTS.md#compiling-appduct-out-of-production-builds)); `appduct doctor`
@@ -226,9 +224,8 @@ check is ever bypassed by hand.
 
 **`getAppductBuildConfig()`** reports the effective trust configuration a running build
 actually has — `{ trust, hasEmbeddedPins, allowPrivateLanOnly }`. It is read via
-`getConstants()` from the exact same native manifest/plist parse `connect()`'s
-`resolveTrustedPins` uses, never a second parse path, so it can never disagree with what a
-real connect attempt would do.
+the same native manifest/plist values `connect()` uses, so it always matches what a real
+connect attempt would do.
 
 `trust` reports the *effective* bucket — `"pin"` whenever embedded pins are present, since
 they always win; `"link"` otherwise — not the raw config string. On `/noop` it reports the
@@ -291,8 +288,8 @@ a fixed set is always present.
 
 ## Key handling rules
 
-- **Never commit a private key.** `git ls-files "*.pem"` must stay empty in this repo and
-  should stay empty in yours. Test suites generate throwaway keys into temp directories
+- **Never commit a private key.** `git ls-files "*.pem"` should print nothing in your app's
+  repo. Test suites generate throwaway keys into temp directories
   at runtime; they are never checked in.
 - **`key.pem` must be `0600`.** The daemon refuses to load a key file that is
   group- or world-readable — treat that refusal as the system working, not a bug to
@@ -357,7 +354,7 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   who "always allows" it has approved every app tool; `policy.destructive: "prompt"` is how to keep
   a human approving each call to a tool annotated `destructiveHint: true` (an unannotated tool
   falls under `policy.default`). `"prompt"` requires a human gate
-  and fails closed everywhere one can't be guaranteed: today the only implemented gate
+  and fails closed everywhere one can't be guaranteed: the only implemented gate
   is an MCP client that declares the `elicitation` capability, which receives an
   `elicitation/create` prompt for each call; the CLI and every other client are denied outright
   (`policy_denied`, reason `no_consent_channel`) rather than silently treated as
@@ -377,59 +374,26 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   prompt itself either — only against a compliant client's own auto-approval. Worth
   knowing rather than filing as a bug: `"prompt"` denies unconditionally in CI or any other
   unattended pipeline (there is no consent channel there at all), so a pipeline that
-  needs a tool to run unattended must set `allow`/`deny` for it explicitly. Until a
-  non-MCP consent channel ships, `"deny"` remains the only way to hard-block a tool for
-  CLI callers.
+  needs a tool to run unattended must set `allow`/`deny` for it explicitly. For CLI callers,
+  `"deny"` is the only way to hard-block a tool.
 - **Audit.** Every `tools.call` attempt — regardless of outcome — appends one line to
   `audit/<YYYY-MM-DD>.jsonl`: timestamp, session, alias, tool name, a sha256 of the
   canonicalized args (never the raw args), outcome, error type if any, duration, caller
   (`cli`/`mcp`/`client`), and — only for a `"prompt"` call that proceeded — `consent: "elicitation"`
-  (files written by older versions may also contain `consent: "client"`).
+  (older files may hold `consent: "client"`).
   That marker is the weakest form of evidence recorded here: the daemon never observes
   the actual consent decision, only that the call arrived already gated, so it's kept
   distinct from a plain `"ok"` rather than folded into it. This is on unconditionally;
   there's no flag to disable it. Check `daemon.status`'s `audit.failedWrites` if you
   need to confirm the log is actually landing on disk (e.g. under a read-only or full
   filesystem).
-- **Inclusion defaults to dev builds only — not a compiled-in build-type check.** iOS
-  restricts CocoaPods linking to the `Debug` configuration; on Android `AppductPackage`
-  always compiles, and the `release` variant's compile classpath gets the vendored no-op
-  core (`android/core-noop`) in place of the real one. Both are real per-variant decisions, not a
-  `debuggable`/`#if DEBUG` gate compiled into every variant, and neither quietly depends on
-  a custom build-type/configuration name being spelled `debug`/`Debug`.
-
-  A release pipeline that wants Appduct anyway (an agent-driven, release-signed internal
-  build) sets `APPDUCT_ENABLED=1`; one that wants it gone even from debug sets
-  `APPDUCT_ENABLED=0`.
-  [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md#inclusion-is-an-autolinking-decision) has the full
-  mechanism.
-
-  Verify the outcome against the built artifact (`appduct doctor`). On Android, `doctor` deliberately trusts
-  only its `AppductNativeMarker` keep-rule signal, since the release-default no-op stub
-  shares the real implementation's package name and would otherwise look present to a naive
-  scan. When the module genuinely isn't present, the JS public API degrades to the exact
-  `/noop` entry's behavior — see [What a build without the native module
+- **Release builds exclude Appduct by default.** Debug builds carry it; release builds do
+  not, unless you opt in with `APPDUCT_ENABLED=1`. Removing the JS as well takes the
+  `withAppduct` Metro helper. [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md) has the recipes,
+  including how to exclude Appduct from every build. Check the artifact you ship with
+  `appduct doctor --assert-absent` rather than trusting the config. A build without the
+  native module behaves as described in [What a build without the native module
   does](#what-a-build-without-the-native-module-does).
-- **Compile out of a build you don't want carrying Appduct at all.** Being present and
-  trusting nothing (`trust: "pin"` with a `cliPins` set that has no matching daemon, or an
-  app that simply never mints a bootstrap link for that build) still ships the native code
-  and JS bundle inside the binary.
-
-  Stripping it takes two independent steps. Excluding the package from **autolinking** is
-  the only thing that removes the compiled native pod/module; swapping the **JS** entries
-  for `/noop` at bundle time is the only thing that removes the deep-link listener and tool
-  registry from the bundle.
-
-  Neither alone removes both. `APPDUCT_ENABLED=0` drives both at once, but only once
-  the `withAppduct` Metro helper is wired into `metro.config.js` — without it the
-  variable removes the native half only.
-
-  The exact snippets, the `package.json`-only placement of `expo.autolinking`, the
-  `apple`-overrides-`ios` rule and the iOS codegen coupling live in
-  [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md#compiling-appduct-out-of-production-builds).
-  `appduct doctor` verifies the exclusion actually took effect in a built artifact rather
-  than trusting the config that was supposed to produce it — this whole area is now checked
-  by CI, not just documented.
 - **App-store-review note.** An always-installed deep-link listener that can open a
   pinned socket and let an external process invoke code is a legitimate "remote control"
   surface from a reviewer's point of view, even though it can't be exercised without a

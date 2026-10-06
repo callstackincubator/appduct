@@ -267,26 +267,11 @@ Agents see the list with `appduct events ls`. In development, `postEvent` warns 
 
 ## Handle errors
 
-If your handler throws, the call fails with `tool_execution_error` and your message. Validation failures report `tool_input_validation_error` or `tool_output_validation_error`. Callers see these types unchanged. See [Error types](/appduct/reference/protocol/#error-types).
+If your handler throws, the call fails with `tool_execution_error` and your message. Validation failures report `tool_input_validation_error` or `tool_output_validation_error`. Callers see these types unchanged. See [Error types](/appduct/reference/cli/#error-types).
 
 ## Keep a tool out of some builds
 
-To leave a destructive tool out of some builds, pass `enabled` rather than wrapping the hook in an `if`:
-
-```ts
-useAppductTool(
-  {
-    name: "wipe_local_db",
-    description: "Destructive: clear the local database.",
-    annotations: { destructiveHint: true },
-    handler: async () => wipeLocalDb(),
-  },
-  [],
-  { enabled: process.env.EXPO_PUBLIC_APPDUCT_TOOLS === "full" },
-);
-```
-
-See [Keep a tool out of some builds](/appduct/guides/security/#keep-a-tool-out-of-some-builds) for why a build flag works better here than `__DEV__`.
+To leave a tool out of some builds, pass `{ enabled }` as the hook's third argument instead of wrapping the hook in an `if`. See [Keep a tool out of some builds](/appduct/guides/security/#keep-a-tool-out-of-some-builds) for an example, and for why a build flag works better here than `__DEV__`.
 
 ## Advanced: the hook's `deps` argument
 

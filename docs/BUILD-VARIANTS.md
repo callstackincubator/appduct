@@ -25,33 +25,10 @@ Inclusion is decided entirely by autolinking, not by anything this package does 
 runtime. By default the native module is present in **debug** builds and absent from
 **release** builds.
 
-The mechanism differs by platform. On iOS, CocoaPods' `:configurations` is restricted to
-`Debug` — a real per-variant *linking* decision.
-
-Android can't use the equivalent `buildTypes` lever the same way, for a package with
-static Java registration (`packageInstance`). React Native's Gradle autolinking generates
-`PackageList.java` once, shared unfiltered across every variant, so restricting *linking*
-by variant would leave that shared file referencing a class absent from an unlisted
-variant's classpath — a compile error, not an inert build.
-
-Android therefore links this project into every variant unconditionally, and
-`android/build.gradle` instead swaps which *vendored source directory* compiles for the
-`release` build type, based on `APPDUCT_ENABLED`. `AppductPackage`/`NativeAppductModule`
-(`android/src/main/java`) always compile, for every variant — they reference
-`AppductConnectionManager` and friends by unqualified name only, never a build-type
-check. Which implementation that name resolves to is decided by which directory is on the
-variant's compile classpath: `debug` always adds `android/core` (the real implementation,
-vendored from `packages/native/android/core`); `release` adds either the same `android/core`
-(opted in) or `android/core-noop` (the default) — the same public API, every method a no-op.
-There is no `src/debug`/`src/release-stub` source-set split; the split is which
-vendored directory gets added to the variant's `java.srcDirs`.
-
-Either way, the real implementation is genuinely absent from the compiled output it is
-excluded from — not a `#if DEBUG`/`FLAG_DEBUGGABLE` check baked into code that ships
-regardless. `AppductPackage.getModule` (Android) and
-`AppductTurboBridge.swift`/`RCTNativeAppduct.mm` (iOS) contain no build-type check
-at all: if the real implementation is compiled/linked into a variant, it is in that
-variant's build, full stop. Whether it is is what `APPDUCT_ENABLED` controls.
+On iOS, CocoaPods links the pod only into the `Debug` configuration. On Android, a
+`release` build compiles a same-API no-op in place of the real implementation. Either way
+an excluded build does not contain the real implementation at all; there is no runtime
+build-type check to bypass.
 
 **Resulting matrix (`APPDUCT_ENABLED` × build variant, `trust` orthogonal to both):**
 
@@ -211,10 +188,6 @@ from the registry instead of resolving the one your build actually uses):
 > both exclude and hand-add the pod; a normal consumer app that just wants Appduct gone
 > never hits it.
 
-There is no plugin option to assert this stays in sync with autolinking — the plugin no
-longer accepts an `include` option; passing one throws at prebuild, naming the replacement
-(`APPDUCT_ENABLED`, described above).
-
 ## JS — swap the module at bundle time
 
 Strip the JS too, so no Appduct JS (deep-link listener, tool registry, client state
@@ -273,65 +246,34 @@ always reports `"idle"`.
 
 ## Native core
 
-The Swift/Kotlin connection code above — TLS, SPKI pinning, trust-mode resolution, the
-private-LAN check, and the process-memory resume lease — lives canonically in
-`packages/native`, not in `@appduct/react-native` itself. `@appduct/react-native` vendors
-it at build/publish time (`scripts/sync-native-core.mjs`) rather than depending on it as a
-published package, so this package's releases stay independent of separately publishing
-`packages/native` to CocoaPods trunk / Maven Central. Nothing here changes what ships in a
-given build variant; it only changes where the source of truth for that code lives.
+A plain iOS or Android app, with no React Native, uses the same rule: the real
+implementation is in debug builds only, unless you opt in.
 
-**iOS** (`packages/native/ios`): a SwiftPM package, `AppductCore`, manifested by the
-repo-root `Package.swift` (SwiftPM requires the manifest at the repository root for URL
-dependencies). Every file under `Sources/AppductCore/Real/` is wrapped in
-`#if APPDUCT_ENABLED`, with a same-API no-op mirror under `Stub/` wrapped in
-`#if !APPDUCT_ENABLED`. The `AppductCore` target's `swiftSettings` define
-`APPDUCT_ENABLED` for the `Debug` configuration, plus for any configuration that opts into
-the `AlwaysEnabled` package trait — a trait rather than a second product, because a target's
-sources (and therefore its active `#if` branches) are shared by every product built from it,
-so a second "always-real" product could not compile different content from the first. This
-is the same `Debug`-only default as `:configurations => ['Debug']` above, just expressed as a
-compiler define instead of a linking decision, because a SwiftPM `TargetDependency` cannot be
-conditioned on build configuration the way a CocoaPods dependency can.
-`@appduct/react-native`'s own `Appduct.podspec` vendors only `Real/` and always compiles
-it with `-DAPPDUCT_ENABLED` set — autolinking has already decided inclusion by the time
-those sources compile, so the pod never needs `Stub/`.
+**Android.** Depend on the real module for debug and the no-op module for release:
 
-**Android** (`packages/native/android`): a standalone Gradle project (own `settings.gradle`,
-not a workspace member) publishing two modules with the same public API —
-`com.callstack.appduct:core` (the real implementation) and `:core-noop` (every
-method a no-op, no `okhttp` dependency, no marker class). `@appduct/react-native` vendors
-`core`/`core-noop` into `android/core`/`android/core-noop` and picks between them the same way
-described above — `AppductPackage`/`NativeAppductModule` (`android/src/main/java`)
-always compile, and `debug`/`release` add whichever vendored directory to `java.srcDirs`.
-**A plain Android app instead depends on `core`/`core-noop` as ordinary Maven coordinates**
-(`debugImplementation("com.callstack.appduct:core:<version>")` /
-`releaseImplementation("com.callstack.appduct:core-noop:<version>")`,
-`packages/native/android/README.md`) — a real per-variant *dependency* decision, distinct from
-(and simpler than) the vendored copy's source-directory swap, since a plain app has no
-`PackageList.java`-style shared registration file forcing every variant onto the same
-classpath the way RN's autolinking does.
+```kotlin
+dependencies {
+  debugImplementation("com.callstack.appduct:core:<version>")
+  releaseImplementation("com.callstack.appduct:core-noop:<version>")
+}
+```
 
-Three exclusion mechanisms exist across the two platforms and their two consumers, all
-structural and all failing closed: Android's `debugImplementation`/`releaseImplementation`
-pairing with `core-noop` (a plain app, and the vendored copy's `java.srcDirs` swap doing
-the equivalent internally); iOS CocoaPods' `:configurations => ['Debug']`; and iOS SwiftPM's
-`Debug`-conditioned `APPDUCT_ENABLED` compiler define plus the opt-in `AlwaysEnabled` package
-trait. None of the three is a runtime check — in every case the excluded configuration's
-build genuinely does not contain the real implementation's bytecode.
+`core-noop` has the same public API with every method inert, so your code compiles
+unchanged in both variants. See
+[`packages/native/android/README.md`](../packages/native/android/README.md).
 
-A doctor-detection marker exists on both platforms, compiled only into the real
-implementation and never into the excluded/no-op counterpart: `AppductCoreMarker` (an
-`@objc` class, iOS) and `AppductNativeMarker` (Android) — `doctor`'s presence verdict is
-decided by that marker alone on both platforms, never by a package/class name or a
-manifest/plist key that a no-op build shares with the real one.
-**Always run `appduct doctor --assert-absent` against the actual signed artifact you are
-about to ship** — a `Release`/`release` configuration by name, or a dependency/build-setting
-combination you believe excludes the real implementation, is what's supposed to produce that
-outcome, not a guarantee of it; `doctor` checks the artifact itself, which is the only thing
-that matters to an app-store reviewer or an attacker. This applies identically whether the
-artifact is the vendored RN copy's build or a plain native app's own `Release`/`release`
-build of `packages/native`.
+**iOS.** With SwiftPM, the package compiles the real implementation only into `Debug` and a
+same-API stub into `Release`; depend on its `AlwaysEnabled` trait to carry the real one into
+`Release` too. With CocoaPods, use
+`pod 'AppductCore', :configurations => ['Debug']`. See
+[`packages/native/ios/README.md`](../packages/native/ios/README.md).
+
+Then check the artifact you are about to ship:
+
+```bash
+appduct doctor path/to/app-release.apk --assert-absent
+appduct doctor path/to/YourApp.app --assert-absent
+```
 
 ## Related
 

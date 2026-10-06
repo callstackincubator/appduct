@@ -15,7 +15,7 @@ details, see [PROTOCOL.md](PROTOCOL.md); for operational security guidance, see
    human surface. Both are thin clients of the same daemon RPC.
 3. **Multi-device.** One daemon serves N concurrent device sessions on one port.
 4. **Hardened local control plane.** Unix-domain-socket RPC guarded by filesystem
-   permissions replaces the unauthenticated localhost TCP API.
+   permissions, not an unauthenticated localhost TCP API.
 5. **Dev-first, production-capable.** Same protocol everywhere; production adds policy
    (consent, audit) and a compile-out story, not a different architecture.
 
@@ -58,8 +58,8 @@ Deliberately out of scope, so the boundaries of the design are explicit:
 
 - One daemon per operator machine (per user). It is long-lived and never exits because
   of anything a device does.
-- Devices connect **to** the daemon over pinned `wss://` (same direction as v1 — this is
-  what works for physical phones).
+- Devices connect **to** the daemon over pinned `wss://`; that direction is what works for
+  physical phones.
 - The CLI and MCP server never touch sockets, keys, or state files directly; everything
   goes through the daemon RPC.
 
@@ -114,9 +114,7 @@ Any other value must be a port number in `1..65535`.
 `advertisedIp` overrides auto-detection of the address advertised in minted bootstrap
 payloads. `scheme` is the deep-link URI scheme composed into `appduct sessions link`'s output
 when `--scheme` is not passed (§10) — set it once here instead of on every invocation.
-Unlike `scheme`, the app id `--open android`/`--open ios-device` need (issue #63) has no
-home in this file: it lives only in a project `.appduct/config.json`'s `appId.<platform>`
-(§10), never in the state directory's `config.json` — see `resolveAppId` in `scheme.ts`.
+The app id `--open` needs is not a key here (§10).
 `eventBufferSize` caps the per-session `events.since` retention buffer of `app_event`s (§5).
 `restartDaemonOnVersionMismatch` makes version-drift restarts unconditional rather than
 only-when-no-sessions-are-live (§4, "Version drift").
@@ -246,8 +244,7 @@ only-when-no-sessions-are-live (§4, "Version drift").
     an established connection; the operator restarts the MCP server. Drift found *at* MCP startup
     that cannot be resolved fails the whole server, so the agent loses every Appduct tool rather
     than some of them — an MCP client renders that as a bare "server failed to start", so the
-    server writes one stderr line naming both versions and the remedies before it exits. (Starting
-    degraded, with the built-in management tools still answering, is a possible follow-up.)
+    server writes one stderr line naming both versions and the remedies before it exits.
 
 ## 5. Control plane RPC (UDS)
 
@@ -484,10 +481,8 @@ belong here:
   itself is single-quoted, above. The pattern is deliberately a superset of both platforms' own id
   grammars (Android forbids `-` in an `applicationId` but allows `_`; iOS is the other way
   round): it is a safety check on the argv and the device shell, not a spelling check, so a syntactically safe but
-  wrong id for its platform fails loudly at `am start`/`devicectl` instead. It is *not* validated
-  in `daemon/config.ts` — there is nothing to validate there any more: an app id has no home in
-  the state directory's `config.json`, only in a project `.appduct/config.json`'s
-  `appId.<platform>` (§10, `resolveAppId`).
+  wrong id for its platform fails loudly at `am start`/`devicectl` instead. Where the app id
+  comes from is §10 (`resolveAppId`).
 - `ios-device` also **refuses to deliver a loopback link**. `daemon/address.ts` falls back to
   `127.0.0.1` when it finds no routable interface; delivered to a phone, that link points the
   phone at itself, and the failure is silent — `wait_for_session` simply blocks for its whole
@@ -582,12 +577,11 @@ server can't drift in behavior: they are the same calls.
 
 The per-command reference lives in the [`appduct` package README](../packages/appduct/README.md),
 which is where it stays current. Every command is `appduct <noun> <verb> [selector] [args]`
-(issue #96): `sessions ls|revoke|link`, `tools ls|describe|call`, `events ls|tail|since`, with
-`daemon run|start|stop|status` as the model this was generalized from — `init`, `keygen`, `doctor`
-and `mcp` stay one-verb nouns. This is a clean break with no aliases (pre-1.0): a removed
-top-level word (`ls`, `revoke`, `link`, `invoke`) is a usage error naming its replacement
-(`dispatch.ts`'s `REMOVED_COMMANDS`), and a bare noun or an unrecognized verb is a usage error
-naming that noun's verbs, exactly like a bare `daemon` already does. `cac` matches only a
+(issue #96): `sessions ls|revoke|link`, `tools ls|describe|call`, `events ls|tail|since`,
+`daemon run|start|stop|status`; `init`, `keygen`, `doctor` and `mcp` are one-verb nouns. A
+top-level word from the pre-noun CLI (`ls`, `revoke`, `link`, `invoke`) is a usage error naming
+its replacement (`REMOVED_COMMANDS`), and a bare noun or an unrecognized verb is a usage error
+naming that noun's verbs. `cac` matches only a
 command's first word and builds its boolean/string flag table from that command's own declared
 options, so each noun in `create-cli.ts` declares every option any of its verbs uses — otherwise a
 boolean flag ahead of a positional (`tools ls --full <selector>`) would swallow it as that flag's
@@ -637,7 +631,7 @@ they cannot drift. First match wins:
    schemes — it throws a usage error naming both sources instead.
 6. otherwise an error naming every location above
 
-The project `.appduct/config.json` carries a second key alongside `scheme` since issue #63:
+The project `.appduct/config.json` carries a second key alongside `scheme`:
 `appId`, an object with `ios`/`android` string entries. `scheme.ts`'s `resolveAppId` resolves it
 per delivery target (`android` → `appId.android`, `ios-device` → `appId.ios`; `ios-sim` needs
 none — see §8), in a shorter order than `scheme`'s, first match wins:
@@ -666,13 +660,13 @@ code to read one string is a far larger blast radius than this warrants. Dynamic
 use `--scheme`, `APPDUCT_SCHEME`, or `appduct init --scheme <s>`.
 
 `appduct init`, run in an app root, writes that project `.appduct/config.json` (`scheme`, and
-now `appId.ios`/`appId.android` via `--ios-app-id <id>`/`--android-app-id <id>`) and prints the
+`appId.ios`/`appId.android` via `--ios-app-id <id>`/`--android-app-id <id>`) and prints the
 MCP server entry to paste plus the `import "@appduct/react-native/auto"` reminder. It never
 generates keys (the daemon auto-generates `key.pem` — §3), and writes the file `0600` inside a
 `0700` directory, matching §3's conventions. The two app-id flags are independent — there is no
 single `--app-id` on `init` — because the platforms' ids usually match but not always, and `init`
 never guesses one from a discovered value the way it never guesses `scheme` from an ambiguous
-native probe (§10's discussion of `discoverNativeScheme`).
+native probe (`discoverStaticProjectScheme`, above).
 
 Re-running it is always safe: it keeps the scheme (and any recorded app id) already recorded and
 only *notes* a scheme divergence when discovery (`app.json` or a native project file) has come to
@@ -761,7 +755,7 @@ bootstrap deep-link handling, and the process-memory resume lease — is not nat
 package: it is vendored at build time from `packages/native`, a framework-free core with no
 React Native dependency (`docs/tasks/14-native-core-extraction.md`,
 `docs/tasks/15-native-session-logic.md`,
-[BUILD-VARIANTS.md § Native core](BUILD-VARIANTS.md#native-core)). The same core is also
+[internal/native-core.md](internal/native-core.md)). The same core is also
 consumed directly — no React Native, no Expo — by a plain iOS app (`Appduct.shared`,
 [`packages/native/ios/README.md`](../packages/native/ios/README.md)) and a plain Android app
 (the `Appduct` object, [`packages/native/android/README.md`](../packages/native/android/README.md)),
@@ -822,10 +816,9 @@ The full config surface (option names, native keys, trust recipes) lives in
 [SECURITY.md](SECURITY.md). The [package README](../packages/react-native/README.md) is the
 getting-started path and API reference.
 
-Client behavior (issue #48 phase 2 moved everything in this list except schema handling
-and cancellation's `AbortSignal` translation into the native core —
-`docs/tasks/15-native-session-logic.md` has the full core API, bridge protocol, and
-deviations):
+Client behavior. Everything in this list except schema handling and cancellation's
+`AbortSignal` translation lives in the native core; `docs/tasks/15-native-session-logic.md`
+has the full core API, bridge protocol, and deviations:
 
 - On every successful claim/resume, native commits the latest `resume_token` lease before
   emitting the `session_ack`. The lease is synchronous, native **process-memory
@@ -851,8 +844,8 @@ deviations):
   listener that needs the departing session's id/alias keeps the most recent non-null event.
 - Native's own `handleUrl(url)` decodes the v2 bootstrap payload, checks expiry and the
   private-IP policy (`allowPrivateLanOnly`, read once from the same manifest/plist key
-  `resolveTrustedPins` uses), and decides whether the link outranks a session already held
-  — the JS-side `deep-link-core.ts` this used to be is gone. `@appduct/react-native/auto`
+  `resolveTrustedPins` uses), and decides whether the link outranks a session already held.
+  `@appduct/react-native/auto`
   installs a `Linking` `url` listener that forwards straight into `handleUrl`, then calls
   `restoreSession()` once before considering the initial launch URL (recovery goes first so
   the link is judged against a settled session, not so it wins) — a successful restore does
@@ -925,7 +918,7 @@ deviations):
   The raw test is structural rather than keyword-based on purpose. A keyword probe using `in`
   walks the prototype chain, and validator instances from libraries predating Standard Schema
   (yup, joi, superstruct, valibot 0.x) carry a prototype `type` — they would be taken as raw
-  JSON Schema and published as the tool's shape, having previously been rejected outright.
+  JSON Schema and published as the tool's shape.
   Many also hold circular references, so `JSON.stringify` on `tool_registry_snapshot` would
   throw and lose the whole snapshot, not just that tool.
 
@@ -955,9 +948,8 @@ deviations):
   emits `onToolCancel(id, "timeout")` (so JS aborts the matching `AbortSignal`), replies
   `tool_timeout` itself, and ignores whatever the handler later resolves or throws. The
   hint is the tool's own `timeoutMs`, falling back to native's built-in default
-  (`APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`, 10 s — the frozen TurboModule spec has no channel
-  for JS to override this client-wide default the way the old `defaultToolTimeoutMs` client
-  option once did; see `docs/tasks/15-native-session-logic.md`'s deviations). This timer is
+  (`APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`, 10 s; the TurboModule spec has no channel for JS to
+  override it). This timer is
   the real ceiling on a call: a caller's `tools.call` `timeoutMs` can shorten the deadline
   but never extend it past this point. Only the *explicit* per-tool value travels on the
   descriptor (`docs/PROTOCOL.md` §5), where it becomes the daemon's default deadline for
@@ -968,7 +960,7 @@ deviations):
   timeout, or session suspension (transport lost — there is no socket left to deliver
   `tool_cancel` over, so native aborts every in-flight call directly and JS mirrors that by
   aborting every signal it is holding). A handler that ignores the signal keeps running and
-  replies normally, exactly as it did before cancellation existed; one that observes it and
+  replies normally; one that observes it and
   throws/rejects gets its `tool_error` sent as `tool_cancelled` by native (only for an
   explicit `tool_cancel` — a handler that throws after its own timeout still reports
   `tool_timeout`, not `tool_cancelled`, since native already answered by the time the throw
@@ -990,10 +982,10 @@ it.
 
 - Policy applies at the daemon on every `tools.call` (CLI and MCP alike), keyed on the
   descriptor's `annotations`: `policy.default`/`policy.destructive`/per-tool overrides
-  `policy.tools["<alias>/<name>"]`, each `"allow" | "deny" | "prompt"`. `allow`/`deny`
-  behave as before; denied calls return `policy_denied` and are audited.
+  `policy.tools["<alias>/<name>"]`, each `"allow" | "deny" | "prompt"`. `allow` runs the
+  call; `deny` returns `policy_denied`. Denied calls are audited.
 - `"prompt"` means "a human gate is required; if one cannot be guaranteed, deny" — it
-  fails closed rather than silently behaving like `allow`. One gate is implemented today, and
+  fails closed rather than silently behaving like `allow`. One gate is implemented, and
   it is MCP-only:
   - **Elicitation** (issue #10): whenever the connected client declared the `elicitation`
      capability at `initialize` (checked via the SDK Server's `getClientCapabilities()`), a
@@ -1010,10 +1002,7 @@ it.
      on the same `policy_denied`/`no_consent_channel` path as any other ungated caller.
 
   Every other caller (the CLI, an MCP client that doesn't declare elicitation) is denied with
-  `policy_denied`, reason `no_consent_channel`. An earlier Claude Code-specific fallback that
-  emitted `_meta["anthropic/requiresUserInteraction"]` on `tools/list` and sent
-  `consent: "client"` was removed: it was evidence only that a client armed itself to ask, not
-  an observed decision, and it tied consent to one client's self-reported `clientInfo`.
+  `policy_denied`, reason `no_consent_channel`.
   - Elicitation carries an *observed decision* (the client's reply to a specific request), but
     the daemon never sees the client's own prompt UI. A client's declared capabilities are
     self-reported, and `consent` is an ordinary RPC param on
@@ -1024,8 +1013,7 @@ it.
     hostile process on the operator's own machine — see `docs/SECURITY.md`'s threat model,
     which already treats socket access as full daemon control.
   - Known limitation: a client can declare the `elicitation` capability and then always reply
-    `"decline"` or `"cancel"` without ever really surfacing the prompt to a human (older Codex
-    behavior at the time of writing). This fails closed — the tool is simply never callable
+    `"decline"` or `"cancel"` without ever really surfacing the prompt to a human. This fails closed — the tool is simply never callable
     through that client — which is the acceptable failure mode; it is not distinguishable from
     a human genuinely saying no. Non-interactive Claude Code (`claude -p`) behaves this way: it
     declares elicitation and answers every request with `"cancel"`.
@@ -1041,9 +1029,8 @@ it.
   errorType?, durationMs, caller: "cli"|"mcp"|"client", consent?: "elicitation" }`.
   `consent` is set only when a `"prompt"` call proceeded after an elicitation accept, kept
   distinct from a plain `"ok"` since the daemon never observes the client-side prompt itself,
-  only that the call arrived carrying this marker. Audit files written before the flag-based
-  fallback was removed may also contain `consent: "client"`. Raw
-  args are never logged. Day files are pruned on the `auditRetentionDays` schedule described in
+  only that the call arrived carrying this marker (older audit files may also hold
+  `consent: "client"`). Raw args are never logged. Day files are pruned on the `auditRetentionDays` schedule described in
   §3, and `daemon status` surfaces the directory's file count, size, and failure counters.
 
 ## 13. Package layout
@@ -1055,8 +1042,8 @@ packages/
                    Standard Schema helpers. No runtime deps.
   appduct/      CLI + daemon + MCP:
     src/daemon/    lifecycle (pidfile, UDS server, auto-spawn helpers), session engine,
-                   link minter, tls (cert minting — reuse host-certificate.ts),
-                   event bus, policy, audit
+                   link minter, tls (key loading and leaf-cert minting on top of
+                   host-certificate.ts), event bus, policy, audit
     src/rpc/       RPC client library (connect-or-spawn), shared by cli/ and mcp/
     src/commands/  one handler per command (daemon/<action>.ts per daemon action):
                    typed options in, CliResult out, no argv parsing — what tests call
@@ -1064,36 +1051,30 @@ packages/
                    multi-level router (router.ts) and one route per command under
                    routes/ (routes/daemon/ is a nested router) — §10 "Startup cost"
     src/mcp/       stdio MCP server
-  react-native/    @appduct/react-native (entries: ., /auto, /noop). Depends only on
+    src/events/    waitForAppEvent, the drain-then-live event wait shared by mcp/ and client/
+    src/client/    appduct/client, the programmatic client for test runners
+  react-native/    @appduct/react-native (entries: ., /auto, /noop, /metro, app.plugin.js). Depends only on
                    @appduct/shared — no third-party runtime deps, which is why no
                    JSON Schema validator ships with it (§11's raw schema form). Vendors
                    packages/native at build time (see below) rather than depending on it.
   native/          Framework-free Swift (SwiftPM, packages/native/ios) and Kotlin
                    (standalone Gradle project, packages/native/android) core. Not an
-                   npm/pnpm workspace package -- no package.json. §11, BUILD-VARIANTS.md
-                   § Native core, docs/tasks/14-native-core-extraction.md.
+                   npm/pnpm workspace package -- no package.json. §11,
+                   docs/internal/native-core.md, docs/tasks/14-native-core-extraction.md.
 playground/        reference app (Expo dev build)
+playground-native/ plain iOS and Android apps on packages/native, no React Native
 ```
 
 The repo-root `Package.swift` (SwiftPM manifests must live at the repository root for URL
 dependencies) is the SwiftPM manifest for `packages/native/ios`.
 
-Tooling stays: pnpm workspaces, turbo, Vitest, tsc for declarations (`appduct` and
-`@appduct/shared` emit their JS with esbuild — §10 "Startup cost"). Node ≥ 20 for the daemon
-(UDS + `AF_UNIX` on Windows). Windows support is best-effort; the control plane uses the
-named-pipe path `\\.\pipe\appduct-<user>` behind the same client API.
+Tooling: pnpm workspaces, turbo, Vitest, tsc for declarations (`appduct` and
+`@appduct/shared` emit their JS with esbuild — §10 "Startup cost"). Node ≥ 20 for the daemon.
+The control plane is always a Unix domain socket (`getSocketPath` in `daemon/state-dir.ts`).
 
 ## 14. Current limitations
 
-- A general-purpose interactive consent UI. `policy: "prompt"` (§12) has one implemented
-  MCP-only gate (elicitation, issue #10) — the CLI, and an MCP client that doesn't declare
-  elicitation, still fail closed with no prompt of their own.
-- Remote relay / hosts outside the operator machine.
-- Pinning an offline anchor CA that signs short-lived leaves (rotation uses overlapping
-  pin sets; the anchor-CA design is a future option).
 - Web/browser client (safe no-op stub only).
 - Multiple endpoint candidates in the bootstrap payload.
 - A tool whose `input_schema` root `type` rules out an object (`"string"`, `"array"`, ...) is
-  listed but not callable, because `tools.call`'s `args` are always a JSON object (§5). Wrapping
-  such arguments so the tool stays callable is tracked in
-  [issue #34](https://github.com/callstackincubator/appduct/issues/34).
+  listed but not callable, because `tools.call`'s `args` are always a JSON object (§5).

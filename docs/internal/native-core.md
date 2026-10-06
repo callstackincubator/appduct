@@ -36,14 +36,13 @@ development or CI.
 `ios/Sources/AppductCore/Real/AppductClient.swift` (plus its `+Session`/`+ToolInvocation`
 extensions) and `android/core/src/main/java/.../AppductClient.kt` are, respectively, a
 `public actor` and a plain class on top of `AppductConnectionManager`/`AppductTransport` that
-own everything the TypeScript client (`packages/react-native/src/client/*`) used to own: the
+own all of the session logic, so the React Native package's TypeScript has none of it: the
 claim/resume handshake, full-jitter reconnect, grace-window recovery, lease restore, registry
 snapshot/delta sync, per-call timeout/cancel/progress, and foreground/background observation. See
 [`../tasks/15-native-session-logic.md`](../tasks/15-native-session-logic.md) (iOS + JS) and
 [`../tasks/16-android-session-logic.md`](../tasks/16-android-session-logic.md) (Android) for the
 full API, the RN bridge's continuation-per-call protocol on top of it, and every documented
-deviation from issue #48's sketch (the `sessionChange` event shrinking to `{ sessionId, alias }`,
-`defaultToolTimeoutMs` no longer being app-configurable, and so on).
+deviation from issue #48's sketch.
 
 ## The `Appduct` facade (the plain-app entry point)
 
@@ -77,7 +76,7 @@ ios/
     Real/      the real implementation, every file wrapped in `#if APPDUCT_ENABLED`
                (includes AppductAPI.swift, the plain-app facade)
     Stub/      a same-API no-op mirror, every file wrapped in `#if !APPDUCT_ENABLED`
-  Tests/AppductCoreTests/    XCTest suite (moved from packages/react-native/ios/AppductTests)
+  Tests/AppductCoreTests/    XCTest suite
 android/
   core/        the real implementation as a standalone Gradle module
                (includes Appduct.kt, AppductInitProvider.kt, AppductLinkActivity.kt --
@@ -96,11 +95,11 @@ dependencies (and therefore only lets another project depend on this repo via
 ## How `@appduct/react-native` vendors this
 
 The RN package does **not** depend on `AppductCore`/`com.callstack.appduct:core` as
-a CocoaPods/Gradle dependency. Publishing this core independently to CocoaPods trunk and Maven
-Central is deferred (see the table above); until then the RN package's own releases would be
-blocked on unrelated native-core publishing infrastructure if it depended on published core
-artifacts. Instead, `packages/react-native/scripts/sync-native-core.mjs` copies source files
-straight into the RN package at build/publish time:
+a CocoaPods/Gradle dependency, even though both are published (see the table above). Vendoring
+keeps an `@appduct/react-native` install free of a separate SwiftPM/Maven resolution step, and
+keeps the RN package's npm release independent of the native registries (Maven Central's final
+publish is a manual step). `packages/react-native/scripts/sync-native-core.mjs` copies source
+files straight into the RN package at build/publish time:
 
 - `ios/Sources/AppductCore/Real/*.swift` → `packages/react-native/ios/Core/` (only `Real/` — the
   RN pod always compiles with `-DAPPDUCT_ENABLED` set, so it never needs `Stub/`)
@@ -124,11 +123,55 @@ tarball (see `.npmignore`/`package.json#files`), so a consumer installing `@appd
 from npm gets the vendored sources without ever needing this directory or a SwiftPM/Maven
 dependency resolution step.
 
+## Build variants: how each consumer excludes the real implementation
+
+Inclusion never depends on a runtime build-type check. In every case below, an excluded
+configuration's build does not contain the real implementation's code at all.
+
+**iOS, SwiftPM.** Every file under `Sources/AppductCore/Real/` is wrapped in
+`#if APPDUCT_ENABLED`, with a same-API no-op mirror under `Stub/` wrapped in
+`#if !APPDUCT_ENABLED`. The `AppductCore` target's `swiftSettings` define `APPDUCT_ENABLED` for
+the `Debug` configuration, plus for any configuration that opts into the `AlwaysEnabled`
+package trait. It is a trait rather than a second product because a target's sources (and so
+its active `#if` branches) are shared by every product built from it; a second "always-real"
+product could not compile different content from the first. It is a compiler define rather
+than a linking decision because a SwiftPM `TargetDependency` cannot be conditioned on build
+configuration the way a CocoaPods dependency can.
+
+**iOS, CocoaPods.** The repo-root `AppductCore.podspec` is linked with
+`:configurations => ['Debug']` by the consuming app. `@appduct/react-native`'s own
+`Appduct.podspec` vendors only `Real/` and always compiles it with `-DAPPDUCT_ENABLED`:
+autolinking (its `react-native.config.js` sets `ios.configurations` from `APPDUCT_ENABLED`)
+has already decided inclusion by the time those sources compile.
+
+**Android, plain app.** `debugImplementation(core)` / `releaseImplementation(core-noop)`, a
+real per-variant dependency decision. `core-noop` has the same public API, no `okhttp`
+dependency, no marker class and no manifest entries.
+
+**Android, vendored into `@appduct/react-native`.** The RN Gradle project cannot be restricted
+per variant with autolinking's `buildTypes`: the package registers statically
+(`packageInstance`), and React Native's generated `PackageList.java` is one file shared
+unfiltered across every variant, so restricting linking would leave it referencing a class
+missing from an unlisted variant's classpath (a compile error, not an inert build). So the RN
+project links into every variant, `AppductPackage`/`NativeAppductModule`
+(`android/src/main/java`) always compile and reference `AppductConnectionManager` and friends
+by unqualified name, and `android/build.gradle` adds one vendored directory to each variant's
+`java.srcDirs`: `debug` always gets `android/core`; `release` gets `android/core` when
+`APPDUCT_ENABLED` is `1`/`true` and `android/core-noop` otherwise.
+
+**Doctor markers.** Each real implementation carries a marker compiled only into it, never
+into the stub or no-op: `AppductCoreMarker` (an `@objc` class, iOS) and `AppductNativeMarker`
+(Android, protected by a keep rule). `appduct doctor` decides presence from that marker alone,
+never from a package or class name or a manifest/plist key that a no-op build shares with the
+real one. `@appduct/react-native`'s podspec and `android/build.gradle` also print `[appduct] native module INCLUDED in this
+build` when the real implementation is linked, as an early warning; `doctor` against the signed
+artifact is the authority.
+
 ## Fixtures and task notes
 
 - [`../../packages/native/fixtures/README.md`](../../packages/native/fixtures/README.md) — the
-  cross-language conformance vectors (bootstrap payloads and links, tool descriptors, close codes,
-  the SPKI pin) that the TypeScript, Swift, and Kotlin test suites all read from one place, so a
+  cross-language conformance vectors (bootstrap payloads and links, tool descriptors, event
+  descriptors and event registry frames, close codes, the SPKI pin) that the TypeScript, Swift, and Kotlin test suites all read from one place, so a
   future change to one implementation's parsing/validation rules can't drift from the other two
   without a test failing ([`../tasks/17-conformance-fixtures.md`](../tasks/17-conformance-fixtures.md)).
 - [`../tasks/14-native-core-extraction.md`](../tasks/14-native-core-extraction.md) — phase 1, the
@@ -146,7 +189,7 @@ dependency resolution step.
 
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §11 — the SDK entry points and client behavior this
   core implements.
-- [`../BUILD-VARIANTS.md`](../BUILD-VARIANTS.md#native-core) — how inclusion is decided and verified
-  on every platform.
+- [`../BUILD-VARIANTS.md`](../BUILD-VARIANTS.md) — the user-facing inclusion rules and how to verify
+  them with `appduct doctor`.
 - [`../SECURITY.md`](../SECURITY.md#configuring-trust) — trust modes, pins, and the same keys a
   plain native app sets.

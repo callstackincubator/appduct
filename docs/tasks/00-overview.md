@@ -14,14 +14,6 @@ builds" design with a simpler one:
 Read this file before starting any task in this directory — the contract below is what makes
 the tasks parallelizable.
 
-## Note on the old task numbering
-
-Comments across ~37 files reference `docs/tasks/00-overview.md`,
-`docs/tasks/01-ios-debug-flag-spike.md`, "opt-in hardening design doc part B", and bare task
-numbers. Those files were never committed, and the numbers collide with this series. Task 01
-strips every one of those references and **must land before anything else**, so that a
-reference to `docs/tasks/NN-*.md` in this repo means a file that exists.
-
 ## Motivating problems
 
 1. **The gate is keyed on the wrong axis.** `debuggable`/`#if DEBUG` splits builds into
@@ -167,27 +159,10 @@ axis) still does not recur: a release-signed internal/QA build simply sets
 `APPDUCT_ENABLED=1` for that pipeline, same as it would have set `APPDUCT_ENABLED=0` to
 exclude. `appduct doctor` remains the artifact-level check either way.
 
-## Task list and ordering
+## Task list
 
 | # | Task | Depends on |
 | --- | --- | --- |
-| 01 | Purge stale task references | — (must land first, alone) |
-| 02 | Fix autolinking exclusion (docs + playground) | 01 |
-| 03 | `useAppductTool({ enabled })` | 01 |
-| 04 | Remove native build-time gating | 01 |
-| 05 | Explicit trust mode in native clients | 01 |
-| 06 | Config plugin rewrite | 04, 05 |
+| 05 | Explicit trust mode in native clients | — |
 | 07 | Native module constants → JS | 05 |
-| 08 | `appduct doctor` artifact check | 01 |
-| 09 | Docs, migration, CI | all |
-
-**Parallelization:**
-
-- **Wave 0 (alone):** 01. It edits comments in ~37 files; landing it concurrently with
-  anything else guarantees conflicts.
-- **Wave 1 (parallel, no shared files):** 02, 03, 04, 05, 08. Task 04 touches
-  `AppductPackage.kt`, the two iOS entry files, and the podspec; task 05 touches
-  `AppductConnectionManager.{kt,swift}`. Verify that split holds before starting both.
-- **Wave 2 (parallel):** 06 and 07, once the key names in 04/05 are real rather than
-  contract-only.
-- **Wave 3:** 09, last, once behavior is settled.
+| 08 | `appduct doctor` artifact check | — |

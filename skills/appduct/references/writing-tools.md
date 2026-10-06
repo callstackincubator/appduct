@@ -147,7 +147,8 @@ Before and after:
 registerTool({ name: "checkout", description: "Checkout", inputSchema: z.object({ payload: z.any() }),
   handler: async ({ payload }) => runCheckout(payload) });
 
-// After: `place_order(paymentMethod: "card" | "apple_pay" = "card") -> { orderId: string, total: number }  [destructive]`
+// After: `place_order(paymentMethod: "card" | "apple_pay" = "card") -> { orderId: string, total: number }`,
+// tagged `[prompt]` when the daemon's policy asks before running destructive tools.
 registerTool({
   name: "place_order",
   description: "Place an order for the current cart and navigate to the confirmation screen. Requires a signed-in user with a non-empty cart. Charges the test payment method.",

@@ -195,7 +195,22 @@ To tell a test or agent that something happened, post an event. It throws unless
 try await Appduct.shared.postEvent("checkout_completed", payload: ["orderId": "ord_4821"])
 ```
 
-Read events with `appduct events tail`, or wait for one from a test. See [Wait for app events](/appduct/guides/cli/#watch-events).
+To list an event for agents before it's posted, declare it with its description and an optional JSON Schema for the payload:
+
+```swift
+let registration = try Appduct.shared.registerEvent(
+  name: "checkout_completed",
+  description: "An order was paid.",
+  payloadSchema: ["type": "object", "properties": ["orderId": ["type": "string"]], "required": ["orderId"]]
+)
+
+// Withdraw it:
+registration.remove()
+```
+
+`appduct events ls` shows what's declared. The schema is only listed for callers; Appduct doesn't check posted payloads against it. A malformed schema makes `registerEvent` throw.
+
+Read events with [`appduct events tail`](/appduct/guides/cli/#watch-events), or [wait for one from a test](/appduct/guides/cli/#drive-the-app-from-a-test-suite).
 
 ## Ship Appduct in a Release build
 

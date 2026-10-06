@@ -30,7 +30,7 @@ npm install -g appduct
 
 No key, no pins, and no config plugin are needed for a first run, in any build type. The daemon auto-generates a key on first start, and `appduct sessions link` carries its `sha256/...` fingerprint on the deep link for the app to trust for that session.
 
-Wire your deep-link scheme so the OS can open the app with that link. For an Expo app that's all: `appduct sessions link` reads `expo.scheme` straight out of `app.json`. Otherwise (a dynamic `app.config.js`, which Appduct never executes, or bare React Native) name it with `appduct init --scheme <s>`, `--scheme`, or `APPDUCT_SCHEME` — the [CLI README](https://github.com/callstackincubator/appduct/blob/main/packages/appduct/README.md#the-deep-link-scheme) has the full resolution order. To make a build trust only pins you embedded ahead of time, see [Configuring trust](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#configuring-trust).
+Wire your deep-link scheme so the OS can open the app with that link. That's all the CLI needs: `appduct sessions link` reads `expo.scheme` from `app.json`, or, in bare React Native, the scheme your `Info.plist` or `AndroidManifest.xml` already declares. If the scheme lives only in a dynamic `app.config.js`, which Appduct never executes, name it with `appduct init --scheme <s>`, `--scheme`, or `APPDUCT_SCHEME` — the [CLI README](https://github.com/callstackincubator/appduct/blob/main/packages/appduct/README.md#the-deep-link-scheme) has the full resolution order. To make a build trust only pins you embedded ahead of time, see [Configuring trust](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#configuring-trust).
 
 By default the native module ships in **debug** builds only: a release build has none, so the API is inert and `connect()` rejects with `appduct_disabled` (see [Build variants](https://github.com/callstackincubator/appduct/blob/main/docs/BUILD-VARIANTS.md)).
 
@@ -48,7 +48,7 @@ if (__DEV__) {
 }
 ```
 
-The default flow needs no `Linking` handler of your own, and sessions survive Metro reloads and network flaps — see [ARCHITECTURE.md §11](https://github.com/callstackincubator/appduct/blob/main/docs/ARCHITECTURE.md#11-react-native-sdk) for lease, resume, and reconnect rules.
+The default flow needs no `Linking` handler of your own. A session survives Metro reloads and network drops: the app reconnects by itself and picks up the same session, as long as it comes back within the daemon's grace period (10 minutes by default).
 
 If you drive bootstrap yourself and never import `/auto`, call `restoreSession()` before your own bootstrap handling — it's then the only reader of the native resume lease.
 
@@ -71,8 +71,7 @@ export function AppductBootstrap() {
       inputSchema: z.object({ a: z.number(), b: z.number() }),
       outputSchema: z.object({ total: z.number() }),
       handler: async ({ a, b }) => ({ total: a + b }),
-    },
-    []
+    }
   );
 
   return null;
@@ -89,12 +88,12 @@ To keep a destructive tool out of some build variants, pass `{ enabled }` rather
 
 An agent picks a tool from one signature line and the first line of its description, so name tools by intent, set `annotations` (`readOnlyHint`, `destructiveHint`), declare an `outputSchema`, and describe each parameter — see [Designing tools for agents](https://github.com/callstackincubator/appduct/blob/main/docs/TOOLS.md#designing-tools-for-agents).
 
-### 5. Start the daemon and test the flow
+### 5. Link the app and call a tool
 
-`appduct` auto-spawns its daemon. `sessions link` needs your app's deep-link scheme: pass `--scheme` (matching `expo.scheme`), or set `scheme` once in `~/.appduct/config.json`:
+Run this from your app's directory. The daemon starts on its own, and the scheme is read from `app.json` or the native project files, as in step 2; pass `--scheme <s>` to override it:
 
 ```bash
-appduct sessions link --scheme myapp --qr
+appduct sessions link --qr
 ```
 
 Scan the QR (or open the link) in the app, then list and invoke tools:
@@ -150,7 +149,6 @@ Omit the session selector when only one session is active; pass an alias or sess
 - [Gating a tool by build variant](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#gating-a-tool-by-build-variant) — `enabled`, and why `__DEV__` is wrong here.
 - [Build variants](https://github.com/callstackincubator/appduct/blob/main/docs/BUILD-VARIANTS.md) — `APPDUCT_ENABLED`, autolinking exclusion, compiling Appduct out of production builds.
 - [What a build without the native module does](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md#what-a-build-without-the-native-module-does).
-- [ARCHITECTURE.md §11](https://github.com/callstackincubator/appduct/blob/main/docs/ARCHITECTURE.md#11-react-native-sdk) — resume lease, reconnect, cancellation.
 - [`appduct` CLI and MCP server](https://github.com/callstackincubator/appduct/blob/main/packages/appduct/README.md).
 
 ## Made with ❤️ at Callstack

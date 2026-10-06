@@ -6,9 +6,7 @@ A plain SwiftUI app -- no React Native, no Expo -- that consumes `AppductCore`
 tools the Expo playground (`playground/`) registers, so `appduct tools ls` reports an equivalent
 surface regardless of which playground app answered the link.
 
-See [`packages/native/ios/README.md`](../../packages/native/ios/README.md) for the SDK itself;
-[`docs/tasks/18-ios-entry-points.md`](../../docs/tasks/18-ios-entry-points.md) for why this app is
-built the way it is.
+See [`packages/native/ios/README.md`](../../packages/native/ios/README.md) for the SDK itself.
 
 ## Run it
 
@@ -51,8 +49,7 @@ own `AppductCore` sources -- there is nothing to vendor or publish first.
 ## Debug ships the real core, Release ships the stub
 
 This target sets no `APPDUCT_ENABLED` define of its own. Xcode passes the configuration name
-straight through to SwiftPM, and `Package.swift`'s `.when(configuration: .debug)` does the rest
-(Decision 2, [`docs/tasks/14-native-core-extraction.md`](../../docs/tasks/14-native-core-extraction.md)):
+straight through to SwiftPM, and `Package.swift`'s `.when(configuration: .debug)` does the rest:
 a `Debug` build links the real `AppductCore` implementation, a `Release` build links the
 same-API `Stub/` implementation, and neither configuration needed a build setting naming
 `APPDUCT_ENABLED` explicitly. Verify this against the built artifact rather than trusting the
