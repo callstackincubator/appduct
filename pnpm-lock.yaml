@@ -52,6 +52,9 @@ importers:
         specifier: ^8.18.3
         version: 8.21.1
     devDependencies:
+      '@appduct/react-native':
+        specifier: workspace:*
+        version: link:../react-native
       '@appduct/web':
         specifier: workspace:*
         version: link:../web
@@ -88,6 +91,9 @@ importers:
       '@appduct/shared':
         specifier: workspace:*
         version: link:../shared
+      '@appduct/web':
+        specifier: workspace:*
+        version: link:../web
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

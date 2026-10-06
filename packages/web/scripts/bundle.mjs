@@ -1,7 +1,7 @@
 /**
  * Bundles `@appduct/web` with esbuild: `dist/index.js` is one browser-ready ES module with
  * `@appduct/shared` inlined, so a page or bundler imports it by name with no further resolution.
- * `dist/react.js` is the `./react` entry; it imports `@appduct/web` rather than inlining a second
+ * `dist/react.js` is the `./react` entry; it imports `./index.js` rather than inlining a second
  * copy, so the hook and the plain API share one session. Types come from
  * `tsc -p tsconfig.build.json` (declarations only).
  */
@@ -21,7 +21,7 @@ await build({
     {
       name: "share-the-web-entry",
       setup(b) {
-        b.onResolve({ filter: /^\.\.\/index\.js$/ }, () => ({ path: "@appduct/web", external: true }));
+        b.onResolve({ filter: /^\.\.\/index\.js$/ }, () => ({ path: "./index.js", external: true }));
       },
     },
   ],

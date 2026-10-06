@@ -54,6 +54,7 @@
     "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@appduct/react-native": "workspace:*",
     "@appduct/web": "workspace:*",
     "@types/node": "^22.10.0",
     "@types/react": "~19.1.17",
