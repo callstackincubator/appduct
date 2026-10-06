@@ -2,4 +2,4 @@ export { createMemoryDaemonSockets, type MemoryDaemonSocket, type MemoryDaemonSo
 export { createMemoryPageChannel, type MemoryPageChannel } from "./memory-page-channel.js";
 export { openNodeDaemonSocket } from "./node-daemon-socket.js";
 export type { DaemonSocket, DaemonSocketEvents, OpenDaemonSocket, PageChannel } from "./ports.js";
-export { linkPayload, relayPage, type RelayLink } from "./relay.js";
+export { linkPayload, parseLink, relayPage, type RelayLink } from "./relay.js";

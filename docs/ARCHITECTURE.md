@@ -70,7 +70,9 @@ Browsers reach the daemon on a second listener, `ws://127.0.0.1:<webPort>`, not 
   same listener over a Node socket, which sends no `Origin`. The page selects it with
   `connect(link, { transport: "devtools" })`, so an `https` page needs no `webOrigins` entry and
   opens no connection of its own. One binding serves a page for its lifetime; a later `attachPage`
-  re-points it at the new link. The binding belongs to the page's target, so a popup or a navigation
+  re-points it at the new link, which suspends the first link's session for its grace period; until
+  it expires, `connect()` with no selector is `ambiguous_session`, so select the new session with
+  `connect({ selector: link.sessionId })` or `waitForSession`. The binding belongs to the page's target, so a popup or a navigation
   that creates a new target is not relayed. A link is claimable
   only on the listener of its transport (`link.create`'s `transport`, §5). The page side is
   `packages/web` (`@appduct/web`): a TypeScript port of the native session core under the same SDK

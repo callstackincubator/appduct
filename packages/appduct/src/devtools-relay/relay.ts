@@ -1,4 +1,4 @@
-import { decodeBootstrap } from "@appduct/shared";
+import { decodeBootstrap, type BootstrapPayload } from "@appduct/shared";
 
 import type { DaemonSocket, OpenDaemonSocket, PageChannel } from "./ports.js";
 
@@ -12,6 +12,13 @@ export const linkPayload = (link: RelayLink): string => {
   return payload;
 };
 
+/** The bootstrap a link carries; throws when the link has no payload or the payload is not an Appduct link. */
+export const parseLink = (link: RelayLink): BootstrapPayload => {
+  const bootstrap = decodeBootstrap(linkPayload(link));
+  if (!bootstrap) throw new Error("The link's #appduct= payload is not a valid Appduct link.");
+  return bootstrap;
+};
+
 /** 1001: the page that held the socket is gone, as a browser closes its own on unload. */
 const GOING_AWAY = 1001;
 
@@ -21,8 +28,7 @@ const GOING_AWAY = 1001;
  * document is destroyed, so the daemon suspends the session and the reloaded page resumes it.
  */
 export const relayPage = (page: PageChannel, link: RelayLink, openDaemonSocket: OpenDaemonSocket): void => {
-  const bootstrap = decodeBootstrap(linkPayload(link));
-  if (!bootstrap) throw new Error("The link's #appduct= payload is not a valid Appduct link.");
+  const bootstrap = parseLink(link);
   const host = bootstrap.address.includes(":") ? `[${bootstrap.address}]` : bootstrap.address;
   const url = `ws://${host}:${bootstrap.port}`;
 

@@ -5,7 +5,7 @@
  * to the page's target: a popup, or a navigation that creates a new target, is not relayed, and the
  * session stays on the page it was attached to.
  */
-import { linkPayload, openNodeDaemonSocket, relayPage, type PageChannel, type RelayLink } from "../devtools-relay/index.js";
+import { linkPayload, openNodeDaemonSocket, parseLink, relayPage, type PageChannel, type RelayLink } from "../devtools-relay/index.js";
 import { toAppductError } from "./errors.js";
 
 /** The part of a Playwright `Page` that `attachPage` uses, so `appduct` has no Playwright dependency. */
@@ -35,6 +35,10 @@ const channelOf = async (page: AttachablePage): Promise<PageChannel> => {
   const existing = channels.get(page);
   if (existing) {
     existing.reset(); // closes the previous link's daemon socket
+    // The page still holds its transport for that socket; close it so a failed re-attach leaves nothing half-open.
+    await page
+      .evaluate(`window.__APPDUCT__?.receive(${JSON.stringify(JSON.stringify({ kind: "close", code: 1001, reason: "superseded" }))})`)
+      .catch(() => undefined);
     return existing;
   }
 
@@ -68,6 +72,12 @@ const channelOf = async (page: AttachablePage): Promise<PageChannel> => {
  * Connects the page, which must already load `@appduct/web`, to the daemon through its Playwright
  * binding. Resolves once the session is claimed. A reload resumes the session over the same binding.
  *
+ * Attaching a page that is already attached closes the first link's socket, so the daemon suspends
+ * the first session for its grace period and it stays listed as `suspended`. While it is, a
+ * `connect()` with no selector finds two sessions and fails with `ambiguous_session`: select the new
+ * one with `connect({ selector: link.sessionId })` or `waitForSession`. An invalid `link` rejects
+ * before anything is dropped.
+ *
  * ```ts
  * await page.goto("https://staging.example.com");
  * await attachPage(page, { link: await link({ target: "web", url: page.url() }) });
@@ -75,6 +85,7 @@ const channelOf = async (page: AttachablePage): Promise<PageChannel> => {
  */
 export const attachPage = async (page: AttachablePage, options: AttachPageOptions): Promise<void> => {
   try {
+    parseLink(options.link); // before the channel drops the previous link's socket
     const payload = linkPayload(options.link);
     relayPage(await channelOf(page), options.link, openNodeDaemonSocket);
     await page.waitForFunction("typeof window.__APPDUCT__?.connect === 'function'");
