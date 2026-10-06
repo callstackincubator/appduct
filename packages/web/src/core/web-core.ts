@@ -4,7 +4,7 @@ import type { AppductCore, AppductNativeEvents } from "@appduct/shared/sdk";
 import { fullJitterBackoffMs } from "./backoff.js";
 import { createConnection, type ConnectionOptions } from "./connection.js";
 import { isResumeLeaseExpired, parseResumeLease } from "./lease.js";
-import type { TimerHandle, WebCorePorts } from "./ports.js";
+import type { TimerHandle, TransportKind, WebCorePorts } from "./ports.js";
 import { createEventRegistry, createToolRegistry } from "./registry.js";
 import { createToolInvoker } from "./tool-invoker.js";
 
@@ -20,6 +20,7 @@ type HeldSession = {
   disconnectedAtMs: number | null;
   ip: string;
   port: number;
+  transport: TransportKind;
   acceptsEventRegistry: boolean;
 };
 
@@ -66,6 +67,7 @@ const parseConnectInput = (json: string): { options: ConnectionOptions; expiresA
       ip,
       port: input.port,
       sessionId: input.sessionId,
+      transport: input.transport === "devtools" ? "devtools" : "websocket",
       token: optionalString(input.token, "token"),
       resumeToken: optionalString(input.resumeToken, "resumeToken"),
       deviceManufacturer: optionalString(input.deviceManufacturer, "deviceManufacturer"),
@@ -222,7 +224,11 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
     );
   };
 
-  const onAckReceived = (ack: SessionAckMessage, kind: "claimed" | "resumed", ip: string, port: number) => {
+  const onAckReceived = (
+    ack: SessionAckMessage,
+    kind: "claimed" | "resumed",
+    { ip, port, transport }: { ip: string; port: number; transport: TransportKind },
+  ) => {
     clearReconnectTimer();
     clearGraceTimer();
     reconnectAttempt = 0;
@@ -236,6 +242,7 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
       disconnectedAtMs: null,
       ip,
       port,
+      transport,
       acceptsEventRegistry: ack.event_registry === true,
     };
     connectingSessionId = null;
@@ -284,8 +291,14 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
     resumeInFlight = true;
     try {
       await handshake(
-        { ip: session.ip, port: session.port, sessionId: session.sessionId, resumeToken: session.resumeToken },
-        (ack) => onAckReceived(ack, "resumed", session.ip, session.port),
+        {
+          ip: session.ip,
+          port: session.port,
+          transport: session.transport,
+          sessionId: session.sessionId,
+          resumeToken: session.resumeToken,
+        },
+        (ack) => onAckReceived(ack, "resumed", session),
       );
     } catch (error) {
       resumeInFlight = false;
@@ -401,7 +414,7 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
 
     try {
       setState("connecting");
-      await handshake(options, (ack) => onAckReceived(ack, "claimed", options.ip, options.port));
+      await handshake(options, (ack) => onAckReceived(ack, "claimed", options));
     } catch (error) {
       if (myEpoch === epoch) {
         connectingSessionId = null;
@@ -466,6 +479,7 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
         disconnectedAtMs: lease.disconnectedAtMs ?? nowMs,
         ip: lease.endpoint.ip,
         port: lease.endpoint.port,
+        transport: lease.transport,
         // Not acked yet; the ack that resumes the session says.
         acceptsEventRegistry: false,
       };

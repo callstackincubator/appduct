@@ -8,6 +8,7 @@ export type {
   Socket,
   SocketEvents,
   TimerHandle,
+  TransportKind,
   Transport,
   WebCorePorts,
 } from "./ports.js";
