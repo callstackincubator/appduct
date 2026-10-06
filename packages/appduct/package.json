@@ -1,7 +1,7 @@
 {
   "name": "appduct",
   "version": "0.14.0",
-  "description": "Driving React Native tools without in-app debug UI.",
+  "description": "Call functions inside your running iOS, Android or React Native app from a terminal, test or AI agent.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -24,6 +24,8 @@
   },
   "keywords": [
     "appduct",
+    "ios",
+    "android",
     "react-native",
     "agent"
   ],

@@ -70,7 +70,7 @@ export default function ToolsScreen() {
   // left ungrouped -- so `appduct tools ls` shows headings, `--groups` has something to list, and
   // `--group diagnostics` vs `--group diagnostics/progress` differ.
   //
-  // These tools are the template an agent copies (docs/TOOLS.md, "Designing tools for agents"):
+  // These tools are the template an agent copies (https://callstackincubator.github.io/appduct/guides/writing-tools/#design-tools-for-the-agent-that-calls-them):
   // every tool that returns something has an object-rooted `outputSchema`, observers carry
   // `readOnlyHint`, the one that
   // resets state carries `destructiveHint` (and `idempotentHint`, since resetting twice is the

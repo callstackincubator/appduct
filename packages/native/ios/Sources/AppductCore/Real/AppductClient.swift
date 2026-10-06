@@ -4,11 +4,11 @@
 
 import Foundation
 
-/// Everything the TypeScript client (`packages/react-native/src/client/*`, `bootstrap.ts`,
-/// `deep-link-core.ts`) used to own, ported into Swift on top of `AppductConnectionManager`
-/// (issue #48 phase 2, `docs/tasks/15-native-session-logic.md`): reconnect with full-jitter backoff,
-/// grace-window lease recovery, the tool registry and its wire deltas, per-call timeout/cancel/
-/// progress, and v2 bootstrap deep-link handling. One instance is meant to live for the app process
+/// Everything the TypeScript client (`packages/react-native/src/client/*`, `bootstrap.ts`, /
+//`deep-link-core.ts`) used to own, ported into Swift on top of `AppductConnectionManager` / (issue
+//#48 phase 2): reconnect with full-jitter backoff, / grace-window lease recovery, the tool registry
+//and its wire deltas, per-call timeout/cancel/ / progress, and v2 bootstrap deep-link handling. One
+//instance is meant to live for the app process
 /// lifetime (or the RN TurboModule bridge's lifetime); construct one, `registerTool` your handlers,
 /// then `connect`/`restoreSession`/`handleUrl` as your app's bootstrap flow requires.
 public actor AppductClient {

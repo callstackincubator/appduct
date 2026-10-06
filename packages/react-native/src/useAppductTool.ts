@@ -24,8 +24,8 @@ export type UseAppductToolOptions = {
    * removes any existing registration owned by this hook instance), so this is the supported way
    * to gate a tool by build variant without violating the rules of hooks — put the condition in
    * the argument instead of wrapping the hook call itself, e.g.
-   * `{ enabled: process.env.EXPO_PUBLIC_APPDUCT_TOOLS === "full" }`. See `docs/SECURITY.md`'s
-   * "Gating a tool by build variant" section for the recommended predicate and why `__DEV__`
+   * `{ enabled: process.env.EXPO_PUBLIC_APPDUCT_TOOLS === "full" }`. See
+   * https://callstackincubator.github.io/appduct/guides/security/#keep-a-tool-out-of-some-builds for the recommended predicate and why `__DEV__`
    * is the wrong default for anything but genuinely debug-only tools.
    */
   enabled?: boolean;

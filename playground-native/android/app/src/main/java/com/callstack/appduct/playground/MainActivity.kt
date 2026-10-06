@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 /**
  * The playground's one screen: current connection state/session, a button that posts an app
  * event, and a log of recent state/session/error events and tool calls -- the native mirror of
- * the Expo playground's `playground/app/(tabs)/index.tsx` (docs/tasks/19-android-entry-points.md).
+ * the Expo playground's `playground/app/(tabs)/index.tsx`.
  * Deep links never reach here directly: `AppductLinkActivity` (declared in `core`'s manifest)
  * is the exported entry point for `appduct-native://` links, and this activity's UI just
  * reflects [PlaygroundState], which [PlaygroundApplication] keeps up to date via one

@@ -5,9 +5,9 @@ import android.net.Uri
 import org.json.JSONObject
 
 /**
- * No-op mirror of `core`'s [Appduct] facade (docs/tasks/19-android-entry-points.md, issue #48
- * decision 2): same public surface, but every method does nothing and [state] is always
- * [ClientState.closed]. No `AppductInitProvider` in this module at all -- there is no `Context`
+ * No-op mirror of `core`'s [Appduct] facade (issue #48 decision 2): same public surface, but every
+ * method does nothing and [state] is always [ClientState.closed]. No `AppductInitProvider` in this
+ * module at all -- there is no `Context`
  * to capture and nothing to restore, so this build never touches the network and never needs a
  * manifest entry either (matching `core-noop`'s already-empty `AndroidManifest.xml`). No
  * `kotlinx.coroutines` import: `suspend` is a Kotlin-language/stdlib feature, not a
