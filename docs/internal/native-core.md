@@ -38,11 +38,35 @@ extensions) and `android/core/src/main/java/.../AppductClient.kt` are, respectiv
 `public actor` and a plain class on top of `AppductConnectionManager`/`AppductTransport` that
 own all of the session logic, so the React Native package's TypeScript has none of it: the
 claim/resume handshake, full-jitter reconnect, grace-window recovery, lease restore, registry
-snapshot/delta sync, per-call timeout/cancel/progress, and foreground/background observation. See
-[`../tasks/15-native-session-logic.md`](../tasks/15-native-session-logic.md) (iOS + JS) and
-[`../tasks/16-android-session-logic.md`](../tasks/16-android-session-logic.md) (Android) for the
-full API, the RN bridge's continuation-per-call protocol on top of it, and every documented
-deviation from issue #48's sketch.
+snapshot/delta sync, per-call timeout/cancel/progress, and foreground/background observation.
+
+Design decisions worth knowing before changing it:
+
+- **The RN bridge answers each JS tool through one continuation per call.** The handler the bridge
+  registers emits `onToolCall` and suspends until `respondToToolCall` resumes it with JS's result
+  or error. When the core cancels the call (a `tool_cancel` frame, its own timeout, or the session
+  suspending), the bridge emits `onToolCancel` and rethrows, so the core still decides which wire
+  `tool_error` type goes out, exactly as for a native handler.
+- **Cancellation is the platform's own**, not an `AbortSignal`-like token: Swift `Task`
+  cancellation (`ToolCallContext.cancelReason()` says why) and Kotlin coroutine cancellation.
+- **Native does no schema validation** (issue #48 decision 4). It produces `tool_not_found`,
+  `tool_timeout`, `tool_cancelled`, `tool_execution_error` and `tool_serialization_error`; the two
+  schema validation errors originate in JS and pass through native verbatim.
+- **The default tool timeout is fixed natively at 10 s**, the old JS default. The TurboModule
+  spec has no channel for JS to change it; a per-tool `timeoutMs` still travels on the descriptor.
+- **`registerTool`/`unregisterTool`/`handleUrl` are synchronous** in the TurboModule spec, so the
+  registry is guarded by a plain lock (`NSLock`, `synchronized`) rather than the actor or the
+  client's dispatcher, and `handleUrl` answers at once and does the decode and connect in the
+  background, reporting failures on `onError`.
+- **Android confines all client state to one single-thread dispatcher**
+  (`Dispatchers.Default.limitedParallelism(1)`), so concurrent calls and transport callbacks never
+  race. That dispatcher is not injectable, which is why reconnect and grace timing are covered
+  through the pure backoff and close-code functions rather than end to end. Backgrounding is
+  observed with `ProcessLifecycleOwner`, so switching between Activities does not look like
+  leaving the foreground.
+- **Tests fake the transport session, not the socket.** `AppductTransportSession` (iOS) and
+  `AppductTransport` (Android) are `AppductConnectionManager`'s surface as an interface, which keeps
+  the TLS and pinning code untouched while the whole state machine runs without a network.
 
 ## The `Appduct` facade (the plain-app entry point)
 
@@ -50,10 +74,26 @@ deviation from issue #48's sketch.
 `Appduct.kt`) are thin, public wrappers over `AppductClient` that a plain app calls directly —
 `register`/`handle`/`postEvent`/`addListener`, converting across the `[String: Any]`/`JSONObject`
 boundary instead of exposing `AppductClient`'s own JSON-string-based, TurboModule-shaped API.
-See [`../tasks/18-ios-entry-points.md`](../tasks/18-ios-entry-points.md) and
-[`../tasks/19-android-entry-points.md`](../tasks/19-android-entry-points.md) for the design
-decisions (why `Appduct.shared` starts `restoreSession()` on first access, the Android
-`AppductInitProvider`/`AppductLinkActivity` init-and-deep-link story, and more).
+Its public types (`ClientState`, `BuildConfig`, `ToolCallContext`, ...) are new mirrors, not the
+internal types made public, so the internals can change shape without a public API break.
+
+- **No init call on either platform.** On iOS, `Appduct.shared` is a `static let`, so its first
+  access builds the client and starts `restoreSession()` in a detached `Task`. On Android,
+  `AppductInitProvider`, a manifest-declared `ContentProvider`, captures the application `Context`
+  and builds the client before `Application.onCreate()` runs, which is what lets an app call
+  `Appduct.register(...)` from there. `core-noop` has no provider and needs none.
+- **A handler result that can't become JSON is a `tool_serialization_error`**, never coerced to
+  `null`, so an app bug (returning a `Date`, say) is visible on the wire.
+- **`AppductLinkActivity` takes every link on its scheme.** It is a no-UI trampoline with no
+  knowledge of the app's navigation, so it cannot forward a non-Appduct link. An app that uses the
+  same scheme for its own links gives Appduct a dedicated scheme, or removes the activity
+  (`tools:node="remove"`) and calls `Appduct.handle(intent)` from its own activity.
+- **`${appductScheme}` stays unresolved in `core`'s manifest.** AGP resolves a library's own
+  manifest placeholders when it merges that library's manifest, so a default set in `core` would be
+  baked into the AAR and silently override the consuming app's value. Only the `unitTest` component
+  sets one, for Robolectric.
+- **`core` does not declare `android.permission.INTERNET`.** A library granting an app a
+  permission on its behalf is its own hazard; the consuming app declares it.
 
 **RN apps must not touch the facade.** `Appduct.shared` / the `Appduct` object own their own
 `AppductClient` instance and the one process-memory resume lease that comes with it; the RN
@@ -84,7 +124,6 @@ android/
   core-noop/   same public API, every method a no-op -- no okhttp, no marker class, no manifest
                entries at all
 fixtures/      language-neutral JSON test vectors the TypeScript, Swift, and Kotlin suites all read
-               (../tasks/17-conformance-fixtures.md)
 ```
 
 The repo-root [`Package.swift`](../../Package.swift) is the SwiftPM manifest for `ios/` — it has to
@@ -167,29 +206,19 @@ real one. `@appduct/react-native`'s podspec and `android/build.gradle` also prin
 build` when the real implementation is linked, as an early warning; `doctor` against the signed
 artifact is the authority.
 
-## Fixtures and task notes
+## Conformance fixtures
 
-- [`../../packages/native/fixtures/README.md`](../../packages/native/fixtures/README.md) — the
-  cross-language conformance vectors (bootstrap payloads and links, tool descriptors, event
-  descriptors and event registry frames, close codes, the SPKI pin) that the TypeScript, Swift, and Kotlin test suites all read from one place, so a
-  future change to one implementation's parsing/validation rules can't drift from the other two
-  without a test failing ([`../tasks/17-conformance-fixtures.md`](../tasks/17-conformance-fixtures.md)).
-- [`../tasks/14-native-core-extraction.md`](../tasks/14-native-core-extraction.md) — phase 1, the
-  mechanical extraction and the vendoring/build-variant decisions.
-- [`../tasks/15-native-session-logic.md`](../tasks/15-native-session-logic.md) /
-  [`../tasks/16-android-session-logic.md`](../tasks/16-android-session-logic.md) — phase 2, porting
-  the session lifecycle into Swift/Kotlin.
-- [`../tasks/18-ios-entry-points.md`](../tasks/18-ios-entry-points.md) /
-  [`../tasks/19-android-entry-points.md`](../tasks/19-android-entry-points.md) — phase 3, the
-  plain-app facades and native playgrounds.
-- [`../tasks/21-native-core-integration.md`](../tasks/21-native-core-integration.md) — where every
-  decision and phase of issue #48 landed, end to end.
+[`../../packages/native/fixtures/README.md`](../../packages/native/fixtures/README.md) describes the
+cross-language conformance vectors (bootstrap payloads and links, tool descriptors, event
+descriptors and event registry frames, close codes, the SPKI pin) that the TypeScript, Swift, and
+Kotlin test suites all read from one place, so a change to one implementation's parsing or
+validation rules can't drift from the other two without a test failing.
 
 ## Related
 
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §11 — the SDK entry points and client behavior this
   core implements.
-- [`../BUILD-VARIANTS.md`](../BUILD-VARIANTS.md) — the user-facing inclusion rules and how to verify
+- [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/) — the user-facing inclusion rules and how to verify
   them with `appduct doctor`.
-- [`../SECURITY.md`](../SECURITY.md#configuring-trust) — trust modes, pins, and the same keys a
+- [Security](https://callstackincubator.github.io/appduct/guides/security/#pin-a-build-to-your-key) — trust modes, pins, and the same keys a
   plain native app sets.

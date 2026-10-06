@@ -19,7 +19,7 @@ socket, and each gets its own session.
 - The app does not trust the deep link, the local network, or the IP address by itself.
 - The app trusts the daemon only because the TLS leaf certificate's SPKI hash matches an
   embedded `sha256/...` pin (or a pin in the pin *set* — plural pins let you roll keys
-  without breaking already-shipped app builds; see `docs/SECURITY.md`).
+  without breaking already-shipped app builds; see [Rotate keys](https://callstackincubator.github.io/appduct/guides/security/#rotate-keys)).
 - The deep link only carries bootstrap data for one pending session; it is a hint, not
   proof of authority. The session token inside it is short-lived and single-use.
 

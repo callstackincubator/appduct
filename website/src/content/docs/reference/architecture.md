@@ -89,4 +89,4 @@ The background service keeps running after you upgrade the CLI. The next command
 
 - [Wire protocol](https://github.com/callstackincubator/appduct/blob/main/docs/PROTOCOL.md): messages, the link payload, and close codes, for implementing a client.
 - [ARCHITECTURE.md](https://github.com/callstackincubator/appduct/blob/main/docs/ARCHITECTURE.md): the full design document.
-- [SECURITY.md](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md): the full threat model.
+- [Security](/appduct/guides/security/): what Appduct protects against, and what it doesn't.

@@ -10,7 +10,7 @@ The `appduct` package is the operator/agent side of Appduct: a CLI and an MCP se
 
 - **One daemon, many devices.** It starts on first use and serves every connected iOS, Android and React Native app on one port. A session survives backgrounding, network drops and React Native reloads: it pauses while the app is away and resumes when it reconnects.
 - **Same surface for humans and agents.** The CLI (`sessions`, `tools`, `events`, ...) and `appduct mcp` use the same RPC methods, so an agent sees the tools a human operator does.
-- **Local to your user account.** The CLI and MCP server reach the daemon through a local socket only your user account can open, and the daemon's key and logs are readable only by you (see [`docs/SECURITY.md`][security]).
+- **Local to your user account.** The CLI and MCP server reach the daemon through a local socket only your user account can open, and the daemon's key and logs are readable only by you (see [Security][security]).
 - **Fits production-minded apps.** The app only exposes what you register; trust boundaries are pins and TLS, and production deployments can gate tools with policy and audit every call.
 
 ## Getting started
@@ -77,7 +77,7 @@ Use `--filter <text>` to narrow the listing to tools whose name or description c
 
 ### Tool groups
 
-When the app puts its tools in groups ([`docs/TOOLS.md`](../../docs/TOOLS.md#group-tools-in-a-large-app)), `appduct tools ls` lists them under group headings, with subgroups indented under their parent and ungrouped tools last:
+When the app puts its tools in groups ([Write tools](https://callstackincubator.github.io/appduct/guides/writing-tools/#group-tools-in-a-large-app)), `appduct tools ls` lists them under group headings, with subgroups indented under their parent and ungrouped tools last:
 
 ```
 Tools
@@ -281,7 +281,7 @@ For anything the client doesn't cover, the package's main entry exports `runCli(
 
 ## Keys and pins
 
-You can skip this entirely while your app has no `cliPins` configured — the zero-config default, in any build type. The daemon auto-generates its own `key.pem` the first time it starts if one isn't already there (mode `0600`) and prints its `sha256/...` fingerprint on that first run; `appduct sessions link` carries that fingerprint on the deep link for the app to pick up. See [`docs/SECURITY.md`][security]'s "Trust modes" for what that does and doesn't protect.
+You can skip this entirely while your app has no `cliPins` configured — the zero-config default, in any build type. The daemon auto-generates its own `key.pem` the first time it starts if one isn't already there (mode `0600`) and prints its `sha256/...` fingerprint on that first run; `appduct sessions link` carries that fingerprint on the deep link for the app to pick up. See [Security][security]'s "Trust modes" for what that does and doesn't protect.
 
 For a build that should trust only a key you embedded ahead of time, generate one explicitly:
 
@@ -316,7 +316,7 @@ No log grows without bound: `audit/<YYYY-MM-DD>.jsonl` files older than `auditRe
 | `advertisedIp` | detected | Address put in links for physical devices. |
 | `scheme` | none | Fallback deep-link scheme (step 4 of [The deep-link scheme](#the-deep-link-scheme)). |
 | `restartDaemonOnVersionMismatch` | `false` | Always replace an outdated daemon, even with devices connected. |
-| `policy` | `{ "default": "allow", "destructive": "allow" }` | Which tools callers may run without approval; see [`docs/SECURITY.md`][security]. |
+| `policy` | `{ "default": "allow", "destructive": "allow" }` | Which tools callers may run without approval; see [Security][security]. |
 | `auditRetentionDays` | `30` | Days of audit log to keep. |
 | `daemonLogMaxBytes`, `eventsLogMaxBytes` | 10 MiB | Size at which `daemon.log` and `events.log` are rotated. |
 
@@ -324,7 +324,7 @@ No log grows without bound: `audit/<YYYY-MM-DD>.jsonl` files older than `auditRe
 
 ## Release gate: `appduct doctor`
 
-Appduct's inclusion in a build is controlled entirely by autolinking exclusion (see [`docs/BUILD-VARIANTS.md`][build-variants]) — there's no runtime `debuggable` check to catch a pipeline that forgot to exclude the package. `doctor` checks the built artifact itself, not the config you think produced it:
+Appduct's inclusion in a build is controlled entirely by autolinking exclusion (see [Build variants][build-variants]) — there's no runtime `debuggable` check to catch a pipeline that forgot to exclude the package. `doctor` checks the built artifact itself, not the config you think produced it:
 
 ```bash
 appduct doctor ./build/MyApp.ipa --assert-absent
@@ -366,8 +366,8 @@ Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_camp
 [callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love
 [architecture]: https://github.com/callstackincubator/appduct/blob/main/docs/ARCHITECTURE.md
 [protocol]: https://github.com/callstackincubator/appduct/blob/main/docs/PROTOCOL.md
-[security]: https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md
-[build-variants]: https://github.com/callstackincubator/appduct/blob/main/docs/BUILD-VARIANTS.md
+[security]: https://callstackincubator.github.io/appduct/guides/security/
+[build-variants]: https://callstackincubator.github.io/appduct/guides/build-variants/
 [license-badge]: https://img.shields.io/npm/l/appduct?style=for-the-badge
 [license]: https://github.com/callstackincubator/appduct/blob/main/LICENSE
 [npm-downloads-badge]: https://img.shields.io/npm/dm/appduct?style=for-the-badge

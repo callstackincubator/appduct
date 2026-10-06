@@ -61,10 +61,10 @@ android {
 
 dependencies {
   implementation "com.squareup.okhttp3:okhttp:4.12.0"
-  // AppductClient's public API (docs/tasks/16-android-session-logic.md): suspend fun connect/
-  // restoreSession/disconnect/postEvent, per-call timeout/cancel via coroutine cancellation.
-  // core-noop deliberately does not depend on this (its AppductClient mirror needs no coroutine
-  // machinery for a same-signature no-op) -- see that module's build.gradle.
+  // AppductClient's public API: suspend fun connect/ restoreSession/disconnect/postEvent, per-call
+  // timeout/cancel via coroutine cancellation. core-noop deliberately does not depend on this (its
+  // AppductClient mirror needs no coroutine machinery for a same-signature no-op) -- see that
+  // module's build.gradle.
   api "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1"
   api "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
   // ProcessLifecycleOwner: foreground/background observation backing AppductClient's
@@ -86,13 +86,13 @@ dependencies {
 // module's own build config -- a real consumer resolves it from their own app's
 // `manifestPlaceholders`. AGP resolves a library's manifest placeholders once, at that library's
 // own manifest-merge step, baking a literal value into the merged manifest that a downstream
-// consumer then inherits verbatim -- proven the hard way: an earlier `defaultConfig.manifestPlaceholders`
-// default here leaked into playground-native's own debug build via project substitution, silently
-// overriding that app's own `appductScheme` (docs/tasks/19-android-entry-points.md's deviations
-// section). So the only placeholder value this module may ever set is one scoped to a component
-// real consumers never resolve through: `unitTest`, which needs *some* concrete value purely so
-// Robolectric's AppductLinkActivityTest gets a mergeable manifest, and is never published or
-// depended on by anything downstream.
+// consumer then inherits verbatim -- proven the hard way: an earlier
+// `defaultConfig.manifestPlaceholders` default here leaked into playground-native's own debug build
+// via project substitution, silently overriding that app's own `appductScheme`. So the only
+// placeholder value this module may ever set is one scoped to a component real consumers never
+// resolve through: `unitTest`, which needs *some* concrete value purely so Robolectric's
+// AppductLinkActivityTest gets a mergeable manifest, and is never published or depended on by
+// anything downstream.
 androidComponents {
   onVariants(selector().withBuildType("debug")) { variant ->
     variant.unitTest?.manifestPlaceholders?.put("appductScheme", "appduct-core-test")

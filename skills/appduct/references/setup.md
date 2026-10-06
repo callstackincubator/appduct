@@ -32,7 +32,7 @@ not do it as part of a first-time setup.
    from release bundles as well, wrap the Metro config in `withAppduct` from
    `@appduct/react-native/metro` (call it last, after anything else that sets
    `resolver.resolveRequest`) and build releases with `APPDUCT_ENABLED=0`. See
-   `docs/BUILD-VARIANTS.md`.
+   https://callstackincubator.github.io/appduct/guides/build-variants/.
 
 ## Expo
 
@@ -41,7 +41,7 @@ not do it as part of a first-time setup.
    required only when `trust: "pin"` is set or implied; `trust` and `allowPrivateLanOnly`
    (defaults to `true`, fail-closed) are optional, and `deepLinkScheme` is only
    *validated* against `expo.scheme` — it is not what the CLI reads. A zero-config app can
-   skip the plugin entry entirely (`docs/SECURITY.md`, "Configuring trust").
+   skip the plugin entry entirely (https://callstackincubator.github.io/appduct/guides/security/#pin-a-build-to-your-key).
 3. Make sure `expo.scheme` is set — it is both what registers the app for deep links and
    what `appduct sessions link` discovers automatically from `app.json`.
 4. Run `appduct init` in the app root. It records the scheme in

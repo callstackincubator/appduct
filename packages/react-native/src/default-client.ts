@@ -16,9 +16,9 @@ let appductClientInstance: ReturnType<typeof createAppductClient> | null =
   null;
 
 /**
- * Whether Appduct's native module exists in a build at all is decided entirely by
- * autolinking (see `docs/tasks/00-overview.md`'s "Inclusion" contract), not by any runtime
- * check here. When it is absent — Expo Go, a JS-only bundle, or the app excluded Appduct
+ * Whether Appduct's native module exists in a build at all is decided entirely by autolinking, not
+ * by any runtime check here. When it is absent — Expo Go, a JS-only bundle, or the app excluded
+ * Appduct
  * from autolinking — `TurboModuleRegistry` never finds it, and every exported function of the root
  * entry degrades to the exact `./noop` entry's behavior instead of the real client's — see
  * `noopIfNativeUnavailable`. Logged exactly once per process, not once per call, so an app that

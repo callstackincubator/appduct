@@ -114,9 +114,10 @@ function normalizeOptions(rawOptions, expoConfig) {
   } else if (rawTrust === "link" || rawTrust === "pin") {
     trust = rawTrust;
   } else {
-    // A typo here must be a config-time error, not a silent fallback to the default -- see
-    // 00-overview.md's amendment during task 05. The native readers make the same call, but
-    // catching it here means an app author sees it at prebuild instead of on a device.
+    // An unrecognized value must be a config-time error, not a silent fallback to the default: a
+    // typo must never quietly downgrade an intended "pin" into link trust. The native readers make
+    // the same call, but catching it here means an app author sees it at prebuild instead of on a
+    // device.
     throw new Error(
       `${PLUGIN_NAME}: "trust" must be "link" or "pin", got ${JSON.stringify(rawTrust)}.`,
     );

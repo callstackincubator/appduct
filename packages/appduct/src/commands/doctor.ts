@@ -1,8 +1,7 @@
 /**
- * `appduct doctor <artifact>` (docs/tasks/08-appduct-doctor.md): the release-gate replacement
- * for the runtime `debuggable` check removed elsewhere in opt-in hardening — see
- * `artifact-inspect.ts`'s doc comment for the detection strategy and why it never collapses a
- * missing-tool or unreadable-artifact case into "absent".
+ * `appduct doctor <artifact>`: the release-gate replacement for the runtime `debuggable` check
+ * removed elsewhere in opt-in hardening — see `artifact-inspect.ts`'s doc comment for the detection
+ * strategy and why it never collapses a missing-tool or unreadable-artifact case into "absent".
  *
  * This handler owns only the CLI-facing concerns: option validation (mutually exclusive
  * `--assert-present`/`--assert-absent`) and turning a failed assertion into a distinct

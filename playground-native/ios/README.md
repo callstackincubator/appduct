@@ -77,4 +77,4 @@ appduct doctor path/to/Release-iphonesimulator/AppductPlayground.app --assert-ab
 - `AppductPlayground/Info.plist` -- declares the `appduct-native` URL scheme
   (`CFBundleURLTypes`). No `AppductTrust`/`AppductCliPins` keys: this playground is the
   zero-config example, so it trusts whatever pin `appduct sessions link` puts on the deep link for that
-  session (`trust: "link"`) -- see [`docs/SECURITY.md`](../../docs/SECURITY.md#trust-modes).
+  session (`trust: "link"`) -- see [Security](https://callstackincubator.github.io/appduct/guides/security/#choose-what-a-build-trusts).

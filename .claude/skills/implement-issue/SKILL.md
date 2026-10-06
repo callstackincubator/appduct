@@ -41,7 +41,7 @@ If a criterion cannot be phrased that way, post the list as an issue comment wit
 question under it, apply `status:blocked`, and stop. Do not guess.
 
 Add one criterion of your own when the change is user-visible: the docs. Name the surfaces
-from the `writing-user-docs` skill's table (README, `docs/`, website, the shipped skill, CLI
+from the `writing-user-docs` skill's table (README, website, the shipped skill, CLI
 help, error text) and write them with that skill. The changelog entry is always required and
 is written with the `writing-changelog` skill.
 

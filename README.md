@@ -9,7 +9,7 @@ Appduct lets a terminal, a test runner, or an AI agent call functions inside you
 - **E2E tests skip the setup.** Instead of tapping through login, onboarding and an empty cart, a test calls `log_in` or `seed_cart` and starts at the screen it's testing.
 - **Agents can drive your app.** Over MCP or the CLI, an agent can flip a feature flag, open a screen, or read some state through your tools.
 - **No hidden debug UI.** There's no secret gesture or admin panel for someone to find.
-- **Release builds leave it out.** By default Appduct is only in debug builds. You can opt in for internal builds such as TestFlight; see [Build variants](docs/BUILD-VARIANTS.md).
+- **Release builds leave it out.** By default Appduct is only in debug builds. You can opt in for internal builds such as TestFlight; see [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/).
 
 ## How it works
 
@@ -96,12 +96,12 @@ To try it before touching your own app, run a playground app: [iOS](playground-n
 
 - [Documentation site](https://callstackincubator.github.io/appduct/): guides and reference for every platform
 - [CLI guide](packages/appduct/README.md): connect to a device, list and call tools
-- [Use Appduct with an agent](docs/USE-WITH-AGENTS.md): MCP config and the agent skill
+- [Use Appduct with an agent](https://callstackincubator.github.io/appduct/guides/agents/): MCP config and the agent skill
 - [Call tools from tests](packages/appduct/README.md#test-runners-appductclient): the `appduct/client` API
-- [Registering tools](docs/TOOLS.md): schemas, long-running tools and events
-- [Build variants](docs/BUILD-VARIANTS.md): which builds include Appduct
-- [Security](docs/SECURITY.md): what it protects against, trust and key rotation
-- [Packages and platform support](docs/SUPPORT.md)
+- [Registering tools](https://callstackincubator.github.io/appduct/guides/writing-tools/): schemas, long-running tools and events
+- [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/): which builds include Appduct
+- [Security](https://callstackincubator.github.io/appduct/guides/security/): what it protects against, trust and key rotation
+- [Packages and platform support](https://callstackincubator.github.io/appduct/start/introduction/#packages)
 
 ## Made with ❤️ at Callstack
 

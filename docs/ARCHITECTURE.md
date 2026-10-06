@@ -3,7 +3,7 @@
 This is the canonical architecture reference for the current Appduct implementation.
 It describes the daemon-based v2 protocol and public surfaces. For field-level wire
 details, see [PROTOCOL.md](PROTOCOL.md); for operational security guidance, see
-[SECURITY.md](SECURITY.md).
+[Security](https://callstackincubator.github.io/appduct/guides/security/).
 
 ## 1. Goals
 
@@ -34,7 +34,7 @@ Deliberately out of scope, so the boundaries of the design are explicit:
 - Remote relay to hosts outside the operator machine.
 - Pinning an offline anchor CA that signs short-lived leaf certs. The current model pins
   the same key used for the TLS leaf; overlapping pin sets are the supported rotation
-  path — see `docs/SECURITY.md`.
+  path — see [Rotate keys](https://callstackincubator.github.io/appduct/guides/security/#rotate-keys).
 
 ## 2. Topology
 
@@ -433,7 +433,7 @@ belong here:
   format and older builds that ignore it still work. Anything parsing the link must stop at
   the `&` — a naive "slice to end of string" swallows the pin and corrupts the payload.
 - The `pin` matters only to a build whose effective `trust` is `"link"` (§11). Embedded pins,
-  when configured, always win — see [SECURITY.md](SECURITY.md)'s "Trust modes".
+  when configured, always win — see [Choose what a build trusts](https://callstackincubator.github.io/appduct/guides/security/#choose-what-a-build-trusts).
 - **The address baked into the payload is decided by the delivery path, before the link is
   minted, and cannot be revised afterwards.** `--open android` and `--open ios-sim` force
   `127.0.0.1` because `adb reverse` and the simulator's shared network stack both make the
@@ -753,13 +753,11 @@ trust-mode resolution, the private-LAN check, claim/resume, reconnect with full-
 backoff, the tool registry and its wire deltas, per-call timeout/cancel/progress, v2
 bootstrap deep-link handling, and the process-memory resume lease — is not native to this
 package: it is vendored at build time from `packages/native`, a framework-free core with no
-React Native dependency (`docs/tasks/14-native-core-extraction.md`,
-`docs/tasks/15-native-session-logic.md`,
-[internal/native-core.md](internal/native-core.md)). The same core is also
-consumed directly — no React Native, no Expo — by a plain iOS app (`Appduct.shared`,
+React Native dependency ([internal/native-core.md](internal/native-core.md)). The same core is
+also consumed directly — no React Native, no Expo — by a plain iOS app (`Appduct.shared`,
 [`packages/native/ios/README.md`](../packages/native/ios/README.md)) and a plain Android app
 (the `Appduct` object, [`packages/native/android/README.md`](../packages/native/android/README.md)),
-issue #48 phase 3 (`docs/tasks/18-ios-entry-points.md`, `docs/tasks/19-android-entry-points.md`).
+issue #48 phase 3.
 **The RN bridge and the plain-app facade never coexist in one app.** Each owns its own
 `AppductClient` instance and the one process-memory resume lease that comes with it, so an
 RN app that also imported the facade and called `Appduct.shared`/the `Appduct` object
@@ -794,7 +792,7 @@ own no session state themselves. Entry points:
   a new entry point can't be silently missed.
 
 **Inclusion and trust are two independent, explicit config decisions — neither is derived
-from build type** (`docs/SECURITY.md` has the full threat-model writeup; this is the
+from build type** ([Security](https://callstackincubator.github.io/appduct/guides/security/) has the user-facing threat model; this is the
 config-surface summary):
 
 - **Inclusion** is decided entirely by autolinking, outside this package — there is no
@@ -803,6 +801,17 @@ config-surface summary):
   separately and additively: `noopIfNativeUnavailable` degrades the public API to exact
   `/noop` behavior whenever the native module isn't found, for any reason (excluded, or an
   environment like Expo Go that has none).
+  `APPDUCT_ENABLED` is read in three places: the package's own `react-native.config.js` sets
+  autolinking's `ios.configurations` (CocoaPods links only into a configuration literally named
+  `Debug` by default), `android/build.gradle` picks the `release` no-op source set for a build
+  type literally named `release`, and `@appduct/react-native/metro` decides whether to redirect
+  imports to `/noop`. Only the Expo config plugin validates the value; `react-native.config.js`
+  swallows a parse error and `build.gradle` treats anything but `1`/`true` as unset, so a
+  malformed value falls back to the dev-only default in bare React Native. The podspec and
+  `build.gradle` print `[appduct] native module INCLUDED in this build` when linked.
+  Excluding the package from iOS autolinking also stops `expo-modules-autolinking` generating
+  its codegen output (`AppductSpec`), so an app that excludes it but adds the pod by hand
+  fails to build.
 - **Trust** is decided by the explicit `trust` value — `"pin"` (embedded `cliPins` only) or
   `"link"` (the bootstrap link's `pin`, for that session). Defaults to `"pin"` when `cliPins`
   is non-empty, `"link"` otherwise. Two invariants matter more than the config surface:
@@ -811,14 +820,14 @@ config-surface summary):
   resolution, so a typo can't silently downgrade `"pin"` into permissive link TOFU.
 
 The full config surface (option names, native keys, trust recipes) lives in
-[SECURITY.md](SECURITY.md#configuring-trust); the inclusion/compile-out recipes live in
-[BUILD-VARIANTS.md](BUILD-VARIANTS.md); the threat model lives in
-[SECURITY.md](SECURITY.md). The [package README](../packages/react-native/README.md) is the
+[Security](https://callstackincubator.github.io/appduct/guides/security/#pin-a-build-to-your-key); the inclusion/compile-out recipes live in
+[Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/); the threat model lives in
+[Security](https://callstackincubator.github.io/appduct/guides/security/). The [package README](../packages/react-native/README.md) is the
 getting-started path and API reference.
 
 Client behavior. Everything in this list except schema handling and cancellation's
-`AbortSignal` translation lives in the native core; `docs/tasks/15-native-session-logic.md`
-has the full core API, bridge protocol, and deviations:
+`AbortSignal` translation lives in the native core;
+[internal/native-core.md](internal/native-core.md) has the bridge protocol and design decisions:
 
 - On every successful claim/resume, native commits the latest `resume_token` lease before
   emitting the `session_ack`. The lease is synchronous, native **process-memory
@@ -1010,7 +1019,7 @@ it.
     shell access, which is the typical Claude Code setup this feature targets) can set it
     directly, same as it could send any other RPC call. `"prompt"` guards against a compliant
     client silently auto-approving on the caller's behalf; it is not a defense against a
-    hostile process on the operator's own machine — see `docs/SECURITY.md`'s threat model,
+    hostile process on the operator's own machine — see the [security guide](https://callstackincubator.github.io/appduct/guides/security/)'s threat model,
     which already treats socket access as full daemon control.
   - Known limitation: a client can declare the `elicitation` capability and then always reply
     `"decline"` or `"cancel"` without ever really surfacing the prompt to a human. This fails closed — the tool is simply never callable
@@ -1060,7 +1069,7 @@ packages/
   native/          Framework-free Swift (SwiftPM, packages/native/ios) and Kotlin
                    (standalone Gradle project, packages/native/android) core. Not an
                    npm/pnpm workspace package -- no package.json. §11,
-                   docs/internal/native-core.md, docs/tasks/14-native-core-extraction.md.
+                   docs/internal/native-core.md.
 playground/        reference app (Expo dev build)
 playground-native/ plain iOS and Android apps on packages/native, no React Native
 ```

@@ -176,7 +176,7 @@ try Appduct.shared.register(
   are optional, exactly like the JS API's `registerTool`.
   Set them the way an agent needs them: `readOnlyHint` on every observer, `destructiveHint` on
   anything that deletes, signs out or pays, and an `outputSchema` on every tool, so `appduct tools ls`
-  shows a complete signature. [`docs/TOOLS.md`](../../../docs/TOOLS.md#designing-tools-for-agents)
+  shows a complete signature. [Write tools](https://callstackincubator.github.io/appduct/guides/writing-tools/#design-tools-for-the-agent-that-calls-them)
   has the full list of rules, with examples.
 - `group` is optional too. On an app with many tools, set it so agents can list them one area at a
   time (`appduct tools ls --group cart`). A group is `"cart"` or one subgroup below it, like
@@ -240,7 +240,7 @@ Against an older `appduct` CLI that predates event lists, the app keeps its sess
 By default a build trusts whatever pin the deep link itself carries for that session
 (`trust: "link"`) — no configuration needed. To pin a build to keys you embedded ahead of time
 instead, set these `Info.plist` keys. They are the same settings React Native apps configure; see
-[Configuring trust](../../../docs/SECURITY.md#configuring-trust) for what each one protects against:
+[Configuring trust](https://callstackincubator.github.io/appduct/guides/security/#pin-a-build-to-your-key) for what each one protects against:
 
 | Key | Purpose |
 | --- | ------- |
@@ -268,7 +268,7 @@ appduct doctor path/to/YourApp.app --assert-absent    # Release
 ```
 
 `doctor` exits non-zero when the assertion fails, so you can run it as a release-pipeline step. See
-[`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) for how other build variants are
+[Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/) for how other build variants are
 handled.
 
 ## Threading
@@ -310,5 +310,5 @@ CocoaPods' `:configurations` restriction, most likely on purpose for an internal
 ## Going further
 
 - [`playground-native/ios`](../../../playground-native/ios) — a full example app built on this SDK.
-- [`docs/SECURITY.md`](../../../docs/SECURITY.md) — trust modes, pins, the threat model.
-- [`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) — how inclusion is decided per build.
+- [Security](https://callstackincubator.github.io/appduct/guides/security/) — trust modes, pins, the threat model.
+- [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/) — how inclusion is decided per build.

@@ -17,12 +17,11 @@ let package = Package(
   ],
   traits: [
     // Opt-in product for a consumer that wants the real implementation compiled into every
-    // configuration, not only `Debug` -- see Decision 2 in docs/tasks/14-native-core-extraction.md
-    // for why this is a trait rather than a second product: a second product sharing the same
-    // target's sources with a different set of active `#if` branches is not expressible in
-    // SwiftPM (a target's sources -- and therefore its compiler defines -- are shared by every
-    // product that includes it), so the two "editions" of AppductCore differ only in which
-    // build settings apply, not in which files are compiled.
+    // configuration, not only `Debug`. It is a trait rather than a second product because a second
+    // product sharing the same target's sources with a different set of active `#if` branches is
+    // not expressible in SwiftPM (a target's sources -- and therefore its compiler defines -- are
+    // shared by every product that includes it), so the two "editions" of AppductCore differ only
+    // in which build settings apply, not in which files are compiled.
     .trait(
       name: "AlwaysEnabled",
       description: "Compile the real implementation in every configuration, not only Debug"

@@ -1,4 +1,4 @@
-// Standalone Gradle project for the framework-free Android core (docs/tasks/14-native-core-extraction.md).
+// Standalone Gradle project for the framework-free Android core.
 // Not part of the pnpm/Turbo workspace and not autolinked into any app -- it exists so `core` and
 // `core-noop` can be built, tested, and (eventually, Phase 3) published on their own, independent of
 // any React Native/Expo project. `@appduct/react-native` vendors these sources at build time

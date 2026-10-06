@@ -110,7 +110,7 @@ clients show them, and a `config.json` policy can require approval for every too
 Tools are read by agents from a one-line signature and the first line of the description: name
 them by intent, set `readOnlyHint` on observers and `destructiveHint` on anything that deletes,
 signs out or pays, and give every tool an `outputSchema`. See
-[`docs/TOOLS.md`](../../../docs/TOOLS.md#designing-tools-for-agents) for the full list of rules.
+[Write tools](https://callstackincubator.github.io/appduct/guides/writing-tools/#design-tools-for-the-agent-that-calls-them) for the full list of rules.
 
 On an app with many tools, pass `group` so agents can list them one area at a time
 (`appduct tools ls --group cart`). A group is `"cart"` or one subgroup below it, like
@@ -262,7 +262,7 @@ ever reaches `Appduct` automatically; call `Appduct.handle` yourself instead (se
 `Appduct.buildConfig` reports this build's effective trust configuration —
 `BuildConfig(trust, hasEmbeddedPins, allowPrivateLanOnly)` — read from the exact same manifest
 `<meta-data>` values a real `connect()`/link claim uses. See
-[`docs/SECURITY.md`](../../../docs/SECURITY.md#trust-modes) for the full trust-mode explanation;
+[Security](https://callstackincubator.github.io/appduct/guides/security/#choose-what-a-build-trusts) for the full trust-mode explanation;
 the keys themselves, set as `<meta-data>` on your app's `<application>` tag:
 
 | Name | Purpose |
@@ -296,7 +296,7 @@ appduct doctor path/to/app-debug.apk --assert-present
 
 `doctor` reports `core-noop` as absent and works on minified (R8) builds. It exits non-zero when
 the assertion fails, so you can run it as a release-pipeline step. See
-[`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) for how other build variants are
+[Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/) for how other build variants are
 handled.
 
 ## Troubleshooting
@@ -326,8 +326,8 @@ design (see [Threading](#threading)) — wrap the UI-touching part in
 
 ## Related
 
-- [`docs/SECURITY.md`](../../../docs/SECURITY.md) — trust modes, pins, and the threat model.
-- [`docs/BUILD-VARIANTS.md`](../../../docs/BUILD-VARIANTS.md) — how inclusion is decided and
+- [Security](https://callstackincubator.github.io/appduct/guides/security/) — trust modes, pins, and the threat model.
+- [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/) — how inclusion is decided and
   verified across this whole repo.
 - [`playground-native/android/README.md`](../../../playground-native/android/README.md) — a
   runnable Compose app exercising everything above.

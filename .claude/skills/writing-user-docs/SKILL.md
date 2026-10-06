@@ -14,7 +14,6 @@ A user is someone integrating Appduct into an app, driving it from the CLI or MC
 agent reading the product skill. Anything they read to get something done is user-facing:
 
 - `README.md` and the package READMEs under `packages/*/`, `playground/`, `playground-native/`
-- `docs/` except `docs/internal/` and `docs/tasks/`
 - `website/` content
 - `skills/appduct/` (the skill shipped to users; not the repo's own `.claude/skills/`)
 - CLI help text, error messages and MCP tool descriptions in `packages/appduct/src`
@@ -31,11 +30,11 @@ contradict each other, which is worse than no docs.
 | Change | Surfaces |
 | --- | --- |
 | CLI command or flag | the command's `--help` text in code; `website/src/content/docs/reference`; `skills/appduct/references/cli.md` if an agent needs it |
-| SDK API (React Native, iOS, Android) | that package's README; the matching website guide; `docs/TOOLS.md` when it is about tools |
+| SDK API (React Native, iOS, Android) | that package's README; the matching website guide (`website/src/content/docs/guides/writing-tools.mdx` when it is about tools) |
 | MCP built-in tool or its behaviour | `skills/appduct/SKILL.md` "Over MCP"; website reference |
 | Error type or message | `skills/appduct/SKILL.md` "Output and errors"; the website page that shows the command |
-| Setup, config or build variant | `skills/appduct/references/setup.md`; `website/src/content/docs/install`; `docs/BUILD-VARIANTS.md` |
-| Security-relevant behaviour | `docs/SECURITY.md` |
+| Setup, config or build variant | `skills/appduct/references/setup.md`; `website/src/content/docs/install`; `website/src/content/docs/guides/build-variants.mdx` |
+| Security-relevant behaviour | `website/src/content/docs/guides/security.mdx` |
 
 Always: the changelog entry (`writing-changelog` skill), and `pnpm check:links` before the PR.
 
