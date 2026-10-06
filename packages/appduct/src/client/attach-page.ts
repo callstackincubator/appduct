@@ -28,9 +28,18 @@ const BINDING = "__appductBinding";
 /** Every new document announces itself before its own scripts run, so the relay knows the old one is gone. */
 const ANNOUNCE_DOCUMENT = `if (window === window.top) window.${BINDING}(JSON.stringify({ kind: "context" }));`;
 
+/** One binding per page: `exposeBinding` cannot be undone, so a later attach re-points the same channel. */
+const channels = new WeakMap<AttachablePage, PageChannel & { reset(): void }>();
+
 const channelOf = async (page: AttachablePage): Promise<PageChannel> => {
-  const bindingHandlers: ((json: string) => void)[] = [];
-  const resetHandlers: (() => void)[] = [];
+  const existing = channels.get(page);
+  if (existing) {
+    existing.reset(); // closes the previous link's daemon socket
+    return existing;
+  }
+
+  let bindingHandlers: ((json: string) => void)[] = [];
+  let resetHandlers: (() => void)[] = [];
   const reset = () => resetHandlers.forEach((handler) => handler());
 
   await page.exposeBinding(BINDING, (source, json) => {
@@ -41,11 +50,18 @@ const channelOf = async (page: AttachablePage): Promise<PageChannel> => {
   await page.addInitScript(ANNOUNCE_DOCUMENT);
   page.on("close", reset);
 
-  return {
-    onBindingCall: (handler) => void bindingHandlers.push(handler),
-    onContextReset: (handler) => void resetHandlers.push(handler),
-    evaluate: (expression) => page.evaluate(expression),
+  const channel = {
+    onBindingCall: (handler: (json: string) => void) => void bindingHandlers.push(handler),
+    onContextReset: (handler: () => void) => void resetHandlers.push(handler),
+    evaluate: (expression: string) => page.evaluate(expression),
+    reset: () => {
+      reset();
+      bindingHandlers = [];
+      resetHandlers = [];
+    },
   };
+  channels.set(page, channel);
+  return channel;
 };
 
 /**

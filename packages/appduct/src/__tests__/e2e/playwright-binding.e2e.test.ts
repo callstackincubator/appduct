@@ -156,15 +156,19 @@ describe("e2e: web session over a Playwright binding", () => {
       const { page } = await startStagingPage();
       await page.goto(`${ORIGIN}/`);
       await attachPage(page, { link: await link({ stateDir, target: "web", url: `${ORIGIN}/` }) });
-      await waitForActiveSession(stateDir);
+      const first = await waitForActiveSession(stateDir);
 
       await attachPage(page, { link: await link({ stateDir, target: "web", url: `${ORIGIN}/` }) });
+      let second: SessionRow | undefined;
       await waitUntil(
-        async () => (await sessions(stateDir)).some((row) => row.state === "active" && row.toolCount > 0),
-        { timeoutMs: 15_000, description: "the second attach to claim a session" },
+        async () => {
+          second = (await sessions(stateDir)).find((row) => row.sessionId !== first.sessionId && row.state === "active" && row.toolCount > 0);
+          return second !== undefined;
+        },
+        { timeoutMs: 15_000, description: "the second attach to claim its own session" },
       );
 
-      const app = await connect({ stateDir });
+      const app = await connect({ stateDir, selector: second!.sessionId });
       trackCleanup(() => app.close());
       expect(await app.call("add", { a: 6, b: 7 })).toEqual({ total: 13 });
     },
