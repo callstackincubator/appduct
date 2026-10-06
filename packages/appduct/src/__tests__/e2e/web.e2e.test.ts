@@ -35,6 +35,7 @@ import { registerTool, registerEvent, postEvent } from "/appduct-web.js";
 registerTool({
   name: "add",
   description: "Add two numbers.",
+  outputSchema: { type: "object", properties: { total: { type: "number" } } },
   handler: ({ a, b }) => ({ total: a + b }),
 });
 registerEvent({ name: "saved", description: "A document was saved." });

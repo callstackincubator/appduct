@@ -1,4 +1,5 @@
 import { encodeBootstrap } from "@appduct/shared";
+import { jsonSchema } from "@appduct/shared/sdk";
 import { describe, expect, it } from "vitest";
 
 import { createManualClock, createMemorySessionStore, createMemoryTransport } from "../core/index.js";
@@ -109,7 +110,12 @@ describe("the plain-JS entry", () => {
 
   it("answers a call for a tool registered before the session was claimed", async () => {
     const { appduct, socket } = load(PAGE);
-    appduct.registerTool({ name: "ping", description: "Say pong.", handler: () => "pong" });
+    appduct.registerTool({
+      name: "ping",
+      description: "Say pong.",
+      outputSchema: jsonSchema<string>({ type: "string" }),
+      handler: () => "pong",
+    });
 
     const connecting = appduct.connect(payload);
     socket().open();
