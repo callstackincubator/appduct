@@ -395,8 +395,10 @@ not as the mechanism that keeps a destructive tool out of reach of a hostile one
   restricts CocoaPods linking to the `Debug` configuration; on Android `AppductPackage`
   always compiles, and the `release` variant's compile classpath gets the vendored no-op
   core (`android/core-noop`) in place of the real one. Both are real per-variant decisions, not a
-  `debuggable`/`#if DEBUG` gate compiled into every variant, and neither quietly depends on
-  a custom build-type/configuration name being spelled `debug`/`Debug`.
+  `debuggable`/`#if DEBUG` gate compiled into every variant. Both key off the configuration or
+  build type's *name*, though: a project using other names links nothing on iOS and fails the
+  build on Android, so it never ships Appduct by accident.
+  [`BUILD-VARIANTS.md`](BUILD-VARIANTS.md#custom-build-types-and-configurations) has the steps.
 
   A release pipeline that wants Appduct anyway (an agent-driven, release-signed internal
   build) sets `APPDUCT_ENABLED=1`; one that wants it gone even from debug sets

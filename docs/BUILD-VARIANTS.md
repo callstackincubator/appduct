@@ -55,11 +55,11 @@ variant's build, full stop. Whether it is is what `APPDUCT_ENABLED` controls.
 
 **Resulting matrix (`APPDUCT_ENABLED` × build variant, `trust` orthogonal to both):**
 
-| `APPDUCT_ENABLED` | Debug / `debug` | Release / `release` |
-| --- | --- | --- |
-| unset (default) | Native code ships | Native code excluded |
-| `1` / `true` | Native code ships | Native code ships |
-| `0` / `false` | Native code excluded | Native code excluded |
+| `APPDUCT_ENABLED` | `Debug` / `debug` | `Release` / `release` | A configuration/build type with any other name |
+| --- | --- | --- | --- |
+| unset (default) | Native code ships | Native code excluded | iOS: not linked. Android: build fails — see [Custom build types and configurations](#custom-build-types-and-configurations) |
+| `1` / `true` | Native code ships | Native code ships | Native code ships (Android needs one `matchingFallbacks` line first) |
+| `0` / `false` | Native code excluded | Native code excluded | Native code excluded |
 
 `trust` (`"link"` vs `"pin"`, resolved as described in
 [`SECURITY.md`](SECURITY.md#trust-modes)) only matters in a variant where the native code
@@ -107,12 +107,38 @@ is still how you strip Appduct JS from a release bundle.
 merely when the app compiles. Flipping it and rebuilding without re-running install does
 nothing, silently.
 
-**Keyed to build type by name, not by a compiled-in check.** CocoaPods restricts linking
-to Xcode configurations literally named `Debug`/`Release`; Gradle restricts it to build
-types literally named `debug`/`release`. A custom build-type/configuration name (a
-`staging` flavor, say) gets neither — set `APPDUCT_ENABLED=1` for that pipeline if it
-should carry Appduct. This is a real per-variant linking decision, not a runtime check
-compiled into every variant.
+### Custom build types and configurations
+
+Both platforms key off the name, and each fails differently when your project uses names other
+than `Debug`/`Release`.
+
+On iOS the default links the pod only into a configuration named `Debug`, so a `Staging`
+configuration is left unlinked — CocoaPods matches names case-insensitively and nothing else
+links the pod in. `APPDUCT_ENABLED=1` removes the restriction entirely rather than adding a
+name, so it covers `Staging`, `Internal`, whatever you call it. One exception: an app that
+also sets its own `configurations` list for this package in its `react-native.config.js`
+overrides ours completely, variable or not — delete that entry or add the name there.
+
+Android needs one line first. This project publishes only `debug` and `release` variants, so
+an app with a `staging` **build type** fails at dependency resolution — "No matching variant
+of project :appduct_react-native was found" — whether or not the variable is set. Tell Gradle
+which of ours to fall back to:
+
+```groovy
+buildTypes {
+  staging {
+    initWith release
+    matchingFallbacks = ["release"]   // or ["debug"] for a debuggable staging build
+  }
+}
+```
+
+The fallback decides which of Appduct's two variants `staging` compiles against. A `release`
+fallback follows `APPDUCT_ENABLED`: Appduct ships only when it is `1`/`true`. A `debug` fallback
+always carries the real implementation — that variant is a debug build, and the variable only
+decides whether this package is linked at all. A `staging` **product flavor** is a different thing
+and needs nothing — flavors don't change the build type, so `stagingDebug` and `stagingRelease`
+behave like `debug` and `release`.
 
 ## Verifying against the artifact
 

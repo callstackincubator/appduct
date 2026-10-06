@@ -11,6 +11,9 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: `APPDUCT_ENABLED=1` now carries Appduct into an iOS configuration whatever you call it**, rather than only into ones named `Debug` or `Release`; see `docs/BUILD-VARIANTS.md`.
+- **Docs: an Android app with a custom build type needs one `matchingFallbacks` line before Appduct applies to it.** Without it, the build fails at dependency resolution instead of quietly building without Appduct.
+
 ## 0.14.0 (2026-10-02)
 
 - **New: `appduct_list_events` MCP tool lists the events an app declares, with descriptions.** `name` takes a glob like `"cart.*"`, and an exact name also returns the payload schema.
