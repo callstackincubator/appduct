@@ -30,6 +30,7 @@ import {
   type SessionClaimMessage,
   type SessionDeviceMetadata,
   type SessionResumeMessage,
+  type LinkTransport,
   type SessionSummary,
   type SessionSuspendReason,
   type ToolCallMessage,
@@ -146,7 +147,7 @@ export type SessionManagerOptions = {
   graceSeconds: number;
   keepaliveIntervalSeconds: number;
   linkTtlSeconds: number;
-  getEndpoint: () => CreatedLink["endpoint"];
+  getEndpoint: (transport: LinkTransport) => CreatedLink["endpoint"];
   eventBus: EventBus;
   clock?: Clock;
   timers?: TimerFns;
@@ -170,9 +171,15 @@ export type SessionManager = {
    * 07's emulator/simulator fast path); see `links.ts`'s `PendingLinkRegistry.create`. Omits
    * `LinkCreateResult.pin` — the session manager has no `TlsManager` handle, so the RPC handler
    * (`daemon.ts`) attaches the current SPKI pin itself before returning to the caller. */
-  createLink: (ttlSeconds?: number, addressOverride?: string) => Omit<LinkCreateResult, "pin">;
-  /** First message on a fresh socket. Returns the claimed sessionId, or `null` after closing the socket. */
-  handleClaim: (socket: WebSocket, message: SessionClaimMessage) => string | null;
+  createLink: (
+    ttlSeconds?: number,
+    addressOverride?: string,
+    transport?: LinkTransport,
+  ) => Omit<LinkCreateResult, "pin">;
+  /** First message on a fresh socket accepted on `transport`'s listener. Returns the claimed
+   * sessionId, or `null` after closing the socket. A link minted for the other transport is
+   * refused with `wrong_transport` and stays claimable on its own listener. */
+  handleClaim: (socket: WebSocket, message: SessionClaimMessage, transport: LinkTransport) => string | null;
   /** First message on a resume socket. Returns the resumed sessionId, or `null` after closing the socket. */
   handleResume: (socket: WebSocket, message: SessionResumeMessage) => string | null;
   /** Dispatches an already-type-checked post-claim message; closes the socket on invalid content. */
@@ -366,10 +373,15 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
     }
   }, options.keepaliveIntervalSeconds * 1000);
 
-  const createLink = (ttlSeconds?: number, addressOverride?: string): Omit<LinkCreateResult, "pin"> => {
+  const createLink = (
+    ttlSeconds?: number,
+    addressOverride?: string,
+    transport?: LinkTransport,
+  ): Omit<LinkCreateResult, "pin"> => {
     const { link, deepLinkPayload, endpoint } = pendingLinks.create(
       ttlSeconds ?? options.linkTtlSeconds,
       addressOverride,
+      transport,
     );
 
     return {
@@ -380,7 +392,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
     };
   };
 
-  const handleClaim = (socket: WebSocket, message: SessionClaimMessage): string | null => {
+  const handleClaim = (socket: WebSocket, message: SessionClaimMessage, transport: LinkTransport): string | null => {
     const pending = pendingLinks.get(message.session_id);
 
     if (!pending) {
@@ -390,6 +402,11 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
         closeSocket(socket, 1008, "unknown_session");
       }
 
+      return null;
+    }
+
+    if (pending.transport !== transport) {
+      closeSocket(socket, 1008, "wrong_transport");
       return null;
     }
 

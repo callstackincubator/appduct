@@ -1,5 +1,6 @@
 /**
- * The pinned-TLS WebSocket listener (ARCHITECTURE.md §7). A thin frame-level gate in front of
+ * The pinned-TLS WebSocket listener and the plain-HTTP web listener (ARCHITECTURE.md §7). Both put
+ * the same thin frame-level gate in front of
  * `SessionManager`: JSON/binary/size hygiene, the pre-claim timeout, and post-claim
  * type/session-id routing. All state-machine decisions (claim/resume/registry/close-code choice)
  * live in sessions.ts — this module never inspects session state itself.
@@ -9,9 +10,15 @@
  * closing — for any reason — must never stop the listener or any other session.
  */
 
+import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { createServer as createHttpsServer, type Server as HttpsServer } from "node:https";
 
-import { isSessionClaimMessage, isSessionResumeMessage, isSessionBoundMessage } from "@appduct/shared";
+import {
+  isSessionClaimMessage,
+  isSessionResumeMessage,
+  isSessionBoundMessage,
+  type LinkTransport,
+} from "@appduct/shared";
 import { WebSocketServer } from "ws";
 
 import { isPostClaimMessageType, type SessionManager } from "./sessions.js";
@@ -44,23 +51,18 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
-export const startListener = async (options: ListenerOptions): Promise<DaemonListener> => {
-  const timers = options.timers ?? systemTimers;
-  const preClaimTimeoutMs = options.preClaimTimeoutMs ?? DEFAULT_PRE_CLAIM_TIMEOUT_MS;
-  const material = options.tls.current();
+type FrameGateOptions = {
+  sessionManager: SessionManager;
+  /** The listener this gate sits on: a claim is only valid for links minted for it. */
+  transport: LinkTransport;
+  preClaimTimeoutMs: number;
+  timers: TimerFns;
+};
 
-  const httpsServer = createHttpsServer({ key: material.keyPem, cert: material.certPem });
-
-  httpsServer.on("error", () => {
-    // A listener-level error (e.g. a transient accept failure) must never crash the daemon.
-    // Startup failures are still surfaced via the one-shot listener below.
-  });
-
-  const wss = new WebSocketServer({ server: httpsServer, maxPayload: MAX_PAYLOAD_BYTES });
-
-  wss.on("error", () => {
-    // Same contract as the https server: never let a listener-level error take the daemon down.
-  });
+/** The frame-level gate both listeners share. Installed on the `WebSocketServer`, so it does not
+ * care which server the sockets arrive through. */
+const attachFrameGate = (wss: WebSocketServer, options: FrameGateOptions): void => {
+  const { timers, preClaimTimeoutMs } = options;
 
   wss.on("connection", (socket) => {
     socket.on("error", () => {
@@ -101,7 +103,7 @@ export const startListener = async (options: ListenerOptions): Promise<DaemonLis
 
       if (claimedSessionId === null) {
         if (isSessionClaimMessage(parsed)) {
-          const result = options.sessionManager.handleClaim(socket, parsed);
+          const result = options.sessionManager.handleClaim(socket, parsed, options.transport);
 
           if (result) {
             claimedSessionId = result;
@@ -139,29 +141,71 @@ export const startListener = async (options: ListenerOptions): Promise<DaemonLis
       options.sessionManager.handlePostClaimMessage(claimedSessionId, socket, parsed);
     });
   });
+};
 
-  await new Promise<void>((resolve, reject) => {
+const listen = (server: HttpServer | HttpsServer, port: number, host?: string): Promise<void> => {
+  return new Promise<void>((resolve, reject) => {
     const onError = (error: Error): void => {
-      httpsServer.off("listening", onListening);
+      server.off("listening", onListening);
       reject(error);
     };
     const onListening = (): void => {
-      httpsServer.off("error", onError);
+      server.off("error", onError);
       resolve();
     };
 
-    httpsServer.once("error", onError);
-    httpsServer.once("listening", onListening);
-    httpsServer.listen(options.port);
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(port, host);
   });
+};
+
+const closeServer = (wss: WebSocketServer, server: HttpServer | HttpsServer): Promise<void> => {
+  return new Promise<void>((resolve) => {
+    for (const client of wss.clients) {
+      client.terminate();
+    }
+
+    wss.close(() => {
+      // `server.close()` alone only stops accepting new connections — it waits for existing
+      // (including idle keep-alive) sockets to end, which could hang shutdown indefinitely.
+      server.closeAllConnections();
+      server.close(() => resolve());
+    });
+  });
+};
+
+const boundPort = (server: HttpServer | HttpsServer): number | undefined => {
+  const address = server.address();
+  return address && typeof address !== "string" ? address.port : undefined;
+};
+
+export const startListener = async (options: ListenerOptions): Promise<DaemonListener> => {
+  const timers = options.timers ?? systemTimers;
+  const preClaimTimeoutMs = options.preClaimTimeoutMs ?? DEFAULT_PRE_CLAIM_TIMEOUT_MS;
+  const material = options.tls.current();
+
+  const httpsServer = createHttpsServer({ key: material.keyPem, cert: material.certPem });
+
+  httpsServer.on("error", () => {
+    // A listener-level error (e.g. a transient accept failure) must never crash the daemon.
+    // Startup failures are still surfaced via the one-shot listener below.
+  });
+
+  const wss = new WebSocketServer({ server: httpsServer, maxPayload: MAX_PAYLOAD_BYTES });
+
+  wss.on("error", () => {
+    // Same contract as the https server: never let a listener-level error take the daemon down.
+  });
+
+  attachFrameGate(wss, { sessionManager: options.sessionManager, transport: "native", preClaimTimeoutMs, timers });
+
+  await listen(httpsServer, options.port);
 
   return {
     httpsServer,
     wss,
-    port: () => {
-      const address = httpsServer.address();
-      return address && typeof address !== "string" ? address.port : undefined;
-    },
+    port: () => boundPort(httpsServer),
     applyTls: (nextMaterial) => {
       // Keep this guard for compatibility with runtimes whose `node:https` shim omits the method.
       const server = httpsServer as HttpsServer & {
@@ -170,18 +214,77 @@ export const startListener = async (options: ListenerOptions): Promise<DaemonLis
 
       server.setSecureContext?.({ key: nextMaterial.keyPem, cert: nextMaterial.certPem });
     },
-    close: () =>
-      new Promise<void>((resolve) => {
-        for (const client of wss.clients) {
-          client.terminate();
-        }
+    close: () => closeServer(wss, httpsServer),
+  };
+};
 
-        wss.close(() => {
-          // `server.close()` alone only stops accepting new connections — it waits for existing
-          // (including idle keep-alive) sockets to end, which could hang shutdown indefinitely.
-          httpsServer.closeAllConnections();
-          httpsServer.close(() => resolve());
-        });
-      }),
+export type WebListenerOptions = {
+  sessionManager: SessionManager;
+  /** Origins allowed in addition to localhost, `127.0.0.1` and `[::1]` on any port. Compared
+   * as exact strings against the `Origin` header (`config.json`'s `webOrigins`). */
+  origins: readonly string[];
+  preClaimTimeoutMs?: number;
+  timers?: TimerFns;
+};
+
+export type WebListener = {
+  port: () => number | undefined;
+  close: () => Promise<void>;
+};
+
+const LOOPBACK_HOSTNAMES: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+const isLoopbackOrigin = (origin: string): boolean => {
+  try {
+    const url = new URL(origin);
+
+    return (url.protocol === "http:" || url.protocol === "https:") && LOOPBACK_HOSTNAMES.has(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The plain-HTTP listener web pages connect to, bound to `127.0.0.1` on an OS-assigned port. A
+ * browser cannot pin the daemon's self-signed certificate, so it cannot use the TLS listener.
+ * Instead every upgrade is checked against its `Origin` header and refused with 403 unless that
+ * is a loopback origin or listed in `origins`. A request with no `Origin` is let through: only a
+ * local non-browser process sends none, and it could connect to the daemon anyway.
+ */
+export const startWebListener = async (options: WebListenerOptions): Promise<WebListener> => {
+  const timers = options.timers ?? systemTimers;
+  const preClaimTimeoutMs = options.preClaimTimeoutMs ?? DEFAULT_PRE_CLAIM_TIMEOUT_MS;
+  const allowed = new Set(options.origins);
+
+  const httpServer = createHttpServer((_request, response) => {
+    response.writeHead(426, { "content-type": "text/plain" });
+    response.end("Appduct web listener: WebSocket upgrades only.");
+  });
+
+  httpServer.on("error", () => {
+    // Same contract as the TLS listener: never let a listener-level error take the daemon down.
+  });
+
+  const wss = new WebSocketServer({
+    server: httpServer,
+    maxPayload: MAX_PAYLOAD_BYTES,
+    verifyClient: ({ origin }, callback) => {
+      if (origin === undefined || isLoopbackOrigin(origin) || allowed.has(origin)) {
+        callback(true);
+      } else {
+        callback(false, 403, "Forbidden");
+      }
+    },
+  });
+
+  wss.on("error", () => {});
+
+  attachFrameGate(wss, { sessionManager: options.sessionManager, transport: "web", preClaimTimeoutMs, timers });
+
+  await listen(httpServer, 0, "127.0.0.1");
+
+  return {
+    port: () => boundPort(httpServer),
+    close: () => closeServer(wss, httpServer),
   };
 };
