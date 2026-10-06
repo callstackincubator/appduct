@@ -1,7 +1,7 @@
 {
   "name": "@appduct/react-native",
   "version": "0.14.0",
-  "description": "Expo native client for Appduct sessions",
+  "description": "React Native SDK for Appduct: register tools an agent, test or terminal can call in your running app.",
   "main": "build/index.js",
   "module": "build/index.js",
   "types": "build/index.d.ts",

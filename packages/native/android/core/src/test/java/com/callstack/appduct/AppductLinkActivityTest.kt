@@ -11,9 +11,9 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Robolectric coverage for the trampoline activity (docs/tasks/19-android-entry-points.md): an
- * intent carrying a bootstrap URL reaches [Appduct], and therefore the underlying
- * [AppductClient], via [AppductLinkActivity.onCreate]. Uses a real `android.jar` (via
+ * Robolectric coverage for the trampoline activity: an intent carrying a bootstrap URL reaches
+ * [Appduct], and therefore the underlying [AppductClient], via [AppductLinkActivity.onCreate]. Uses
+ * a real `android.jar` (via
  * Robolectric, already a test dependency for [AppductSpkiPinTest]) rather than
  * [FakeAppductTransport] alone, since this is the one behavior that needs a real `Activity`
  * lifecycle to exercise.

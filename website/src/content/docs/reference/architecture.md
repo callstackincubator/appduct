@@ -74,14 +74,7 @@ Apps post events with `postEvent`. The background service keeps the last 256 eve
 
 ## Upgrades
 
-The background service keeps running after you upgrade the CLI. On its first command, each CLI or MCP process compares versions:
-
-- **Same version:** nothing happens.
-- **The service is newer:** the command proceeds with a notice. Appduct never downgrades a running service.
-- **The service is older and holds nothing:** it's replaced automatically.
-- **The service is older and has connected devices or an unopened link:** the command stops and names both versions, instead of dropping your sessions. Run `appduct daemon stop`, or pass `--daemon-restart`.
-
-A long-running MCP server doesn't re-check after it starts; restart it after upgrading.
+The background service keeps running after you upgrade the CLI. The next command replaces an older service unless devices are connected, and never downgrades a newer one. A running MCP server checks only when it starts, so restart it after upgrading. See [Keep the background service healthy](/appduct/guides/cli/#keep-the-background-service-healthy).
 
 ## What Appduct doesn't do
 
@@ -94,6 +87,6 @@ A long-running MCP server doesn't re-check after it starts; restart it after upg
 
 ## For the details
 
-- [Wire protocol](/appduct/reference/protocol/): messages, the link payload, and close codes, for implementing a client.
+- [Wire protocol](https://github.com/callstackincubator/appduct/blob/main/docs/PROTOCOL.md): messages, the link payload, and close codes, for implementing a client.
 - [ARCHITECTURE.md](https://github.com/callstackincubator/appduct/blob/main/docs/ARCHITECTURE.md): the full design document.
-- [SECURITY.md](https://github.com/callstackincubator/appduct/blob/main/docs/SECURITY.md): the full threat model.
+- [Security](/appduct/guides/security/): what Appduct protects against, and what it doesn't.

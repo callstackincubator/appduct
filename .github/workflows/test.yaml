@@ -104,12 +104,12 @@ jobs:
       - name: Build packages
         run: pnpm build
       - name: Test and assemble the standalone native Android core
-        # packages/native/android (docs/tasks/14-native-core-extraction.md) is not part of the
+        # packages/native/android is not part of the
         # pnpm/Turbo workspace and is never autolinked into the playground -- it builds and tests
         # on its own, independent of the playground prebuild below, since this is what
         # @appduct/react-native's android/build.gradle vendors from (scripts/sync-native-core.mjs).
         # publishToMavenLocal for both artifacts also runs here so the maven-publish config
-        # (docs/tasks/19-android-entry-points.md §6) can't silently rot between the real publish
+        # can't silently rot between the real publish
         # this repeats and the ops-only step of pushing it to Maven Central.
         working-directory: packages/native/android
         run: >-
@@ -191,7 +191,7 @@ jobs:
           playground/android/app/build/outputs/apk/release/app-release.apk
           --assert-absent
       - name: Assemble the native Android playground (Debug and Release)
-        # playground-native/android (docs/tasks/19-android-entry-points.md) has no React Native
+        # playground-native/android has no React Native
         # anywhere in it -- settings.gradle's includeBuild dependency substitution resolves
         # `core`/`core-noop` straight to packages/native/android, so this proves the plain-Android
         # consumer path independently of the Expo playground and of the publishToMavenLocal step
@@ -297,7 +297,7 @@ jobs:
       - name: Build packages
         run: pnpm build
       - name: Build and test AppductCore (packages/native/ios)
-        # Repo-root Package.swift (docs/tasks/14-native-core-extraction.md; SwiftPM manifests must
+        # Repo-root Package.swift (SwiftPM manifests must
         # live at the repository root for URL dependencies). Runs before the CocoaPods-based
         # playground build below since it needs neither Expo prebuild nor `pod install`, so a stub
         # compile failure or a test regression fails fast. `-c debug` (the implicit default for
@@ -388,7 +388,7 @@ jobs:
           --assert-absent
       - name: Install xcodegen
         # playground-native/ios's Xcode project is generated from project.yml, not committed
-        # (docs/tasks/18-ios-entry-points.md Decision 6) -- one source of truth, no .pbxproj merge
+        # -- one source of truth, no .pbxproj merge
         # conflicts, mirroring Package.swift being the one source of truth for AppductCore itself.
         run: brew list xcodegen > /dev/null 2>&1 || brew install xcodegen
       - name: Generate the native iOS playground's Xcode project

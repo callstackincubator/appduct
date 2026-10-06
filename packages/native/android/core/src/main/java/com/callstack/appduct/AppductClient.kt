@@ -89,12 +89,13 @@ private data class ConnectOptionsInternal(
  * used to own, on top of [AppductConnectionManager]/[AppductTransport]: the claim/resume
  * handshake, full-jitter reconnect, the grace timer, lease restore, the tool registry and its
  * snapshot/delta sync, and per-call tool invocation (timeout/cancel/progress/error classification).
- * See `docs/tasks/16-android-session-logic.md` for the threading model and design notes.
- *
  * Every state mutation -- whether triggered by a public suspend call or by a transport callback --
  * runs on [dispatcher], a single-threaded confinement (mirroring [AppductConnectionManager]'s
  * own single-thread executor), so there is never a data race between e.g. a `connect()` call and an
- * in-flight socket callback.
+ * in-flight socket callback. Tool handlers run as children of the same scope, each in its own
+ * coroutine, so a suspending session can cancel every in-flight call at once and one stuck handler
+ * never blocks another call or this state machine. The tool registry is `synchronized` separately,
+ * because `registerTool`/`unregisterTool` are plain calls an app may make from any thread.
  */
 internal class AppductClient private constructor(
     private val defaultToolTimeoutMs: Long,

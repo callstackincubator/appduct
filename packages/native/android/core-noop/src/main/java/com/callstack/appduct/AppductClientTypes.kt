@@ -3,7 +3,7 @@ package com.callstack.appduct
 import org.json.JSONObject
 
 /** No-op mirror of `core`'s `AppductClientTypes.kt` -- same public shapes, so a bridge compiled
- * against `core` also compiles unchanged against this module (docs/tasks/16-android-session-logic.md). */
+ * against `core` also compiles unchanged against this module. */
 internal const val APPDUCT_DEFAULT_TOOL_TIMEOUT_MS = 10_000L
 
 internal enum class AppductClientState {

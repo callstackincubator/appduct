@@ -4,10 +4,9 @@
     <application>
         <!--
           Captures the application Context before any app code runs, so `Appduct.register(...)`
-          works from `Application.onCreate()` with no manual init call
-          (docs/tasks/19-android-entry-points.md). `${applicationId}` is filled in automatically by
-          AGP: every consumer app gets a uniquely named authority, as the platform requires for a
-          ContentProvider. The name below is fully qualified, not the relative `.AppductInitProvider`
+          works from `Application.onCreate()` with no manual init call. `${applicationId}` is filled
+          in automatically by AGP: every consumer app gets a uniquely named authority, as the
+          platform requires for a ContentProvider. The name below is fully qualified, not the relative `.AppductInitProvider`
           shorthand, because this module's Kotlin package (`com.callstack.appduct`)
           differs from its AGP `namespace` (`com.callstack.appduct.core`, see
           build.gradle) that relative names resolve against; a relative name here would resolve to

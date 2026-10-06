@@ -2,7 +2,7 @@ import type { TurboModule } from "react-native";
 import { TurboModuleRegistry, CodegenTypes } from "react-native";
 
 /**
- * TurboModule spec for the phase-2 native core (issue #48, docs/tasks/15-native-session-logic.md).
+ * TurboModule spec for the phase-2 native core (issue #48).
  *
  * Every structured value crosses the bridge as a JSON string: the native core owns the wire
  * protocol (PROTOCOL.md) and JSON is its native currency, and it sidesteps Codegen's limits on
@@ -12,10 +12,9 @@ import { TurboModuleRegistry, CodegenTypes } from "react-native";
  * cancel, progress, the seven `tool_error` types — lives in `packages/native`.
  *
  * **Sanctioned spec change (issue #48 review, Decision 5 follow-up):** the initial phase-2 port of
- * `AppductSessionChangeEventNative` dropped `type`/`reason` (see the frozen-spec deviation once
- * recorded in `docs/tasks/15-native-session-logic.md`/`16-android-session-logic.md`), which was a
- * public-API regression against `main`'s `AppductSessionChangeEvent`. `type`/`reason` are
- * restored below — the one deliberate edit to this otherwise-frozen spec.
+ * `AppductSessionChangeEventNative` dropped `type`/`reason` to keep the spec frozen, which was a
+ * public-API regression against `main`'s `AppductSessionChangeEvent`. `type`/`reason` are restored
+ * below — the one deliberate edit to this otherwise-frozen spec.
  */
 
 /**

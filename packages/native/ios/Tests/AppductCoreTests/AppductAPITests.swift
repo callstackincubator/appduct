@@ -1,9 +1,9 @@
 import XCTest
 @testable import AppductCore
 
-/// Covers the plain-app-facing `Appduct` facade (`Real/AppductAPI.swift`, issue #48 phase 3,
-/// `docs/tasks/18-ios-entry-points.md`) on top of the same `FakeTransportSession`/`FakeClientTimers`
-/// pair `AppductClientTests` uses -- the facade adds a `[String: Any]` boundary and one unified
+/// Covers the plain-app-facing `Appduct` facade (`Real/AppductAPI.swift`, issue #48 phase 3) on top
+//of the same `FakeTransportSession`/`FakeClientTimers` / pair `AppductClientTests` uses -- the
+//facade adds a `[String: Any]` boundary and one unified
 /// listener stream on top of `AppductClient`, so these tests exercise that boundary rather than
 /// re-testing session/reconnect/registry logic already covered there.
 final class AppductAPITests: XCTestCase {

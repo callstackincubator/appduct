@@ -60,27 +60,13 @@ Without a scheme, the server still starts, and the agent can use a device you've
 
 ## What the agent sees
 
-Your app's tools aren't added to the agent's tool list one by one. Instead, the agent gets eight built-in tools. Three of them reach your app's tools, and work like the CLI:
+Your app's tools aren't added to the agent's tool list one by one. Instead, the agent gets eight built-in tools, so an app with hundreds of tools adds only these to the agent's context, and the list doesn't change when tools register or a device connects. With them, the agent can:
 
-| Tool | What it does | CLI equivalent |
-| --- | --- | --- |
-| `appduct_list_tools` | Lists your app's tools as one-line signatures, with each tool's group and policy, and your app's groups with counts. Returns 50 at a time unless given `limit`; takes `group`, `filter`, and `offset`. | `appduct tools ls` |
-| `appduct_describe_tool` | Shows one tool's full input and output schema. | `appduct tools describe <name>` |
-| `appduct_call_tool` | Calls a tool by `name` with `args`. Progress and errors come through unchanged. | `appduct tools call` |
+- **Find and call your app's tools.** `appduct_list_tools` lists them as one-line signatures, 50 at a time, filtered by group or text. `appduct_describe_tool` shows one tool's full schema, and `appduct_call_tool` calls it, with progress and errors passed through unchanged. These match `appduct tools ls`, `describe`, and `call`.
+- **Connect a device.** `appduct_connect` opens a connection link on a booted iOS Simulator or Android emulator, or returns a QR code for you to scan. `appduct_wait_for_session` waits until the app connects.
+- **Read app events.** `appduct_list_events` lists the events your app declares, with descriptions and payload schemas. `appduct_events` returns the events your app posted since a cursor. `appduct_wait_for_event` waits for an event whose name matches a glob such as `"cart.*"`, including one that arrived before the call. A payload over 4096 bytes comes back as a preview; `payloadMaxBytes` changes that limit.
 
-So an app with hundreds of tools adds only these to the agent's context, and the list doesn't change when tools register or a device connects.
-
-The other five connect devices and read app events:
-
-| Tool | What it does |
-| --- | --- |
-| `appduct_connect` | Creates a connection link and opens it on a booted iOS Simulator or Android emulator it finds. If there's none, it returns a QR code for you to scan. |
-| `appduct_wait_for_session` | Waits until the device connects. |
-| `appduct_list_events` | Lists the events your app declared, as one-line signatures with descriptions. `name` filters to a glob, e.g. `"cart.*"`, and an exact name also returns the payload schema. Returns 50 at a time unless given `limit`; takes `offset`. Call it before waiting on an event. CLI: `appduct events ls`. |
-| `appduct_events` | Returns events your app posted with `postEvent`, since a cursor. `name` filters to events whose name matches a glob, e.g. `"cart.*"`. A payload over 4096 bytes is truncated (`payloadMaxBytes` changes that), and the result reports how many events were dropped or are still waiting. |
-| `appduct_wait_for_event` | Waits for a specific app event, checking events that already arrived first. |
-
-With more than one device connected, the agent passes `selector`, the session's alias or id, to pick one.
+With more than one device connected, the agent passes `selector`, the session's alias or id, to pick one. Every tool's arguments and results are listed in the [MCP tools reference](/appduct/reference/cli/#mcp-tools).
 
 ### How an agent connects a device
 
@@ -151,4 +137,4 @@ Plain-text output is meant for reading, and may change between versions. Scripts
 
 **Calls fail with `policy_denied`.** The tool's policy is `"deny"`, or `"prompt"` in a client that can't ask you. Retrying won't help; change the policy or use a client that supports elicitation.
 
-**The agent can't find a tool you just added.** The component that registers it isn't mounted, or the app hasn't reloaded. Ask the agent to list tools again after the change.
+**The agent can't find a tool you just added.** In React Native, the component that registers it isn't mounted, or the app hasn't reloaded. In a native app, the code that calls `register` hasn't run yet, or the app is still running an older build. Ask the agent to list tools again after the change.
