@@ -75,4 +75,4 @@ One note per PR that hit friction, four lines:
 - 2026-10-06 #183 skill: implement-issue
   What went wrong: attachPage registered a page binding per call, so a second attach on the same page threw, and the fix's re-attach semantics then needed a second review round.
   Would have prevented it: For any API that installs per-target state (bindings, listeners), write a test that calls it twice on the same target before opening the PR.
-  Evidence: PR #183 review rounds 1 and 2.
+  Cost: review round
