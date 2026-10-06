@@ -730,11 +730,10 @@ describe("init command (next steps match the project it found)", () => {
     return result.data.nextSteps;
   };
 
-  /** A plain SwiftUI app root: a URL scheme in `Info.plist`, no `package.json` anywhere. */
-  const makeIosAppRoot = async (): Promise<string> => {
-    const root = await makeAppRoot();
+  /** Writes an `Info.plist` declaring the `myapp` URL scheme in `directory`. */
+  const writeInfoPlist = async (directory: string): Promise<void> => {
     await writeFile(
-      path.join(root, "Info.plist"),
+      path.join(directory, "Info.plist"),
       `<?xml version="1.0" encoding="UTF-8"?>
       <plist version="1.0"><dict>
         <key>CFBundleURLTypes</key>
@@ -745,6 +744,29 @@ describe("init command (next steps match the project it found)", () => {
       </dict></plist>`,
       "utf8",
     );
+  };
+
+  /** Writes `app/src/main/AndroidManifest.xml` with a `myapp` deep-link filter and no
+   * `appductScheme` placeholder — the shape the `android-manifest` probe resolves. */
+  const writeAndroidDeepLinkManifest = async (root: string): Promise<void> => {
+    const manifestPath = path.join(root, "app", "src", "main", "AndroidManifest.xml");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(
+      manifestPath,
+      `<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+        <application><activity android:name=".Main"><intent-filter>
+          <action android:name="android.intent.action.VIEW" />
+          <data android:scheme="myapp" />
+        </intent-filter></activity></application>
+      </manifest>`,
+      "utf8",
+    );
+  };
+
+  /** A plain SwiftUI app root: a URL scheme in `Info.plist`, no `package.json` anywhere. */
+  const makeIosAppRoot = async (): Promise<string> => {
+    const root = await makeAppRoot();
+    await writeInfoPlist(root);
 
     return root;
   };
@@ -828,7 +850,86 @@ describe("init command (next steps match the project it found)", () => {
 
     const steps = stepsOf(await handleInitCommand({}, { cwd: root }));
 
+    // The scheme came from the placeholder itself, so this one really does name it.
+    expect(steps[0]).toContain('manifestPlaceholders["appductScheme"] = "myapp"');
+    expect(steps.join("\n")).not.toContain("@appduct/react-native");
+  });
+
+  // The `android-manifest` probe only ever reads the app's own VIEW intent filter, so the scheme it
+  // reports is the app's primary deep link, not Appduct's. Telling the user to put it in
+  // `appductScheme` is the collision the Android guide warns about: Appduct's trampoline activity
+  // takes every link on that scheme and drops the ones that carry no Appduct payload.
+  test("an Android app whose scheme came from its own manifest is told to give Appduct a scheme of its own", async () => {
+    const root = await makeAppRoot();
+    await writeAndroidDeepLinkManifest(root);
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: root }));
+
     expect(steps[0]).toContain('manifestPlaceholders["appductScheme"]');
+    expect(steps[0]).not.toContain('"myapp"');
+    expect(steps[0]).toContain("/install/android/#deep-links");
+  });
+
+  test("a plain Android app whose scheme came from its own manifest still gets the placeholder step, not the React Native import", async () => {
+    const root = await makeAppRoot();
+    await writeAndroidDeepLinkManifest(root);
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: root }));
+
+    expect(steps.join("\n")).not.toContain("@appduct/react-native");
+  });
+
+  test("an Expo app run from its ios directory still gets the auto-import", async () => {
+    const root = await makeAppRoot();
+    await writePackageJson(root, { expo: "~54.0.33", "react-native": "0.81.5" });
+    await mkdir(path.join(root, "ios"), { recursive: true });
+
+    const steps = stepsOf(
+      await handleInitCommand({ scheme: "myapp" }, { cwd: path.join(root, "ios") }),
+    );
+
+    expect(steps[0]).toBe(REACT_NATIVE_STEP);
+    expect(steps.join("\n")).not.toContain("Appduct.shared.handle");
+  });
+
+  test("a bare React Native app run from its ios directory still gets the auto-import", async () => {
+    const root = await makeAppRoot();
+    await writePackageJson(root, { react: "19.1.0", "react-native": "0.81.5" });
+    await mkdir(path.join(root, "ios", "ShopApp"), { recursive: true });
+    await writeInfoPlist(path.join(root, "ios", "ShopApp"));
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: path.join(root, "ios") }));
+
+    // People sit in `ios/` to run `pod install`, and the iOS probe hits there — but the app is still
+    // React Native, and forwarding URLs to `Appduct.shared.handle(url)` is code it does not have.
+    expect(steps[0]).toBe(REACT_NATIVE_STEP);
+    expect(steps.join("\n")).not.toContain("Appduct.shared.handle");
+  });
+
+  test("a bare React Native app run from its android directory still gets the auto-import", async () => {
+    const root = await makeAppRoot();
+    await writePackageJson(root, { react: "19.1.0", "react-native": "0.81.5" });
+    await writeAndroidDeepLinkManifest(path.join(root, "android"));
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: path.join(root, "android") }));
+
+    expect(steps[0]).toBe(REACT_NATIVE_STEP);
+    expect(steps.join("\n")).not.toContain("manifestPlaceholders");
+  });
+
+  // The walk up exists to see the app's own manifest from inside `ios/` or `android/`, so it stops
+  // two directories above the app root: past that it would be reading a workspace or a home
+  // directory that says nothing about the app being initialized.
+  test("a plain iOS app three directories below a React Native manifest still gets the URL-forwarding step", async () => {
+    const repo = await makeAppRoot();
+    await writePackageJson(repo, { react: "19.1.0", "react-native": "0.81.5" });
+    const appDir = path.join(repo, "apps", "shop", "ios");
+    await mkdir(appDir, { recursive: true });
+    await writeInfoPlist(appDir);
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: appDir }));
+
+    expect(steps[0]).toContain("Appduct.shared.handle(url)");
     expect(steps.join("\n")).not.toContain("@appduct/react-native");
   });
 
