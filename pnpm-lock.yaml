@@ -132,6 +132,19 @@ importers:
         specifier: npm:zod@^4.4.3
         version: zod@4.6.5
 
+  packages/web:
+    dependencies:
+      '@appduct/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      typescript:
+        specifier: ~5.9.2
+        version: 5.9.3
+
   playground:
     dependencies:
       '@appduct/react-native':
