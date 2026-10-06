@@ -709,6 +709,173 @@ describe("init command (native project discovery)", () => {
   });
 });
 
+/**
+ * Issue #153: the first next step has to be the wiring this project still needs. It used to be the
+ * `@appduct/react-native/auto` import for every project, which a plain Swift or Kotlin app cannot
+ * act on. Which kind of project this is comes from the app root's own `package.json` (React Native
+ * or not) and from what scheme discovery found on disk (`discovered.source`, which `init` computes
+ * whether or not the scheme ends up coming from it), not from the `source` a run happens to report.
+ */
+describe("init command (next steps match the project it found)", () => {
+  /** The step an Expo / React Native app gets, pinned verbatim: that path is what most users see. */
+  const REACT_NATIVE_STEP =
+    'Add `import "@appduct/react-native/auto";` to your app entry (index.js / App.tsx) — it ' +
+    "is what starts the in-app agent endpoint.";
+
+  const stepsOf = (result: Awaited<ReturnType<typeof handleInitCommand>>): string[] => {
+    if (!result.ok) {
+      throw new Error(`init failed: ${JSON.stringify(result)}`);
+    }
+
+    return result.data.nextSteps;
+  };
+
+  /** A plain SwiftUI app root: a URL scheme in `Info.plist`, no `package.json` anywhere. */
+  const makeIosAppRoot = async (): Promise<string> => {
+    const root = await makeAppRoot();
+    await writeFile(
+      path.join(root, "Info.plist"),
+      `<?xml version="1.0" encoding="UTF-8"?>
+      <plist version="1.0"><dict>
+        <key>CFBundleURLTypes</key>
+        <array><dict>
+          <key>CFBundleURLSchemes</key>
+          <array><string>myapp</string></array>
+        </dict></array>
+      </dict></plist>`,
+      "utf8",
+    );
+
+    return root;
+  };
+
+  /** A plain Kotlin app root: the `appductScheme` placeholder in `app/build.gradle.kts`. */
+  const makeAndroidAppRoot = async (): Promise<string> => {
+    const root = await makeAppRoot();
+    await mkdir(path.join(root, "app"), { recursive: true });
+    await writeFile(
+      path.join(root, "app", "build.gradle.kts"),
+      'android { defaultConfig { manifestPlaceholders["appductScheme"] = "myapp" } }',
+      "utf8",
+    );
+
+    return root;
+  };
+
+  const writePackageJson = async (root: string, dependencies: Record<string, string>) => {
+    await writeFile(
+      path.join(root, "package.json"),
+      JSON.stringify({ name: "shop-app", dependencies }),
+      "utf8",
+    );
+  };
+
+  test("an Expo app still gets the React Native auto-import as its first step", async () => {
+    const root = await makeAppRoot("myapp");
+    await writePackageJson(root, { expo: "~54.0.33", react: "19.1.0", "react-native": "0.81.5" });
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: root }));
+
+    expect(steps[0]).toBe(REACT_NATIVE_STEP);
+  });
+
+  test("a bare React Native app still gets the auto-import when its scheme came from ios/Info.plist", async () => {
+    const root = await makeAppRoot();
+    await writePackageJson(root, { react: "19.1.0", "react-native": "0.81.5" });
+    await mkdir(path.join(root, "ios", "ShopApp"), { recursive: true });
+    await writeFile(
+      path.join(root, "ios", "ShopApp", "Info.plist"),
+      `<?xml version="1.0" encoding="UTF-8"?>
+      <plist version="1.0"><dict>
+        <key>CFBundleURLTypes</key>
+        <array><dict>
+          <key>CFBundleURLSchemes</key>
+          <array><string>myapp</string></array>
+        </dict></array>
+      </dict></plist>`,
+      "utf8",
+    );
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: root }));
+
+    // The iOS probe found the scheme, and the app is still React Native: the import is the step,
+    // not UIKit URL forwarding, which this app does through React Native's Linking.
+    expect(steps[0]).toBe(REACT_NATIVE_STEP);
+    expect(steps.join("\n")).not.toContain("Appduct.shared.handle");
+  });
+
+  test("a plain iOS app gets the URL-forwarding step, not the React Native import", async () => {
+    const root = await makeIosAppRoot();
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: root }));
+
+    expect(steps[0]).toContain("Appduct.shared.handle(url)");
+    expect(steps.join("\n")).not.toContain("@appduct/react-native");
+  });
+
+  test("a plain iOS app is not treated as React Native because it has a package.json", async () => {
+    const root = await makeIosAppRoot();
+    await writePackageJson(root, { "react-native-svg": "15.0.0" });
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: root }));
+
+    expect(steps[0]).toContain("Appduct.shared.handle(url)");
+    expect(steps.join("\n")).not.toContain("@appduct/react-native");
+  });
+
+  test("a plain Android app gets the appductScheme placeholder step, not the React Native import", async () => {
+    const root = await makeAndroidAppRoot();
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: root }));
+
+    expect(steps[0]).toContain('manifestPlaceholders["appductScheme"]');
+    expect(steps.join("\n")).not.toContain("@appduct/react-native");
+  });
+
+  test("a re-run that keeps the recorded scheme still prints the same native step", async () => {
+    const root = await makeIosAppRoot();
+
+    await handleInitCommand({}, { cwd: root });
+    const steps = stepsOf(await handleInitCommand({}, { cwd: root }));
+
+    expect(steps[0]).toContain("Appduct.shared.handle(url)");
+    expect(steps.join("\n")).not.toContain("@appduct/react-native");
+  });
+
+  test("--scheme in a project whose platform discovery cannot see names both native steps", async () => {
+    const root = await makeAppRoot();
+
+    const steps = stepsOf(await handleInitCommand({ scheme: "myapp" }, { cwd: root }));
+
+    expect(steps[0]).toContain("Appduct.shared.handle(url)");
+    expect(steps[1]).toContain('manifestPlaceholders["appductScheme"]');
+    expect(steps.join("\n")).not.toContain("@appduct/react-native");
+  });
+
+  test("the native steps replace the import step but leave every other step alone", async () => {
+    const root = await makeAndroidAppRoot();
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: root }));
+
+    expect(steps[1]).toContain("Add the Appduct MCP server entry");
+    expect(steps[2]).toContain("appduct sessions link --open ios-sim");
+    expect(steps[3]).toContain("was read from");
+    expect(steps[4]).toContain("--ios-app-id");
+    expect(steps[5]).toContain("safe to commit");
+    expect(steps).toHaveLength(6);
+  });
+
+  test("prints the iOS step and not the React Native import, through the real CLI", async () => {
+    const root = await makeIosAppRoot();
+
+    const result = runCliBinary(["init"], { cwd: root, stateDir: await makeStateDir() });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Appduct.shared.handle(url)");
+    expect(result.stdout).not.toContain("@appduct/react-native");
+  });
+});
+
 describe("appduct init (CLI)", () => {
   test("is idempotent across two real CLI runs", async () => {
     const root = await makeAppRoot("myapp");
