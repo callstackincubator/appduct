@@ -94,6 +94,8 @@ const webPortOf = async (daemon: RunningDaemon): Promise<number> => {
   return status.webPort;
 };
 
+type Resume = { sessionId: string; resumeToken: string };
+
 type Outcome =
   | { kind: "ack"; message: Record<string, unknown> }
   | { kind: "closed"; code: number; reason: string }
@@ -102,7 +104,7 @@ type Outcome =
 /** Connects, optionally sends a claim, and reports how the daemon answered. */
 const attempt = (
   url: string,
-  options: { origin?: string; claim?: MintedLink; ca?: string },
+  options: { origin?: string; claim?: MintedLink; resume?: Resume; ca?: string },
 ): Promise<Outcome> => {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(url, {
@@ -125,6 +127,17 @@ const attempt = (
       resolve({ kind: "closed", code, reason: reason.toString("utf8") });
     });
     socket.once("open", () => {
+      if (options.resume) {
+        socket.send(
+          JSON.stringify({
+            type: "session_resume",
+            protocol_version: 2,
+            session_id: options.resume.sessionId,
+            resume_token: options.resume.resumeToken,
+          }),
+        );
+      }
+
       if (options.claim) {
         socket.send(
           JSON.stringify({
@@ -312,6 +325,50 @@ describe("links are bound to their transport", () => {
     const outcome = await connectWeb(daemon, { ...decoded });
 
     expect(outcome).toMatchObject({ kind: "closed", code: 1008, reason: "link_expired" });
+  });
+});
+
+const resumeOf = (minted: MintedLink, outcome: Outcome): Resume => {
+  if (outcome.kind !== "ack") {
+    throw new Error("expected an ack");
+  }
+
+  return { sessionId: minted.sessionId, resumeToken: outcome.message.resume_token as string };
+};
+
+describe("resume is bound to the transport the session was claimed on", () => {
+  const onTls = (daemon: RunningDaemon, resume: Resume) =>
+    attempt(`wss://127.0.0.1:${daemon.listener.port()!}`, { resume, ca: daemon.tls.current().certPem });
+  const onWeb = (daemon: RunningDaemon, resume: Resume) =>
+    webPortOf(daemon).then((port) => attempt(`ws://127.0.0.1:${port}`, { origin: LOCAL_ORIGIN, resume }));
+
+  test("a session claimed on the web listener cannot be resumed over TLS", async () => {
+    const { daemon } = await startTestDaemon();
+    const minted = await mintLink(daemon, "web");
+    const resume = resumeOf(minted, await connectWeb(daemon, minted));
+
+    expect(await onTls(daemon, resume)).toMatchObject({ kind: "closed", code: 1008, reason: "wrong_transport" });
+  });
+
+  test("a session claimed over TLS cannot be resumed on the web listener", async () => {
+    const { daemon } = await startTestDaemon();
+    const minted = await mintLink(daemon, "native");
+    const claimed = await attempt(`wss://127.0.0.1:${daemon.listener.port()!}`, {
+      claim: minted,
+      ca: daemon.tls.current().certPem,
+    });
+    const resume = resumeOf(minted, claimed);
+
+    expect(await onWeb(daemon, resume)).toMatchObject({ kind: "closed", code: 1008, reason: "wrong_transport" });
+  });
+
+  test("a refused cross-listener resume leaves the resume token valid on the right listener", async () => {
+    const { daemon } = await startTestDaemon();
+    const minted = await mintLink(daemon, "web");
+    const resume = resumeOf(minted, await connectWeb(daemon, minted));
+    await onTls(daemon, resume);
+
+    expect((await onWeb(daemon, resume)).kind).toBe("ack");
   });
 });
 
