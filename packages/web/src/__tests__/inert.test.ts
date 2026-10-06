@@ -52,6 +52,27 @@ describe("the inert @appduct/web entry", () => {
     expect(warnings).toHaveLength(1);
   });
 
+  it("warns when connect is called on appductClient, which is what React Native web calls", async () => {
+    const { appduct, warnings } = setup();
+    await appduct.appductClient.connect("any-link");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("@appduct/web/enabled");
+  });
+
+  it("warns when connect is called on appductCore", async () => {
+    const { appduct, warnings } = setup();
+    await appduct.appductCore.connect("any-link");
+    expect(warnings).toHaveLength(1);
+  });
+
+  it("warns once in total across connect, appductClient.connect and appductCore.connect", async () => {
+    const { appduct, warnings } = setup();
+    await appduct.connect("a");
+    await appduct.appductClient.connect("b");
+    await appduct.appductCore.connect("c");
+    expect(warnings).toHaveLength(1);
+  });
+
   it("answers the read calls with nothing: no tools, an idle state, no session", () => {
     const { appduct } = setup();
     expect(appduct.getRegisteredTools()).toEqual([]);
