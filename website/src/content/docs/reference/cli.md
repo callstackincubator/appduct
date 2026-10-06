@@ -16,11 +16,11 @@ exactly one device is connected.
 
 ### `appduct init`
 
-Sets up the current app directory: writes `.appduct/config.json` (mode `0600`) and prints an MCP config entry for this app. Its first next step matches the project it found: the `@appduct/react-native/auto` import for a React Native or Expo app, or the wiring your iOS or Android app needs. Safe to re-run. Never creates keys.
+Sets up the current app directory: writes `.appduct/config.json` (mode `0600`) and prints an MCP config entry for this app. Its first next step matches the project it found: the `@appduct/react-native/auto` import for a React Native or Expo app, or the wiring your iOS or Android app needs. Running it from the app's `ios/` or `android/` directory still prints the import for a React Native or Expo app. Safe to re-run. Never creates keys.
 
 | Flag | Description |
 | --- | --- |
-| `--scheme <scheme>` | Scheme to record. Without it, `init` looks in `app.json` and your native project files, never in `APPDUCT_SCHEME` or a parent directory. |
+| `--scheme <scheme>` | Scheme to record. Without it, `init` looks in `app.json` and your native project files, never in `APPDUCT_SCHEME` or a parent's `.appduct/config.json`. |
 | `--ios-app-id <id>` | iOS bundle id, recorded as `appId.ios`. Needed for `--open ios-device`. |
 | `--android-app-id <id>` | Android package name, recorded as `appId.android`. Needed for `--open android`. |
 | `--force` | Replace a value that's already recorded. On its own, re-reads the scheme from your project files. Merges into the existing file rather than overwriting it. |

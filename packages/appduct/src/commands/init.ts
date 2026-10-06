@@ -242,15 +242,15 @@ const MAX_MANIFEST_WALK_UP = 2;
  * It starts at `root` and walks up, because the natural place to run this is the directory the
  * native toolchain wants you in: `ios/` for `pod install`, `android/` for Gradle. The bound is
  * {@link MAX_MANIFEST_WALK_UP}, and the first directory holding a manifest decides, so a nested
- * app's own manifest wins over a workspace root's. This is *not* the walk-up `init` refuses for a
- * scheme (see this file's header): that one picks what to write into a committed file, where
- * inheriting a parent project's value would silently copy it into a sub-package. This one picks
- * which of two printed hints is true, and writes nothing.
+ * app's own manifest wins over a workspace root's. This is the one place `init` looks above its
+ * root, and it does not contradict the no-walk-up rule in this file's header: that rule keeps a
+ * parent's *scheme* out of a file `init` writes, while this chooses which of two printed hints is
+ * true and writes nothing.
  *
- * A missing, unreadable or unparseable manifest is "nothing learned", not an error: unlike
- * `app.json`, which discovery was pointed at, this file is one `init` only consults to sharpen a
- * hint, and failing a Kotlin app over it would be a new way to break a command documented as safe
- * to run anywhere.
+ * A missing, unreadable or unparseable manifest is "nothing learned", not an error, and does not
+ * stop the walk: unlike `app.json`, which discovery was pointed at, this file is one `init` only
+ * consults to sharpen a hint, and failing a Kotlin app over it would be a new way to break a
+ * command documented as safe to run anywhere.
  */
 const declaresReactNative = async (root: string): Promise<boolean> => {
   let directory = root;

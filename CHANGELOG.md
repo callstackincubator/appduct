@@ -12,7 +12,10 @@ section into a versioned heading.
 ## Unreleased
 
 - **Fix: `appduct init`'s next steps now match the project it found.** A React Native app still gets
-  the `@appduct/react-native/auto` import; a plain iOS or Android app gets the wiring that app needs.
+  the `@appduct/react-native/auto` import, including when `init` runs from its `ios/` or `android/`
+  directory; a plain iOS or Android app gets the wiring that app needs. An Android app that already
+  handles its own deep links is told to give Appduct a scheme of its own — see
+  [Android setup](https://callstackincubator.github.io/appduct/install/android/#deep-links).
 - **Docs: the README is a short overview of Appduct on iOS, Android and React Native, and the guides for registering tools, security and build variants live only on the [docs site](https://callstackincubator.github.io/appduct/).** The `docs/TOOLS.md`, `docs/SECURITY.md` and `docs/BUILD-VARIANTS.md` files are gone.
 - **Docs: the shipped `appduct` skill covers native iOS and Android setup, and no longer tells you to set `APPDUCT_ENABLED=0` for production.** Release builds leave Appduct out by default.
 

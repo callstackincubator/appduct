@@ -663,8 +663,13 @@ use `--scheme`, `APPDUCT_SCHEME`, or `appduct init --scheme <s>`.
 now `appId.ios`/`appId.android` via `--ios-app-id <id>`/`--android-app-id <id>`) and prints the MCP
 server entry to paste plus the wiring step this project still needs: the
 `import "@appduct/react-native/auto"` reminder for a React Native app — the app root's
-`package.json`, or an `app.json` `expo.scheme`, is what says so — or the matching native step for
-a plain iOS or Android app. It never generates keys (the daemon auto-generates `key.pem` — §3), and
+`package.json`, or an `app.json` `expo.scheme`, is what says so, and that manifest is looked for up
+to two directories above the root so `pod install`-depth runs still get the import — or the matching
+native step for a plain iOS or Android app. The Android step names the discovered scheme only when
+the Gradle placeholder is where it came from; when the scheme came from the app's own
+`AndroidManifest.xml` it tells the user to give Appduct a scheme of its own, since sharing one is
+the collision the Android guide warns about. It never generates keys (the daemon auto-generates
+`key.pem` — §3), and
 writes the file `0600` inside a `0700` directory, matching §3's conventions. The two app-id flags
 are independent — there is no single `--app-id` on `init` — because the platforms' ids usually match
 but not always, and `init`
