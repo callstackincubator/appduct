@@ -219,8 +219,18 @@ const readExistingAppId = (
   return value;
 };
 
+/** How far above the app root {@link declaresReactNative} looks for a `package.json`: two
+ * directories, which is exactly how far below a project root `native-scheme.ts` is willing to look
+ * for the native files it resolves — an `Info.plist` up to two levels down, an
+ * `app/build.gradle(.kts)` one. So for every project shape discovery can identify, this walk
+ * reaches the app's own manifest, and for nothing else: one level further is a monorepo's `apps/`
+ * directory, a workspace root, or a home directory, none of which says what framework the app
+ * being initialized is written in. */
+const MAX_MANIFEST_WALK_UP = 2;
+
 /**
- * Whether `<root>/package.json` names React Native as a dependency (issue #153).
+ * Whether the project at `root` (or an app directory directly inside it) is built with React
+ * Native (issue #153).
  *
  * The manifest is the only file in a project that says what framework it is built with, which is
  * what `init` needs to pick a wiring step: a scheme read out of `ios/<App>/Info.plist` looks the
@@ -229,31 +239,52 @@ const readExistingAppId = (
  * either name in `dependencies` or `devDependencies` is enough, since the cost of missing one is
  * printing another platform's step.
  *
- * A missing or unparseable manifest is "nothing learned", not an error: unlike `app.json`, which
- * discovery was pointed at, this file is one `init` only consults to sharpen a hint, and failing a
- * Kotlin app over it would be a new way to break a command documented as safe to run anywhere.
+ * It starts at `root` and walks up, because the natural place to run this is the directory the
+ * native toolchain wants you in: `ios/` for `pod install`, `android/` for Gradle. The bound is
+ * {@link MAX_MANIFEST_WALK_UP}, and the first directory holding a manifest decides, so a nested
+ * app's own manifest wins over a workspace root's. This is *not* the walk-up `init` refuses for a
+ * scheme (see this file's header): that one picks what to write into a committed file, where
+ * inheriting a parent project's value would silently copy it into a sub-package. This one picks
+ * which of two printed hints is true, and writes nothing.
+ *
+ * A missing, unreadable or unparseable manifest is "nothing learned", not an error: unlike
+ * `app.json`, which discovery was pointed at, this file is one `init` only consults to sharpen a
+ * hint, and failing a Kotlin app over it would be a new way to break a command documented as safe
+ * to run anywhere.
  */
 const declaresReactNative = async (root: string): Promise<boolean> => {
-  let manifest: unknown;
+  let directory = root;
 
-  try {
-    manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as unknown;
-  } catch {
-    return false;
+  for (let levelsUp = 0; levelsUp <= MAX_MANIFEST_WALK_UP; levelsUp += 1) {
+    let manifest: unknown;
+
+    try {
+      manifest = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as unknown;
+    } catch {
+      manifest = undefined;
+    }
+
+    if (typeof manifest === "object" && manifest !== null) {
+      const declared = manifest as Record<string, unknown>;
+      const dependencies = [declared.dependencies, declared.devDependencies].flatMap((field) =>
+        typeof field === "object" && field !== null
+          ? Object.keys(field as Record<string, unknown>)
+          : [],
+      );
+
+      return dependencies.includes("react-native") || dependencies.includes("expo");
+    }
+
+    const parent = dirname(directory);
+
+    if (parent === directory) {
+      break;
+    }
+
+    directory = parent;
   }
 
-  if (typeof manifest !== "object" || manifest === null) {
-    return false;
-  }
-
-  const declared = manifest as Record<string, unknown>;
-  const dependencies = [declared.dependencies, declared.devDependencies].flatMap((field) =>
-    typeof field === "object" && field !== null
-      ? Object.keys(field as Record<string, unknown>)
-      : [],
-  );
-
-  return dependencies.includes("react-native") || dependencies.includes("expo");
+  return false;
 };
 
 /**
