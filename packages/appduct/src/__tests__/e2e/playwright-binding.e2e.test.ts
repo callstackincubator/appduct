@@ -150,7 +150,7 @@ describe("e2e: web session over a Playwright binding", () => {
   );
 
   test(
-    "attaching the same page twice moves the session to the new link",
+    "attaching the same page twice leaves the first session suspended and the second one selectable by id",
     async () => {
       const stateDir = await startDaemon();
       const { page } = await startStagingPage();
@@ -168,9 +168,29 @@ describe("e2e: web session over a Playwright binding", () => {
         { timeoutMs: 15_000, description: "the second attach to claim its own session" },
       );
 
+      expect((await sessions(stateDir)).find((row) => row.sessionId === first.sessionId)?.state).toBe("suspended");
       const app = await connect({ stateDir, selector: second!.sessionId });
       trackCleanup(() => app.close());
       expect(await app.call("add", { a: 6, b: 7 })).toEqual({ total: 13 });
+    },
+    60_000,
+  );
+
+  test(
+    "re-attaching with an invalid link rejects and keeps the first session active",
+    async () => {
+      const stateDir = await startDaemon();
+      const { page } = await startStagingPage();
+      await page.goto(`${ORIGIN}/`);
+      await attachPage(page, { link: await link({ stateDir, target: "web", url: `${ORIGIN}/` }) });
+      const first = await waitForActiveSession(stateDir);
+
+      await expect(attachPage(page, { link: { url: `${ORIGIN}/` } })).rejects.toThrow(/#appduct=/);
+
+      expect((await sessions(stateDir)).map((row) => [row.sessionId, row.state])).toEqual([[first.sessionId, "active"]]);
+      const app = await connect({ stateDir });
+      trackCleanup(() => app.close());
+      expect(await app.call("add", { a: 2, b: 2 })).toEqual({ total: 4 });
     },
     60_000,
   );
