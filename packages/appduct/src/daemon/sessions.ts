@@ -101,6 +101,8 @@ type LiveSession = {
   device: SessionDeviceMetadata;
   createdAt: Date;
   claimedAt: Date;
+  /** The listener the session was claimed on; resume is only accepted there. */
+  transport: LinkTransport;
   suspendedAt?: Date;
   suspendReason?: SessionSuspendReason;
   resumeToken: Buffer;
@@ -180,8 +182,10 @@ export type SessionManager = {
    * sessionId, or `null` after closing the socket. A link minted for the other transport is
    * refused with `wrong_transport` and stays claimable on its own listener. */
   handleClaim: (socket: WebSocket, message: SessionClaimMessage, transport: LinkTransport) => string | null;
-  /** First message on a resume socket. Returns the resumed sessionId, or `null` after closing the socket. */
-  handleResume: (socket: WebSocket, message: SessionResumeMessage) => string | null;
+  /** First message on a resume socket accepted on `transport`'s listener. Returns the resumed
+   * sessionId, or `null` after closing the socket. A session claimed on the other listener is
+   * refused with `wrong_transport` before its token is checked, so its token is not rotated. */
+  handleResume: (socket: WebSocket, message: SessionResumeMessage, transport: LinkTransport) => string | null;
   /** Dispatches an already-type-checked post-claim message; closes the socket on invalid content. */
   handlePostClaimMessage: (sessionId: string, socket: WebSocket, message: Record<string, unknown>) => void;
   list: () => SessionSummary[];
@@ -450,6 +454,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       device,
       createdAt: pending.createdAt,
       claimedAt: clock.now(),
+      transport,
       resumeToken: randomBytes(RESUME_TOKEN_BYTES),
       socket,
       missedPongs: 0,
@@ -469,11 +474,16 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
     return sessionId;
   };
 
-  const handleResume = (socket: WebSocket, message: SessionResumeMessage): string | null => {
+  const handleResume = (socket: WebSocket, message: SessionResumeMessage, transport: LinkTransport): string | null => {
     const session = sessions.get(message.session_id);
 
     if (!session) {
       closeSocket(socket, 1008, "unknown_session");
+      return null;
+    }
+
+    if (session.transport !== transport) {
+      closeSocket(socket, 1008, "wrong_transport");
       return null;
     }
 

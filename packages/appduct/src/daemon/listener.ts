@@ -114,7 +114,7 @@ const attachFrameGate = (wss: WebSocketServer, options: FrameGateOptions): void 
         }
 
         if (isSessionResumeMessage(parsed)) {
-          const result = options.sessionManager.handleResume(socket, parsed);
+          const result = options.sessionManager.handleResume(socket, parsed, options.transport);
 
           if (result) {
             claimedSessionId = result;

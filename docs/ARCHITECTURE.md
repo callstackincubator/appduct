@@ -411,9 +411,9 @@ Rules:
 - `ACTIVE → SUSPENDED` (socket close/error/heartbeat loss): the tool registry, device
   metadata, and alias are retained. Pending tool calls fail fast with `session_suspended`.
 - `SUSPENDED → ACTIVE` via `session_resume` on a fresh socket within
-  `graceSeconds`. Either listener accepts `session_resume`: it carries no transport check, and
-  the resume token is the credential. After resume the app re-sends a full `tool_registry_snapshot`
-  (authoritative; replaces the retained registry).
+  `graceSeconds`. A session resumes only on the listener it was claimed on; a resume on the
+  other listener closes `1008 wrong_transport` and leaves the resume token valid. After resume the app re-sends a full
+  `tool_registry_snapshot` (authoritative; replaces the retained registry).
 - Session ids and aliases never collide across live sessions. Terminal states
   (`DISCARDED`, `EXPIRED`, `REVOKED`) free the alias.
 - There is **no limit** on concurrent sessions; all share the two listeners (pinned wss and local web).
