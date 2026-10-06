@@ -224,27 +224,20 @@ const readExistingAppId = (
  *
  * The manifest is the only file in a project that says what framework it is built with, which is
  * what `init` needs to pick a wiring step: a scheme read out of `ios/<App>/Info.plist` looks the
- * same for a bare React Native app as for a plain SwiftUI one. `expo` counts too, and both names are
- * looked for in `devDependencies` as well, because a workspace hoists dependencies and an app can
- * still be a React Native app with the framework one level up.
+ * same for a bare React Native app as for a plain SwiftUI one. `expo` counts as well — an Expo app
+ * without a `react-native` entry is still not a native app in the sense that matters here — and
+ * either name in `dependencies` or `devDependencies` is enough, since the cost of missing one is
+ * printing another platform's step.
  *
  * A missing or unparseable manifest is "nothing learned", not an error: unlike `app.json`, which
- * discovery was pointed at, this file is one `init` only consulted to sharpen a hint, and failing a
+ * discovery was pointed at, this file is one `init` only consults to sharpen a hint, and failing a
  * Kotlin app over it would be a new way to break a command documented as safe to run anywhere.
  */
 const declaresReactNative = async (root: string): Promise<boolean> => {
-  let text: string;
-
-  try {
-    text = await readFile(join(root, "package.json"), "utf8");
-  } catch {
-    return false;
-  }
-
   let manifest: unknown;
 
   try {
-    manifest = JSON.parse(text) as unknown;
+    manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as unknown;
   } catch {
     return false;
   }
@@ -253,17 +246,14 @@ const declaresReactNative = async (root: string): Promise<boolean> => {
     return false;
   }
 
-  return ["dependencies", "devDependencies"].some((field) => {
-    const dependencies = (manifest as Record<string, unknown>)[field];
+  const declared = manifest as Record<string, unknown>;
+  const dependencies = [declared.dependencies, declared.devDependencies].flatMap((field) =>
+    typeof field === "object" && field !== null
+      ? Object.keys(field as Record<string, unknown>)
+      : [],
+  );
 
-    if (typeof dependencies !== "object" || dependencies === null) {
-      return false;
-    }
-
-    return ["react-native", "expo"].some(
-      (name) => (dependencies as Record<string, unknown>)[name] !== undefined,
-    );
-  });
+  return dependencies.includes("react-native") || dependencies.includes("expo");
 };
 
 /**
@@ -300,8 +290,9 @@ const wiringNextSteps = async (
   // missing, so the sentence has to work both ways.
   const android =
     "Check that `app/build.gradle(.kts)` sets " +
-    `\`manifestPlaceholders["appductScheme"] = "${scheme}"\` — Appduct's own activity reads the ` +
-    "link's scheme from it. Rebuild after changing one; the placeholder is fixed at build time.";
+    `\`manifestPlaceholders["appductScheme"] = "${scheme}"\` — Appduct's own activity receives the ` +
+    "connection link on that scheme. Placeholders are fixed at build time, so rebuild and " +
+    "reinstall after changing one.";
 
   if (discovered.source === "android-gradle" || discovered.source === "android-manifest") {
     return [android];
