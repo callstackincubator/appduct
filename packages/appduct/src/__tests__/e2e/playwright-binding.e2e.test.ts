@@ -150,6 +150,28 @@ describe("e2e: web session over a Playwright binding", () => {
   );
 
   test(
+    "attaching the same page twice moves the session to the new link",
+    async () => {
+      const stateDir = await startDaemon();
+      const { page } = await startStagingPage();
+      await page.goto(`${ORIGIN}/`);
+      await attachPage(page, { link: await link({ stateDir, target: "web", url: `${ORIGIN}/` }) });
+      await waitForActiveSession(stateDir);
+
+      await attachPage(page, { link: await link({ stateDir, target: "web", url: `${ORIGIN}/` }) });
+      await waitUntil(
+        async () => (await sessions(stateDir)).some((row) => row.state === "active" && row.toolCount > 0),
+        { timeoutMs: 15_000, description: "the second attach to claim a session" },
+      );
+
+      const app = await connect({ stateDir });
+      trackCleanup(() => app.close());
+      expect(await app.call("add", { a: 6, b: 7 })).toEqual({ total: 13 });
+    },
+    60_000,
+  );
+
+  test(
     "the same page with no relay attached still connects over the WebSocket transport",
     async () => {
       const stateDir = await startDaemon();
