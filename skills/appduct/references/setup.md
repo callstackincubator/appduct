@@ -117,7 +117,9 @@ Appduct out by default on both platforms.
 4. Production builds need nothing: the root entry is inert unless the bundler sets the
    `development` export condition. To include Appduct in another build, import
    `@appduct/web/enabled`. In a bundler with no `development` condition (plain esbuild),
-   `connect()` warns once and does nothing until you set it or use `/enabled`.
+   `connect()` warns once and does nothing. Running the `script` then throws a `TypeError`
+   because `window.__APPDUCT__` is undefined, and opening the `url` silently connects nothing.
+   Fix it with `--conditions=development` (esbuild), or import `@appduct/web/enabled`.
 5. If the connection is refused: the page's origin must be `localhost`, `127.0.0.1` or `[::1]`,
    or listed in `webOrigins` in `~/.appduct/config.json` (then `appduct daemon stop`). An
    `https` page needs Chrome's local network access permission, granted in Playwright with

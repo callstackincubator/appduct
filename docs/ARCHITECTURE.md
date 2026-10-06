@@ -66,9 +66,12 @@ Browsers reach the daemon on a second listener, `ws://127.0.0.1:<webPort>`, not 
   reachable from other machines. A browser can't pin the key, so the listener refuses an upgrade
   with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`. A link is claimable
   only on the listener of its transport (`link.create`'s `transport`, §5). The page side is
-  `packages/web` (`@appduct/web`, not yet published): a TypeScript port of the native session core
-  under the same SDK layer as React Native. Its entry reads `#appduct=` on load, removes it from the
-  address bar and claims, resumes from `sessionStorage` after a reload, and publishes
+  `packages/web` (`@appduct/web`): a TypeScript port of the native session core under the same SDK
+  layer as React Native. It has three entries. `.` resolves by export condition: `development`
+  gives `./enabled`, anything else gives the inert entry, which has the same API, registers
+  nothing, opens no connection, never defines `window.__APPDUCT__`, and warns once on `connect()`.
+  `./enabled` is the real client, importable explicitly. It reads `#appduct=` on load, removes it
+  from the address bar and claims, resumes from `sessionStorage` after a reload, and publishes
   `window.__APPDUCT__.connect` for the `script` that `appduct_connect` returns.
 - The CLI and MCP server never touch sockets, keys, or state files directly; everything
   goes through the daemon RPC.

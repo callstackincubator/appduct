@@ -59,7 +59,7 @@ Your production bundle leaves Appduct out by default. `@appduct/web` has two ent
 
 You don't change your code. Calls to `registerTool` in a production build do nothing, and the session client isn't in the bundle.
 
-If you call `connect()` in a build that got the inert entry, it logs one warning and does nothing. That also happens when your bundler sets no `development` condition, as plain esbuild does. Either set the condition, or import `@appduct/web/enabled`.
+In a build that got the inert entry, `connect()` logs one warning and does nothing. That also happens when your bundler sets no `development` condition, as plain esbuild does. You then see two symptoms: running the `script` from `appduct_connect` throws a `TypeError` because `window.__APPDUCT__` is undefined, and opening the `url` does nothing, with no error. Either set the condition (esbuild: `--conditions=development`), or import `@appduct/web/enabled`.
 
 To include Appduct in a build that isn't `development`, such as a staging build, import the real entry explicitly:
 
