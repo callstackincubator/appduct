@@ -23,7 +23,7 @@ import type {
 import { AppductDisabledError } from "./Appduct.types";
 import type { AppductSubscription } from "./public-api";
 import { createUseAppductTool } from "@appduct/shared/react";
-import { createToolGroupFactory } from "@appduct/shared/sdk";
+import { createToolGroupFactory } from "@appduct/shared/inert";
 
 export * from "./Appduct.types";
 export type {

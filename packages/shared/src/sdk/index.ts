@@ -20,7 +20,13 @@ export type {
 } from "./core.js";
 export { logger } from "./logger.js";
 export { exportToolSchemaForKey } from "./schema.js";
-export { createToolGroupFactory } from "./tool-group.js";
+export {
+  APPDUCT_DEFAULT_TOOL_TIMEOUT_MS,
+  AppductBootstrapParseError,
+  AppductDisabledError,
+  createToolGroupFactory,
+  jsonSchema,
+} from "../inert/index.js";
 export * from "./types.js";
 
 /** Wires the SDK layer onto a platform `core`. Constructing the client subscribes the core's

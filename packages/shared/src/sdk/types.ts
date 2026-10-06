@@ -6,8 +6,6 @@ import type {
   ToolAnnotations,
 } from "../index.js";
 
-/** Local app-side ceiling for a tool handler, matching the daemon's `tools.call` default (§5/§11). */
-export const APPDUCT_DEFAULT_TOOL_TIMEOUT_MS = 10_000;
 
 /**
  * Unified client state (ARCHITECTURE.md §11), owned entirely by the native core since issue #48
@@ -226,23 +224,6 @@ export type AppductRuntimeSchema<Input = unknown, Output = Input> =
   | AppductPairedSchema<Input, Output>
   | AppductJsonSchemaObject<Input, Output>;
 
-/**
- * Tags a raw JSON Schema object with the argument/result type its handler should see. Purely a
- * type-level cast — the object is returned unchanged, nothing is validated, and no runtime check
- * ever confirms that `T` matches the schema.
- *
- * ```ts
- * inputSchema: jsonSchema<{ city: string }>({
- *   type: "object",
- *   properties: { city: { type: "string" } },
- *   required: ["city"],
- * })
- * ```
- */
-export const jsonSchema = <T = Record<string, unknown>>(
-  schema: Record<string, unknown>,
-): AppductJsonSchemaObject<T, T> =>
-  schema as AppductJsonSchemaObject<T, T>;
 
 /**
  * Runtime shape an `inputSchema`/`outputSchema` takes once `normalizeToolSchema` (`schema.ts`) has
@@ -370,25 +351,7 @@ export type AppductRegisteredTool = {
   handler: AppductToolHandler;
 };
 
-export class AppductBootstrapParseError extends Error {
-  code: AppductBootstrapParseErrorCode;
 
-  constructor(code: AppductBootstrapParseErrorCode, message: string) {
-    super(message);
-    this.code = code;
-    this.name = "AppductBootstrapParseError";
-  }
-}
-
-/** `connect()` rejects with this on the `./noop` entry (ARCHITECTURE.md §11: compile-out builds). */
-export class AppductDisabledError extends Error {
-  code = "appduct_disabled" as const;
-
-  constructor() {
-    super("Appduct is disabled in this build (the ./noop entry is in use).");
-    this.name = "AppductDisabledError";
-  }
-}
 
 export type AppductSubscription = { remove(): void };
 

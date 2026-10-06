@@ -1,10 +1,11 @@
-/** Re-exports the shared SDK layer's public types, so this package's public API stays put. */
+/** Re-exports the shared SDK layer's public types, so this package's public API stays put. The
+ * runtime values come from `@appduct/shared/inert` so the `./noop` entry pulls in no client code. */
 export {
   APPDUCT_DEFAULT_TOOL_TIMEOUT_MS,
   jsonSchema,
   AppductBootstrapParseError,
   AppductDisabledError,
-} from "@appduct/shared/sdk";
+} from "@appduct/shared/inert";
 export type {
   AppductClientState,
   AppductConnectOptions,

@@ -22,7 +22,25 @@
       "import": "./dist/react.js",
       "default": "./dist/react.js"
     },
+    "./inert": {
+      "types": "./dist/inert/index.d.ts",
+      "import": "./dist/inert.js",
+      "default": "./dist/inert.js"
+    },
     "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "sdk": [
+        "dist/sdk/index.d.ts"
+      ],
+      "react": [
+        "dist/react/index.d.ts"
+      ],
+      "inert": [
+        "dist/inert/index.d.ts"
+      ]
+    }
   },
   "keywords": [
     "appduct",
