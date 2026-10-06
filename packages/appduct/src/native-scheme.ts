@@ -1,6 +1,5 @@
 /**
- * Static-file scheme discovery for plain iOS (Xcode) and Android (Gradle) apps
- * (docs/tasks/20-cli-native-scheme-discovery.md, phase 3 of issue #48).
+ * Static-file scheme discovery for plain iOS (Xcode) and Android (Gradle) apps.
  *
  * `scheme.ts`'s `resolveScheme` treats this module as one more thing to try after `<cwd>/app.json`
  * — it never walks up (an app root is where these commands run, same rule as `app.json`), and,

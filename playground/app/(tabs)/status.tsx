@@ -49,7 +49,7 @@ export default function StatusScreen() {
   const [connectionState, setConnectionState] = useState<AppductClientState>(
     getAppductState()
   );
-  // Native build config never changes within a process's lifetime (task 07), so a plain `useState`
+  // Native build config never changes within a process's lifetime, so a plain `useState`
   // initializer -- read once, no listener needed -- is enough to show which trust mode this
   // artifact was actually built with.
   const [buildConfig] = useState(() => getAppductBuildConfig());

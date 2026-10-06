@@ -81,7 +81,7 @@ export default defineConfig({
 						llmsPageIndex({ site, base }),
 					].join('\n'),
 					promote: ['start/introduction', 'start/quick-start', 'start/**', 'install/**'],
-					demote: ['reference/protocol', 'reference/architecture'],
+					demote: ['reference/architecture'],
 					customSets: [
 						{
 							label: 'Getting started',
@@ -95,7 +95,7 @@ export default defineConfig({
 						},
 						{
 							label: 'Reference',
-							description: 'CLI and React Native API reference, architecture, and wire protocol',
+							description: 'CLI and React Native API reference, and architecture',
 							paths: ['reference/**'],
 						},
 					],

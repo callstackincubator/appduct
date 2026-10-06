@@ -34,7 +34,7 @@
 	</array>
 	<!-- No AppductTrust/AppductCliPins here on purpose: this playground is the zero-config
 	     example (packages/native/ios/README.md), so it trusts whatever pin `appduct sessions link` puts on
-	     the deep link for that session (`trust: "link"`, docs/SECURITY.md#trust-modes) -- unlike
+	     the deep link for that session (`trust: "link"`, https://callstackincubator.github.io/appduct/guides/security/#choose-what-a-build-trusts) -- unlike
 	     `playground/app.json`, which pins a fixture key for the Expo playground's repeatable CI. -->
 	<key>LSRequiresIPhoneOS</key>
 	<true/>

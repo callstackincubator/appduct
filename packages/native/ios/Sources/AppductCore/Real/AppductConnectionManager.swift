@@ -1,8 +1,8 @@
 // Vendored into @appduct/react-native at build time by scripts/sync-native-core.mjs -- see
 // packages/native/README.md. Compiled unconditionally by the RN pod (Appduct.podspec always
 // sets -DAPPDUCT_ENABLED); the #if guard below only matters when this file is built directly
-// as part of the AppductCore SwiftPM package (see repo-root Package.swift and Decision 2 in
-// docs/tasks/14-native-core-extraction.md).
+// as part of the AppductCore SwiftPM package, which defines APPDUCT_ENABLED for Debug and for
+// the AlwaysEnabled trait (see repo-root Package.swift).
 #if APPDUCT_ENABLED
 
 import CryptoKit
@@ -148,9 +148,9 @@ enum AppductTrustedPinsResolution: Equatable {
   case invalidTrustValue(String)
 }
 
-/// Pure decision logic for explicit trust mode (`docs/tasks/05-explicit-trust-mode.md`): given
-/// the `AppductTrust` plist value, the build-time `cliPins` read from Info.plist, and the
-/// connect options' `linkPin` (from the bootstrap deep link's separate `pin` query param, if
+/// Pure decision logic for explicit trust mode: given / the `AppductTrust` plist value, the
+//build-time `cliPins` read from Info.plist, and the / connect options' `linkPin` (from the
+//bootstrap deep link's separate `pin` query param, if
 /// any), decides which SPKI pin(s) this connection trusts. Factored out of `configureFromBundle`
 /// (which reads `Bundle.main`) so the decision matrix is unit-testable without an Info.plist
 /// fixture — mirrors Android's `resolveTrustedPins` one-to-one.
@@ -219,7 +219,7 @@ func readAppductManifestConfig() -> AppductManifestConfig {
   )
 }
 
-/// The small diagnostic surface exposed to JS via `getConstants()` (`docs/tasks/07-native-module-constants.md`).
+/// The small diagnostic surface exposed to JS via `getConstants()`.
 struct AppductBuildConfig: Equatable {
   let trust: String
   let hasEmbeddedPins: Bool

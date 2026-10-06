@@ -1,6 +1,5 @@
 /**
- * Static-file scheme discovery for plain iOS/Android apps (`native-scheme.ts`,
- * docs/tasks/20-cli-native-scheme-discovery.md, phase 3 of issue #48): the four probes
+ * Static-file scheme discovery for plain iOS/Android apps (`native-scheme.ts`): the four probes
  * (`android-gradle`, `android-manifest`, `ios-info-plist`, `ios-project-yml`), the depth/size
  * limits guarding the `Info.plist` walk, binary-plist handling, and the disagreement error.
  */

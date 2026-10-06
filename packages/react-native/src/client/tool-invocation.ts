@@ -10,10 +10,10 @@ import { logger } from "../logger";
 import { validateToolSchema } from "../schema";
 
 /**
- * The thin half of what `client/tool-invocation.ts` used to own (issue #48 phase 2,
- * `docs/tasks/15-native-session-logic.md`): the native core now owns per-call timeout, cancellation
- * delivery, and the wire `tool_call`/`tool_cancel`/`tool_result`/`tool_error`/`tool_call_progress`
- * frames themselves. This module's only remaining job is inherently JS: run the registered handler,
+ * The thin half of what `client/tool-invocation.ts` used to own (issue #48 phase 2): the native
+ * core now owns per-call timeout, cancellation delivery, and the wire
+ * `tool_call`/`tool_cancel`/`tool_result`/`tool_error`/`tool_call_progress` frames themselves. This
+ * module's only remaining job is inherently JS: run the registered handler,
  * validate its input/output against the registered schema, and answer through
  * `respondToToolCall` — everything else (timeouts, unknown-tool `tool_not_found`, wire sends) is
  * handled by native before/after this code ever runs.

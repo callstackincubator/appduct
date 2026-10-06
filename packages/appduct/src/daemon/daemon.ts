@@ -798,7 +798,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           // `daemon.sock` — including the CLI, or an agent with shell access, which is the typical
           // setup this feature targets — could send it directly; that is not a bypass of
           // this feature so much as a restatement of this codebase's existing trust boundary
-          // (docs/SECURITY.md: anything that can reach the socket already has full daemon control).
+          // (https://callstackincubator.github.io/appduct/guides/security/: anything that can reach the socket already has full daemon control).
           // "prompt" guards against a compliant MCP client silently auto-approving on the caller's
           // behalf, not against a hostile process on the operator's own machine.
           const grantedConsent: "elicitation" | undefined =

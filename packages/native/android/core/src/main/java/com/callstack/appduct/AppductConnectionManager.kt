@@ -65,10 +65,10 @@ internal data class AppductConnectOptions(
     companion object {
         /**
          * Parses the connect payload from a plain string-keyed map. This module has no
-         * `react-android` dependency (docs/tasks/14-native-core-extraction.md, Decision 1's
-         * "framework-free" core) -- the RN bridge (`NativeAppductModule.kt`, which stays in
-         * `@appduct/react-native`) converts its `ReadableMap` via `ReadableMap.toHashMap()`
-         * before calling `AppductConnectionManager.connect()`. `Number.toInt()` (rather than
+         * `react-android` dependency (it is the framework-free core) -- the RN bridge
+         * (`NativeAppductModule.kt`, which stays in `@appduct/react-native`) converts its
+         * `ReadableMap` via `ReadableMap.toHashMap()` before calling
+         * `AppductConnectionManager.connect()`. `Number.toInt()` (rather than
          * `ReadableMap.getInt`, which throws for a missing/non-numeric key) mirrors that method's
          * own "missing means 0, present-and-wrong-type means a ClassCastException" contract closely
          * enough for values that always originate from a JSON-decoded bootstrap payload, which never
@@ -147,10 +147,10 @@ internal sealed class TrustedPinsResolution {
 }
 
 /**
- * Pure decision logic for explicit trust mode (`docs/tasks/05-explicit-trust-mode.md`): given the
- * `TRUST` manifest value, the build-time `CLI_PINS` read from the manifest, and the connect
- * options' `linkPin` (from the bootstrap deep link's separate `pin` query param, if any), decides
- * which SPKI pin(s) this connection trusts. Factored out of `loadConfiguration` (which reads
+ * Pure decision logic for explicit trust mode: given the `TRUST` manifest value, the build-time
+ * `CLI_PINS` read from the manifest, and the connect options' `linkPin` (from the bootstrap deep
+ * link's separate `pin` query param, if any), decides which SPKI pin(s) this connection trusts.
+ * Factored out of `loadConfiguration` (which reads
  * `PackageManager`/`ApplicationInfo`) so the decision matrix is unit-testable without a
  * `Context`/manifest fixture — mirrors iOS's `resolveTrustedPins` one-to-one.
  *
@@ -326,7 +326,7 @@ internal fun readAppductManifestConfig(context: Context): AppductManifestConfig 
     )
 }
 
-/** The small diagnostic surface exposed to JS via `getConstants()` (`docs/tasks/07-native-module-constants.md`). */
+/** The small diagnostic surface exposed to JS via `getConstants()`. */
 internal data class AppductBuildConfig(
     val trust: String,
     val hasEmbeddedPins: Boolean,

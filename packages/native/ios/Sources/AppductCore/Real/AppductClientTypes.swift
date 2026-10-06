@@ -245,7 +245,7 @@ extension AppductConnectionManager: AppductTransportSession {}
 
 /// Structural seam mirroring the slice of `client/app-state.ts`'s `AppStateLike` the client needs,
 /// backed by `UIApplication` notifications on Apple platforms (`#if canImport(UIKit)`) instead of
-/// React Native's JS-level `AppState` -- see `docs/tasks/15-native-session-logic.md`.
+/// React Native's JS-level `AppState`.
 public protocol AppductForegroundObserving: Sendable {
   /// `true` when the app is not in the foreground (background or inactive).
   func isBackgrounded() -> Bool

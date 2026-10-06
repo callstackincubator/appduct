@@ -3,10 +3,10 @@ package com.callstack.appduct
 import android.content.Context
 
 /**
- * No-op mirror of `packages/native/android/core`'s real `AppductConnectionManager`
- * (docs/tasks/14-native-core-extraction.md, Decision 2). Same public class/method names and
- * signatures the RN bridge (`NativeAppductModule.kt`, vendored `android/core`|`core-noop`) and
- * any other consumer calls -- so a release build's `releaseImplementation(core-noop)` dependency
+ * No-op mirror of `packages/native/android/core`'s real `AppductConnectionManager`. Same public
+ * class/method names and signatures the RN bridge (`NativeAppductModule.kt`, vendored
+ * `android/core`|`core-noop`) and any other consumer calls -- so a release build's
+ * `releaseImplementation(core-noop)` dependency
  * resolves to something source-compatible with `debugImplementation(core)` -- but every method does
  * nothing, no `okhttp3` dependency, and deliberately no `AppductNativeMarker` class: the marker's
  * entire purpose is to prove the *real* implementation shipped, so a stub copy here would defeat

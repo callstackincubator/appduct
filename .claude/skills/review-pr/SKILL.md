@@ -43,7 +43,7 @@ PR added and check each criterion has one that fails without the change.
 - **Consistency.** The same case handled two ways in two paths of the diff (one normalises,
   the other does not).
 - **Security.** New trust decisions, paths built from input, anything widening what a link or
-  a client can do. Check against `docs/SECURITY.md`.
+  a client can do. Check against `website/src/content/docs/guides/security.mdx`.
 - **Boundaries and ports.** Imports past an `index.ts`, direct `node:*` I/O outside an
   adapter, `vi.mock`, tests asserting on internals.
 - **Simplification checklist** from the `architecture` skill.
@@ -53,7 +53,7 @@ PR added and check each criterion has one that fails without the change.
   function, module, process or cause named, the kind wrong (`Breaking` missing on something
   a user must act on, or `New` on a fix), a change no user could notice. Load that skill when
   the diff touches `CHANGELOG.md`.
-- **User-facing text.** READMEs, `docs/`, website, `skills/appduct`, CLI help and error
+- **User-facing text.** READMEs, website, `skills/appduct`, CLI help and error
   messages follow the `writing-user-docs` skill: implementation detail leaked, marketing
   adjectives, time-relative words, an unhappy path left out. Load that skill when the diff
   touches those paths.

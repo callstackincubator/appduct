@@ -112,17 +112,32 @@ A call can run for the tool's own time limit: 10 seconds unless the tool declare
 
 Pressing Ctrl-C during a call cancels it in the app too.
 
-When a call fails, the error type comes from the app unchanged, for example `tool_input_validation_error`, `tool_execution_error`, or `tool_timeout`. See [Error types](/appduct/reference/protocol/#error-types).
+When a call fails, the error type comes from the app unchanged, for example `tool_input_validation_error`, `tool_execution_error`, or `tool_timeout`. See [Error types](/appduct/reference/cli/#error-types).
 
 ## Watch events
 
-Your app can post events with `postEvent`, such as "checkout finished". To stream them:
+Your app can post events with `postEvent`, such as "checkout finished". To see which events it declares, with the shape of each payload:
+
+```bash
+appduct events ls
+appduct events ls --name checkout_completed   # one event's full payload schema
+```
+
+Only events the app declares with [`registerEvent`](/appduct/guides/writing-tools/#tell-callers-something-happened) are listed. An app can post events it never declared; those still stream, they're just missing from `events ls`.
+
+To stream events as they arrive:
 
 ```bash
 appduct events tail
+appduct events tail --name "cart.*"
 ```
 
 This keeps running until you stop it. To print what already happened and exit, pass the cursor from an earlier result to `appduct events since <cursor>`. Add `--json` for one JSON object per line.
+
+`tail` and `since` take two filters:
+
+- `--name <glob>` keeps only events whose whole name matches. `*` matches any run of characters; a name without `*` matches exactly. Matching is case-sensitive.
+- `--payload-max-bytes <n>` replaces any payload larger than `n` bytes of JSON with a preview, marked `truncated: true`. Without it, payloads print whole.
 
 Only your app's events are printed, not device connections or tool calls. To check that a device is connected, run `appduct sessions ls`.
 
