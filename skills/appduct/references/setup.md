@@ -104,6 +104,28 @@ Then run `appduct init --ios-app-id <bundle-id>` or `--android-app-id <applicati
 app root; it finds the scheme in `Info.plist` or the Gradle placeholder. Release builds leave
 Appduct out by default on both platforms.
 
+## Web
+
+1. Install `appduct` where you run the CLI, and `@appduct/web` in the page's app.
+2. Register tools with `registerTool` from `@appduct/web`, following
+   [writing-tools.md](./writing-tools.md). The API is the same as React Native's, without the
+   hook.
+3. Connect the page you are driving: `appduct_connect` with `target: "web"` and the page's
+   `url` returns `{ url, script }`. Open `url` (reloads the page), or run `script` in the page
+   (keeps its state). CLI: `appduct sessions link --open web <url>`. A link works once and
+   expires after 5 minutes. Reloading the page resumes the session; a new tab does not.
+4. Production builds need nothing: the root entry is inert unless the bundler sets the
+   `development` export condition. To include Appduct in another build, import
+   `@appduct/web/enabled`. In a bundler with no `development` condition (plain esbuild),
+   `connect()` warns once and does nothing. Running the `script` then throws a `TypeError`
+   because `window.__APPDUCT__` is undefined, and opening the `url` silently connects nothing.
+   Fix it with `--conditions=development` (esbuild), or import `@appduct/web/enabled`.
+5. If the connection is refused: the page's origin must be `localhost`, `127.0.0.1` or `[::1]`,
+   or listed in `webOrigins` in `~/.appduct/config.json` (then `appduct daemon stop`). An
+   `https` page needs Chrome's local network access permission, granted in Playwright with
+   `context.grantPermissions(["local-network-access"], { origin })`; Safari can't connect from
+   `https`. The browser must run on the same computer as the daemon.
+
 ## Hardening (not needed for a dev loop)
 
 For builds that leave your machine, replace link-carried trust with embedded pins:

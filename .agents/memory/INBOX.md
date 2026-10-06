@@ -64,3 +64,7 @@ One note per PR that hit friction, four lines:
   What went wrong: a browser-based test was added without adding the browser install to CI and contributor setup, so `pnpm test` failed on a fresh clone and a second review round was needed.
   Would have prevented it: when a test needs a new external binary, add its install to CI and AGENTS.md Commands in the same commit.
   Cost: review round
+- 2026-10-06 #173 skill: implement-issue
+  What went wrong: making a package public updated its docs entry points but left docs/ARCHITECTURE.md calling it "not yet published" and didn't describe what a plain-esbuild dev user sees with the inert entry; caught in review, needing a second round.
+  Would have prevented it: when changing a package's exports or publish state, grep the repo for its name in docs/ and skills/ and update every description, including the failure symptoms of each entry.
+  Cost: review round
