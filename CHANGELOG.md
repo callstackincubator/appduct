@@ -11,6 +11,9 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: events posted from an iOS app now report their time in milliseconds, like Android's.**
+  A script reading that `ts` from `appduct events tail` or `appduct events since` no longer needs to multiply it by 1,000.
+
 ## 0.14.0 (2026-10-02)
 
 - **New: `appduct_list_events` MCP tool lists the events an app declares, with descriptions.** `name` takes a glob like `"cart.*"`, and an exact name also returns the payload schema.
