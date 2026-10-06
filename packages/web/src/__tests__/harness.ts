@@ -70,7 +70,7 @@ const build = (
   sessionStore: MemorySessionStore,
   clock: ManualClock,
 ): Harness => {
-  const core = createWebCore({ transport, sessionStore, clock, random: () => 0.5, device: DEVICE });
+  const core = createWebCore({ transport, devtoolsTransport: createMemoryTransport(), sessionStore, clock, random: () => 0.5, device: DEVICE });
   const recorded: Recorded = { states: [], sessions: [], errors: [], toolCalls: [], toolCancels: [] };
   core.addListener("stateChange", (event) => recorded.states.push(event));
   core.addListener("sessionChange", (event) => recorded.sessions.push(event));
