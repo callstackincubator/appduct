@@ -1,8 +1,8 @@
 import type {
   AppductListenerKind,
   AppductUnifiedListenerMap,
-} from "../Appduct.types";
-import { logger } from "../logger";
+} from "./types.js";
+import { logger } from "./logger.js";
 
 export type UnifiedListenerBus = {
   addListener<Kind extends AppductListenerKind>(

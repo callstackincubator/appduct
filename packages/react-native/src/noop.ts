@@ -22,8 +22,8 @@ import type {
 } from "./Appduct.types";
 import { AppductDisabledError } from "./Appduct.types";
 import type { AppductSubscription } from "./public-api";
-import { createToolGroupFactory } from "./tool-group";
-import { createUseAppductTool } from "./useAppductTool";
+import { createUseAppductTool } from "@appduct/shared/react";
+import { createToolGroupFactory } from "@appduct/shared/inert";
 
 export * from "./Appduct.types";
 export type {
@@ -31,7 +31,7 @@ export type {
   AppductSubscription,
   AppductToolGroupRegistrar,
 } from "./public-api";
-export type { UseAppductToolOptions } from "./useAppductTool";
+export type { UseAppductToolOptions } from "@appduct/shared/react";
 
 const noopSubscription: AppductSubscription = { remove() {} };
 

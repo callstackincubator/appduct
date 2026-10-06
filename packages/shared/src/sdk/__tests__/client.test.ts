@@ -1,11 +1,11 @@
 import { describe, expect, vi, test } from "vitest";
 
-import { createAppductClient } from "../client";
+import { createAppductClient } from "../index.js";
 import type {
   AppductNativeEvents,
-  AppductNativeModuleLike,
-} from "../client-types";
-import { logger } from "../logger";
+  AppductCore,
+} from "../index.js";
+import { logger } from "../index.js";
 
 (globalThis as { __DEV__?: boolean }).__DEV__ = true;
 
@@ -14,7 +14,7 @@ import { logger } from "../logger";
  * per-call timeout entirely into the native core (see
  * `packages/native/ios/Tests/AppductCoreTests/AppductClientTests.swift` for that behavioral
  * spec). This file covers the bridge contract instead: `createAppductClient` against a mocked
- * `AppductNativeModuleLike` that emits `onToolCall`/`onToolCancel`/`onStateChange`/
+ * `AppductCore` that emits `onToolCall`/`onToolCancel`/`onStateChange`/
  * `onSessionChange`/`onError` the way the real TurboModule does, asserting the thin JS layer wires
  * them onto the public surface correctly.
  */
@@ -57,7 +57,7 @@ const createFakeNativeModule = () => {
     }
   };
 
-  const module: AppductNativeModuleLike = {
+  const module: AppductCore = {
     registerTool: (descriptorJson) => registerToolCalls.push(descriptorJson),
     unregisterTool: (name) => unregisterToolCalls.push(name),
     registerEvent: () => {},
@@ -156,7 +156,7 @@ describe("createAppductClient (bridge contract)", () => {
   test("createToolGroup binds the group onto every registration it makes", async () => {
     const fake = createFakeNativeModule();
     const client = createAppductClient(fake.module);
-    const { createToolGroupFactory } = await import("../tool-group");
+    const { createToolGroupFactory } = await import("../index.js");
 
     const registerCartTool = createToolGroupFactory((registration) =>
       client.registerTool(registration),

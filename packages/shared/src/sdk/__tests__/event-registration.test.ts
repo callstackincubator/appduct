@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod4";
 
-import type { AppductNativeModuleLike } from "../client-types";
-import { createAppductClient } from "../client";
+import type { AppductCore } from "../index.js";
+import { createAppductClient } from "../index.js";
 
 const setDev = (value: boolean) => {
   (globalThis as { __DEV__?: boolean }).__DEV__ = value;
@@ -34,7 +34,7 @@ const createFakeNativeModule = () => {
     getSessionId: () => "s1",
     getRegisteredToolsJson: () => "[]",
     addListener: () => ({ remove: () => {} }),
-  } satisfies AppductNativeModuleLike;
+  } satisfies AppductCore;
   return { module, registerEventCalls, unregisterEventCalls, postEventCalls };
 };
 

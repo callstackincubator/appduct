@@ -1,4 +1,4 @@
-import type { EventDescriptor, ToolDescriptor } from "@appduct/shared";
+import type { EventDescriptor, ToolDescriptor } from "../index.js";
 
 import type {
   AppductClientState,
@@ -12,25 +12,20 @@ import type {
   AppductToolHandler,
   AppductToolRegistration,
   AppductUnifiedListenerMap,
-} from "../Appduct.types";
+} from "./types.js";
 import type {
-  AppductNativeModuleLike,
+  AppductCore,
   CreateAppductClientOptions,
-} from "../client-types";
-import { isDev, logger } from "../logger";
+} from "./core.js";
+import { isDev, logger } from "./logger.js";
 import {
   exportEventPayloadSchema,
   normalizeOptionalToolSchema,
   toToolDescriptor,
   validateToolSchema,
-} from "../schema";
-import { createUnifiedListenerBus } from "./listeners";
-import { createToolMessageHandler } from "./tool-invocation";
-
-export type {
-  AppductNativeModuleLike,
-  CreateAppductClientOptions,
-} from "../client-types";
+} from "./schema.js";
+import { createUnifiedListenerBus } from "./listeners.js";
+import { createToolMessageHandler } from "./tool-invocation.js";
 
 /**
  * Both native bridges reject `postEvent` with this code when no session is active (iOS:
@@ -58,8 +53,7 @@ export const isAppductNotActiveError = (error: unknown): boolean =>
  * onto the public listener/handler surface.
  */
 export const createAppductClient = (
-  module: AppductNativeModuleLike,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for call-site compatibility; see CreateAppductClientOptions's doc comment.
+  module: AppductCore,
   clientOptions: CreateAppductClientOptions = {},
 ) => {
   /** Development-only: warns when `name` is undeclared or `payload` fails its declared schema.

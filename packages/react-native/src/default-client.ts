@@ -2,7 +2,8 @@ import {
   appductNativeModule,
   isAppductNativeModuleAvailable,
 } from "./AppductModule";
-import { createAppductClient } from "./client";
+import { createAppduct, type AppductClient } from "@appduct/shared/sdk";
+
 import { logger } from "./logger";
 
 /**
@@ -12,7 +13,7 @@ import { logger } from "./logger";
  * anything exported there is public API by construction.
  */
 
-let appductClientInstance: ReturnType<typeof createAppductClient> | null =
+let appductClientInstance: AppductClient | null =
   null;
 
 /**
@@ -56,11 +57,9 @@ export function noopIfNativeUnavailable<T>(
  * entry genuinely side-effect-free at import time (ARCHITECTURE.md §11), not merely
  * non-throwing.
  */
-const getAppductClientInstance = (): ReturnType<
-  typeof createAppductClient
-> => {
+const getAppductClientInstance = (): AppductClient => {
   if (!appductClientInstance) {
-    appductClientInstance = createAppductClient(appductNativeModule);
+    appductClientInstance = createAppduct(appductNativeModule).client;
   }
   return appductClientInstance;
 };
@@ -76,7 +75,7 @@ const getAppductClientInstance = (): ReturnType<
  * which is also the first point the root entry's top-level functions touch it.
  */
 export const appductClient = new Proxy(
-  {} as ReturnType<typeof createAppductClient>,
+  {} as AppductClient,
   {
     get(_target, property, receiver) {
       return Reflect.get(getAppductClientInstance(), property, receiver);

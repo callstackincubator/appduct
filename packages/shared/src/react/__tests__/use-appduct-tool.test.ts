@@ -5,9 +5,9 @@ import type {
   AppductToolExecutionContext,
   AppductToolHandler,
   AppductToolRegistration,
-} from "../Appduct.types";
-import type { AppductSubscription } from "../public-api";
-import { exportToolSchemaForKey } from "../schema";
+} from "../../sdk/index.js";
+import type { AppductSubscription } from "../../sdk/index.js";
+import { exportToolSchemaForKey } from "../../sdk/index.js";
 
 (globalThis as { __DEV__?: boolean }).__DEV__ = true;
 
@@ -179,7 +179,7 @@ describe("createUseAppductTool", () => {
 
   test("registers on mount and disposes on unmount", async () => {
     const { registerTool, registrations } = makeRegisterTool();
-    const { createUseAppductTool } = await import("../useAppductTool");
+    const { createUseAppductTool } = await import("../index.js");
     const useAppductTool = createUseAppductTool(
       registerTool,
       realEntryOptions,
@@ -199,7 +199,7 @@ describe("createUseAppductTool", () => {
 
   test("does not re-register across re-renders with unchanged deps", async () => {
     const { registerTool, registrations } = makeRegisterTool();
-    const { createUseAppductTool } = await import("../useAppductTool");
+    const { createUseAppductTool } = await import("../index.js");
     const useAppductTool = createUseAppductTool(
       registerTool,
       realEntryOptions,
@@ -214,7 +214,7 @@ describe("createUseAppductTool", () => {
 
   test("disposes the old registration and creates a new one when deps change (fast-refresh churn)", async () => {
     const { registerTool, registrations } = makeRegisterTool();
-    const { createUseAppductTool } = await import("../useAppductTool");
+    const { createUseAppductTool } = await import("../index.js");
     const useAppductTool = createUseAppductTool(
       registerTool,
       realEntryOptions,
@@ -231,7 +231,7 @@ describe("createUseAppductTool", () => {
   describe("derived registration key (deps omitted)", () => {
     test("N re-renders with an unchanged definition produce exactly one registration and no removals", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -249,7 +249,7 @@ describe("createUseAppductTool", () => {
 
     test("changing description re-registers (remove + upsert)", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -273,7 +273,7 @@ describe("createUseAppductTool", () => {
 
     test("changing annotations or timeoutMs re-registers", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -320,7 +320,7 @@ describe("createUseAppductTool", () => {
 
     test("changing group re-registers, an unchanged group does not", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -357,7 +357,7 @@ describe("createUseAppductTool", () => {
 
     test("a handler closing over changed state does not re-register, and the next call sees the new value", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -388,7 +388,7 @@ describe("createUseAppductTool", () => {
 
     test("an inline schema rebuilt each render with an equal shape does not re-register", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -430,7 +430,7 @@ describe("createUseAppductTool", () => {
 
     test("a hoisted schema kept by identity re-exports nothing and never re-registers", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -473,7 +473,7 @@ describe("createUseAppductTool", () => {
 
     test("changing name re-registers under the new name", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -492,7 +492,7 @@ describe("createUseAppductTool", () => {
 
     test("changing the output schema's shape re-registers", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -529,7 +529,7 @@ describe("createUseAppductTool", () => {
 
     test("a schema that exports no JSON Schema still re-registers when it is added, swapped or removed", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -570,7 +570,7 @@ describe("createUseAppductTool", () => {
 
     test("an unchanged unexportable schema kept by identity does not re-register", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -596,7 +596,7 @@ describe("createUseAppductTool", () => {
 
     test("a null deps argument (untyped JS callers) behaves like an omitted one", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -621,7 +621,7 @@ describe("createUseAppductTool", () => {
 
   test("caller-supplied deps override the derived key entirely", async () => {
     const { registerTool, registrations } = makeRegisterTool();
-    const { createUseAppductTool } = await import("../useAppductTool");
+    const { createUseAppductTool } = await import("../index.js");
     const useAppductTool = createUseAppductTool(
       registerTool,
       realEntryOptions,
@@ -647,7 +647,7 @@ describe("createUseAppductTool", () => {
      */
     test("never exports JSON Schema and never re-registers on a descriptor change", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(registerTool);
 
       let exportCount = 0;
@@ -685,7 +685,7 @@ describe("createUseAppductTool", () => {
 
     test("still honours options.enabled", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(registerTool);
 
       host.render(() =>
@@ -713,7 +713,7 @@ describe("createUseAppductTool", () => {
       seen.push(registration.name);
       return { remove() {} };
     };
-    const { createUseAppductTool } = await import("../useAppductTool");
+    const { createUseAppductTool } = await import("../index.js");
     const useAppductTool = createUseAppductTool(
       registerTool,
       realEntryOptions,
@@ -728,7 +728,7 @@ describe("createUseAppductTool", () => {
   describe("options.enabled", () => {
     test("defaults to enabled: registers on mount", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -742,7 +742,7 @@ describe("createUseAppductTool", () => {
 
     test("enabled: false never registers", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -757,7 +757,7 @@ describe("createUseAppductTool", () => {
 
     test("true -> false removes the registration and leaks nothing", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -779,7 +779,7 @@ describe("createUseAppductTool", () => {
 
     test("false -> true registers", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -800,7 +800,7 @@ describe("createUseAppductTool", () => {
 
     test("toggling twice (true -> false -> true) leaves exactly one live registration", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -823,7 +823,7 @@ describe("createUseAppductTool", () => {
 
     test("a disabled hook never exports JSON Schema, however often it re-renders", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -870,7 +870,7 @@ describe("createUseAppductTool", () => {
 
     test("unmounting while disabled is a no-op — nothing was registered, so there is nothing to remove", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -887,7 +887,7 @@ describe("createUseAppductTool", () => {
 
     test("toggling enabled re-runs the effect even when deps is omitted", async () => {
       const { registerTool, registrations } = makeRegisterTool();
-      const { createUseAppductTool } = await import("../useAppductTool");
+      const { createUseAppductTool } = await import("../index.js");
       const useAppductTool = createUseAppductTool(
         registerTool,
         realEntryOptions,
@@ -956,7 +956,7 @@ describe("createUseAppductTool", () => {
         useRef: hostA.useRef,
       }));
       const { createUseAppductTool: createA } =
-        await import("../useAppductTool");
+        await import("../index.js");
       const useAppductToolA = createA(
         registry.registerTool,
         realEntryOptions,
@@ -971,7 +971,7 @@ describe("createUseAppductTool", () => {
         useRef: hostB.useRef,
       }));
       const { createUseAppductTool: createB } =
-        await import("../useAppductTool");
+        await import("../index.js");
       const useAppductToolB = createB(
         registry.registerTool,
         realEntryOptions,

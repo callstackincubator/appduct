@@ -1,11 +1,9 @@
 import type {
   AppductRuntimeSchema,
-  AppductToolRegistration,
-} from "./Appduct.types";
-import type {
   AppductSubscription,
   AppductToolGroupRegistrar,
-} from "./public-api";
+  AppductToolRegistration,
+} from "../sdk/index.js";
 
 type ToolRegistrar = <
   TInputSchema extends AppductRuntimeSchema | undefined,

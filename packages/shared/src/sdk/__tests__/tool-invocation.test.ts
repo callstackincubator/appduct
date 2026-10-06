@@ -1,9 +1,9 @@
 import { describe, expect, vi, test } from "vitest";
 import { z } from "zod";
 
-import type { AppductRegisteredTool } from "../Appduct.types";
-import { createToolMessageHandler } from "../client/tool-invocation";
-import { normalizeToolSchema } from "../schema";
+import type { AppductRegisteredTool } from "../index.js";
+import { createToolMessageHandler } from "../tool-invocation.js";
+import { normalizeToolSchema } from "../schema.js";
 
 (globalThis as { __DEV__?: boolean }).__DEV__ = true;
 
