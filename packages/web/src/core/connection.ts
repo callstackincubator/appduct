@@ -48,6 +48,8 @@ type Current = {
   socket: Socket | undefined;
   phase: "connecting" | "active" | "failed";
   lastError: string | undefined;
+  /** Why this side closed the socket, reported from `onClose` in place of the echoed wire code. */
+  closedByCore: { code: 1008 | 1011; reason: string } | undefined;
 };
 
 /**
@@ -67,10 +69,13 @@ export const createConnection = (ports: WebCorePorts, handlers: ConnectionHandle
     sessionStore.write(JSON.stringify(next));
   };
 
-  const fail = (entry: Current, message: string, code: number, reason: string) => {
+  // The browser cannot send 1008 or 1011, so the wire carries 4008 and 4011. `onClose` reports the
+  // 1008 or 1011 we meant, as the Swift and Kotlin cores do for their own closes.
+  const fail = (entry: Current, message: string, code: 1008 | 1011, reason: string) => {
     entry.phase = "failed";
     entry.lastError = message;
-    entry.socket?.close(code, reason);
+    entry.closedByCore = { code, reason };
+    entry.socket?.close(code === 1008 ? 4008 : 4011, reason);
   };
 
   const firstFrame = (options: ConnectionOptions) =>
@@ -143,7 +148,7 @@ export const createConnection = (ports: WebCorePorts, handlers: ConnectionHandle
 
   return {
     open(options) {
-      const entry: Current = { options, socket: undefined, phase: "connecting", lastError: undefined };
+      const entry: Current = { options, socket: undefined, phase: "connecting", lastError: undefined, closedByCore: undefined };
       current = entry;
       try {
         entry.socket = transport.open(formatUrl(options.ip, options.port), {
@@ -164,6 +169,7 @@ export const createConnection = (ports: WebCorePorts, handlers: ConnectionHandle
           close(code, reason) {
             if (current !== entry) return;
             current = undefined;
+            if (entry.closedByCore) ({ code, reason } = entry.closedByCore);
             if (code === 1000) sessionStore.clear();
             else markDisconnected(options.sessionId);
             handlers.onClose({ code, reason: reason || undefined, error: entry.lastError });

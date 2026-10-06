@@ -13,7 +13,9 @@ export type SocketEvents = {
 export type Socket = {
   /** Throws unless the socket is open. */
   send(text: string): void;
-  close(code: number, reason: string): void;
+  /** Only codes a browser `WebSocket.close` accepts: 1000, or 3000 to 4999. The core sends
+   * 4008 for a protocol violation and 4011 for a failed send. */
+  close(code: 1000 | 4008 | 4011, reason: string): void;
 };
 
 /** Opens a WebSocket to the daemon. */
