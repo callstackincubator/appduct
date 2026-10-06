@@ -1049,11 +1049,14 @@ packages/
   shared/          @appduct/shared — wire protocol v2 (messages, bootstrap codec,
                    tool descriptors, error types), RPC method/param/result types,
                    Standard Schema helpers. No runtime deps. Also the TypeScript SDK
-                   layer every JS binding builds on, as two separate entries so the CLI
+                   layer every JS binding builds on, as three separate entries so the CLI
                    (root entry only) never loads it: `/sdk` (`createAppduct(core)`, the
                    `AppductCore` interface a platform binding implements, schema
-                   conversion, tool groups; never imports react) and `/react`
-                   (`createUseAppductTool`; `react` is an optional peer dependency).
+                   conversion, tool groups; never imports react), `/react`
+                   (`createUseAppductTool`; `react` is an optional peer dependency) and
+                   `/inert` (the few runtime values a noop entry needs, no client code).
+                   A noop entry may import from `/inert` only: importing `/sdk` would ship
+                   the whole client in release builds.
   appduct/      CLI + daemon + MCP:
     src/daemon/    lifecycle (pidfile, UDS server, auto-spawn helpers), session engine,
                    link minter, tls (key loading and leaf-cert minting on top of

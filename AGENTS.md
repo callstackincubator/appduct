@@ -9,7 +9,7 @@ the daemon, CLI, MCP server and SDKs fit together.
 | Path | What it is |
 | --- | --- |
 | `packages/appduct` | CLI, daemon, MCP server, `appduct/client` (TypeScript) |
-| `packages/shared` | Wire protocol and domain types shared by CLI and SDK, plus the TypeScript SDK layer (`/sdk`: client, schema conversion, tool groups; `/react`: the hook) |
+| `packages/shared` | Wire protocol and domain types shared by CLI and SDK, plus the TypeScript SDK layer (`/sdk`: client, schema conversion, tool groups; `/react`: the hook; `/inert`: the only entry a noop entry may import, no client code) |
 | `packages/react-native` | React Native SDK, Expo config plugin, Metro helper |
 | `packages/native` | Framework-free iOS (Swift) and Android (Kotlin) core |
 | `playground`, `playground-native` | Expo app and native apps registering the same five demo tools |
