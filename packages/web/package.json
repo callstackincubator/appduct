@@ -23,7 +23,9 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "~5.9.2",
-    "esbuild": "^0.25.12"
+    "esbuild": "^0.25.12",
+    "@types/react": "~19.1.1",
+    "react": "19.1.0"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -34,6 +36,26 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react.js",
+      "default": "./dist/react.js"
+    },
     "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "react": [
+        "dist/react/index.d.ts"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "react": "*"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   }
 }

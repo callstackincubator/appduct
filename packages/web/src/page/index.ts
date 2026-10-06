@@ -7,7 +7,12 @@ import type { PageEnv } from "./memory-page.js";
 export { createMemoryPage, type MemoryPage, type PageEnv } from "./memory-page.js";
 
 /** The plain-JS surface of `@appduct/web`. */
-export type WebAppduct = Pick<AppductClient, "registerTool" | "registerEvent" | "postEvent" | "disconnect"> & {
+export type WebAppduct = Pick<
+  AppductClient,
+  "registerTool" | "registerEvent" | "postEvent" | "disconnect" | "getRegisteredTools" | "addAppductListener"
+> & {
+  /** `idle | connecting | active | reconnecting | closed`. */
+  getAppductState: AppductClient["getClientState"];
   /** Claims a session with the link from `appduct_connect`: the value after `#appduct=`. */
   connect(link: string): Promise<void>;
 };
@@ -47,6 +52,9 @@ export const createWebAppduct = ({ ports, page }: { ports: WebCorePorts; page: P
     registerEvent: client.registerEvent,
     postEvent: client.postEvent,
     disconnect: client.disconnect,
+    getRegisteredTools: client.getRegisteredTools,
+    addAppductListener: client.addAppductListener,
+    getAppductState: client.getClientState,
     connect,
   };
 };
