@@ -12,7 +12,7 @@ section into a versioned heading.
 ## Unreleased
 
 - **Changed: `@appduct/react-native` names its shared API type `AppductPublicApi`.** The old name
-  `CordierePublicApi` still imports, for one release, with a deprecation warning.
+  `CordierePublicApi` still imports, with a deprecation warning, until 0.15.0 removes it.
 - **Docs: the README is a short overview of Appduct on iOS, Android and React Native, and the guides for registering tools, security and build variants live only on the [docs site](https://callstackincubator.github.io/appduct/).** The `docs/TOOLS.md`, `docs/SECURITY.md` and `docs/BUILD-VARIANTS.md` files are gone.
 - **Docs: the shipped `appduct` skill covers native iOS and Android setup, and no longer tells you to set `APPDUCT_ENABLED=0` for production.** Release builds leave Appduct out by default.
 

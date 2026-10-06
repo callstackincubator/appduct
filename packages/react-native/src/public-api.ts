@@ -87,8 +87,10 @@ export type AppductPublicApi = {
 };
 
 /**
- * The name this type shipped under before the product was called Appduct.
+ * The name this type shipped under before the product was called Appduct. Removing it is #161,
+ * whose first step is marking the removal `Breaking:` in `CHANGELOG.md` — anything else lets
+ * `cut-release` ship it as a patch and break the apps this tag is warning.
  *
- * @deprecated Use `AppductPublicApi`. The alias ships for one release and is then removed.
+ * @deprecated Use `AppductPublicApi`. Removed in 0.15.0 (#161).
  */
 export type CordierePublicApi = AppductPublicApi;
