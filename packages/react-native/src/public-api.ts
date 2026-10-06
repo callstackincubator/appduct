@@ -86,5 +86,9 @@ export type AppductPublicApi = {
   getAppductBuildConfig(): AppductBuildConfig;
 };
 
-/** The name this type shipped under before the product was called Appduct. */
+/**
+ * The name this type shipped under before the product was called Appduct.
+ *
+ * @deprecated Use `AppductPublicApi`. The alias ships for one release and is then removed.
+ */
 export type CordierePublicApi = AppductPublicApi;
