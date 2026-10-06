@@ -11,6 +11,7 @@
  * await app.close();
  * ```
  */
+export { attachPage, type AttachablePage, type AttachPageOptions } from "./attach-page.js";
 export { connect, type ConnectOptions } from "./connect.js";
 export {
   link,
