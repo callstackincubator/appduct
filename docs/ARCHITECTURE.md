@@ -56,10 +56,16 @@ Deliberately out of scope, so the boundaries of the design are explicit:
 └──────────────────────────────────────────────────────────┘
 ```
 
+Browsers reach the daemon on a second listener, `ws://127.0.0.1:<webPort>`, not drawn above.
+
 - One daemon per operator machine (per user). It is long-lived and never exits because
   of anything a device does.
 - Devices connect **to** the daemon over pinned `wss://`; that direction is what works for
   physical phones.
+- Web pages connect to a second listener: plain `ws://` on `127.0.0.1` and `webPort`, never
+  reachable from other machines. A browser can't pin the key, so the listener refuses an upgrade
+  with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`. A link is claimable
+  only on the listener of its transport (`link.create`'s `transport`, §5).
 - The CLI and MCP server never touch sockets, keys, or state files directly; everything
   goes through the daemon RPC.
 
@@ -100,6 +106,7 @@ The daemon refuses to load a key file that is group/world-readable.
   "policy": { "default": "allow", "destructive": "allow" },
   "advertisedIp": null,
   "scheme": null,
+  "webOrigins": [],
   "restartDaemonOnVersionMismatch": false
 }
 ```
@@ -265,9 +272,9 @@ Methods:
 
 | Method | Params | Result |
 | --- | --- | --- |
-| `daemon.status` | — | `{ version, pid, startedAt, wssPort, pinnedKeys: [spkiPin], sessions: SessionSummary[], pendingLinks }` — `pendingLinks` counts minted-but-unclaimed links (not sessions, §6, but live state a restart destroys; §4's version drift check reads it). Absent from daemons that predate this field. |
+| `daemon.status` | — | `{ version, pid, startedAt, wssPort, webPort, pinnedKeys: [spkiPin], sessions: SessionSummary[], pendingLinks }` — `pendingLinks` counts minted-but-unclaimed links (not sessions, §6, but live state a restart destroys; §4's version drift check reads it). Absent from daemons that predate this field. |
 | `daemon.shutdown` | — | `{ ok: true }` (then exits) |
-| `link.create` | `{ ttlSeconds?, addressOverride? }` | `{ sessionId, deepLinkPayload, endpoint: { family, address, port }, expiresAt }` — `deepLinkPayload` is the base64url bootstrap blob; callers compose `<scheme>:///?appduct=<payload>`. `addressOverride` forces the advertised address (the emulator/simulator fast path uses it to force `127.0.0.1`). |
+| `link.create` | `{ ttlSeconds?, addressOverride?, transport? }` | `{ sessionId, deepLinkPayload, endpoint: { family, address, port }, expiresAt }` — `deepLinkPayload` is the base64url bootstrap blob; callers compose `<scheme>:///?appduct=<payload>`. `addressOverride` forces the advertised address (the emulator/simulator fast path uses it to force `127.0.0.1`). `transport` is `"native"` (default) or `"web"`: a web link encodes `127.0.0.1` and `daemon.status`'s `webPort`, ignores `addressOverride`, and can only be claimed on the plain-HTTP web listener (which refuses an upgrade with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`); a link presented on the other transport's listener closes `1008 wrong_transport`. |
 | `sessions.list` | — | `SessionSummary[]` |
 | `sessions.describe` | `{ selector? }` | full session detail incl. device metadata, state timestamps, tool count |
 | `sessions.revoke` | `{ selector? }` | `{ ok: true }` — closes socket (code 1000), frees alias |
@@ -403,14 +410,15 @@ Rules:
   successful resume the resume token is **rotated** (old one invalid immediately).
 - `ACTIVE → SUSPENDED` (socket close/error/heartbeat loss): the tool registry, device
   metadata, and alias are retained. Pending tool calls fail fast with `session_suspended`.
-- `SUSPENDED → ACTIVE` via `session_resume` on a fresh pinned socket within
-  `graceSeconds`. After resume the app re-sends a full `tool_registry_snapshot`
-  (authoritative; replaces the retained registry).
+- `SUSPENDED → ACTIVE` via `session_resume` on a fresh socket within
+  `graceSeconds`. A session resumes only on the listener it was claimed on; a resume on the
+  other listener closes `1008 wrong_transport` and leaves the resume token valid. After resume the app re-sends a full
+  `tool_registry_snapshot` (authoritative; replaces the retained registry).
 - Session ids and aliases never collide across live sessions. Terminal states
   (`DISCARDED`, `EXPIRED`, `REVOKED`) free the alias.
-- There is **no limit** on concurrent sessions; all share the single wss listener.
+- There is **no limit** on concurrent sessions; all share the two listeners (pinned wss and local web).
 
-## 7. Wire protocol v2 (app ↔ daemon, over pinned wss)
+## 7. Wire protocol v2 (app ↔ daemon, over pinned wss or the local web listener)
 
 **[PROTOCOL.md](PROTOCOL.md) is the normative reference** for the message catalog, frame
 rules, close codes, keepalive, and the `ToolDescriptor` shape. Don't duplicate it here; the

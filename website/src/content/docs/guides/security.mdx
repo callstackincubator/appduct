@@ -23,6 +23,22 @@ With the defaults, Appduct is only in debug builds, so a release build has no Ap
 - **A leaked key.** If your key leaks, someone on the network can impersonate your computer to builds that trust it, until those builds are retired. [Rotate keys](#rotate-keys) to limit the damage.
 - **Exposing Appduct to the internet.** Whether to do that is your decision. If you do, set up [policy](#limit-what-callers-can-run).
 
+## Web pages
+
+A browser can't pin your computer's key, so a web page connects to a separate port instead: plain `ws://` on `127.0.0.1`, which `appduct daemon status --json` reports as `data.daemon.web_port`. The page can't check that it's talking to Appduct, so this port is never reachable from other machines. Treat it like any local port: any process on your computer can open it.
+
+What keeps other websites out is the `Origin` header the browser sends. The daemon refuses a connection with a 403 unless the origin is `localhost`, `127.0.0.1`, or `[::1]` on any port, or is listed in `webOrigins` in `~/.appduct/config.json`:
+
+```json title="~/.appduct/config.json"
+{
+  "webOrigins": ["https://app.example.test"]
+}
+```
+
+Each entry must match the origin exactly, as the browser sends it: scheme, host, and port if it isn't the default. `"https://app.example.test"` doesn't match `"https://app.example.test:8443"`. A connection with no `Origin` is let through. Only a process on your computer sends none, and it could connect anyway. Run `appduct daemon stop` after changing the file.
+
+A page you load from a `webOrigins` entry or a local dev server can claim a link and call any tool you've registered, so list only origins you control. Links work as for devices: one connection, 5 minutes, and a web link can't be used on the device port or the other way round.
+
 ## Choose what a build trusts
 
 Each build trusts your computer in one of two ways.

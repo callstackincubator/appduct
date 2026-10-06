@@ -57,6 +57,67 @@ const OPEN_TARGET_ADDRESS_OVERRIDE = "127.0.0.1";
 export const composeDeepLink = (scheme: string, result: LinkCreateResult): string =>
   `${scheme}:///?appduct=${result.deepLinkPayload}&pin=${encodeURIComponent(result.pin)}`;
 
+/** What a web target hands back instead of a deep link: the page URL to open, and the script to
+ * run in an already-open page. Both carry the same bootstrap payload. */
+export type WebLinkResult = {
+  sessionId: string;
+  /** The page URL with `#appduct=<payload>` appended (replacing any fragment it had). */
+  url: string;
+  script: string;
+  /** Unix seconds. */
+  expiresAt: number;
+};
+
+/** Throws a usage error unless `pageUrl` is an http(s) URL. Called before a link is minted, so a
+ * bad URL does not strand a pending link. */
+export const assertWebPageUrl = (pageUrl: string): void => {
+  let protocol: string | undefined;
+
+  try {
+    protocol = new URL(pageUrl).protocol;
+  } catch {
+    // Reported below with the rest of the invalid cases.
+  }
+
+  if (protocol !== "http:" && protocol !== "https:") {
+    throw usageError(`"url" must be an http(s) URL (got "${pageUrl}").`);
+  }
+};
+
+/** Composes the web target's result from a `link.create` result minted with `transport: "web"`. */
+export const composeWebLink = (pageUrl: string, result: LinkCreateResult): WebLinkResult => {
+  const payload = result.deepLinkPayload;
+
+  return {
+    sessionId: result.sessionId,
+    url: `${pageUrl.split("#")[0]}#appduct=${payload}`,
+    script: `window.__APPDUCT__.connect("${payload}")`,
+    expiresAt: result.expiresAt,
+  };
+};
+
+export type MintWebLinkOptions = {
+  stateDir: string;
+  spawn?: SpawnFn;
+  autoSpawn?: boolean;
+  ttlSeconds?: number;
+  /** The page the link will be opened in. */
+  url: string;
+};
+
+/** Mints a link only the web listener accepts. Needs no scheme: a web page is reached by URL. */
+export const mintWebLink = async (options: MintWebLinkOptions): Promise<WebLinkResult> => {
+  assertWebPageUrl(options.url);
+
+  const result = await callDaemon<LinkCreateResult>(
+    RPC_METHODS.linkCreate,
+    { ttlSeconds: options.ttlSeconds, transport: "web" },
+    { stateDir: options.stateDir, spawn: options.spawn, autoSpawn: options.autoSpawn },
+  );
+
+  return composeWebLink(options.url, result);
+};
+
 export type MintLinkOptions = {
   stateDir: string;
   spawn?: SpawnFn;

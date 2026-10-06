@@ -32,7 +32,7 @@ import {
   type ExecFn,
   type OpenTarget,
 } from "../cli/open-target.js";
-import { composeDeepLink } from "../link.js";
+import { assertWebPageUrl, composeDeepLink, composeWebLink, type WebLinkResult } from "../link.js";
 import { renderQrToTerminal } from "../qr-terminal.js";
 import { describeMissingAppId, describeMissingScheme, resolveAppId } from "../scheme.js";
 import {
@@ -59,7 +59,10 @@ const DEFAULT_WAIT_TIMEOUT_MS = 120_000;
  * which now means "figure it out". */
 const NO_TARGET = "none";
 
-type ConnectTarget = OpenTarget | typeof NO_TARGET;
+/** `target: "web"` — no device is involved: the result is a page URL and a script for a browser. */
+const WEB_TARGET = "web";
+
+type ConnectTarget = OpenTarget | typeof NO_TARGET | typeof WEB_TARGET;
 
 /**
  * Attached to every QR-path result. Without this an agent reliably minted a link, said nothing
@@ -91,14 +94,18 @@ export const CONNECT_TOOL_DESCRIPTOR = {
     "this machine. An \"appId\" not supplied here falls back to \"appId.<platform>\" in the " +
     "nearest .appduct/config.json (see \"appduct init\"); it is rejected outright with target " +
     "\"ios-sim\" or \"none\", which need no app id. Pass \"relaunch\": true with ios-device if the " +
-    "app is already running and the delivery does not take. Only when no device is detected (or " +
+    "app is already running and the delivery does not take. Target \"web\" is for a web page: " +
+    "pass \"url\" (the page to open) and get back { url, script } — open \"url\" in a browser, or " +
+    "run \"script\" in a page that is already open, then call appduct_wait_for_session. It needs " +
+    "no scheme and no device. Only when no device is detected (or " +
     "target is \"none\") does this return a QR code for a human to scan, along with an " +
     "\"instructions\" field saying what to do with it. Follow up with appduct_wait_for_session to " +
     "know when the device has connected.",
   inputSchema: {
     type: "object",
     properties: {
-      target: { type: "string", enum: ["android", "ios-sim", "ios-device", NO_TARGET] },
+      target: { type: "string", enum: ["android", "ios-sim", "ios-device", NO_TARGET, WEB_TARGET] },
+      url: { type: "string" },
       device: { type: "string" },
       appId: { type: "string" },
       relaunch: { type: "boolean" },
@@ -159,10 +166,10 @@ const asOptionalConnectTarget = (value: unknown): ConnectTarget | undefined => {
     return undefined;
   }
 
-  if (typeof value !== "string" || !(isOpenTarget(value) || value === NO_TARGET)) {
+  if (typeof value !== "string" || !(isOpenTarget(value) || value === NO_TARGET || value === WEB_TARGET)) {
     throw new McpBuiltinToolError(
       "invalid_request",
-      '"target" must be "android", "ios-sim", "ios-device", or "none".',
+      '"target" must be "android", "ios-sim", "ios-device", "web", or "none".',
     );
   }
 
@@ -301,7 +308,7 @@ const withResolvedAppId = async (
  * be unscannable-in-effect — the address would be wrong for the phone that scanned it.
  */
 const resolveDelivery = async (
-  requested: ConnectTarget | undefined,
+  requested: Exclude<ConnectTarget, typeof WEB_TARGET> | undefined,
   device: string | undefined,
   appId: string | undefined,
   deps: ConnectToolDeps,
@@ -354,7 +361,7 @@ const resolveDelivery = async (
 export const handleConnectTool = async (
   rawArgs: unknown,
   deps: ConnectToolDeps,
-): Promise<ConnectToolResult> => {
+): Promise<ConnectToolResult | WebLinkResult> => {
   const args = asRecord(rawArgs);
 
   const requestedTarget = asOptionalConnectTarget(args.target);
@@ -362,6 +369,35 @@ export const handleConnectTool = async (
   const appId = asOptionalNonEmptyString(args.appId, "appId");
   const relaunch = asOptionalBoolean(args.relaunch, "relaunch");
   const ttlSeconds = asOptionalPositiveNumber(args.ttlSeconds, "ttlSeconds");
+  const url = asOptionalNonEmptyString(args.url, "url");
+
+  if (requestedTarget === WEB_TARGET) {
+    if (url === undefined) {
+      throw new McpBuiltinToolError("invalid_request", '"url" (the page to open) is required with target "web".');
+    }
+
+    if (device !== undefined || appId !== undefined || relaunch !== undefined) {
+      throw new McpBuiltinToolError(
+        "invalid_request",
+        '"device", "appId" and "relaunch" do not apply with target "web".',
+      );
+    }
+
+    try {
+      assertWebPageUrl(url);
+    } catch (error) {
+      throw new McpBuiltinToolError("invalid_request", (error as Error).message);
+    }
+
+    return composeWebLink(
+      url,
+      await deps.call<LinkCreateResult>(RPC_METHODS.linkCreate, { ttlSeconds, transport: "web" }),
+    );
+  }
+
+  if (url !== undefined) {
+    throw new McpBuiltinToolError("invalid_request", '"url" only applies with target "web".');
+  }
 
   if (device !== undefined && (requestedTarget === undefined || requestedTarget === NO_TARGET)) {
     throw new McpBuiltinToolError(

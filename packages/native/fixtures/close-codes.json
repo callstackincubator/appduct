@@ -8,6 +8,7 @@
   { "code": 1008, "reason": "unknown_message_type", "terminal": true },
   { "code": 1008, "reason": "session_mismatch", "terminal": true },
   { "code": 1008, "reason": "already_claimed", "terminal": true },
+  { "code": 1008, "reason": "wrong_transport", "terminal": true },
   { "code": 1008, "reason": "unknown_session", "terminal": true },
   { "code": 1008, "reason": "link_expired", "terminal": true },
   { "code": 1008, "reason": "claim_attempts_exceeded", "terminal": true },

@@ -37,7 +37,7 @@ Creates a one-time connection link and prints it.
 
 | Flag | Description |
 | --- | --- |
-| `--open <target>` | Open the link on a device: `android`, `ios-sim`, or `ios-device` (experimental). |
+| `--open <target>` | Open the link on a device: `android`, `ios-sim`, or `ios-device` (experimental). `--open web <url>` is for a web page; see [Web pages](#web-pages). |
 | `--device <id>` | adb serial, simulator UDID, or device UDID, when more than one is available. |
 | `--app-id <id>` | Installed app id for `android` and `ios-device`. Defaults to `appId.<platform>` in `.appduct/config.json`. Not allowed with `ios-sim`. |
 | `--relaunch` | With `ios-device`: stop a running instance of the app first. |
@@ -56,6 +56,12 @@ How each `--open` target delivers the link:
 Without `--device`, each target requires exactly one candidate and lists them otherwise. `ios-device` requires iOS 17+, Xcode 15+, a connected, trusted device with Developer Mode on, and your app installed. App ids may contain letters, digits, `.`, `_`, and `-`, and must start with a letter or digit.
 
 The link has the form `<scheme>:///?appduct=<payload>&pin=<sha256/...>`. Pass it on whole.
+
+#### Web pages
+
+`appduct sessions link --open web <url>` creates a link for a page served at `<url>`. It needs no device, scheme, or app id, and prints `url` (the page URL with `#appduct=<payload>` added, replacing any fragment) and `script`. Open `url` in a browser, or run `script` in a page that's already open: `window.__APPDUCT__.connect("<payload>")`. The `--ttl` flag applies; `--device`, `--app-id`, and `--relaunch` don't.
+
+A web link points at `127.0.0.1` and the web port, which `appduct daemon status --json` reports as `data.daemon.web_port`. It only works on that port, and a link for a device only works for devices. See [Web pages](/appduct/guides/security/#web-pages) for what the web port accepts.
 
 ### `appduct sessions revoke [selector]`
 
@@ -276,6 +282,7 @@ Default location `~/.appduct/config.json`. Every key is optional. Read when the 
 | `daemonLogMaxBytes` | `10485760` | Size at which `daemon.log` is rotated. |
 | `eventsLogMaxBytes` | `10485760` | Size at which `events.log` is rotated. |
 | `policy` | `{ "default": "allow", "destructive": "allow" }` | See [Limit what callers can run](/appduct/guides/security/#limit-what-callers-can-run). |
+| `webOrigins` | `[]` | Extra origins, such as `"https://app.example.test"`, that may connect from a web page. `localhost`, `127.0.0.1`, and `[::1]` on any port always may. See [Web pages](/appduct/guides/security/#web-pages). |
 | `advertisedIp` | detected | Address put in links for physical devices. |
 | `scheme` | none | Fallback scheme. |
 | `restartDaemonOnVersionMismatch` | `false` | Always replace an outdated background service, even with devices connected. |
@@ -293,7 +300,7 @@ Default location `~/.appduct/config.json`. Every key is optional. Read when the 
 | `appduct_list_tools` | `selector?`, `group?`, `filter?`, `limit?` (default 50), `offset?` | Tool signatures with group and policy, `total`, and the app's `groups` |
 | `appduct_describe_tool` | `selector?`, `name` | One tool's full descriptor and policy |
 | `appduct_call_tool` | `selector?`, `name`, `args?`, `timeoutMs?` (1,000–600,000; can only shorten) | The tool's result |
-| `appduct_connect` | `target?` (`android`, `ios-sim`, `ios-device`, `none`), `device?`, `appId?`, `relaunch?`, `ttlSeconds?` | `{ sessionId, delivered: true }`, or a `qr`, `deepLink`, and `instructions` for a person |
+| `appduct_connect` | `target?` (`android`, `ios-sim`, `ios-device`, `web`, `none`), `url?` (required with `web`), `device?`, `appId?`, `relaunch?`, `ttlSeconds?` | `{ sessionId, delivered: true }`, or a `qr`, `deepLink`, and `instructions` for a person; with `web`, `{ sessionId, url, script, expiresAt }` |
 | `appduct_wait_for_session` | `sessionId`, `timeoutMs?` | Resolves when the device connects |
 | `appduct_list_events` | `selector?`, `name?` (glob, e.g. `"cart.*"`), `limit?` (default 50), `offset?` | `{ session, total, limit, events }`, each event `{ name, signature, description }`, plus `payload_schema` when `name` is an exact name |
 | `appduct_events` | `selector?`, `since?`, `limit?` (default 50), `name?` (glob, e.g. `"cart.*"`), `payloadMaxBytes?` (default 4096) | `{ events, cursor, dropped, remaining }`, each event `{ name, payload, ts, seq, sessionId, alias }`, or, once truncated, `{ name, payloadPreview, truncated: true, payloadBytes, ts, seq, sessionId, alias }` |
@@ -311,7 +318,7 @@ import { connect, link, waitForSession, AppductError } from "appduct/client";
 
 | Function | Description |
 | --- | --- |
-| `link(options?)` | Creates a link, and opens it when `target` is set. Options: `target`, `device`, `appId`, `relaunch`, `scheme`, `ttlSeconds`, `cwd`, `stateDir`. Returns `{ sessionId, deepLink, endpoint, expiresAt, pin, delivered? }`. |
+| `link(options?)` | Creates a link, and opens it when `target` is set. Options: `target`, `device`, `appId`, `relaunch`, `scheme`, `ttlSeconds`, `cwd`, `stateDir`. Returns `{ sessionId, deepLink, endpoint, expiresAt, pin, delivered? }`. With `target: "web"` and the page's `url`, returns `{ sessionId, url, script, expiresAt }` instead. |
 | `waitForSession(sessionId, options?)` | Resolves with an `AppClient` once the device connects. Option: `timeoutMs`. |
 | `connect<Tools>(options?)` | Returns an `AppClient` for a connected device. Options: `selector`, `stateDir`. |
 

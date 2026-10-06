@@ -50,12 +50,16 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
             "ios-sim",
             "ios-device",
             "none",
+            "web",
           ],
           "type": "string",
         },
         "ttlSeconds": {
           "exclusiveMinimum": 0,
           "type": "number",
+        },
+        "url": {
+          "type": "string",
         },
       },
       "type": "object",

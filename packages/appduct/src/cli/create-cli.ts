@@ -58,7 +58,7 @@ export const createCli = () => {
     )
     .option(
       "--open <target>",
-      "link: deliver the link automatically via adb/simctl/devicectl (android|ios-sim|ios-device; ios-device is experimental).",
+      "link: deliver the link automatically via adb/simctl/devicectl (android|ios-sim|ios-device; ios-device is experimental), or with `web <url>` return the page URL and a connect script for a web page.",
     )
     .option("--device <id>", "link: adb serial, simulator udid or paired-device udid to target when --open is ambiguous.")
     .option(
