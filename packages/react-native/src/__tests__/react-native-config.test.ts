@@ -41,15 +41,21 @@ describe("react-native.config.js resolvePlatforms", () => {
     expect(resolvePlatforms()).toStrictEqual(devOnly);
   });
 
+  // An empty `configurations` is CocoaPods' "no restriction", i.e. link the pod into every
+  // Xcode configuration. Naming ["Debug", "Release"] instead approximates "every build" by
+  // spelling: a pipeline whose configuration is called `Staging` is left unlinked (and in a
+  // project that has no `Release` configuration at all, CocoaPods hard-fails install over the
+  // unknown whitelisted name). `APPDUCT_ENABLED=1` promises every build, so it has to widen by
+  // lifting the restriction rather than by guessing which names a project might use.
   test.each(["1", "true", "TRUE"])(
-    "%s: every build -- Debug and Release on iOS; Android unaffected (build.gradle reads the env var itself)",
+    "%s: every build -- no iOS configuration restriction at all, so a custom-named configuration carries Appduct; Android unaffected (build.gradle reads the env var itself)",
     (value) => {
       process.env[ENV_VAR] = value;
       expect(resolvePlatforms()).toStrictEqual(everyBuild);
       expect(
         (everyBuild as { ios: { configurations: string[] } }).ios
           .configurations,
-      ).toStrictEqual(["Debug", "Release"]);
+      ).toStrictEqual([]);
     },
   );
 
