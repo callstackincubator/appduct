@@ -39,6 +39,13 @@ Each entry must match the origin exactly, as the browser sends it: scheme, host,
 
 A page you load from a `webOrigins` entry or a local dev server can claim a link and call any tool you've registered, so list only origins you control. Links work as for devices: one connection, 5 minutes, and a web link can't be used on the device port or the other way round.
 
+A web page can't pin your computer's key, so it can't tell your Appduct from another program listening on that port. Native apps can. Browsers also limit where a page can connect:
+
+- A page on `http://localhost` connects in Chrome, Firefox and Safari.
+- A page on `https://` connects in Firefox, and in Chrome once you grant the local network access permission. Safari blocks it.
+
+Production bundles leave `@appduct/web` out unless they import `@appduct/web/enabled`; see [Build variants](/appduct/guides/build-variants/#web-production-builds). Only import it in builds you control: a page that includes it can claim a link and call every tool you registered.
+
 ## Choose what a build trusts
 
 Each build trusts your computer in one of two ways.

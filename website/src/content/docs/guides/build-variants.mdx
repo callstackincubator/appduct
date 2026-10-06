@@ -74,6 +74,19 @@ const { registerTool, useAppductTool } = __DEV__
 
 Removing both the native module and the JavaScript is what an app store reviewer who expects no remote-control code at all will want to see. Either half alone still gives you a working app where Appduct does nothing.
 
+## Web: production builds
+
+`@appduct/web` leaves itself out of production bundles in any bundler. Its root entry resolves to the real code under the `development` export condition and to an inert entry with the same API under any other. The inert entry registers nothing, opens no connection and doesn't define `window.__APPDUCT__`, so your code needs no conditionals.
+
+| Build | `import "@appduct/web"` | `import "@appduct/web/enabled"` |
+| --- | --- | --- |
+| Development (Vite, webpack and Next.js set `development`) | Included | Included |
+| Production | Inert | Included |
+
+To include Appduct in a build that isn't `development`, such as a staging build, import `@appduct/web/enabled` there. That entry is always the real one, so only import it in builds you control; see [Security](/appduct/guides/security/#web-pages).
+
+A bundler that sets no `development` condition, such as plain esbuild, gives you the inert entry in development too. `connect()` then logs one warning that names this page's two fixes: set the `development` condition (esbuild: `--conditions=development`), or import `@appduct/web/enabled`. Nothing else warns.
+
 ## Leave Appduct out permanently
 
 To make sure a project never includes Appduct on a platform, regardless of environment variables:
