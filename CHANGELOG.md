@@ -11,6 +11,9 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Changed: `@appduct/react-native` names its shared API type `AppductPublicApi`.** The old name
+  `CordierePublicApi` still imports, for one release, with a deprecation warning.
+
 ## 0.14.0 (2026-10-02)
 
 - **New: `appduct_list_events` MCP tool lists the events an app declares, with descriptions.** `name` takes a glob like `"cart.*"`, and an exact name also returns the payload schema.

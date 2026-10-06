@@ -219,4 +219,4 @@ Call it last in `metro.config.js`. See [Build variants](/appduct/guides/build-va
 
 ## Advanced exports
 
-`appductClient` is the default client the functions above use, and `createAppductClient` creates another. Most apps don't need either. The package also exports its TypeScript types, such as `AppductToolDefinition`, `AppductToolExecutionContext`, and `AppductClientState`.
+`appductClient` is the default client the functions above use, and `createAppductClient` creates another. Most apps don't need either. The package also exports its TypeScript types, such as `AppductPublicApi`, `AppductToolDefinition`, `AppductToolExecutionContext`, and `AppductClientState`.
