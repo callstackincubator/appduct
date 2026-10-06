@@ -53,10 +53,9 @@ export type AppductNativeEvents = {
 };
 
 /**
- * Structural seam for the phase-2 TurboModule spec (`NativeAppduct.ts`,
- * `docs/tasks/15-native-session-logic.md`): the native core owns session lifecycle, the tool
- * registry, and per-call timeout/cancel/progress, so this is the entire JS-facing surface —
- * everything crosses as JSON strings.
+ * Structural seam for the phase-2 TurboModule spec (`NativeAppduct.ts`): the native core owns
+ * session lifecycle, the tool registry, and per-call timeout/cancel/progress, so this is the entire
+ * JS-facing surface — everything crosses as JSON strings.
  */
 export type AppductNativeModuleLike = {
   registerTool(descriptorJson: string): void;
@@ -92,11 +91,10 @@ export type AppductNativeModuleLike = {
  * `resumeLeaseStore`/`sessionClaimDeviceFields` are gone — reconnect timing, foreground/background
  * gating, and lease recovery are entirely native-owned now, and device metadata overrides are
  * threaded straight through `connect()`'s input instead of a separate hook. `defaultToolTimeoutMs`
- * is also gone: the default per-call timeout is enforced natively
- * (`AppductClient`'s own `defaultToolTimeoutMs`, currently fixed at
- * `APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`), and the frozen TurboModule spec has no channel for JS to
- * override it -- see `docs/tasks/15-native-session-logic.md`'s deviations section. Kept as an empty
- * object (not removed outright) so `createAppductClient(module, {})` call sites do not need to
- * change.
+ * is also gone: the default per-call timeout is enforced natively (`AppductClient`'s own
+ * `defaultToolTimeoutMs`, currently fixed at `APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`, 10 s, the old JS
+ * default), and the frozen TurboModule spec has no channel for JS to override it; a per-tool
+ * `timeoutMs` still works, since it travels on the descriptor. Kept as an empty object (not removed
+ * outright) so `createAppductClient(module, {})` call sites do not need to change.
  */
 export type CreateAppductClientOptions = Record<string, never>;

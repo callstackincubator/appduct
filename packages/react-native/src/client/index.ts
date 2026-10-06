@@ -51,11 +51,11 @@ export const isAppductNotActiveError = (error: unknown): boolean =>
   (error as { code?: unknown }).code === APPDUCT_NOT_ACTIVE_ERROR_CODE;
 
 /**
- * The thin client left after issue #48 phase 2 (`docs/tasks/15-native-session-logic.md`): the
- * native core owns session lifecycle (claim/resume, reconnect, grace), the tool registry and its
- * wire deltas, and per-call timeout/cancel/progress. This layer keeps only what is inherently JS —
- * a handler map, Standard Schema → JSON Schema conversion, input/output validation, and mapping
- * native's JSON-string events onto the public listener/handler surface.
+ * The thin client left after issue #48 phase 2: the native core owns session lifecycle
+ * (claim/resume, reconnect, grace), the tool registry and its wire deltas, and per-call
+ * timeout/cancel/progress. This layer keeps only what is inherently JS — a handler map, Standard
+ * Schema → JSON Schema conversion, input/output validation, and mapping native's JSON-string events
+ * onto the public listener/handler surface.
  */
 export const createAppductClient = (
   module: AppductNativeModuleLike,

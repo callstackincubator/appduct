@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /**
- * Vendors the framework-free native core (`packages/native`,
- * docs/tasks/14-native-core-extraction.md) into this package at build/publish time, so
- * `@appduct/react-native` never depends on `packages/native` being separately published to
+ * Vendors the framework-free native core (`packages/native`) into this package at build/publish
+ * time, so `@appduct/react-native` never depends on `packages/native` being separately published to
  * CocoaPods trunk or Maven Central -- that is deferred to Phase 3, and this package's own releases
  * should not be blocked on it.
  *

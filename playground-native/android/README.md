@@ -1,8 +1,8 @@
 # Appduct native playground (Android)
 
 A plain Jetpack Compose app that exercises `packages/native/android`'s `Appduct` facade with
-no React Native anywhere in the stack -- the Android counterpart to `playground/`'s Expo app
-(docs/tasks/19-android-entry-points.md, GitHub issue #48 phase 3). It registers the same five
+no React Native anywhere in the stack -- the Android counterpart to `playground/`'s Expo app.
+It registers the same five
 tools the Expo playground does (`sum`, `call_count`, `reset_counter`, `slow_task`,
 `throwing_tool`), shows the current connection state/session/call count, logs recent
 state/session/error events, and has a button that posts an app event.
@@ -44,9 +44,8 @@ From this directory:
 ./gradlew :app:assembleRelease         # releaseImplementation(core-noop) -- inert, no network code
 ```
 
-Verify the split against the built artifacts (from the repo root, with the workspace's own
-`appduct` build -- see the note below about `pnpm exec` picking up a stale global install
-instead):
+Verify the split against the built artifacts, from the repo root, with the workspace's own
+`appduct` build (see the note at the end):
 
 ```bash
 node packages/appduct/dist/bin.js doctor \
@@ -63,10 +62,9 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n com.callstack.appduct.playground/.MainActivity
 ```
 
-Then drive it from the `appduct` CLI, pointed at a daemon whose state directory this build's
-scheme can reach (see `packages/native/android/README.md`'s live-check section for the full
-sequence). Run it from inside `playground-native/`: the scheme and the app id are recorded in
-`playground-native/.appduct/config.json`.
+Then drive it from the `appduct` CLI. Run these from inside `playground-native/`, where
+`.appduct/config.json` records the app's scheme and app id, so no `--scheme` or `--app-id` is
+needed:
 
 ```bash
 appduct sessions link --open android
@@ -75,14 +73,8 @@ appduct tools call sum --input '{"a":2,"b":3}'
 appduct events tail
 ```
 
-## `pnpm exec appduct` can resolve the wrong binary
+## Use the workspace's own `appduct` build
 
-If this machine also has `appduct` installed globally (`npm install -g appduct`, or a shell
-plugin manager's fnm/nvm shim), `pnpm exec appduct ...` can silently run that global install
-instead of this workspace's own build -- `pnpm exec` falls back to `PATH` resolution when it
-finds no locally-linked binary, and a global install is still on `PATH`. This surfaced during this
-task's own verification: `pnpm exec appduct doctor <release apk> --assert-absent` failed with a
-stale global build's detection logic, while `node packages/appduct/dist/bin.js doctor ... `
-correctly held. Prefer invoking the workspace build directly
-(`node packages/appduct/dist/bin.js ...`) when the two might disagree, or confirm first with
-`pnpm exec which appduct` / `pnpm exec node -e "console.log(require.resolve('appduct/package.json'))"`.
+If `appduct` is also installed globally, `pnpm exec appduct` can run that global copy instead of
+this workspace's build. Run `node packages/appduct/dist/bin.js ...` from the repo root when the
+two might differ, or check which one runs with `pnpm exec which appduct`.

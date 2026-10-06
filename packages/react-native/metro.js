@@ -1,13 +1,12 @@
 /**
- * `@appduct/react-native/metro` — the JS half of stripping Appduct from a bundle (see
- * `docs/tasks/12-metro-strip-helper.md`). Plain CommonJS at the package root, like
- * `app.plugin.js`, so it stays `require`-able from a Node-run `metro.config.js` without routing
- * through the `tsc` build that produces `build/` for the RN runtime.
+ * `@appduct/react-native/metro` — the JS half of stripping Appduct from a bundle. Plain CommonJS at
+ * the package root, like `app.plugin.js`, so it stays `require`-able from a Node-run
+ * `metro.config.js` without routing through the `tsc` build that produces `build/` for the RN
+ * runtime.
  *
  * The native half — whether the Appduct pod/module is compiled in at all — is decided by
- * autolinking (`docs/tasks/00-overview.md`'s "Inclusion" contract), not by this file. Neither
- * half alone removes both; see `docs/BUILD-VARIANTS.md`'s "Compiling Appduct out of production
- * builds" section.
+ * autolinking, not by this file. Neither half alone removes both; see
+ * https://callstackincubator.github.io/appduct/guides/build-variants/#strip-appducts-javascript-too.
  */
 const { isAppductAutolinkEnabled } = require("./autolink-env");
 
@@ -83,7 +82,7 @@ function deriveRedirectSpecifiers(exportsField) {
  * `context.resolveRequest`, matching Metro's own default-resolver convention.
  *
  * **Call this last**, after anything else that sets `config.resolver.resolveRequest` (see
- * `docs/BUILD-VARIANTS.md`'s "JS -- swap the module at bundle time" section). The existing
+ * https://callstackincubator.github.io/appduct/guides/build-variants/#strip-appducts-javascript-too). The existing
  * resolver is captured by reference at call time, not read lazily, so
  * `config.resolver.resolveRequest = myResolver` *after* `withAppduct` silently discards the
  * strip rather than erroring — there is no way to detect that misordering from in here, since a

@@ -1,19 +1,25 @@
 # Cross-language conformance fixtures
 
-Issue #48, "Parity is the risk": the TypeScript (`@appduct/shared`, `@appduct/react-native`
-where noted), Swift (`packages/native/ios`), and Kotlin (`packages/native/android/core`)
-implementations of the same wire protocol (`docs/PROTOCOL.md`) must agree byte-for-byte and
-rule-for-rule. Each file here is a language-neutral JSON vector table; each of the three test
-suites loads every file and asserts every case against its own implementation, so a change that
-makes one implementation drift from the others fails a test instead of shipping silently.
+The TypeScript (`@appduct/shared`, and `appduct` where noted), Swift (`packages/native/ios`) and
+Kotlin (`packages/native/android/core`) implementations of the same wire protocol
+(`docs/PROTOCOL.md`) must agree byte-for-byte and rule-for-rule. Each file here is a
+language-neutral JSON vector table that several test suites load and assert against their own
+implementation, so a change that makes one implementation drift from the others fails a test
+instead of shipping silently.
 
 Consumers:
 
-- `packages/shared/src/__tests__/fixtures-conformance.test.ts` (vitest)
-- `packages/appduct/src/__tests__/spki-pin.test.ts` (vitest, `spki-pin.json` only)
-- `packages/native/ios/Tests/AppductCoreTests/FixturesConformanceTests.swift` (XCTest)
+- `packages/shared/src/__tests__/fixtures-conformance.test.ts` (vitest): every file except
+  `spki-pin.json` and `event-registry-frames.json`
+- `packages/appduct/src/__tests__/spki-pin.test.ts` (vitest): `spki-pin.json` only
+- `packages/native/ios/Tests/AppductCoreTests/FixturesConformanceTests.swift` (XCTest): every file
+  except `event-registry-frames.json`
+- `packages/native/ios/Tests/AppductCoreTests/AppductEventRegistryTests.swift` (XCTest):
+  `event-registry-frames.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/FixturesConformanceTest.kt`
-  (JUnit)
+  (JUnit): every file except `event-registry-frames.json`
+- `packages/native/android/core/src/test/java/com/callstack/appduct/AppductEventRegistryTest.kt`
+  (JUnit): `event-registry-frames.json`
 
 ## The rule
 
@@ -69,8 +75,7 @@ Array of `{ name, descriptor, valid }` covering `@appduct/shared`'s `isEventDesc
 (`docs/PROTOCOL.md` §5a): a name is any non-empty string up to 4096 UTF-16 code units (dotted names and
 names with spaces are valid, unlike a tool name), a description is 1 to 4096 characters, and
 `payload_schema` must be a JSON object if present (rejecting a string, an array and `null`). The 4096 limit is pinned in UTF-16 code units: 2048 non-BMP characters (😀) pass, 2049 fail.
-Asserted by the TypeScript and Swift suites; the Kotlin suite joins it with its `registerEvent`
-slice.
+Asserted by the TypeScript, Swift and Kotlin suites.
 
 ### `event-registry-frames.json`
 

@@ -4,10 +4,10 @@
 
 [![MIT license][license-badge]][license] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-The playground is an Expo **development build** that demonstrates Appduct's v2 model: an
-always-on **daemon** on your machine, an app that claims a **pinned `wss://`** session from a
-bootstrap deep link that carries the daemon's key pin, and a thin **CLI/MCP** surface driving tools registered in JS—no extra debug
-screens in the app, same ideas as in **production** builds.
+The playground is an Expo **development build** that shows Appduct end to end: a **daemon** on
+your machine, an app that opens a deep link and connects to it over a pinned `wss://` connection,
+and the **CLI** or an MCP client calling tools the app registers in JavaScript. The app has no
+extra debug screens for any of it.
 
 ## Why it's here
 
@@ -67,6 +67,8 @@ pnpm run playground:appduct -- tools call call_count --input '{}'      # reads s
 pnpm run playground:appduct -- tools call reset_counter --input '{}'   # destructive; denied if policy.destructive=deny
 pnpm run playground:appduct -- tools call slow_task --input '{}'       # watch progress with events tail --follow
 pnpm run playground:appduct -- tools call throwing_tool --input '{}'   # exercises tool_execution_error
+pnpm run playground:appduct -- events ls                              # lists playground_ping, the event the app declares
+pnpm run playground:appduct -- events ls --name playground_ping       # its full payload schema
 pnpm run playground:appduct -- events tail --follow
 ```
 

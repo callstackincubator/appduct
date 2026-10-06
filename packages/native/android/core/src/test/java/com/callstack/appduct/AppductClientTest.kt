@@ -17,8 +17,11 @@ import java.util.concurrent.CopyOnWriteArrayList
  * Port of the behaviors `client.test.ts`/`tool-invocation.test.ts`/`bootstrap.test.ts`/
  * `deep-link-bootstrap.test.ts` describe for the JS client, exercised here against
  * [AppductClient] over a [FakeAppductTransport]. Real reconnect/backoff/grace timing (which
- * would need seconds of wall-clock time per test) is intentionally out of scope -- see
- * `docs/tasks/16-android-session-logic.md`'s "known gaps".
+ * would need seconds of wall-clock time per test) is intentionally out of scope: [AppductClient]
+ * builds its own `Dispatchers.Default`-based dispatcher rather than taking an injectable one, so
+ * virtual time cannot fast-forward its `delay()` calls. The backoff math and close-code
+ * classification it is built from are covered directly by `AppductBackoffTest` and
+ * `AppductTerminalCloseTest`.
  */
 class AppductClientTest {
     private fun newClient(

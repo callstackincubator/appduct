@@ -164,9 +164,10 @@ export function connect(input: AppductConnectInput): Promise<void> {
 
 /**
  * Effective trust/pin config this build was compiled with — read from the TurboModule's
- * `getConstants()`, the exact same manifest/plist source `resolveTrustedPins` (task 05) uses on
- * both platforms, never a second parse. Diagnostics only: this never enables dead-code elimination
- * (bundling runs before native config is known) — see `docs/tasks/07-native-module-constants.md`.
+ * `getConstants()`, the exact same manifest/plist source `resolveTrustedPins` uses on both
+ * platforms, never a second parse. Diagnostics only: this never enables dead-code elimination
+ * (bundling runs before native config is known); stripping at bundle time is
+ * `@appduct/react-native/metro`'s job.
  * On the `./noop` entry this reports the documented "absent" shape instead of a real trust mode.
  */
 export function getAppductBuildConfig(): AppductBuildConfig {
@@ -182,8 +183,8 @@ export function getAppductBuildConfig(): AppductBuildConfig {
  * `group`, `enabled`), disposing the previous registration first (identity-safe — see `registerTool`'s doc
  * comment). Calls are routed through the latest render's handler, so `deps` is an optional
  * override rather than something every call site has to remember. `options.enabled` (default
- * `true`) gates registration without breaking the rules of hooks — see `docs/SECURITY.md`'s
- * "Gating a tool by build variant" section.
+ * `true`) gates registration without breaking the rules of hooks — see
+ * https://callstackincubator.github.io/appduct/guides/security/#keep-a-tool-out-of-some-builds.
  *
  * `exportToolSchemaForKey` is injected (rather than imported by the hook) so the inert `./noop` entry
  * below does not pull JSON Schema export into a bundle that registers nothing.

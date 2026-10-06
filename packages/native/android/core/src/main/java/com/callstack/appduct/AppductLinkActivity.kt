@@ -4,7 +4,7 @@ import android.app.Activity
 import android.os.Bundle
 
 /**
- * No-UI trampoline for `${appductScheme}://` deep links (docs/tasks/19-android-entry-points.md).
+ * No-UI trampoline for `${appductScheme}://` deep links.
  * Declared only in this module's own `AndroidManifest.xml` -- never vendored into
  * `@appduct/react-native` (`scripts/sync-native-core.mjs` copies the `src/main/java` tree only, never
  * a manifest), so the RN bridge, which handles its own deep links via `handleUrl`/`Linking`, never

@@ -1,8 +1,8 @@
 /**
  * `@appduct/react-native/noop` — inert entry (ARCHITECTURE.md §11): identical public API to the
  * root (`.`) entry, but every operation is a no-op. Intended for release-build compile-out via Metro
- * `resolveRequest` or a conditional `require` (see `docs/BUILD-VARIANTS.md`'s "Compiling
- * Appduct out of production builds" section) — swap `@appduct/react-native` (and `/auto`)
+ * `resolveRequest` or a conditional `require` (see
+ * https://callstackincubator.github.io/appduct/guides/build-variants/#strip-appducts-javascript-too) — swap `@appduct/react-native` (and `/auto`)
  * for this entry so no Appduct code, native or JS, ships in that build.
  *
  * Typed against the same `AppductPublicApi` interface as `./index.ts` (see

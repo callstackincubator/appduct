@@ -1,9 +1,9 @@
 import Foundation
 
-/// Bridges the phase-2 TurboModule spec (`NativeAppduct.ts`, `docs/tasks/15-native-session-logic.md`)
-/// to Objective-C++ (`RCTNativeAppduct`). Every structured value crosses as a JSON string; the
-/// core (`AppductClient`) owns session lifecycle, the tool registry, and per-call timeout/cancel/
-/// progress. This file's only job is translation: JS tool calls become `onToolCall` events answered
+/// Bridges the phase-2 TurboModule spec (`NativeAppduct.ts`) / to Objective-C++
+//(`RCTNativeAppduct`). Every structured value crosses as a JSON string; the / core
+//(`AppductClient`) owns session lifecycle, the tool registry, and per-call timeout/cancel/ /
+//progress. This file's only job is translation: JS tool calls become `onToolCall` events answered
 /// by `respondToToolCall`, via a continuation-per-call (`PendingToolCallStore`).
 ///
 /// `@unchecked Sendable`: `client` is an actor reference (`Sendable` by construction); the emitter

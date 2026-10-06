@@ -30,7 +30,7 @@ Pod::Spec.new do |s|
   # 'ios/Core/**/*.swift' is vendored from packages/native/ios/Sources/AppductCore/Real by
   # scripts/sync-native-core.mjs (wired into this package's build/prepack scripts) -- not checked
   # into git, but present by the time CocoaPods reads this podspec, and included in the npm
-  # tarball (see .npmignore) so an installed consumer has it too. docs/tasks/14-native-core-extraction.md.
+  # tarball (see .npmignore) so an installed consumer has it too.
   s.source_files = 'ios/*.{m,mm,swift}', 'ios/Core/**/*.swift'
 
   s.pod_target_xcconfig = {
@@ -55,5 +55,5 @@ Pod::Spec.new do |s|
   # No test_spec: the Swift/Foundation-only unit tests that used to live in ios/AppductTests
   # moved with the sources to packages/native/ios/Tests/AppductCoreTests, and run via `swift
   # test` against the AppductCore SwiftPM package (repo-root Package.swift) instead of a
-  # Pods-generated XCTest scheme -- see docs/tasks/14-native-core-extraction.md and .github/workflows/test.yaml.
+  # Pods-generated XCTest scheme -- see .github/workflows/test.yaml.
 end

@@ -14,9 +14,9 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Pure-logic JVM tests for the Android connection layer, in the standalone
- * `packages/native/android` Gradle project (docs/tasks/14-native-core-extraction.md). Runs on the
- * plain JVM (no Robolectric, no emulator) via `./gradlew :core:testDebugUnitTest` from
- * `packages/native/android`. The same sources are also vendored into `@appduct/react-native` by
+ * `packages/native/android` Gradle project. Runs on the plain JVM (no Robolectric, no emulator) via
+ * `./gradlew :core:testDebugUnitTest` from `packages/native/android`. The same sources are also
+ * vendored into `@appduct/react-native` by
  * `scripts/sync-native-core.mjs`, but these tests are not -- they exercise the canonical copy only.
  *
  * `PinningTrustManager`/`computeSpkiPin` are covered by [AppductSpkiPinTest], which runs in the
@@ -82,7 +82,7 @@ class AppductConnectionManagerTest {
         assertFalse(isLocalIpv4Address("1.2.3.4.5"))
     }
 
-    // MARK: - Explicit trust mode (resolveTrustedPins) — docs/tasks/05-explicit-trust-mode.md
+    // MARK: - Explicit trust mode (resolveTrustedPins)
 
     private val embeddedPins = setOf("sha256/embedded-pin")
     private val linkPinValue = "sha256/link-pin"
@@ -228,7 +228,7 @@ class AppductConnectionManagerTest {
         assertNull(parseTrustMetadataValue(42))
     }
 
-    // MARK: - getConstants()'s build config (docs/tasks/07-native-module-constants.md)
+    // MARK: - getConstants()'s build config
 
     // Every table row from the resolveTrustedPins matrix above must map to a build config that
     // agrees on `hasEmbeddedPins` with whether a real connect() would have used embedded pins, and

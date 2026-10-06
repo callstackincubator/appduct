@@ -214,7 +214,7 @@ export type DaemonStopCommandData = {
   };
 };
 
-/** `appduct doctor <artifact>`: artifact-level Appduct inclusion report (docs/tasks/08). */
+/** `appduct doctor <artifact>`: artifact-level Appduct inclusion report. */
 export type DoctorCommandData = {
   artifact: string;
   platform: "ios" | "android";

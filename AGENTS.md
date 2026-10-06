@@ -15,7 +15,7 @@ the daemon, CLI, MCP server and SDKs fit together.
 | `playground`, `playground-native` | Expo app and native apps registering the same five demo tools |
 | `skills/appduct` | The skill shipped to Appduct users; not for working on this repo |
 | `.agents/` | Agent resources: `memory/` (curated `LESSONS.md` read by section, raw `INBOX.md` write-only), `scripts/` (worktree create and remove, also wired as Claude Code hooks) |
-| `docs/` | Architecture, protocol, security, tools; `docs/tasks` is a historical design record |
+| `docs/` | Contributor docs: architecture, protocol, `internal/`. User docs live in `website/` |
 
 ## Commands
 
@@ -82,7 +82,7 @@ effort however it is started, and sees only the arguments it was invoked with.
 | Designing a feature too big for one PR, or sizing one | `design-feature` | opus | high | yes |
 | Turning a request or a found bug into an issue (interviews first) | `file-issue` | sonnet | medium | no |
 | Running the app on a simulator and driving it through the CLI | `e2e-device` | sonnet | low | yes |
-| Writing or editing anything an Appduct user reads: READMEs, `docs/`, website, the shipped skill, CLI help, error messages | `writing-user-docs` | none | none | no |
+| Writing or editing anything an Appduct user reads: READMEs, the website, the shipped skill, CLI help, error messages | `writing-user-docs` | none | none | no |
 | Adding, amending or reviewing an entry in `CHANGELOG.md` | `writing-changelog` | none | none | no |
 | Cutting a release | `cut-release` | sonnet | low | no |
 | Curating agent memory (weekly, or when the inbox has notes) | `review-memory` | opus | high | yes |

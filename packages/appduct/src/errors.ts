@@ -9,7 +9,7 @@ const EXIT_CODE_BY_ERROR_TYPE: Record<CliErrorType, number> = {
   // EX_NOINPUT (66): "an input file did not exist or was not readable" — `doctor` throws this for a
   // missing external tool or an unreadable/corrupt artifact, deliberately distinct from every other
   // code here so a release pipeline can't mistake "we couldn't tell" for either a clean pass or an
-  // assertion failure (docs/tasks/08-appduct-doctor.md).
+  // assertion failure.
   inspection_error: 66,
   connection_error: 70,
   session_error: 71,

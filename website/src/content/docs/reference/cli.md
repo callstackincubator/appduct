@@ -1,14 +1,14 @@
 ---
 title: CLI reference
-description: Every appduct command, flag, environment variable, config file key, exit code, MCP tool, and the appduct/client API.
+description: Every appduct command, flag, environment variable, config file key, exit code, error type, MCP tool, and the appduct/client API.
 sidebar:
   order: 1
 ---
 
 For task-based instructions, see [Use the CLI](/appduct/guides/cli/). Run `appduct <command> --help` for a command's flags on your installed version.
 
-Every command is `appduct <noun> <verb> [selector] [args]` — `sessions`, `tools`, and `events`
-each work like `appduct daemon run|start|stop|status` already does. Commands that target a device
+Most commands are `appduct <noun> <verb> [selector] [args]`: a noun (`sessions`, `tools`, `events`,
+`daemon`) followed by what to do with it, such as `ls`, `call`, or `tail`. Commands that target a device
 take an optional `[selector]`: a session alias or id from `appduct sessions ls`. Leave it out when
 exactly one device is connected.
 
@@ -190,7 +190,35 @@ Manages the background service. It starts on its own, so you rarely need these.
 | `72` | Tool error | `tool_not_found`, `tool_execution_error`, `tool_timeout` |
 | `77` | Call denied | `policy_denied` |
 
-With `--json`, the error's `type` field names the exact error. See [Error types](/appduct/reference/protocol/#error-types).
+With `--json`, the error's `type` field names the exact error. See [Error types](#error-types).
+
+## Error types
+
+A failed tool call or session lookup reports one of these as its `type`, the same in a CLI `--json` error, an `AppductError` in `appduct/client`, and an MCP tool error.
+
+**From the app:**
+
+| Type | Meaning |
+| --- | --- |
+| `tool_not_found` | No tool with that name is registered |
+| `tool_input_validation_error` | Arguments didn't match the input schema |
+| `tool_output_validation_error` | The result didn't match the output schema |
+| `tool_execution_error` | The handler threw |
+| `tool_serialization_error` | The result couldn't be converted to JSON |
+| `tool_timeout` | The call ran past its time limit |
+| `tool_cancelled` | The caller cancelled the call |
+
+**From the background service:**
+
+| Type | Meaning |
+| --- | --- |
+| `no_session` | No device is connected, and no selector was given |
+| `ambiguous_session` | More than one device is connected; pass a selector |
+| `unknown_session` | No session matches the selector |
+| `session_not_active` | The session isn't active |
+| `session_suspended` | The device disconnected during the call, or the app is in the background. The message says which; bring the app to the foreground to resume |
+| `policy_denied` | [Policy](/appduct/guides/security/#limit-what-callers-can-run) refused the call. Changing config, not retrying, fixes it. |
+| `invalid_request` | The request itself was malformed |
 
 ## Environment variables
 
@@ -269,7 +297,7 @@ Default location `~/.appduct/config.json`. Every key is optional. Read when the 
 | `appduct_wait_for_session` | `sessionId`, `timeoutMs?` | Resolves when the device connects |
 | `appduct_list_events` | `selector?`, `name?` (glob, e.g. `"cart.*"`), `limit?` (default 50), `offset?` | `{ session, total, limit, events }`, each event `{ name, signature, description }`, plus `payload_schema` when `name` is an exact name |
 | `appduct_events` | `selector?`, `since?`, `limit?` (default 50), `name?` (glob, e.g. `"cart.*"`), `payloadMaxBytes?` (default 4096) | `{ events, cursor, dropped, remaining }`, each event `{ name, payload, ts, seq, sessionId, alias }`, or, once truncated, `{ name, payloadPreview, truncated: true, payloadBytes, ts, seq, sessionId, alias }` |
-| `appduct_wait_for_event` | `selector?`, `name`, `match?`, `since?`, `timeoutMs?` (default 120,000; max 1,500,000) | The matching event |
+| `appduct_wait_for_event` | `selector?`, `name` (glob, e.g. `"cart.*"`; `"*"` for any event), `since?`, `timeoutMs?` (default 120,000; max 1,500,000), `payloadMaxBytes?` (default 4096) | The first matching event, `{ sessionId, alias, name, payload, ts, seq, dropped }`, with `payloadPreview`, `truncated: true`, and `payloadBytes` in place of `payload` when it's over the cap |
 
 Unknown arguments are rejected. A tool with policy `"prompt"` asks for approval through MCP elicitation.
 
@@ -296,7 +324,7 @@ import { connect, link, waitForSession, AppductError } from "appduct/client";
 | `call(name, args, { timeoutMs? })` | Calls a tool and returns its result. |
 | `events({ since?, limit? })` | App events retained since a cursor: `{ events, cursor, dropped, remaining }`. |
 | `events({ since?, limit?, payloadMaxBytes })` | Same, but a payload over `payloadMaxBytes` bytes comes back as `payloadPreview`/`payloadBytes` instead of `payload` — check `truncated` before reading it. |
-| `waitForEvent(name, { timeoutMs?, match?, since? })` | Waits for an app event. Checks retained events first. `timeoutMs` defaults to 30,000. |
+| `waitForEvent(name, { timeoutMs?, since?, payloadMaxBytes? })` | Waits for an app event whose name matches `name`, a glob like `"cart.*"`. Checks retained events first; pass `since` to wait only for events after a cursor. `timeoutMs` defaults to 30,000. With `payloadMaxBytes`, a larger payload comes back as `payloadPreview`/`payloadBytes` — check `truncated` before reading it. |
 | `close()` | Closes the connection. |
 
-Failures reject with `AppductError`, whose `type` is the [error type](/appduct/reference/protocol/#error-types).
+Failures reject with `AppductError`, whose `type` is the [error type](#error-types).

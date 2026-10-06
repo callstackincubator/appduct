@@ -1,10 +1,9 @@
 import AppductCore
 import SwiftUI
 
-/// A plain SwiftUI app consuming `AppductCore` directly -- no React Native, no Expo -- mirroring
-/// the API sketch in issue #48 phase 3 (`docs/tasks/18-ios-entry-points.md`). Compare with
-/// `playground/` (the Expo app): same five tools, same deep-link flow, but wired through
-/// `Appduct.shared` instead of `@appduct/react-native`.
+/// A plain SwiftUI app consuming `AppductCore` directly -- no React Native, no Expo -- mirroring /
+//the API sketch in issue #48 phase 3. Compare with / `playground/` (the Expo app): same five tools,
+//same deep-link flow, but wired through / `Appduct.shared` instead of `@appduct/react-native`.
 @main
 struct AppductPlaygroundApp: App {
   init() {

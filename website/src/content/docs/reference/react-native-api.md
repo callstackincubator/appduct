@@ -199,7 +199,7 @@ Optional. Add it only to [pin a build to your key](/appduct/guides/security/#pin
 | `allowPrivateLanOnly` | `true` | Only follow links that point to a local IPv4 address. |
 | `deepLinkScheme` | none | Warns at prebuild if this scheme isn't in `expo.scheme`. |
 
-Run prebuild again after changing these. The removed options `include` and `enableInReleaseBuilds` fail prebuild with a message naming the replacement, `APPDUCT_ENABLED`.
+Run prebuild again after changing these. A config that sets `enableInReleaseBuilds` fails prebuild: which builds include Appduct is set by `APPDUCT_ENABLED` instead. See [Build variants](/appduct/guides/build-variants/).
 
 For bare React Native, set the equivalent native keys: see [Security](/appduct/guides/security/#pin-a-build-to-your-key).
 
