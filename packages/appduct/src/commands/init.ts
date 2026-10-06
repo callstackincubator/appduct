@@ -42,6 +42,11 @@
  * step via {@link discoverStaticProjectScheme} specifically so the two can never disagree about
  * what "discovery" means. `InitCommandData.source` names every origin this command itself can
  * produce.
+ *
+ * One read does go above the root, and it is not an exception to the rule above:
+ * {@link declaresReactNative} walks up a bounded number of directories for a `package.json`, which
+ * chooses which wiring *hint* to print and writes nothing. Nothing that lands in the file `init`
+ * writes is inherited from a parent directory.
  */
 
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
