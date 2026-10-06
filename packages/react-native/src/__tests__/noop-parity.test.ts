@@ -3,7 +3,7 @@ import { z as z3 } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 import { AppductDisabledError } from "../Appduct.types";
-import type { CordierePublicApi } from "../public-api";
+import type { AppductPublicApi } from "../public-api";
 
 (globalThis as { __DEV__?: boolean }).__DEV__ = true;
 
@@ -26,7 +26,7 @@ vi.mock("react-native", () => ({
 }));
 
 describe("noop parity: type-level (see also public-api.ts's doc comment)", () => {
-  test("both entries structurally satisfy CordierePublicApi", async () => {
+  test("both entries structurally satisfy AppductPublicApi", async () => {
     const realModule = await import("../index");
     const noopModule = await import("../noop");
 
@@ -34,10 +34,10 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
     // Vitest strips types at runtime, so this is a signpost for the reader, not the enforcement,
     // mirroring
     // `connect-options-parity.test.ts`'s pattern.
-    const realSatisfiesPublicApi: CordierePublicApi = realModule;
-    const noopSatisfiesPublicApi: CordierePublicApi = noopModule;
+    const realSatisfiesPublicApi: AppductPublicApi = realModule;
+    const noopSatisfiesPublicApi: AppductPublicApi = noopModule;
 
-    const names: (keyof CordierePublicApi)[] = [
+    const names: (keyof AppductPublicApi)[] = [
       "registerTool",
       "createToolGroup",
       "useAppductTool",
@@ -76,7 +76,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
     // must type-check against BOTH entries, and each `handler` must receive the inferred argument
     // type — a bare raw schema gives `Record<string, unknown>`, `jsonSchema<T>()` gives `T`, and a
     // pair gives the Standard Schema's own output type.
-    const registrars: CordierePublicApi["registerTool"][] = [
+    const registrars: AppductPublicApi["registerTool"][] = [
       realModule.registerTool,
       noopModule.registerTool,
     ];
@@ -112,7 +112,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
 
     // A group-bound registrar infers handler args exactly like `registerTool`, and refuses a
     // registration that tries to set its own `group`.
-    const groupFactories: CordierePublicApi["createToolGroup"][] = [
+    const groupFactories: AppductPublicApi["createToolGroup"][] = [
       realModule.createToolGroup,
       noopModule.createToolGroup,
     ];
@@ -147,7 +147,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
     const realModule = await import("../index");
     const noopModule = await import("../noop");
 
-    // `CordierePublicApi` alone would not catch one entry silently dropping the third `options`
+    // `AppductPublicApi` alone would not catch one entry silently dropping the third `options`
     // parameter — TS structurally accepts a function with fewer parameters where more are
     // expected, so `{ enabled }` support could drift without this failing at the type level.
     // Both entries build `useAppductTool` from the same `createUseAppductTool` factory

@@ -32,7 +32,7 @@ export type AppductToolGroupRegistrar = <
  * Both entries are typed against this single interface so they cannot drift — see
  * `__tests__/noop-parity.test.ts`, which mirrors the pattern of `connect-options-parity.test.ts`.
  */
-export type CordierePublicApi = {
+export type AppductPublicApi = {
   registerTool<
     TInputSchema extends AppductRuntimeSchema | undefined,
     TOutputSchema extends AppductRuntimeSchema | undefined,
@@ -85,3 +85,6 @@ export type CordierePublicApi = {
 
   getAppductBuildConfig(): AppductBuildConfig;
 };
+
+/** The name this type shipped under before the product was called Appduct. */
+export type CordierePublicApi = AppductPublicApi;
