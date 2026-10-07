@@ -53,7 +53,7 @@ internal class AppductToolInvoker(
         try {
             sendWire(json.toString())
         } catch (e: Throwable) {
-            onError(AppductUnifiedError(phase = "tool", message = "Failed to send a tool response frame.", cause = e))
+            onError(AppductUnifiedError(phase = "tool", message = e.sendFailureMessage("Failed to send a tool response frame."), cause = e))
         }
     }
 
@@ -136,13 +136,20 @@ internal class AppductToolInvoker(
                             return@launch
                         }
                     withContext(NonCancellable) {
-                        sendSafely(
-                            JSONObject()
-                                .put("type", "tool_result")
-                                .put("session_id", sessionId)
-                                .put("id", callId)
-                                .put("result", jsonResult),
-                        )
+                        try {
+                            sendWire(
+                                JSONObject()
+                                    .put("type", "tool_result")
+                                    .put("session_id", sessionId)
+                                    .put("id", callId)
+                                    .put("result", jsonResult)
+                                    .toString(),
+                            )
+                        } catch (e: AppductFrameTooLargeError) {
+                            sendToolError(sessionId, callId, "tool_serialization_error", e.message!!)
+                        } catch (e: Throwable) {
+                            onError(AppductUnifiedError(phase = "tool", message = "Failed to send a tool response frame.", cause = e))
+                        }
                     }
                 } catch (e: TimeoutCancellationException) {
                     withContext(NonCancellable) {

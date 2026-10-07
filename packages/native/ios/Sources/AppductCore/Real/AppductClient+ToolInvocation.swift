@@ -127,6 +127,8 @@ extension AppductClient {
           "result": value,
         ])
       )
+    } catch let tooLarge as AppductFrameTooLargeError {
+      await sendToolError(id: id, sessionId: sessionId, type: "tool_serialization_error", message: tooLarge.message)
     } catch {
       emitError(
         AppductUnifiedErrorEvent(phase: "tool", message: "Failed to send a tool response frame.")
@@ -187,7 +189,9 @@ extension AppductClient {
     do {
       try await sendWire(.object(object))
     } catch {
-      emitError(AppductUnifiedErrorEvent(phase: "tool", message: "Failed to send a tool response frame."))
+      emitError(
+        AppductUnifiedErrorEvent(phase: "tool", message: sendFailureMessage(error, fallback: "Failed to send a tool response frame."))
+      )
     }
   }
 
@@ -211,7 +215,9 @@ extension AppductClient {
         ])
       )
     } catch {
-      emitError(AppductUnifiedErrorEvent(phase: "tool", message: "Failed to send a tool response frame."))
+      emitError(
+        AppductUnifiedErrorEvent(phase: "tool", message: sendFailureMessage(error, fallback: "Failed to send a tool response frame."))
+      )
     }
   }
 

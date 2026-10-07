@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: a tool result over 256 KiB no longer drops the session.** The call fails with `tool_serialization_error` and a message naming the size and the limit; an oversized event is reported to the app's error listener instead. Applies to iOS, Android, React Native and web.
 - **Docs: which browsers and launch setups connect a web page without a permission prompt, and how to choose between DevTools and WebSocket.** See [Drive a web page](https://callstackincubator.github.io/appduct/guides/web-pages/) and [Security](https://callstackincubator.github.io/appduct/guides/security/#devtools-access).
 - **New: `appduct_connect({ target: "web", url, browserUrl })` and `appduct sessions link --open web <url> --browser-url <u>` attach a tab of a Chrome launched with `--remote-debugging-port`, with no permission prompt on `https` pages.** When several tabs match, the error lists their target ids; pass one as `targetId` or `--target-id`.
 - **New: `attachPage(page, { link })` in `appduct/client` runs a web page's session through a Playwright page, so an `https` page connects with no network connection of its own.** A reload resumes the session; a popup or a page in a new target is not relayed.

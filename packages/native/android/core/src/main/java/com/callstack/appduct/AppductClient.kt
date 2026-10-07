@@ -403,7 +403,7 @@ internal class AppductClient private constructor(
         try {
             rawSend(message.toString())
         } catch (e: Throwable) {
-            emitError(AppductUnifiedError(phase = "socket", message = "Failed to send event \"$name\".", cause = e))
+            emitError(AppductUnifiedError(phase = "socket", message = e.sendFailureMessage("Failed to send event \"$name\"."), cause = e))
         }
     }
 
@@ -931,7 +931,7 @@ internal class AppductClient private constructor(
         try {
             rawSend(message.toString())
         } catch (e: Throwable) {
-            emitError(AppductUnifiedError(phase = "tool", message = "Failed to send the tool registry snapshot.", cause = e))
+            emitError(AppductUnifiedError(phase = "tool", message = e.sendFailureMessage("Failed to send the tool registry snapshot."), cause = e))
         }
 
         if (eventSnapshot == null) return@withLock
@@ -959,7 +959,7 @@ internal class AppductClient private constructor(
         try {
             rawSend(frame.toString())
         } catch (e: Throwable) {
-            emitError(AppductUnifiedError(phase = "tool", message = "Failed to sync the event registry.", cause = e))
+            emitError(AppductUnifiedError(phase = "tool", message = e.sendFailureMessage("Failed to sync the event registry."), cause = e))
         }
     }
 
@@ -981,12 +981,18 @@ internal class AppductClient private constructor(
             try {
                 rawSend(json.toString())
             } catch (e: Throwable) {
-                emitError(AppductUnifiedError(phase = "tool", message = "Failed to sync the tool registry.", cause = e))
+                emitError(AppductUnifiedError(phase = "tool", message = e.sendFailureMessage("Failed to sync the tool registry."), cause = e))
             }
         }
     }
 
-    private suspend fun rawSend(json: String) =
+    private suspend fun rawSend(json: String) {
+        val bytes = json.toByteArray(Charsets.UTF_8).size
+        if (bytes > APPDUCT_MAX_FRAME_BYTES) throw AppductFrameTooLargeError(bytes)
+        sendToTransport(json)
+    }
+
+    private suspend fun sendToTransport(json: String) =
         suspendCancellableCoroutine<Unit> { cont ->
             transport.send(json) { error ->
                 if (error != null) cont.resumeWithException(error) else cont.resume(Unit)

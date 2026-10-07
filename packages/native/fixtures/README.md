@@ -127,6 +127,20 @@ ever terminal, matched wholesale by code, never by inspecting the reason string*
 
 Hand-written directly as JSON, sourced from the table in `docs/PROTOCOL.md` §7.
 
+### `frame-limits.json`
+
+An object: `{ limitBytes, vectors }`, with `limitBytes` the 262,144-byte cap on one frame
+(`docs/PROTOCOL.md` section 3) and each vector `{ name, frameBytes, filler, sent }`. A suite builds
+a frame of exactly `frameBytes` UTF-8 bytes through its public API: it first sends the same
+event, or answers a tool call with the same tool id length, using an empty string to measure the
+frame's size without padding, then sends a string of `filler` characters, topped up with `a`, that
+adds the missing bytes. `sent: true` means the frame goes out as built; `sent: false` means the SDK
+refuses it, answers a tool call with `tool_error` of type `tool_serialization_error` or reports an
+event to the error listener, and the message is exactly
+`Appduct frame is <frameBytes> bytes, over the 262144-byte limit.` Either way the session stays
+active. The multibyte vectors stay under the limit in characters while going over it in bytes.
+Suites also check that a tool registry snapshot over the limit is reported to the error listener.
+
 ### `spki-pin.json`
 
 A single object: `{ description, certificateDerBase64, expectedPin }`. The certificate is the
