@@ -94,6 +94,13 @@ final class SessionScenariosTests: XCTestCase {
 
 // MARK: - Replay
 
+/// `NSLock.withLock` needs macOS 13 / iOS 16, above this package's deployment targets.
+private func scopedLock<T>(_ lock: NSLock, _ body: () -> T) -> T {
+  lock.lock()
+  defer { lock.unlock() }
+  return body()
+}
+
 private struct ScenarioFailure: Error, CustomStringConvertible {
   let description: String
 }
@@ -107,11 +114,11 @@ private final class OutputQueue: @unchecked Sendable {
   func push(_ object: [String: Any]) {
     let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .fragmentsAllowed])
     let text = String(decoding: data, as: UTF8.self)
-    lock.withLock { items.append(text) }
+    scopedLock(lock) { items.append(text) }
   }
 
   func pop() -> String? {
-    lock.withLock { items.isEmpty ? nil : items.removeFirst() }
+    scopedLock(lock) { items.isEmpty ? nil : items.removeFirst() }
   }
 }
 
@@ -121,11 +128,11 @@ private final class ResponseBox: @unchecked Sendable {
   private var responses: [String: Result<JSONValue, AppductToolHandlerError>] = [:]
 
   func put(_ response: Result<JSONValue, AppductToolHandlerError>, for call: String) {
-    lock.withLock { responses[call] = response }
+    scopedLock(lock) { responses[call] = response }
   }
 
   func take(_ call: String) -> Result<JSONValue, AppductToolHandlerError>? {
-    lock.withLock { responses.removeValue(forKey: call) }
+    scopedLock(lock) { responses.removeValue(forKey: call) }
   }
 }
 
