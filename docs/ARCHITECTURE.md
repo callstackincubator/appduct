@@ -64,7 +64,16 @@ Browsers reach the daemon on a second listener, `ws://127.0.0.1:<webPort>`, not 
   physical phones.
 - Web pages connect to a second listener: plain `ws://` on `127.0.0.1` and `webPort`, never
   reachable from other machines. A browser can't pin the key, so the listener refuses an upgrade
-  with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`. A link is claimable
+  with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`. A page the test runner
+  drives through Playwright can skip that listener: `attachPage(page, { link })` (`appduct/client`)
+  exposes a binding on the page, and `src/devtools-relay/` passes the page's session frames to the
+  same listener over a Node socket, which sends no `Origin`. The page selects it with
+  `connect(link, { transport: "devtools" })`, so an `https` page needs no `webOrigins` entry and
+  opens no connection of its own. One binding serves a page for its lifetime; a later `attachPage`
+  re-points it at the new link, which suspends the first link's session for its grace period; until
+  it expires, `connect()` with no selector is `ambiguous_session`, so select the new session with
+  `connect({ selector: link.sessionId })` or `waitForSession`. The binding belongs to the page's target, so a popup or a navigation
+  that creates a new target is not relayed. A link is claimable
   only on the listener of its transport (`link.create`'s `transport`, §5). The page side is
   `packages/web` (`@appduct/web`): a TypeScript port of the native session core under the same SDK
   layer as React Native. It has three entries. `.` resolves by export condition: `development`
@@ -72,7 +81,7 @@ Browsers reach the daemon on a second listener, `ws://127.0.0.1:<webPort>`, not 
   nothing, opens no connection, never defines `window.__APPDUCT__`, and warns once on `connect()`.
   `./enabled` is the real client, importable explicitly. It reads `#appduct=` on load, removes it
   from the address bar and claims, resumes from `sessionStorage` after a reload, and publishes
-  `window.__APPDUCT__.connect` for the `script` that `appduct_connect` returns.
+  `window.__APPDUCT__.connect` (and `receive`, which the relay calls) for the `script` that `appduct_connect` returns.
   `@appduct/web/react` adds `useAppductTool`, built from the same `createUseAppductTool` as React
   Native's; React Native's `browser` export condition resolves to `@appduct/web` so a web build
   needs no web-specific code. Without a `window` (server rendering) every call does nothing.
@@ -1088,6 +1097,8 @@ packages/
     src/mcp/       stdio MCP server
     src/events/    waitForAppEvent, the drain-then-live event wait shared by mcp/ and client/
     src/client/    appduct/client, the programmatic client for test runners
+    src/devtools-relay/  relays a page's session frames between a Playwright binding and the
+                   daemon's web listener (`attachPage` wires it); ports with memory fakes beside them
   react-native/    @appduct/react-native (entries: ., /auto, /noop, /metro, app.plugin.js). Implements
                    `AppductCore` with its TurboModule and keeps the public API; depends only on
                    @appduct/shared — no third-party runtime deps, which is why no

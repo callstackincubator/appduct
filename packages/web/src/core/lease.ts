@@ -1,3 +1,5 @@
+import type { TransportKind } from "./ports.js";
+
 const SCHEMA_VERSION = 1;
 const MAX_ID_LENGTH = 128;
 const MAX_STRING_LENGTH = 4096;
@@ -10,6 +12,8 @@ export type ResumeLease = {
   resumeToken: string;
   alias: string;
   endpoint: { ip: string; port: number };
+  /** What the session was claimed over, so a reload resumes over the same one. */
+  transport: TransportKind;
   keepaliveIntervalS: number;
   graceS: number;
   /** When the socket was first lost, in unix milliseconds; null while it is up. */
@@ -58,6 +62,8 @@ export const parseResumeLease = (raw: string | null): ResumeLease | null => {
     resumeToken: record.resumeToken,
     alias: record.alias,
     endpoint: { ip: endpoint.ip as string, port: endpoint.port as number },
+    // Leases stored before the binding existed have no transport: they are WebSocket sessions.
+    transport: record.transport === "devtools" ? "devtools" : "websocket",
     keepaliveIntervalS: record.keepaliveIntervalS,
     graceS: record.graceS,
     disconnectedAtMs,

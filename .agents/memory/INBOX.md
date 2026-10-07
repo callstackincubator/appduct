@@ -72,3 +72,7 @@ One note per PR that hit friction, four lines:
   What went wrong: a new entry (React Native's web entry) re-exported a subset of the API its shared types promise, so a documented setup type-checked but crashed on web; and after merging #173, a new requirement (`withAppduct` to connect RN web in development) went undocumented. Both needed extra review rounds.
   Would have prevented it: when adding a platform entry behind shared types, add it to the export-parity tests in the same commit; when a merge changes what setup is required, grep docs/, website/ and skills/ for the setup steps and update them in the merge.
   Cost: review round
+- 2026-10-06 #183 skill: implement-issue
+  What went wrong: attachPage registered a page binding per call, so a second attach on the same page threw, and the fix's re-attach semantics then needed a second review round.
+  Would have prevented it: For any API that installs per-target state (bindings, listeners), write a test that calls it twice on the same target before opening the PR.
+  Cost: review round

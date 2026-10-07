@@ -47,8 +47,14 @@ export type DeviceFields = {
   os: string;
 };
 
+/** How a session reaches the daemon: a page `WebSocket`, or the Playwright binding a relay outside
+ * the page carries to the daemon. */
+export type TransportKind = "websocket" | "devtools";
+
 export type WebCorePorts = {
   transport: Transport;
+  /** The binding transport, for a page a relay is attached to. */
+  devtoolsTransport: Transport;
   sessionStore: SessionStore;
   clock: Clock;
   /** A number in [0, 1), used for reconnect jitter. */

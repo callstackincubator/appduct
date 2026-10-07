@@ -1,7 +1,7 @@
 import { isSessionAckMessage, type SessionAckMessage } from "@appduct/shared";
 
 import { newResumeLease, parseResumeLease, type ResumeLease } from "./lease.js";
-import type { Socket, WebCorePorts } from "./ports.js";
+import type { Socket, TransportKind, WebCorePorts } from "./ports.js";
 
 const PROTOCOL_VERSION = 2;
 
@@ -9,6 +9,7 @@ export type ConnectionOptions = {
   ip: string;
   port: number;
   sessionId: string;
+  transport: TransportKind;
   /** Sends `session_claim`. */
   token?: string;
   /** Sends `session_resume` instead. */
@@ -59,7 +60,7 @@ type Current = {
  * daemon's pings itself and offers no way to send them.
  */
 export const createConnection = (ports: WebCorePorts, handlers: ConnectionHandlers): Connection => {
-  const { transport, sessionStore, clock, device } = ports;
+  const { sessionStore, clock, device } = ports;
   let current: Current | undefined;
 
   const markDisconnected = (sessionId: string) => {
@@ -129,6 +130,7 @@ export const createConnection = (ports: WebCorePorts, handlers: ConnectionHandle
             resumeToken: message.resume_token,
             alias: message.alias,
             endpoint: { ip: entry.options.ip, port: entry.options.port },
+            transport: entry.options.transport,
             keepaliveIntervalS: message.keepalive_interval_s,
             graceS: message.grace_s,
           }),
@@ -151,7 +153,7 @@ export const createConnection = (ports: WebCorePorts, handlers: ConnectionHandle
       const entry: Current = { options, socket: undefined, phase: "connecting", lastError: undefined, closedByCore: undefined };
       current = entry;
       try {
-        entry.socket = transport.open(formatUrl(options.ip, options.port), {
+        entry.socket = (options.transport === "devtools" ? ports.devtoolsTransport : ports.transport).open(formatUrl(options.ip, options.port), {
           open() {
             if (current !== entry || !entry.socket) return;
             try {

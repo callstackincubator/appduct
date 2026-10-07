@@ -22,6 +22,7 @@ const load = (
   href: string,
   ports = {
     transport: createMemoryTransport(),
+    devtoolsTransport: createMemoryTransport(),
     sessionStore: createMemorySessionStore(),
     clock: createManualClock(START_MS),
   },
@@ -117,6 +118,37 @@ describe("the plain-JS entry", () => {
 
     expect(reloaded.ports.transport.connections).toHaveLength(2);
     expect(reloaded.socket().frames()[0]).toMatchObject({ type: "session_resume", resume_token: "resume-9" });
+  });
+
+  it("claims over the devtools transport when connect asks for it, leaving the WebSocket transport unused", async () => {
+    const { appduct, ports } = load(PAGE);
+
+    const connecting = appduct.connect(payload, { transport: "devtools" });
+    const socket = ports.devtoolsTransport.connections.at(-1)!;
+    socket.open();
+    socket.receive(ack());
+    await connecting;
+
+    expect(socket.frames()[0]).toMatchObject({ type: "session_claim", session_id: SESSION_ID });
+    expect(ports.transport.connections).toEqual([]);
+  });
+
+  it("resumes over the devtools transport when the page reloads", async () => {
+    const first = load(PAGE);
+    const connecting = first.appduct.connect(payload, { transport: "devtools" });
+    first.ports.devtoolsTransport.connections.at(-1)!.open();
+    first.ports.devtoolsTransport.connections.at(-1)!.receive(ack({ resumeToken: "resume-9" }));
+    await connecting;
+
+    const reloaded = load(PAGE, first.ports);
+    reloaded.ports.devtoolsTransport.connections.at(-1)!.open();
+
+    expect(first.ports.devtoolsTransport.connections).toHaveLength(2);
+    expect(first.ports.devtoolsTransport.connections.at(-1)!.frames()[0]).toMatchObject({
+      type: "session_resume",
+      resume_token: "resume-9",
+    });
+    expect(first.ports.transport.connections).toEqual([]);
   });
 
   it("answers a call for a tool registered before the session was claimed", async () => {
