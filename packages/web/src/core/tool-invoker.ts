@@ -1,5 +1,6 @@
 import { DEFAULT_TOOL_TIMEOUT_MS } from "@appduct/shared";
 
+import { FrameTooLargeError } from "./connection.js";
 import type { Clock, TimerHandle } from "./ports.js";
 import type { ToolRegistry } from "./registry.js";
 
@@ -52,8 +53,8 @@ export const createToolInvoker = (deps: ToolInvokerDeps): ToolInvoker => {
   const send = (frame: { session_id: string } & Record<string, unknown>) => {
     try {
       deps.send(frame);
-    } catch {
-      deps.onSendError("Failed to send a tool response frame.");
+    } catch (error) {
+      deps.onSendError(error instanceof FrameTooLargeError ? error.message : "Failed to send a tool response frame.");
     }
   };
 
@@ -121,7 +122,15 @@ export const createToolInvoker = (deps: ToolInvokerDeps): ToolInvoker => {
         });
         return;
       }
-      send({ type: "tool_result", session_id: sessionId, id, result });
+      try {
+        deps.send({ type: "tool_result", session_id: sessionId, id, result });
+      } catch (error) {
+        if (error instanceof FrameTooLargeError) {
+          sendError(sessionId, id, { type: "tool_serialization_error", message: error.message });
+        } else {
+          deps.onSendError("Failed to send a tool response frame.");
+        }
+      }
     },
 
     progress(id, progress, message) {

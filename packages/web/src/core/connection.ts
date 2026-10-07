@@ -5,6 +5,16 @@ import type { Socket, TransportKind, WebCorePorts } from "./ports.js";
 
 const PROTOCOL_VERSION = 2;
 
+/** The daemon closes the socket with 1009 on a larger frame (PROTOCOL.md section 3). */
+const MAX_FRAME_BYTES = 262_144;
+
+/** An outgoing frame over the daemon's limit; refused before it reaches the socket. */
+export class FrameTooLargeError extends Error {
+  constructor(bytes: number) {
+    super(`Appduct frame is ${bytes} bytes, over the ${MAX_FRAME_BYTES}-byte limit.`);
+  }
+}
+
 export type ConnectionOptions = {
   ip: string;
   port: number;
@@ -189,8 +199,11 @@ export const createConnection = (ports: WebCorePorts, handlers: ConnectionHandle
       if (frame.session_id !== entry.options.sessionId) {
         throw new Error("Outgoing Appduct message session_id does not match the active session.");
       }
+      const text = JSON.stringify(frame);
+      const bytes = new TextEncoder().encode(text).length;
+      if (bytes > MAX_FRAME_BYTES) throw new FrameTooLargeError(bytes);
       try {
-        entry.socket.send(JSON.stringify(frame));
+        entry.socket.send(text);
       } catch {
         const message = "Appduct message could not be sent because the socket is closing.";
         fail(entry, message, 1011, "send_failed");
