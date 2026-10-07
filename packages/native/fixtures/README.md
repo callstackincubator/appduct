@@ -20,6 +20,9 @@ Consumers:
   (JUnit): every file except `event-registry-frames.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/AppductEventRegistryTest.kt`
   (JUnit): `event-registry-frames.json`
+- `packages/web/src/__tests__/session-scenarios.test.ts` (vitest) and
+  `packages/native/ios/Tests/AppductCoreTests/SessionScenariosTests.swift` (XCTest):
+  `session-scenarios.json` only. The Kotlin core does not replay it yet.
 
 ## The rule
 
@@ -126,6 +129,63 @@ ever terminal, matched wholesale by code, never by inspecting the reason string*
 1001, 1006, or anything unrecognized) is worth a reconnect attempt inside the grace window.
 
 Hand-written directly as JSON, sourced from the table in `docs/PROTOCOL.md` §7.
+
+### `session-scenarios.json`
+
+Array of `{ name, startMs, random, steps }`. Each scenario is a script for one fresh core: `startMs`
+is the clock's starting Unix time in milliseconds, `random` is the constant the jitter source
+returns, and `steps` run in order. With `random` at 0.5, the first reconnect delay is 250 ms, and
+the second consecutive one 500 ms. The scenarios here cover the paths where session behaviour has
+broken before: resuming with the rotated token after a drop, at the jittered delay and not before;
+grace expiry reporting the session lost; and a terminal `1008` that never reconnects, even after
+time passes the 30 s backoff cap.
+
+A step either drives the core, `{ "drive": <name>, ... }`, or expects an output,
+`{ "expect": <name>, ... }`.
+
+| Drive | Fields | Does |
+| --- | --- | --- |
+| `connect` | `sessionId`, `token`, `expiresAt` | calls `connect` with a claim token; `expiresAt` is Unix seconds |
+| `receive` | `frame` | the daemon sends a frame on the newest connection |
+| `close` | `code`, `reason?` | the daemon closes the newest connection |
+| `drop` | | the newest connection dies with no close code |
+| `advance` | `ms` | moves the clock forward, running every timer that falls due |
+| `registerTool` | `descriptor` | registers a tool, in wire form; a call to it is answered by `respond` |
+| `respond` | `call`, `result` or `error` | answers the call with that id; an `error` is `{ type, message }` |
+| `disconnect` | | calls `disconnect` |
+
+Outputs are on two channels. The wire channel is what the core asked of the connection:
+
+| Expect | Fields | Is |
+| --- | --- | --- |
+| `connect` | `mode` (`claim` or `resume`), `sessionId`, `resumeToken?` | a new connection whose first frame is `session_claim` or `session_resume` |
+| `send` | `frame` | any later frame the core sent |
+
+The app channel is what the core told the app:
+
+| Expect | Fields | Is |
+| --- | --- | --- |
+| `state` | `state`, `reason?` | a `stateChange` event |
+| `session` | `type`, `reason?` | a `sessionChange` event |
+| `call` | `name`, `args` | a tool call handed to the registered tool |
+| `cancel` | `call`, `reason` | that call being cancelled |
+
+Each channel is strictly ordered, and the order between the two is not asserted, because the
+actor-based cores do not fix it. An `expect` waits, with a time limit, for the next output of its
+channel and fails if that output differs; frames compare as JSON, ignoring key order. An output the
+steps never expect fails the scenario once the steps run out, which is how "does not reconnect"
+and "does not resume yet" are written: nothing is expected, and the leftover check catches it.
+Every connection that gets an ack is followed by a `tool_registry_snapshot` `send` (an empty
+`tools` array when none are registered), so a scenario expects it.
+
+Each runner maps the steps onto its core's existing fakes. The TypeScript runner opens each new
+fake socket itself and turns the first frame it sees into the `connect` output. The Swift runner
+reads the `connect` call and the `send` calls from its fake transport, which sees the connect
+options rather than the frame. A scenario that must not depend on how a core orders its work
+consumes every output before the next drive step.
+
+Hand-written directly as JSON. Each runner also has inline scenarios that must fail, for a missing,
+an extra and an out-of-order output.
 
 ### `spki-pin.json`
 
