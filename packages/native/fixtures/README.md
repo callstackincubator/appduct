@@ -20,9 +20,10 @@ Consumers:
   (JUnit): every file except `event-registry-frames.json` and `session-scenarios.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/AppductEventRegistryTest.kt`
   (JUnit): `event-registry-frames.json`
-- `packages/web/src/__tests__/session-scenarios.test.ts` (vitest) and
-  `packages/native/ios/Tests/AppductCoreTests/SessionScenariosTests.swift` (XCTest):
-  `session-scenarios.json` only. The Kotlin core does not replay it yet.
+- `packages/web/src/__tests__/session-scenarios.test.ts` (vitest),
+  `packages/native/ios/Tests/AppductCoreTests/SessionScenariosTests.swift` (XCTest) and
+  `packages/native/android/core/src/test/java/com/callstack/appduct/SessionScenariosTest.kt`
+  (JUnit): `session-scenarios.json` only.
 
 ## The rule
 
@@ -179,9 +180,10 @@ Every connection that gets an ack is followed by a `tool_registry_snapshot` `sen
 `tools` array when none are registered), so a scenario expects it.
 
 Each runner maps the steps onto its core's existing fakes. The TypeScript runner opens each new
-fake socket itself and turns the first frame it sees into the `connect` output. The Swift runner
-reads the `connect` call and the `send` calls from its fake transport, which sees the connect
-options rather than the frame. A scenario that must not depend on how a core orders its work
+fake socket itself and turns the first frame it sees into the `connect` output. The Swift and
+Kotlin runners read the `connect` call and the `send` calls from their fake transport, which sees
+the connect options rather than the frame. The Kotlin runner runs the core on a test dispatcher and
+clock, so an `expect` finds its output once the scheduler has run, or never. A scenario that must not depend on how a core orders its work
 consumes every output before the next drive step.
 
 Hand-written directly as JSON. Each runner also has inline scenarios that must fail, for a missing,
