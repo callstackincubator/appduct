@@ -242,6 +242,73 @@ describe("session engine: full lifecycle", () => {
   }, 15_000);
 });
 
+describe("session engine: a replaced socket", () => {
+  const frames: Array<[string, (sessionId: string) => Record<string, unknown>]> = [
+    ["tool_registry_snapshot", (sessionId) => ({ type: "tool_registry_snapshot", session_id: sessionId, tools: [] })],
+    [
+      "tool_registry_delta",
+      (sessionId) => ({
+        type: "tool_registry_delta",
+        session_id: sessionId,
+        operation: "upsert",
+        tool: { name: "stale", description: "Sent by the replaced socket." },
+      }),
+    ],
+  ];
+
+  test.each(frames)("a %s from it, after the app resumed, leaves the tool list unchanged", async (_type, frame) => {
+    const { daemon, port } = await startTestDaemon();
+    const link = await createLinkAndDecode(daemon, port);
+
+    const oldSocket = await connectClient(daemon);
+    oldSocket.send(
+      JSON.stringify({ type: "session_claim", protocol_version: 2, session_id: link.sessionId, token: link.token }),
+    );
+    const ack = await nextMessage(oldSocket);
+
+    const toolsChanged = waitForEvent(daemon, "tools_changed");
+    oldSocket.send(
+      JSON.stringify({
+        type: "tool_registry_snapshot",
+        session_id: link.sessionId,
+        tools: [{ name: "ping", description: "Replies with pong." }],
+      }),
+    );
+    await toolsChanged;
+
+    // Hold the old socket's reads so it has not yet seen the daemon's close frame, as an app
+    // that sent a frame just before it noticed the daemon had replaced its connection would.
+    const rawOld = (oldSocket as unknown as { _socket: Socket })._socket;
+    rawOld.pause();
+
+    const newSocket = await connectClient(daemon);
+    const resumed = waitForEvent(daemon, "session_resumed");
+    newSocket.send(
+      JSON.stringify({
+        type: "session_resume",
+        protocol_version: 2,
+        session_id: link.sessionId,
+        resume_token: ack.resume_token,
+      }),
+    );
+    await nextMessage(newSocket);
+    await resumed;
+
+    oldSocket.send(JSON.stringify(frame(link.sessionId)));
+    const oldClosed = nextClose(oldSocket);
+    rawOld.resume();
+    // The daemon reads the stale frame before the close handshake completes.
+    await oldClosed;
+
+    const { tools } = (await rpcCall(daemon.paths.socketPath, "tools.list", { selector: link.sessionId })) as {
+      tools: Array<{ name: string }>;
+    };
+    expect(tools.map((tool) => tool.name)).toEqual(["ping"]);
+
+    newSocket.close();
+  });
+});
+
 describe("session engine: rejection matrix (daemon and other sessions survive every case)", () => {
   test("wrong token during claim closes 1008 without discarding the link", async () => {
     const { daemon, port } = await startTestDaemon();
