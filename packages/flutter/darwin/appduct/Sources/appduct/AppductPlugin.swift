@@ -112,3 +112,9 @@ public class AppductPlugin: NSObject, FlutterPlugin {
     #endif
   }
 }
+
+#if os(iOS)
+  // `addSceneDelegate` takes a `FlutterSceneLifeCycleDelegate`, which `FlutterPlugin` does not
+  // imply on iOS. The `scene(...)` methods above satisfy it.
+  extension AppductPlugin: FlutterSceneLifeCycleDelegate {}
+#endif

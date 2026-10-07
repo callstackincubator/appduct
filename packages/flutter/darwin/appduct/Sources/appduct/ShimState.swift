@@ -17,7 +17,8 @@ public struct ShimDevice {
 ///
 /// One instance per process (`shared`) holds the resume lease in memory: a hot restart keeps it
 /// and the process ending drops it. The first engine to call `activate` owns the shim; a second
-/// engine gets `owner: false` until the first detaches. Before an engine activates, no link is
+/// engine gets `owner: false` until the first detaches (iOS only: macOS never tells a plugin its
+/// engine went away, so there the first engine owns the shim for the life of the process). Before an engine activates, no link is
 /// claimed and nothing but the latest Appduct link is kept.
 public final class ShimState {
   public static let shared = ShimState()
