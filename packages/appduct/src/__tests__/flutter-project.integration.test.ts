@@ -161,6 +161,14 @@ describe("scheme discovery in a Flutter project", () => {
     );
   });
 
+  test("names both files when iOS and macOS declare different schemes", async () => {
+    const root = await makeProject({ ios: "iosapp", macos: "macapp" });
+
+    await expect(discoverStaticProjectScheme(root)).rejects.toThrow(
+      /ios[/\\]Runner[/\\]Info\.plist.*"iosapp".*macos[/\\]Runner[/\\]Info\.plist.*"macapp"/su,
+    );
+  });
+
   test("does not read android/app without a pubspec.yaml", async () => {
     const root = await makeProject({ android: "notflutter", pubspec: false });
 
