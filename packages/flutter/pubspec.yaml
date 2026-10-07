@@ -24,5 +24,7 @@ flutter:
         pluginClass: AppductPlugin
       ios:
         pluginClass: AppductPlugin
+        sharedDarwinSource: true
       macos:
         pluginClass: AppductPlugin
+        sharedDarwinSource: true
