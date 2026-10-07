@@ -227,9 +227,15 @@ final class FixturesConformanceTests: XCTestCase {
   }
 
   private func frames(_ transport: FakeTransportSession, ofType type: String) -> [[String: Any]] {
-    transport.sentMessages.compactMap { text in
+    rawFrames(transport, ofType: type).compactMap { text in
+      try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
+    }
+  }
+
+  private func rawFrames(_ transport: FakeTransportSession, ofType type: String) -> [String] {
+    transport.sentMessages.filter { text in
       let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
-      return object?["type"] as? String == type ? object : nil
+      return object?["type"] as? String == type
     }
   }
 
@@ -246,6 +252,7 @@ final class FixturesConformanceTests: XCTestCase {
       let (client, transport) = try await activeClient()
       let answer = StringBox()
       try client.registerTool(ToolDescriptor(name: "big", description: "Returns a string."), handler: { _, _ in .string(answer.value) })
+      try await waitUntil("the registry delta reached the wire") { !self.frames(transport, ofType: "tool_registry_delta").isEmpty }
       let call = { (id: String) in
         transport.simulateIncoming(
           "{\"type\":\"tool_call\",\"session_id\":\"session-1\",\"id\":\"\(id)\",\"name\":\"big\",\"args\":{}}"
@@ -254,14 +261,14 @@ final class FixturesConformanceTests: XCTestCase {
 
       call("id-a")
       try await waitUntil("the empty result reached the wire") { self.frames(transport, ofType: "tool_result").count == 1 }
-      let emptyFrameBytes = transport.sentMessages.last!.utf8.count
+      let emptyFrameBytes = rawFrames(transport, ofType: "tool_result")[0].utf8.count
 
       answer.value = Self.padding(frameBytes: frameBytes, filler: vector["filler"] as! String, emptyFrameBytes: emptyFrameBytes)
       call("id-b")
 
       if vector["sent"] as! Bool {
         try await waitUntil("\(name): the result reached the wire") { self.frames(transport, ofType: "tool_result").count == 2 }
-        XCTAssertEqual(transport.sentMessages.last!.utf8.count, frameBytes, name)
+        XCTAssertEqual(rawFrames(transport, ofType: "tool_result")[1].utf8.count, frameBytes, name)
       } else {
         try await waitUntil("\(name): a tool error reached the wire") { !self.frames(transport, ofType: "tool_error").isEmpty }
         XCTAssertEqual(frames(transport, ofType: "tool_result").count, 1, name)
