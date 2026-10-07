@@ -219,6 +219,16 @@ describe("appduct init in a Flutter project", () => {
     expect(steps).toContain("CFBundleURLSchemes");
   });
 
+  test("spells out the Android intent-filter for the discovered scheme", async () => {
+    const root = await makeProject({ android: "myapp" });
+
+    const steps = (await run(root)).nextSteps.join("\n");
+
+    expect(steps).toContain('<data android:scheme="myapp"/>');
+    expect(steps).toContain("android.intent.category.DEFAULT");
+    expect(steps).toContain("android.intent.category.BROWSABLE");
+  });
+
   test("names the permissions a LAN link needs on each platform", async () => {
     const root = await makeProject({ android: "myapp" });
 
