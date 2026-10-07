@@ -606,15 +606,30 @@ export const discoverNativeScheme = async (root: string): Promise<NativeSchemeDi
   const tried: string[] = [];
   const results: NativeSchemeProbeResult[] = [];
   // A Flutter project keeps its Android app in `android/app/`, so the Android probes treat
-  // `android/` as their root. The iOS walk already reaches `ios/Runner` and `macos/Runner`.
-  const androidRoot = (await isFlutterProject(root)) ? join(root, "android") : root;
+  // `android/` as their root, and the iOS plist probe runs once under `ios/` and once under `macos/`.
+  const flutter = await isFlutterProject(root);
+  const androidRoot = flutter ? join(root, "android") : root;
+
+  // The iOS walk stops at the first plist with a scheme, so a Flutter project's two apps are
+  // probed as separate sources and the conflict check below sees both.
+  const iosRoots = flutter ? [join(root, "ios"), join(root, "macos")] : [root];
 
   for (const [platform, probe] of PROBES) {
-    const outcome = await probe(platform === "android" ? androidRoot : root);
-    tried.push(...outcome.tried);
+    let roots = [root];
 
-    if (outcome.result !== undefined) {
-      results.push(outcome.result);
+    if (platform === "android") {
+      roots = [androidRoot];
+    } else if (probe === probeIosInfoPlist) {
+      roots = iosRoots;
+    }
+
+    for (const probeRoot of roots) {
+      const outcome = await probe(probeRoot);
+      tried.push(...outcome.tried);
+
+      if (outcome.result !== undefined) {
+        results.push(outcome.result);
+      }
     }
   }
 
