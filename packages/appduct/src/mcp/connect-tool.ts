@@ -17,6 +17,7 @@ import {
   type EventNotification,
   type LinkCreateResult,
   type SessionsDescribeResult,
+  type WebAttachResult,
 } from "@appduct/shared";
 
 import {
@@ -97,7 +98,12 @@ export const CONNECT_TOOL_DESCRIPTOR = {
     "app is already running and the delivery does not take. Target \"web\" is for a web page: " +
     "pass \"url\" (the page to open) and get back { url, script } — open \"url\" in a browser, or " +
     "run \"script\" in a page that is already open, then call appduct_wait_for_session. It needs " +
-    "no scheme and no device. Only when no device is detected (or " +
+    "no scheme and no device. To have the daemon attach a page that is already open in a Chrome " +
+    "launched with --remote-debugging-port, also pass \"browserUrl\" (its debugging endpoint, such as " +
+    "http://127.0.0.1:9222): the tab whose address starts with \"url\" is attached and the call returns " +
+    "{ sessionId, url, targetId, attached: true }, with no further step. When no tab or several " +
+    "match, the error lists the open tabs with their target ids; pass one as \"targetId\" to pick it. A " +
+    "popup, or a page in a new tab, is not attached. Only when no device is detected (or " +
     "target is \"none\") does this return a QR code for a human to scan, along with an " +
     "\"instructions\" field saying what to do with it. Follow up with appduct_wait_for_session to " +
     "know when the device has connected.",
@@ -106,6 +112,8 @@ export const CONNECT_TOOL_DESCRIPTOR = {
     properties: {
       target: { type: "string", enum: ["android", "ios-sim", "ios-device", NO_TARGET, WEB_TARGET] },
       url: { type: "string" },
+      browserUrl: { type: "string" },
+      targetId: { type: "string" },
       device: { type: "string" },
       appId: { type: "string" },
       relaunch: { type: "boolean" },
@@ -361,7 +369,7 @@ const resolveDelivery = async (
 export const handleConnectTool = async (
   rawArgs: unknown,
   deps: ConnectToolDeps,
-): Promise<ConnectToolResult | WebLinkResult> => {
+): Promise<ConnectToolResult | WebLinkResult | (WebAttachResult & { attached: true })> => {
   const args = asRecord(rawArgs);
 
   const requestedTarget = asOptionalConnectTarget(args.target);
@@ -370,6 +378,16 @@ export const handleConnectTool = async (
   const relaunch = asOptionalBoolean(args.relaunch, "relaunch");
   const ttlSeconds = asOptionalPositiveNumber(args.ttlSeconds, "ttlSeconds");
   const url = asOptionalNonEmptyString(args.url, "url");
+  const browserUrl = asOptionalNonEmptyString(args.browserUrl, "browserUrl");
+  const targetId = asOptionalNonEmptyString(args.targetId, "targetId");
+
+  if ((browserUrl !== undefined || targetId !== undefined) && requestedTarget !== WEB_TARGET) {
+    throw new McpBuiltinToolError("invalid_request", '"browserUrl" and "targetId" only apply with target "web".');
+  }
+
+  if (targetId !== undefined && browserUrl === undefined) {
+    throw new McpBuiltinToolError("invalid_request", '"targetId" needs "browserUrl": it names a tab of that browser.');
+  }
 
   if (requestedTarget === WEB_TARGET) {
     if (url === undefined) {
@@ -387,6 +405,12 @@ export const handleConnectTool = async (
       assertWebPageUrl(url);
     } catch (error) {
       throw new McpBuiltinToolError("invalid_request", (error as Error).message);
+    }
+
+    if (browserUrl !== undefined) {
+      const attached = await deps.call<WebAttachResult>(RPC_METHODS.webAttach, { url, browserUrl, targetId, ttlSeconds });
+
+      return { ...attached, attached: true };
     }
 
     return composeWebLink(

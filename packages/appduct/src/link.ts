@@ -17,7 +17,7 @@
  * (`sha256/<44-char-base64>`, may contain `+`/`/`/`=`), so it is percent-encoded here; native/JS
  * parsers use `URLSearchParams`, which decodes it back.
  */
-import { RPC_METHODS, type AgentEndpoint, type LinkCreateResult } from "@appduct/shared";
+import { RPC_METHODS, type AgentEndpoint, type LinkCreateResult, type WebAttachParams, type WebAttachResult } from "@appduct/shared";
 
 import {
   deliverToOpenTarget,
@@ -116,6 +116,22 @@ export const mintWebLink = async (options: MintWebLinkOptions): Promise<WebLinkR
   );
 
   return composeWebLink(options.url, result);
+};
+
+export type AttachWebTabOptions = WebAttachParams & {
+  stateDir: string;
+  spawn?: SpawnFn;
+  autoSpawn?: boolean;
+};
+
+/** Asks the daemon to attach a tab of the debugging-port browser at `browserUrl` and claim a session on it. */
+export const attachWebTab = async ({ stateDir, spawn, autoSpawn, ...params }: AttachWebTabOptions): Promise<WebAttachResult & { attached: true }> => {
+  assertWebPageUrl(params.url);
+
+  // The daemon waits up to five seconds for the page to load `@appduct/web`, past the default request timeout.
+  const result = await callDaemon<WebAttachResult>(RPC_METHODS.webAttach, params, { stateDir, spawn, autoSpawn, requestTimeoutMs: 30_000 });
+
+  return { ...result, attached: true };
 };
 
 export type MintLinkOptions = {

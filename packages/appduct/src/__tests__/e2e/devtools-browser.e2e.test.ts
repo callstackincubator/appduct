@@ -82,6 +82,7 @@ beforeAll(async () => {
       "--no-sandbox",
       "--no-first-run",
       "--ignore-certificate-errors",
+      "--no-proxy-server",
       `--host-resolver-rules=MAP ${HOST} 127.0.0.1`,
       "about:blank",
     ],

@@ -21,6 +21,8 @@ export const route: Route = async (context) => {
           ttlSeconds: parsePositiveIntegerOption(options.ttl, "--ttl"),
           scheme: typeof options.scheme === "string" ? options.scheme : undefined,
           url: context.args[0],
+          browserUrl: typeof options.browserUrl === "string" ? options.browserUrl : undefined,
+          targetId: typeof options.targetId === "string" ? options.targetId : undefined,
           open: typeof options.open === "string" ? options.open : undefined,
           device: typeof options.device === "string" ? options.device : undefined,
           // cac camelCases `--app-id`; the dashed spelling is kept as a fallback so a

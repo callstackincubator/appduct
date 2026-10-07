@@ -37,7 +37,7 @@ const start = async (tabs: { id: string; url: string; title: string }[]) => {
       },
     }),
   );
-  return { stateDir, browser, browserUrls, call: (method: string, params: unknown) => callDaemon(method, params, { stateDir }) };
+  return { stateDir, browser, browserUrls, call: <T>(method: string, params: unknown) => callDaemon<T>(method, params, { stateDir }) };
 };
 
 const shopTab = { id: "A1", url: `${PAGE_URL}/cart`, title: "Cart" };

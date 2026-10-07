@@ -74,7 +74,7 @@ describe("attachBrowserTab", () => {
     const error = await attach(world, { url: "https://staging.example/c" }).catch((caught: Error) => caught);
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain("no open tab");
+    expect((error as Error).message).toMatch(/no open tab/i);
     expect((error as Error).message).toContain("A  https://staging.example/a");
     expect((error as Error).message).toContain("B  https://staging.example/b");
   });
