@@ -810,4 +810,23 @@ class AppductClientTest {
             assertEquals("Checkout", event.getJSONObject("payload").getString("screen"))
             assertNotNull(event.opt("ts"))
         }
+
+    @Test
+    fun `a tool registry snapshot over the frame limit goes to the error listener and keeps the session active`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            val errors = CopyOnWriteArrayList<AppductUnifiedError>()
+            client.addErrorListener { errors.add(it) }
+            for (i in 0 until 70) {
+                client.registerTool(AppductToolDescriptor(name = "tool_$i", description = "x".repeat(4096))) { _, _ -> null }
+            }
+
+            client.connectAndAck(fake)
+
+            waitUntil { errors.isNotEmpty() }
+            assertTrue(fake.sentMessages.none { JSONObject(it).optString("type") == "tool_registry_snapshot" })
+            assertEquals("tool", errors.first().phase)
+            assertTrue(Regex("^Appduct frame is \\d+ bytes, over the 262144-byte limit\\.$").matches(errors.first().message))
+            assertEquals(AppductClientState.active, client.state)
+        }
 }

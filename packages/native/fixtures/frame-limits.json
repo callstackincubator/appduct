@@ -1,0 +1,11 @@
+{
+  "limitBytes": 262144,
+  "vectors": [
+    { "name": "ASCII frame of exactly 262144 bytes", "frameBytes": 262144, "filler": "a", "sent": true },
+    { "name": "ASCII frame of 262145 bytes", "frameBytes": 262145, "filler": "a", "sent": false },
+    { "name": "two-byte characters, frame of exactly 262144 bytes", "frameBytes": 262144, "filler": "é", "sent": true },
+    { "name": "two-byte characters push the frame to 262145 bytes", "frameBytes": 262145, "filler": "é", "sent": false },
+    { "name": "three-byte characters push the frame to 262145 bytes", "frameBytes": 262145, "filler": "€", "sent": false },
+    { "name": "four-byte characters push the frame to 262145 bytes", "frameBytes": 262145, "filler": "😀", "sent": false }
+  ]
+}

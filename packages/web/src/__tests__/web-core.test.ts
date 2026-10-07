@@ -409,6 +409,23 @@ describe("posting events", () => {
   });
 });
 
+describe("a tool registry snapshot over the frame limit", () => {
+  it("is reported to the error listener and leaves the session active", async () => {
+    const h = setup();
+    for (let i = 0; i < 70; i++) {
+      h.core.registerTool(JSON.stringify({ name: `tool_${i}`, description: "x".repeat(4096) }));
+    }
+
+    const socket = await h.claim();
+
+    expect(ofType(socket, "tool_registry_snapshot")).toEqual([]);
+    expect(h.recorded.errors).toHaveLength(1);
+    expect(h.recorded.errors[0]?.phase).toBe("tool");
+    expect(h.recorded.errors[0]?.message).toMatch(/^Appduct frame is \d+ bytes, over the 262144-byte limit\.$/);
+    expect(h.core.getState()).toBe("active");
+  });
+});
+
 describe("declaring events", () => {
   const event = (name: string) => JSON.stringify({ name, description: `The ${name} event.` });
 
