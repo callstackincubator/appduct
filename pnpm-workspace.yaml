@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
   - "playground"
+  - "playground-web"
   - "website"
 allowBuilds:
   # esbuild works without its postinstall (it loads the platform binary from its optional
