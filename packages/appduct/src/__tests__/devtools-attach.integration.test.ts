@@ -28,16 +28,19 @@ const start = async (tabs: { id: string; url: string; title: string }[]) => {
   stateDirs.push(stateDir);
   const browser: MemoryDevtoolsBrowser = createMemoryDevtoolsBrowser(tabs);
   const browserUrls: string[] = [];
+  // One browser per spelling of the endpoint, as separate connections to the same Chrome would be.
+  const browsers = new Map<string, MemoryDevtoolsBrowser>([[BROWSER_URL, browser]]);
   daemons.push(
     await startDaemon({
       stateDir,
       connectDevtoolsBrowser: (browserUrl) => {
         browserUrls.push(browserUrl);
-        return browser;
+        if (!browsers.has(browserUrl)) browsers.set(browserUrl, createMemoryDevtoolsBrowser(tabs));
+        return browsers.get(browserUrl)!;
       },
     }),
   );
-  return { stateDir, browser, browserUrls, call: <T>(method: string, params: unknown) => callDaemon<T>(method, params, { stateDir }) };
+  return { stateDir, browser, browsers, browserUrls, call: <T>(method: string, params: unknown) => callDaemon<T>(method, params, { stateDir }) };
 };
 
 const shopTab = { id: "A1", url: `${PAGE_URL}/cart`, title: "Cart" };
@@ -87,6 +90,44 @@ describe("appduct_connect with browserUrl", () => {
     const { call } = await start([]);
 
     await expect(handleConnectTool({ target: "web", url: PAGE_URL, targetId: "A1" }, { call })).rejects.toThrow(/targetId/u);
+  });
+
+  test("returns the tab's own address, with no link payload", async () => {
+    const { call } = await start([shopTab]);
+
+    const result = await handleConnectTool({ target: "web", url: PAGE_URL, browserUrl: BROWSER_URL }, { call });
+
+    expect(result).toMatchObject({ url: `${PAGE_URL}/cart` });
+    expect(JSON.stringify(result)).not.toContain("appduct=");
+  });
+
+  test.each(["http://127.0.0.1:9222", "http://localhost:9222", "http://[::1]:9222", "http://localhost:9222/"])(
+    "accepts the loopback browserUrl %s",
+    async (browserUrl) => {
+      const { call } = await start([shopTab]);
+
+      await expect(handleConnectTool({ target: "web", url: PAGE_URL, browserUrl }, { call })).resolves.toMatchObject({ attached: true });
+    },
+  );
+
+  test.each(["http://192.168.1.5:9222", "https://evil.example:9222", "http://127.0.0.1.evil.example:9222", "http://127.0.0.1@evil.example:9222"])(
+    "rejects the non-loopback browserUrl %s without contacting it",
+    async (browserUrl) => {
+      const { call, browserUrls } = await start([shopTab]);
+
+      await expect(handleConnectTool({ target: "web", url: PAGE_URL, browserUrl }, { call })).rejects.toThrow(/loopback/u);
+      expect(browserUrls).toEqual([]);
+    },
+  );
+
+  test("relays a tab once when it is attached under two spellings of the browserUrl", async () => {
+    const { browsers, call } = await start([shopTab]);
+
+    await handleConnectTool({ target: "web", url: PAGE_URL, browserUrl: "http://127.0.0.1:9222" }, { call });
+    await handleConnectTool({ target: "web", url: PAGE_URL, browserUrl: "http://localhost:9222/" }, { call });
+
+    expect(browsers.get("http://127.0.0.1:9222")!.attachedTargets()).toEqual([]);
+    expect(browsers.get("http://localhost:9222/")!.attachedTargets()).toEqual(["A1"]);
   });
 
   test("rejects a browserUrl that is not http(s)", async () => {

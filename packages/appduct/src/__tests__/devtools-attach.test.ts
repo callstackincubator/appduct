@@ -41,6 +41,14 @@ describe("attachBrowserTab", () => {
     expect(world.browser.attachedTargets()).toEqual(["A"]);
   });
 
+  it("returns the tab's address without the link's payload", async () => {
+    const world = setup([tab("A", "https://staging.example/shop/cart")]);
+
+    const result = await attach(world, { url: "https://staging.example/shop" });
+
+    expect(result.url).toBe("https://staging.example/shop/cart");
+  });
+
   it("connects the page over the devtools transport with the link's payload", async () => {
     const world = setup([tab("A", "https://staging.example/shop")]);
 
