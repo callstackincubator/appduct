@@ -28,7 +28,7 @@ import {
 } from "@appduct/shared";
 
 import type { EventBus } from "./event-bus.js";
-import { appBackgroundedMessage, RpcApplicationError } from "./rpc-errors.js";
+import { appBackgroundedMessage, appReconnectedMessage, RpcApplicationError } from "./rpc-errors.js";
 import { systemTimers, type TimerFns, type TimerHandle } from "./timers.js";
 
 /** Re-exported under this module's historical names; the values live in `@appduct/shared` so the
@@ -91,7 +91,7 @@ export type CallsManager = {
   rejectSession: (
     sessionId: string,
     errorType: "session_suspended" | "unknown_session",
-    options?: { backgrounded?: boolean },
+    options?: { reason?: "backgrounded" | "reconnected" },
   ) => void;
   /** Rejects and clears every pending call across every session (daemon shutdown). */
   disposeAll: () => void;
@@ -130,9 +130,13 @@ export const deriveCallTransportTimeoutMs = (timeoutMs: number | undefined): num
 /** Event kinds that terminate every pending call for a session (ARCHITECTURE.md §6/§5: "On
  * suspend/revoke/expiry, every pending call rejects immediately with session_suspended (or
  * unknown_session on revoke)"). Expiry only ever follows suspend (pending calls are already gone
- * by then), but it is handled defensively with the same `unknown_session` type as revoke. */
+ * by then), but it is handled defensively with the same `unknown_session` type as revoke.
+ * `session_resumed` terminates calls too: a resume that replaces a still-open socket never
+ * emits `session_suspended`, and the app aborted whatever it was running when that socket was
+ * lost, so those calls can never be answered. After a normal suspend nothing is pending. */
 const TERMINATING_KIND_ERROR_TYPES = {
   session_suspended: "session_suspended",
+  session_resumed: "session_suspended",
   session_revoked: "unknown_session",
   session_expired: "unknown_session",
 } as const;
@@ -254,7 +258,7 @@ export const createCallsManager = (options: CallsManagerOptions): CallsManager =
   const rejectSession = (
     sessionId: string,
     errorType: "session_suspended" | "unknown_session",
-    options: { backgrounded?: boolean } = {},
+    options: { reason?: "backgrounded" | "reconnected" } = {},
   ): void => {
     const sessionMap = pendingBySession.get(sessionId);
 
@@ -269,9 +273,11 @@ export const createCallsManager = (options: CallsManagerOptions): CallsManager =
       pending.reject(
         new RpcApplicationError(
           errorType,
-          options.backgrounded
+          options.reason === "backgrounded"
             ? appBackgroundedMessage(pending.alias)
-            : "Session transitioned while the call was pending.",
+            : options.reason === "reconnected"
+              ? appReconnectedMessage(pending.alias)
+              : "Session transitioned while the call was pending.",
         ),
       );
     }
@@ -283,9 +289,13 @@ export const createCallsManager = (options: CallsManagerOptions): CallsManager =
     ];
 
     if (errorType && event.sessionId) {
-      const backgrounded =
-        event.kind === "session_suspended" && (event.data as { reason?: string }).reason === "app_backgrounded";
-      rejectSession(event.sessionId, errorType, { backgrounded });
+      const reason =
+        event.kind === "session_resumed"
+          ? "reconnected"
+          : event.kind === "session_suspended" && (event.data as { reason?: string }).reason === "app_backgrounded"
+            ? "backgrounded"
+            : undefined;
+      rejectSession(event.sessionId, errorType, { reason });
     }
   });
 
