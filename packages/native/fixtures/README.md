@@ -10,14 +10,14 @@ instead of shipping silently.
 Consumers:
 
 - `packages/shared/src/__tests__/fixtures-conformance.test.ts` (vitest): every file except
-  `spki-pin.json` and `event-registry-frames.json`
+  `spki-pin.json`, `event-registry-frames.json` and `session-scenarios.json`
 - `packages/appduct/src/__tests__/spki-pin.test.ts` (vitest): `spki-pin.json` only
 - `packages/native/ios/Tests/AppductCoreTests/FixturesConformanceTests.swift` (XCTest): every file
-  except `event-registry-frames.json`
+  except `event-registry-frames.json` and `session-scenarios.json`
 - `packages/native/ios/Tests/AppductCoreTests/AppductEventRegistryTests.swift` (XCTest):
   `event-registry-frames.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/FixturesConformanceTest.kt`
-  (JUnit): every file except `event-registry-frames.json`
+  (JUnit): every file except `event-registry-frames.json` and `session-scenarios.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/AppductEventRegistryTest.kt`
   (JUnit): `event-registry-frames.json`
 - `packages/web/src/__tests__/session-scenarios.test.ts` (vitest) and

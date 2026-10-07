@@ -34,22 +34,22 @@ final class SessionScenariosTests: XCTestCase {
   // MARK: The runner itself
 
   private static let sessionId = "session-1"
-  private static let ack: [String: Any] = [
+  private static var ack: [String: Any] { [
     "type": "session_ack", "session_id": sessionId, "status": "ok", "alias": "phone",
     "resume_token": "resume-1", "keepalive_interval_s": 15, "grace_s": 10,
-  ]
-  private static let claimThenActive: [[String: Any]] = [
+  ] }
+  private static var claimThenActive: [[String: Any]] { [
     ["drive": "connect", "sessionId": sessionId, "token": "claim-token", "expiresAt": 1_700_000_300],
     ["expect": "connect", "mode": "claim", "sessionId": sessionId],
     ["expect": "state", "state": "connecting"],
     ["drive": "receive", "frame": ack],
     ["expect": "state", "state": "active"],
     ["expect": "session", "type": "claimed"],
-  ]
-  private static let snapshot: [String: Any] = [
+  ] }
+  private static var snapshot: [String: Any] { [
     "expect": "send",
     "frame": ["tools": [Any](), "session_id": sessionId, "type": "tool_registry_snapshot"] as [String: Any],
-  ]
+  ] }
 
   private func inline(_ steps: [[String: Any]]) -> [String: Any] {
     ["name": "inline", "startMs": 1_700_000_000_000, "random": 0.5, "steps": steps]
@@ -106,15 +106,12 @@ private final class OutputQueue: @unchecked Sendable {
 
   func push(_ object: [String: Any]) {
     let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .fragmentsAllowed])
-    lock.lock()
-    items.append(String(decoding: data, as: UTF8.self))
-    lock.unlock()
+    let text = String(decoding: data, as: UTF8.self)
+    lock.withLock { items.append(text) }
   }
 
   func pop() -> String? {
-    lock.lock()
-    defer { lock.unlock() }
-    return items.isEmpty ? nil : items.removeFirst()
+    lock.withLock { items.isEmpty ? nil : items.removeFirst() }
   }
 }
 
@@ -124,15 +121,11 @@ private final class ResponseBox: @unchecked Sendable {
   private var responses: [String: Result<JSONValue, AppductToolHandlerError>] = [:]
 
   func put(_ response: Result<JSONValue, AppductToolHandlerError>, for call: String) {
-    lock.lock()
-    responses[call] = response
-    lock.unlock()
+    lock.withLock { responses[call] = response }
   }
 
   func take(_ call: String) -> Result<JSONValue, AppductToolHandlerError>? {
-    lock.lock()
-    defer { lock.unlock() }
-    return responses.removeValue(forKey: call)
+    lock.withLock { responses.removeValue(forKey: call) }
   }
 }
 
