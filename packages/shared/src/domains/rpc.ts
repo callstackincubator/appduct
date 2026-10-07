@@ -159,7 +159,7 @@ export type WebAttachParams = {
 
 export type WebAttachResult = {
   sessionId: string;
-  /** The tab's address with `#appduct=<payload>` appended. */
+  /** The tab's own address, as the browser lists it. It carries no link payload. */
   url: string;
   /** The CDP target id of the attached tab. */
   targetId: string;

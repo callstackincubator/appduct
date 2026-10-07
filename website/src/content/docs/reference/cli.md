@@ -71,7 +71,7 @@ If the page is open in a Chrome you launched with `--remote-debugging-port` and 
 appduct sessions link --open web https://staging.example.com/shop --browser-url http://127.0.0.1:9222
 ```
 
-The daemon attaches the one tab whose address starts with `<url>`, connects the page through the debugging port, and prints `sessionId`, `url` and `targetId`. The page opens no connection of its own, so this works on `https` pages with no permission prompt. The page must already load `@appduct/web`. Reloading the page resumes the session.
+The daemon attaches the one tab whose address starts with `<url>`, connects the page through the debugging port, and prints `sessionId`, `url` (the tab's own address) and `targetId`. The page opens no connection of its own, so this works on `https` pages with no permission prompt. `<browser-url>` must be on this machine: `127.0.0.1`, `[::1]` or `localhost`. The page must already load `@appduct/web`. Reloading the page resumes the session.
 
 If no tab matches, or several do, the command fails and lists the open tabs with their target ids. Pass one with `--target-id <id>`; it wins even when several tabs match. A popup, or a page that opens in a new tab, isn't attached: run the command again for it.
 

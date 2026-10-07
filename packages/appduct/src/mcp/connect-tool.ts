@@ -99,9 +99,9 @@ export const CONNECT_TOOL_DESCRIPTOR = {
     "pass \"url\" (the page to open) and get back { url, script } — open \"url\" in a browser, or " +
     "run \"script\" in a page that is already open, then call appduct_wait_for_session. It needs " +
     "no scheme and no device. To have the daemon attach a page that is already open in a Chrome " +
-    "launched with --remote-debugging-port, also pass \"browserUrl\" (its debugging endpoint, such as " +
-    "http://127.0.0.1:9222): the tab whose address starts with \"url\" is attached and the call returns " +
-    "{ sessionId, url, targetId, attached: true }, with no further step. When no tab or several " +
+    "launched with --remote-debugging-port, also pass \"browserUrl\" (its debugging endpoint on this " +
+    "machine: 127.0.0.1, [::1] or localhost, such as http://127.0.0.1:9222): the tab whose address starts with \"url\" is attached and the call returns " +
+    "{ sessionId, url, targetId, attached: true }, with no further step; \"url\" is the tab's own address. When no tab or several " +
     "match, the error lists the open tabs with their target ids; pass one as \"targetId\" to pick it. A " +
     "popup, or a page in a new tab, is not attached. Only when no device is detected (or " +
     "target is \"none\") does this return a QR code for a human to scan, along with an " +

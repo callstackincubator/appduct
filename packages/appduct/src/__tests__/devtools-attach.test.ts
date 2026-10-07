@@ -29,7 +29,7 @@ const setup = (tabs: ReturnType<typeof tab>[]): { browser: MemoryDevtoolsBrowser
 const attach = (
   { browser, daemon }: ReturnType<typeof setup>,
   options: { url: string; targetId?: string; mint?: typeof mintLink },
-) => attachBrowserTab({ browser, openDaemonSocket: daemon.open, mintLink: options.mint ?? mintLink, url: options.url, targetId: options.targetId });
+) => attachBrowserTab({ browser, relayedTabs: new Map(), openDaemonSocket: daemon.open, mintLink: options.mint ?? mintLink, url: options.url, targetId: options.targetId });
 
 describe("attachBrowserTab", () => {
   it("attaches the one tab whose url starts with the given url", async () => {

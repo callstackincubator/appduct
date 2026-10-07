@@ -52,6 +52,7 @@ import {
   openNodeDaemonSocket,
   type ConnectDevtoolsBrowser,
   type DevtoolsBrowser,
+  type DevtoolsPage,
 } from "../devtools-relay/index.js";
 import { composeWebLink } from "../link.js";
 import { getDaemonReportedVersion } from "../package-version.js";
@@ -454,6 +455,8 @@ const asLinkCreateParams = (params: unknown): LinkCreateParams => {
   return { ttlSeconds, addressOverride: addressOverride as string | undefined, transport };
 };
 
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "[::1]", "localhost"]);
+
 const asWebAttachParams = (params: unknown): WebAttachParams => {
   if (typeof params !== "object" || params === null || Array.isArray(params)) {
     throw new RpcApplicationError("invalid_request", "Params must be an object.");
@@ -471,8 +474,22 @@ const asWebAttachParams = (params: unknown): WebAttachParams => {
     throw new RpcApplicationError("invalid_request", '"url" and "browserUrl" are required.');
   }
 
-  if (!/^https?:\/\//u.test(browserUrl as string)) {
+  let parsedBrowserUrl: URL | undefined;
+  try {
+    parsedBrowserUrl = new URL(browserUrl as string);
+  } catch {
+    // Reported below with the other malformed shapes.
+  }
+
+  if (parsedBrowserUrl === undefined || (parsedBrowserUrl.protocol !== "http:" && parsedBrowserUrl.protocol !== "https:")) {
     throw new RpcApplicationError("invalid_request", `"browserUrl" must be an http(s) URL such as http://127.0.0.1:9222 (got "${browserUrl as string}").`);
+  }
+
+  if (!LOOPBACK_HOSTS.has(parsedBrowserUrl.hostname)) {
+    throw new RpcApplicationError(
+      "invalid_request",
+      `"browserUrl" must be a loopback address (127.0.0.1, [::1] or localhost), because a debugging port gives full control of the browser (got "${browserUrl as string}").`,
+    );
   }
 
   if (ttlSeconds !== undefined && (typeof ttlSeconds !== "number" || !Number.isInteger(ttlSeconds) || ttlSeconds <= 0)) {
@@ -487,6 +504,9 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
   const timers = options.timers ?? systemTimers;
   const connectDevtoolsBrowser = options.connectDevtoolsBrowser ?? connectNodeDevtoolsBrowser;
   const devtoolsBrowsers = new Map<string, DevtoolsBrowser>();
+  // Keyed by target id, not browserUrl: one tab reached through two spellings of the endpoint must
+  // still have one relay.
+  const relayedTabs = new Map<string, DevtoolsPage>();
   const paths = getStateDirPaths(options.stateDir);
 
   await ensureStateDir(options.stateDir);
@@ -749,6 +769,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           try {
             return await attachBrowserTab({
               browser,
+              relayedTabs,
               url,
               targetId,
               openDaemonSocket: openNodeDaemonSocket,

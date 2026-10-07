@@ -1,8 +1,13 @@
 import { linkPayload, relayPage, type RelayLink } from "./relay.js";
-import type { DevtoolsBrowser, DevtoolsTarget, OpenDaemonSocket } from "./ports.js";
+import type { DevtoolsBrowser, DevtoolsPage, DevtoolsTarget, OpenDaemonSocket } from "./ports.js";
 
 export type AttachBrowserTabOptions = {
   browser: DevtoolsBrowser;
+  /**
+   * The page relayed for each target id. Attaching a tab closes the page already relayed for it, so a
+   * tab has one relay however its browser was reached; the new page is recorded here once relayed.
+   */
+  relayedTabs: Map<string, DevtoolsPage>;
   /** The tab's address, or the start of it. */
   url: string;
   /** Picks the tab directly, for when several tabs match `url`. */
@@ -12,6 +17,7 @@ export type AttachBrowserTabOptions = {
   openDaemonSocket: OpenDaemonSocket;
 };
 
+/** `url` is the tab's own address, without the link's payload. */
 export type AttachedTab = { sessionId: string; url: string; targetId: string; expiresAt: number };
 
 const listTabs = (tabs: DevtoolsTarget[]): string => (tabs.length === 0 ? "  (none)" : tabs.map((tab) => `  ${tab.id}  ${tab.url}`).join("\n"));
@@ -45,6 +51,8 @@ const WAIT_FOR_WEB = `new Promise((resolve, reject) => {
 export const attachBrowserTab = async (options: AttachBrowserTabOptions): Promise<AttachedTab> => {
   const tab = pickTab(await options.browser.targets(), options.url, options.targetId);
   const link = await options.mintLink();
+  options.relayedTabs.get(tab.id)?.close();
+  options.relayedTabs.delete(tab.id);
   const page = await options.browser.openPage(tab.id);
   try {
     relayPage(page, link, options.openDaemonSocket);
@@ -56,5 +64,6 @@ export const attachBrowserTab = async (options: AttachBrowserTabOptions): Promis
     page.close();
     throw error;
   }
-  return { sessionId: link.sessionId, url: link.url, targetId: tab.id, expiresAt: link.expiresAt };
+  options.relayedTabs.set(tab.id, page);
+  return { sessionId: link.sessionId, url: tab.url, targetId: tab.id, expiresAt: link.expiresAt };
 };

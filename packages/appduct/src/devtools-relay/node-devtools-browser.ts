@@ -25,8 +25,14 @@ const listTargets = async (browserUrl: string): Promise<ListedTarget[]> => {
 };
 
 /** Speaks raw CDP to one tab over its own WebSocket: no Playwright, no browser-wide session. */
-const openTab = async (target: ListedTarget): Promise<DevtoolsPage> => {
-  const socket = new WebSocket(target.webSocketDebuggerUrl!);
+const openTab = async (target: ListedTarget, browserUrl: string): Promise<DevtoolsPage> => {
+  // The listing is the browser's answer, not ours to follow: keep its path, but connect to the
+  // host we were told to reach, never one the listing names.
+  const endpoint = new URL(browserUrl);
+  const socketUrl = new URL(target.webSocketDebuggerUrl!);
+  socketUrl.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
+  socketUrl.host = endpoint.host;
+  const socket = new WebSocket(socketUrl);
   await new Promise<void>((resolve, reject) => {
     socket.once("open", () => resolve());
     socket.once("error", reject);
@@ -90,7 +96,7 @@ export const connectNodeDevtoolsBrowser: ConnectDevtoolsBrowser = (browserUrl): 
       const target = (await listTargets(browserUrl)).find((candidate) => candidate.id === targetId);
       if (!target?.webSocketDebuggerUrl) throw new Error(`The browser at ${browserUrl} has no tab ${targetId}.`);
       open.get(targetId)?.close();
-      const page = await openTab(target);
+      const page = await openTab(target, browserUrl);
       open.set(targetId, page);
       return page;
     },
