@@ -114,6 +114,12 @@ Appduct out by default on both platforms.
    `url` returns `{ url, script }`. Open `url` (reloads the page), or run `script` in the page
    (keeps its state). CLI: `appduct sessions link --open web <url>`. A link works once and
    expires after 5 minutes. Reloading the page resumes the session; a new tab does not.
+   If the page is open in a Chrome launched with `--remote-debugging-port` and its own
+   `--user-data-dir`, add `browserUrl` (CLI: `--browser-url`, such as `http://127.0.0.1:9222`) and
+   the daemon attaches the tab itself: no `script`, no `https` permission prompt, and the session
+   is claimed when the call returns. When no tab or several tabs start with `url`, the error lists
+   the open tabs with their target ids; pass one as `targetId` (CLI: `--target-id`). A popup or a
+   page in a new tab isn't attached.
 4. Production builds need nothing: the root entry is inert unless the bundler sets the
    `development` export condition. To include Appduct in another build, import
    `@appduct/web/enabled`. A React Native app's web build in `expo start --web` needs the Metro

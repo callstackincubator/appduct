@@ -73,7 +73,10 @@ Browsers reach the daemon on a second listener, `ws://127.0.0.1:<webPort>`, not 
   re-points it at the new link, which suspends the first link's session for its grace period; until
   it expires, `connect()` with no selector is `ambiguous_session`, so select the new session with
   `connect({ selector: link.sessionId })` or `waitForSession`. The binding belongs to the page's target, so a popup or a navigation
-  that creates a new target is not relayed. A link is claimable
+  that creates a new target is not relayed. A page in a Chrome launched with `--remote-debugging-port`
+  needs no Playwright: `web.attach` (§5) has the daemon pick the tab through the `DevtoolsBrowser`
+  port (raw CDP over `ws`, one WebSocket per relayed tab, memory fake beside it), add the binding,
+  run the connect script and run the same relay itself, so the session outlives the call. A link is claimable
   only on the listener of its transport (`link.create`'s `transport`, §5). The page side is
   `packages/web` (`@appduct/web`): a TypeScript port of the native session core under the same SDK
   layer as React Native. It has three entries. `.` resolves by export condition: `development`
@@ -294,6 +297,7 @@ Methods:
 | `daemon.status` | — | `{ version, pid, startedAt, wssPort, webPort, pinnedKeys: [spkiPin], sessions: SessionSummary[], pendingLinks }` — `pendingLinks` counts minted-but-unclaimed links (not sessions, §6, but live state a restart destroys; §4's version drift check reads it). Absent from daemons that predate this field. |
 | `daemon.shutdown` | — | `{ ok: true }` (then exits) |
 | `link.create` | `{ ttlSeconds?, addressOverride?, transport? }` | `{ sessionId, deepLinkPayload, endpoint: { family, address, port }, expiresAt }` — `deepLinkPayload` is the base64url bootstrap blob; callers compose `<scheme>:///?appduct=<payload>`. `addressOverride` forces the advertised address (the emulator/simulator fast path uses it to force `127.0.0.1`). `transport` is `"native"` (default) or `"web"`: a web link encodes `127.0.0.1` and `daemon.status`'s `webPort`, ignores `addressOverride`, and can only be claimed on the plain-HTTP web listener (which refuses an upgrade with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`); a link presented on the other transport's listener closes `1008 wrong_transport`. |
+| `web.attach` | `{ url, browserUrl, targetId?, ttlSeconds? }` | `{ sessionId, url, targetId, expiresAt }` — picks the tab with `targetId`, else the one tab of the browser at `browserUrl` whose URL starts with `url`, and fails with `invalid_request` listing the open tabs and their target ids when none or several match. It then mints a web link, adds the binding over CDP, connects the page with `transport: "devtools"` and relays it until the tab closes. |
 | `sessions.list` | — | `SessionSummary[]` |
 | `sessions.describe` | `{ selector? }` | full session detail incl. device metadata, state timestamps, tool count |
 | `sessions.revoke` | `{ selector? }` | `{ ok: true }` — closes socket (code 1000), frees alias |
@@ -1098,7 +1102,7 @@ packages/
     src/events/    waitForAppEvent, the drain-then-live event wait shared by mcp/ and client/
     src/client/    appduct/client, the programmatic client for test runners
     src/devtools-relay/  relays a page's session frames between a Playwright binding and the
-                   daemon's web listener (`attachPage` wires it); ports with memory fakes beside them
+                   daemon's web listener (`attachPage` and `web.attach` wire it); ports with memory fakes beside them
   react-native/    @appduct/react-native (entries: ., /auto, /noop, /metro, app.plugin.js). Implements
                    `AppductCore` with its TurboModule and keeps the public API; depends only on
                    @appduct/shared — no third-party runtime deps, which is why no
