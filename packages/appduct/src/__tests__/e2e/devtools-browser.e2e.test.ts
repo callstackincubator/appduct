@@ -107,9 +107,15 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await observer?.close().catch(() => undefined);
-  chromeProcess?.kill("SIGKILL");
+  // Chromium's helper processes can still be writing to the profile right after the kill, so wait
+  // for the browser to exit and retry the removal while they finish.
+  if (chromeProcess && chromeProcess.exitCode === null && chromeProcess.signalCode === null) {
+    const exited = new Promise((resolve) => chromeProcess!.once("exit", resolve));
+    chromeProcess.kill("SIGKILL");
+    await exited;
+  }
   await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
-  await rm(scratch, { recursive: true, force: true });
+  await rm(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
 type SessionRow = { alias: string; sessionId: string; state: string; toolCount: number };
