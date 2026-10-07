@@ -76,3 +76,7 @@ One note per PR that hit friction, four lines:
   What went wrong: attachPage registered a page binding per call, so a second attach on the same page threw, and the fix's re-attach semantics then needed a second review round.
   Would have prevented it: For any API that installs per-target state (bindings, listeners), write a test that calls it twice on the same target before opening the PR.
   Cost: review round
+- 2026-10-07 #184 skill: implement-issue
+  What went wrong: the daemon's per-tab relay was keyed by the raw browserUrl string and recorded only after async setup, so two spellings of one URL, and then two concurrent attaches, each left two relays on one tab; it took two extra review rounds.
+  Would have prevented it: key per-target state by the target's own id, and record it synchronously right after the first await that yields the target, with a test that attaches the same target twice concurrently.
+  Cost: review round
