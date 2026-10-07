@@ -433,6 +433,10 @@ Rules:
   successful resume the resume token is **rotated** (old one invalid immediately).
 - `ACTIVE → SUSPENDED` (socket close/error/heartbeat loss): the tool registry, device
   metadata, and alias are retained. Pending tool calls fail fast with `session_suspended`.
+- `ACTIVE → ACTIVE` via `session_resume` while the old socket is still open: the daemon closes
+  the old socket (`1000 session_replaced`), adopts the new one and emits `session_resumed`
+  without suspending. Calls pending on the old socket fail fast with `session_suspended`
+  (the app aborted them with that socket) and frames the old socket still delivers are dropped.
 - `SUSPENDED → ACTIVE` via `session_resume` on a fresh socket within
   `graceSeconds`. A session resumes only on the listener it was claimed on; a resume on the
   other listener closes `1008 wrong_transport` and leaves the resume token valid. After resume the app re-sends a full

@@ -1,0 +1,71 @@
+---
+title: Web setup
+description: Add Appduct to a web page in any framework, register tools, and connect it to the CLI.
+sidebar:
+  label: Web
+  order: 4
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+This page adds Appduct to a web page, in any framework or none. You register tools in JavaScript, and the CLI or an agent calls them the same way as in a native app. Building a React Native app? Its web build uses [React Native setup](/appduct/install/react-native/) instead.
+
+**Requirements**
+
+- A browser on the same computer as the CLI. A page on `http://localhost` works in Chrome, Firefox and Safari; for `https` pages see [Drive a web page](/appduct/guides/web-pages/).
+- The `appduct` CLI on your computer: `npm install -g appduct` (Node 20 or newer).
+
+## Set up the page
+
+<Steps>
+
+1. Install the library:
+
+   ```bash
+   npm install @appduct/web
+   ```
+
+2. Register a tool in your page's code:
+
+   ```ts
+   import { registerTool } from "@appduct/web";
+
+   registerTool({
+     name: "seed_cart",
+     description: "Fill the cart with test items.",
+     inputSchema: {
+       type: "object",
+       properties: { items: { type: "number" } },
+       required: ["items"],
+     },
+     handler: async ({ items }) => ({ added: items }),
+   });
+   ```
+
+3. Start your dev server and create a link for the page:
+
+   ```bash
+   appduct sessions link --open web http://localhost:5173/
+   ```
+
+   Open the printed URL in the browser. The page claims the session and removes the link from the address bar.
+
+4. Call the tool:
+
+   ```bash
+   appduct tools call seed_cart --input '{"items":3}'
+   ```
+
+</Steps>
+
+Reloading the page resumes the session. A link works once and expires after 5 minutes.
+
+## Production builds
+
+Production bundles leave Appduct out by default. Vite, webpack and Next.js use the real code only in development builds, and your code needs no conditionals. See [Build variants](/appduct/guides/build-variants/#web-production-builds).
+
+## Next
+
+- [Drive a web page](/appduct/guides/web-pages/): connect an `https` page, a Chrome with a debugging port, or a Playwright page.
+- [Write tools](/appduct/guides/writing-tools/): schemas, results and events.
+- [Security](/appduct/guides/security/#web-pages): what the web port accepts.
