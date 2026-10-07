@@ -10,16 +10,18 @@ const _allowedDartLibraries = {
 };
 
 final _directive = RegExp(
-  r'''^\s*(?:import|export|part)\s+(?:of\s+)?['"]([^'"]+)['"]''',
+  r'''^\s*(?:import|export|part)\s+(?:of\s+)?[^;]*;''',
   multiLine: true,
 );
+final _quotedUri = RegExp(r'''['"]([^'"]+)['"]''');
 
 /// The directives in [source] that the pure core may not have: anything but the four `dart:`
 /// libraries or a relative path that stays inside the core directory.
 List<String> forbiddenImports(String source) {
   return [
-    for (final match in _directive.allMatches(source))
-      if (!_isAllowed(match.group(1)!)) match.group(1)!,
+    for (final directive in _directive.allMatches(source))
+      for (final uri in _quotedUri.allMatches(directive.group(0)!))
+        if (!_isAllowed(uri.group(1)!)) uri.group(1)!,
   ];
 }
 
@@ -52,6 +54,13 @@ void main() {
       expect(forbiddenImports("import '../io/socket.dart';"), [
         '../io/socket.dart',
       ]);
+    });
+
+    test('flags every uri of a conditional import', () {
+      expect(
+        forbiddenImports("import 'stub.dart' if (dart.library.io) 'dart:io';"),
+        ['dart:io'],
+      );
     });
 
     test('accepts the four allowed dart libraries and sibling files', () {

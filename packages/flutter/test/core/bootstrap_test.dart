@@ -63,5 +63,10 @@ void main() {
     test('returns null for text that is not a URL', () {
       expect(parseBootstrapLink('http://[bad'), isNull);
     });
+
+    test('returns null for a percent-escape that is not valid UTF-8', () {
+      expect(parseBootstrapLink('myapp:///?appduct=x&pin=%ff'), isNull);
+      expect(parseBootstrapLink('myapp:///?appduct=%ff'), isNull);
+    });
   });
 }

@@ -313,10 +313,9 @@ void main() {
           'event_registry': false,
         },
         'tool_call with array args': {..._frames['tool_call']!, 'args': []},
-        'tool_call without an id': {..._frames['tool_call']!..remove('id')},
-        'tool_result without a result key': {
-          ..._frames['tool_result']!..remove('result'),
-        },
+        'tool_call without an id': {..._frames['tool_call']!}..remove('id'),
+        'tool_result without a result key': {..._frames['tool_result']!}
+          ..remove('result'),
         'tool_error with an unknown error type': {
           ..._frames['tool_error']!,
           'error': {'type': 'boom', 'message': 'm'},
@@ -332,9 +331,8 @@ void main() {
           'operation': 'noop',
         },
         'event with a non-numeric ts': {..._frames['event']!, 'ts': 'now'},
-        'cancel without a reason': {
-          ..._frames['tool_cancel']!..remove('reason'),
-        },
+        'cancel without a reason': {..._frames['tool_cancel']!}
+          ..remove('reason'),
         'session id over 128 characters': {
           ..._frames['tool_cancel']!,
           'session_id': 's' * 129,
