@@ -69,6 +69,12 @@ const platforms = [
 		body: 'Kotlin, Android 7.0 (API 24)+. Maven Central, with a no-op artifact for release.',
 		href: docs('install/android'),
 	},
+	{
+		name: 'Web',
+		pkg: '@appduct/web',
+		body: 'Any framework or plain JavaScript. Chrome, Firefox and Safari on localhost; left out of production bundles.',
+		href: docs('install/web'),
+	},
 ];
 ---
 
@@ -76,7 +82,7 @@ const platforms = [
 	frontmatter={{
 		title: 'Let agents and tests reach into your running app',
 		description:
-			'Let agents and tests reach into your running app — without shipping a debug menu. For React Native, iOS, and Android.',
+			'Let agents and tests reach into your running app — without shipping a debug menu. For React Native, iOS, Android, and the web.',
 		template: 'splash',
 		editUrl: false,
 		lastUpdated: false,
