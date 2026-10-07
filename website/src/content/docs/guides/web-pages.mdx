@@ -68,12 +68,11 @@ await page.goto("https://staging.example.com/shop");
 await attachPage(page, { link: await link({ target: "web", url: page.url() }) });
 ```
 
-`attachPage` resolves once the session is claimed.
+`attachPage` resolves once the session is claimed. After a reload, the session resumes, the same as over WebSocket.
 
 ## What a DevTools session doesn't cover
 
 - **A popup or a new tab.** The session stays on the page you attached. A page that opens in a new target isn't connected: attach it separately.
-- **A reload.** The session resumes. This works the same as over WebSocket.
 - **A page without `@appduct/web`.** The page must already load it, or the attach fails.
 
 For what DevTools access means for trust, see [Security](/appduct/guides/security/#devtools-access).
