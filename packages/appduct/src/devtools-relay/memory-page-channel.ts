@@ -7,6 +7,8 @@ export type MemoryPageChannel = PageChannel & {
   call(message: Record<string, unknown>): void;
   /** The document is destroyed. */
   resetContext(): void;
+  /** The connection is dropped: the context resets once, then the page stops calling the relay. */
+  close(): void;
   /** What the relay delivered to `__APPDUCT__.receive`, parsed. */
   received(): Record<string, unknown>[];
   /** Every other expression evaluated in the page, in order. */
@@ -35,6 +37,11 @@ export const createMemoryPageChannel = (): MemoryPageChannel => {
     evaluated: () => expressions.filter((expression) => !isReceive(expression)),
     call: (message) => bindingHandlers.forEach((handler) => handler(JSON.stringify(message))),
     resetContext: () => resetHandlers.forEach((handler) => handler()),
+    close: () => {
+      resetHandlers.forEach((handler) => handler());
+      resetHandlers.length = 0;
+      bindingHandlers.length = 0;
+    },
     received: () =>
       expressions.filter(isReceive).map((expression) => {
         const json = JSON.parse(expression.slice(RECEIVE_PREFIX.length, -1)) as string;

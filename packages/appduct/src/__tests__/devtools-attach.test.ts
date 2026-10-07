@@ -5,7 +5,10 @@ import {
   attachBrowserTab,
   createMemoryDaemonSockets,
   createMemoryDevtoolsBrowser,
+  type DevtoolsBrowser,
+  type DevtoolsPage,
   type MemoryDaemonSockets,
+  type MemoryPageChannel,
   type MemoryDevtoolsBrowser,
 } from "../devtools-relay/index.js";
 
@@ -124,5 +127,28 @@ describe("attachBrowserTab", () => {
     const error = (await attach(world, { url: "https://staging.example/shop" }).catch((caught: Error) => caught)) as Error;
 
     expect(error.message).toContain("@appduct/web");
+  });
+
+  it("leaves one daemon socket open when two attaches of one tab overlap", async () => {
+    const world = setup([tab("A", "https://staging.example/shop")]);
+    const opened: DevtoolsPage[] = [];
+    const browser: DevtoolsBrowser = {
+      ...world.browser,
+      openPage: async (targetId) => {
+        const page = await world.browser.openPage(targetId);
+        opened.push(page);
+        return page;
+      },
+    };
+    const relayedTabs = new Map<string, DevtoolsPage>();
+    const attachOnce = () =>
+      attachBrowserTab({ browser, relayedTabs, openDaemonSocket: world.daemon.open, mintLink, url: "https://staging.example/shop" });
+
+    await Promise.all([attachOnce(), attachOnce()]);
+    opened.forEach((page) => (page as MemoryPageChannel).call({ kind: "open" }));
+
+    expect(opened).toHaveLength(2);
+    expect(world.daemon.sockets).toHaveLength(1);
+    expect(relayedTabs.get("A")).toBe(opened[1]);
   });
 });
