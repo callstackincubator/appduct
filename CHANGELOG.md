@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Docs: which browsers and launch setups connect a web page without a permission prompt, and how to choose between DevTools and WebSocket.** See [Drive a web page](https://callstackincubator.github.io/appduct/guides/web-pages/) and [Security](https://callstackincubator.github.io/appduct/guides/security/#devtools-access).
 - **New: `appduct_connect({ target: "web", url, browserUrl })` and `appduct sessions link --open web <url> --browser-url <u>` attach a tab of a Chrome launched with `--remote-debugging-port`, with no permission prompt on `https` pages.** When several tabs match, the error lists their target ids; pass one as `targetId` or `--target-id`.
 - **New: `attachPage(page, { link })` in `appduct/client` runs a web page's session through a Playwright page, so an `https` page connects with no network connection of its own.** A reload resumes the session; a popup or a page in a new target is not relayed.
 - **New: a React Native app's web build registers its tools with the same `@appduct/react-native` calls, including `useAppductTool`, and they are callable once the page is opened with `appduct sessions link --open web <url>`; a production web build leaves Appduct out.** In `expo start --web` this needs `withAppduct` in `metro.config.js`. Web used to throw; see [Security](https://callstackincubator.github.io/appduct/guides/security/#web-pages).

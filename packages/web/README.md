@@ -84,6 +84,8 @@ await context.grantPermissions(["local-network-access"], { origin: "https://app.
 
 For an `https` page that isn't on localhost, add its origin to `webOrigins` in `~/.appduct/config.json`; see [Security](https://callstackincubator.github.io/appduct/guides/security/#web-pages).
 
+To skip the permission, or to drive a Chrome with a debugging port or a Playwright page, connect through DevTools instead; see [Drive a web page](https://callstackincubator.github.io/appduct/guides/web-pages/).
+
 ## What it doesn't do
 
 - A browser on another computer, or a cloud browser, can't connect.

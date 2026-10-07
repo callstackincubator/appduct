@@ -1,0 +1,79 @@
+---
+title: Drive a web page
+description: Which browsers and launch setups can connect a web page to Appduct, and how to choose between the DevTools and WebSocket transports.
+sidebar:
+  order: 6
+---
+
+A page that loads `@appduct/web` connects to Appduct in one of two ways. This page helps you pick the one that fits the browser you're driving. To register tools in the page, see the [`@appduct/web` README](https://github.com/callstackincubator/appduct/tree/main/packages/web#readme).
+
+- **WebSocket**: the page opens a connection to Appduct's web port on `127.0.0.1`. It works in any browser, but an `https` page needs a permission in Chrome and doesn't work in Safari. See [Security](/appduct/guides/security/#web-pages).
+- **DevTools**: Appduct reaches the page through the browser's DevTools protocol, and the page opens no connection of its own. An `https` page connects with no permission prompt.
+
+Both give you the same session and the same tools. Only how the page connects differs.
+
+## Which browsers and launch setups can use DevTools
+
+| Browser and launch setup | Transport | How you connect it |
+| --- | --- | --- |
+| Chromium launched with `--remote-debugging-port` and its own `--user-data-dir`, for example Chrome with `--remote-debugging-port=9222` | DevTools | `appduct sessions link --open web <url> --browser-url http://127.0.0.1:9222` |
+| chrome-devtools-mcp started with `--browser-url` | DevTools | The same command, against the Chrome that `--browser-url` points to |
+| agent-browser started with `--cdp` | DevTools | The same command, against the browser that `--cdp` points to |
+| A page in a Playwright test or script | DevTools | `attachPage(page, { link })` from `appduct/client` |
+| chrome-devtools-mcp that launches its own Chrome, or started with `--autoConnect` | WebSocket | `appduct sessions link --open web <url>` |
+| Claude in Chrome | WebSocket | `appduct sessions link --open web <url>` |
+| Firefox and Safari | WebSocket | `appduct sessions link --open web <url>` |
+
+For the WebSocket rows, an `https` page also needs Chrome's local network access permission, and Safari can't connect from `https`; see the [`@appduct/web` README](https://github.com/callstackincubator/appduct/tree/main/packages/web#browser-support).
+
+The browser must run on the same computer as Appduct. A debugging port gives full control of the browser, so `--browser-url` only accepts `127.0.0.1`, `[::1]` or `localhost`.
+
+## Choose a transport
+
+1. If you drive the page from a Playwright test or script, use `attachPage`. You need no debugging port.
+2. If the browser has a debugging port, use `--browser-url`. This is the choice for `https` pages, because no permission is needed.
+3. Otherwise, connect over WebSocket with `appduct sessions link --open web <url>`.
+
+### Attach a tab through a debugging port
+
+Launch Chrome with a debugging port and a profile of its own. Chrome refuses a debugging port on its default profile:
+
+```bash
+google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/appduct-chrome
+```
+
+Open your page, then attach it:
+
+```bash
+appduct sessions link --open web https://staging.example.com/shop --browser-url http://127.0.0.1:9222
+```
+
+The command attaches the one tab whose address starts with the URL and prints `sessionId`, `url` and `targetId`. Agents use `appduct_connect` with `target: "web"`, `url` and `browserUrl`.
+
+If no tab matches, or several do, the command fails and lists the open tabs with their target ids. Pass the one you want with `--target-id` (`targetId` in `appduct_connect`):
+
+```bash
+appduct sessions link --open web https://staging.example.com/shop \
+  --browser-url http://127.0.0.1:9222 --target-id 7C9A41F0B2D3E58A6F1C0D4E9B8A7352
+```
+
+The target id wins even when several tabs match.
+
+### Attach a Playwright page
+
+```ts
+import { attachPage, link } from "appduct/client";
+
+await page.goto("https://staging.example.com/shop");
+await attachPage(page, { link: await link({ target: "web", url: page.url() }) });
+```
+
+`attachPage` resolves once the session is claimed.
+
+## What a DevTools session doesn't cover
+
+- **A popup or a new tab.** The session stays on the page you attached. A page that opens in a new target isn't connected: attach it separately.
+- **A reload.** The session resumes. This works the same as over WebSocket.
+- **A page without `@appduct/web`.** The page must already load it, or the attach fails.
+
+For what DevTools access means for trust, see [Security](/appduct/guides/security/#devtools-access).
