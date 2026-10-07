@@ -9,7 +9,6 @@ let package = Package(
         .target(
             name: "ShimState",
             path: "../appduct/Sources/appduct",
-            exclude: ["AppductPlugin.swift", "PrivacyInfo.xcprivacy"],
             sources: ["ShimState.swift"]
         ),
         .testTarget(name: "ShimStateTests", dependencies: ["ShimState"]),

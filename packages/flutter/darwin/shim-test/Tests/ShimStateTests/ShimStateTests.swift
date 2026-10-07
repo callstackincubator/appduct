@@ -1,8 +1,6 @@
 import ShimState
 import XCTest
 
-
-
 private let link = "myapp:///?appduct=AAAA&pin=sha256/x"
 private let device = ShimDevice(manufacturer: "Apple", model: "iPhone", os: "iOS 18.2")
 

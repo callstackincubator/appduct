@@ -107,6 +107,9 @@ jobs:
       - name: Test
         if: steps.affected.outputs.run == 'true'
         run: flutter test
+      - name: Test the Android shim state
+        if: steps.affected.outputs.run == 'true'
+        run: gradle -p android/shim-test test
 
   android:
     runs-on: ubuntu-latest
@@ -368,6 +371,8 @@ jobs:
         run: |
           swift build -c release
           swift test
+      - name: Test the Flutter shim state
+        run: swift test --package-path packages/flutter/darwin/shim-test
       - name: Build AppductCore for iOS
         # `swift build` above targets the *host* -- macOS -- where `#if canImport(UIKit)` is false
         # and UIKitAppductForegroundObserver is compiled out entirely. Until this step existed, no
