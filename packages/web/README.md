@@ -89,7 +89,7 @@ To skip the permission, or to drive a Chrome with a debugging port or a Playwrig
 ## What it doesn't do
 
 - A browser on another computer, or a cloud browser, can't connect.
-- The page can't check that it's talking to your Appduct daemon, as a native app can. It connects to a port that only your computer can reach, and the daemon only accepts pages from allowed origins.
+- The page can't check that it's talking to your Appduct daemon, as a native app can. It connects to a port that only your computer can reach. Over WebSocket, the daemon only accepts pages from allowed origins. Over DevTools, access is limited by the local debugging port or the Playwright page; see [Security](https://callstackincubator.github.io/appduct/guides/security/#devtools-access).
 
 ## Made with ❤️ at Callstack
 

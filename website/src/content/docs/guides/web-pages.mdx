@@ -24,7 +24,7 @@ Both give you the same session and the same tools. Only how the page connects di
 | Claude in Chrome | WebSocket | `appduct sessions link --open web <url>` |
 | Firefox and Safari | WebSocket | `appduct sessions link --open web <url>` |
 
-For the WebSocket rows, an `https` page also needs Chrome's local network access permission, and Safari can't connect from `https`; see the [`@appduct/web` README](https://github.com/callstackincubator/appduct/tree/main/packages/web#browser-support).
+For the WebSocket rows, an `https` page also needs Chrome's local network access permission, and Safari can't connect from `https`; see the [`@appduct/web` README](https://github.com/callstackincubator/appduct/tree/main/packages/web#browser-support). `appduct sessions link --open web <url>` only prints a URL and a script. Nothing connects until you open that URL, or run the script in the page.
 
 The browser must run on the same computer as Appduct. A debugging port gives full control of the browser, so `--browser-url` only accepts `127.0.0.1`, `[::1]` or `localhost`.
 
@@ -32,7 +32,7 @@ The browser must run on the same computer as Appduct. A debugging port gives ful
 
 1. If you drive the page from a Playwright test or script, use `attachPage`. You need no debugging port.
 2. If the browser has a debugging port, use `--browser-url`. This is the choice for `https` pages, because no permission is needed.
-3. Otherwise, connect over WebSocket with `appduct sessions link --open web <url>`.
+3. Otherwise, connect over WebSocket with `appduct sessions link --open web <url>`. It prints a URL and a script; open the URL or run the script in the page to connect.
 
 ### Attach a tab through a debugging port
 
