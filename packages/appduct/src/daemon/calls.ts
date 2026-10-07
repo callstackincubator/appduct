@@ -91,7 +91,7 @@ export type CallsManager = {
   rejectSession: (
     sessionId: string,
     errorType: "session_suspended" | "unknown_session",
-    options?: { reason?: "backgrounded" | "reconnected" },
+    options?: { message?: (alias: string) => string },
   ) => void;
   /** Rejects and clears every pending call across every session (daemon shutdown). */
   disposeAll: () => void;
@@ -258,7 +258,7 @@ export const createCallsManager = (options: CallsManagerOptions): CallsManager =
   const rejectSession = (
     sessionId: string,
     errorType: "session_suspended" | "unknown_session",
-    options: { reason?: "backgrounded" | "reconnected" } = {},
+    options: { message?: (alias: string) => string } = {},
   ): void => {
     const sessionMap = pendingBySession.get(sessionId);
 
@@ -273,11 +273,7 @@ export const createCallsManager = (options: CallsManagerOptions): CallsManager =
       pending.reject(
         new RpcApplicationError(
           errorType,
-          options.reason === "backgrounded"
-            ? appBackgroundedMessage(pending.alias)
-            : options.reason === "reconnected"
-              ? appReconnectedMessage(pending.alias)
-              : "Session transitioned while the call was pending.",
+          options.message?.(pending.alias) ?? "Session transitioned while the call was pending.",
         ),
       );
     }
@@ -289,13 +285,11 @@ export const createCallsManager = (options: CallsManagerOptions): CallsManager =
     ];
 
     if (errorType && event.sessionId) {
-      const reason =
-        event.kind === "session_resumed"
-          ? "reconnected"
-          : event.kind === "session_suspended" && (event.data as { reason?: string }).reason === "app_backgrounded"
-            ? "backgrounded"
-            : undefined;
-      rejectSession(event.sessionId, errorType, { reason });
+      const backgrounded =
+        event.kind === "session_suspended" && (event.data as { reason?: string }).reason === "app_backgrounded";
+      const message =
+        event.kind === "session_resumed" ? appReconnectedMessage : backgrounded ? appBackgroundedMessage : undefined;
+      rejectSession(event.sessionId, errorType, { message });
     }
   });
 
