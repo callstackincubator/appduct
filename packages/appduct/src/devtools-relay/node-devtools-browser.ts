@@ -95,8 +95,8 @@ export const connectNodeDevtoolsBrowser: ConnectDevtoolsBrowser = (browserUrl): 
     openPage: async (targetId) => {
       const target = (await listTargets(browserUrl)).find((candidate) => candidate.id === targetId);
       if (!target?.webSocketDebuggerUrl) throw new Error(`The browser at ${browserUrl} has no tab ${targetId}.`);
-      open.get(targetId)?.close();
       const page = await openTab(target, browserUrl);
+      open.get(targetId)?.close();
       open.set(targetId, page);
       return page;
     },

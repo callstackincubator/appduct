@@ -5,7 +5,7 @@ export type AttachBrowserTabOptions = {
   browser: DevtoolsBrowser;
   /**
    * The page relayed for each target id. Attaching a tab closes the page already relayed for it, so a
-   * tab has one relay however its browser was reached; the new page is recorded here once relayed.
+   * tab has one relay however its browser was reached; the new page is recorded here as soon as it is open.
    */
   relayedTabs: Map<string, DevtoolsPage>;
   /** The tab's address, or the start of it. */
@@ -51,9 +51,10 @@ const WAIT_FOR_WEB = `new Promise((resolve, reject) => {
 export const attachBrowserTab = async (options: AttachBrowserTabOptions): Promise<AttachedTab> => {
   const tab = pickTab(await options.browser.targets(), options.url, options.targetId);
   const link = await options.mintLink();
-  options.relayedTabs.get(tab.id)?.close();
-  options.relayedTabs.delete(tab.id);
   const page = await options.browser.openPage(tab.id);
+  // One synchronous step, so overlapping attaches of the tab cannot each miss the other's relay.
+  options.relayedTabs.get(tab.id)?.close();
+  options.relayedTabs.set(tab.id, page);
   try {
     relayPage(page, link, options.openDaemonSocket);
     await page.evaluate(WAIT_FOR_WEB).catch(() => {
@@ -62,8 +63,8 @@ export const attachBrowserTab = async (options: AttachBrowserTabOptions): Promis
     await page.evaluate(`window.__APPDUCT__.connect(${JSON.stringify(linkPayload(link))}, { transport: "devtools" })`);
   } catch (error) {
     page.close();
+    if (options.relayedTabs.get(tab.id) === page) options.relayedTabs.delete(tab.id);
     throw error;
   }
-  options.relayedTabs.set(tab.id, page);
   return { sessionId: link.sessionId, url: tab.url, targetId: tab.id, expiresAt: link.expiresAt };
 };
