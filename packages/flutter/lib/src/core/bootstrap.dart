@@ -48,17 +48,17 @@ final _pinPattern = RegExp(r'^sha256/[A-Za-z0-9+/]{43}=$');
 /// Reads the `appduct` and `pin` query values of `<scheme>:///?appduct=<payload>&pin=...`.
 /// Returns null when the link has no `appduct` value or is not a URL.
 BootstrapLink? parseBootstrapLink(String url) {
-  final Uri uri;
+  final String? payload;
+  final String? pin;
   try {
-    uri = Uri.parse(url);
+    final query = Uri.parse(url).queryParametersAll;
+    payload = query['appduct']?.first;
+    pin = query['pin']?.first;
   } on FormatException {
     return null;
   }
 
-  final payload = uri.queryParametersAll['appduct']?.first;
   if (payload == null) return null;
-
-  final pin = uri.queryParametersAll['pin']?.first;
   return BootstrapLink(
     payload: payload,
     pin: pin != null && _pinPattern.hasMatch(pin) ? pin : null,
