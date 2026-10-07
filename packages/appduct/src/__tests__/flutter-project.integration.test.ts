@@ -232,7 +232,11 @@ describe("appduct init in a Flutter project", () => {
     const flutterSteps = (await run(flutter)).nextSteps;
     const expoSteps = (await run(expo)).nextSteps;
 
-    expect(flutterSteps.slice(flutterSteps.length - 3)).toEqual(expoSteps.slice(expoSteps.length - 3));
+    const generic = (steps: string[]): string[] =>
+      steps.filter((step) => !step.startsWith("Scheme ") && /MCP|pair a device|safe to commit|app's id/u.test(step));
+
+    expect(generic(flutterSteps)).toHaveLength(4);
+    expect(generic(flutterSteps)).toEqual(generic(expoSteps));
   });
 
   test("still prints the React Native reminder for an Expo app", async () => {

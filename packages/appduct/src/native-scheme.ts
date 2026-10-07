@@ -7,6 +7,8 @@
  * `xcodebuild`, no Gradle evaluation. Every probe is a plain read of a well-known project file,
  * parsed defensively:
  *
+ * - Flutter (a root with a `pubspec.yaml`): the Android probes below read `android/app/…` instead
+ *   of `app/…`; the iOS walk already reaches `ios/Runner` and `macos/Runner`.
  * - Android: `app/build.gradle.kts` / `app/build.gradle` for a `manifestPlaceholders["appductScheme"]`
  *   (or `.appductScheme =`) assignment, then `app/src/main/AndroidManifest.xml` for the first
  *   `<data android:scheme>` inside an intent filter that also declares
@@ -574,12 +576,17 @@ const probeIosProjectYml = async (root: string): Promise<NativeSchemeDiscovery> 
 
 /** In the order the file-level doc comment (and issue #48) describes: Android before iOS, and
  * within each platform the build config before the manifest/project file that mirrors it. */
-const PROBES: Array<(root: string) => Promise<NativeSchemeDiscovery>> = [
-  probeAndroidGradle,
-  probeAndroidManifest,
-  probeIosInfoPlist,
-  probeIosProjectYml,
+const PROBES: Array<["android" | "ios", (root: string) => Promise<NativeSchemeDiscovery>]> = [
+  ["android", probeAndroidGradle],
+  ["android", probeAndroidManifest],
+  ["ios", probeIosInfoPlist],
+  ["ios", probeIosProjectYml],
 ];
+
+/** Whether `root` is a Flutter project root: it has a `pubspec.yaml`. */
+export const isFlutterProject = async (root: string): Promise<boolean> => {
+  return (await readCappedText(join(root, "pubspec.yaml"))).ok;
+};
 
 /**
  * Runs every static-file probe against `root` (never walking up — same rule as `app.json`) and
@@ -598,9 +605,12 @@ const PROBES: Array<(root: string) => Promise<NativeSchemeDiscovery>> = [
 export const discoverNativeScheme = async (root: string): Promise<NativeSchemeDiscovery> => {
   const tried: string[] = [];
   const results: NativeSchemeProbeResult[] = [];
+  // A Flutter project keeps its Android app in `android/app/`, so the Android probes treat
+  // `android/` as their root. The iOS walk already reaches `ios/Runner` and `macos/Runner`.
+  const androidRoot = (await isFlutterProject(root)) ? join(root, "android") : root;
 
-  for (const probe of PROBES) {
-    const outcome = await probe(root);
+  for (const [platform, probe] of PROBES) {
+    const outcome = await probe(platform === "android" ? androidRoot : root);
     tried.push(...outcome.tried);
 
     if (outcome.result !== undefined) {
