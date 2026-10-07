@@ -4,9 +4,9 @@
  * command and `appduct/client`'s `link()` use so the deep-link shape can't drift between them.
  */
 
-import type { CliResult, LinkCommandData, WebLinkCommandData } from "../cli/result-types.js";
+import type { CliResult, LinkCommandData, WebAttachCommandData, WebLinkCommandData } from "../cli/result-types.js";
 import { isOpenTarget, OPEN_TARGETS, type ExecFn, type OpenTarget } from "../cli/open-target.js";
-import { mintLink, mintWebLink } from "../link.js";
+import { attachWebTab, mintLink, mintWebLink } from "../link.js";
 import { usageError } from "../errors.js";
 import type { SpawnFn } from "../rpc/client.js";
 
@@ -19,6 +19,10 @@ export type LinkCommandOptions = {
   relaunch?: boolean;
   /** The page to open, with `--open web`. */
   url?: string;
+  /** With `--open web`: the debugging endpoint of a Chromium whose tab the daemon attaches. */
+  browserUrl?: string;
+  /** With `--browser-url`: the CDP target id of the tab to attach. */
+  targetId?: string;
 };
 
 export type LinkCommandContext = {
@@ -39,6 +43,10 @@ export const handleLinkCommand = async (
   context: LinkCommandContext,
 ): Promise<CliResult<LinkCommandData>> => {
   let openTarget: OpenTarget | undefined;
+
+  if (options.browserUrl !== undefined || options.targetId !== undefined) {
+    throw usageError('"--browser-url" and "--target-id" only apply with "--open web".');
+  }
 
   if (options.open !== undefined) {
     if (!isOpenTarget(options.open)) {
@@ -89,13 +97,30 @@ export const handleLinkCommand = async (
 export const handleWebLinkCommand = async (
   options: LinkCommandOptions,
   context: LinkCommandContext,
-): Promise<CliResult<WebLinkCommandData>> => {
+): Promise<CliResult<WebLinkCommandData | WebAttachCommandData>> => {
   if (options.url === undefined) {
     throw usageError('"--open web" needs the page URL: appduct sessions link --open web <url>.');
   }
 
   if (options.device !== undefined || options.appId !== undefined || options.relaunch !== undefined) {
     throw usageError('"--device", "--app-id" and "--relaunch" do not apply with "--open web".');
+  }
+
+  if (options.targetId !== undefined && options.browserUrl === undefined) {
+    throw usageError('"--target-id" needs "--browser-url": it names a tab of that browser.');
+  }
+
+  if (options.browserUrl !== undefined) {
+    const attached = await attachWebTab({
+      stateDir: context.stateDir,
+      spawn: context.spawn,
+      ttlSeconds: options.ttlSeconds,
+      url: options.url,
+      browserUrl: options.browserUrl,
+      targetId: options.targetId,
+    });
+
+    return { ok: true, data: attached };
   }
 
   const result = await mintWebLink({

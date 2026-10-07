@@ -26,6 +26,8 @@ import {
   type EventsSubscribeResult,
   type LinkCreateParams,
   type LinkCreateResult,
+  type WebAttachParams,
+  type WebAttachResult,
   type SessionsDescribeResult,
   type SessionsListResult,
   type SessionsRevokeResult,
@@ -44,6 +46,15 @@ import {
 } from "@appduct/shared";
 
 import type { Clock } from "../cli/types.js";
+import {
+  attachBrowserTab,
+  connectNodeDevtoolsBrowser,
+  openNodeDaemonSocket,
+  type ConnectDevtoolsBrowser,
+  type DevtoolsBrowser,
+  type DevtoolsPage,
+} from "../devtools-relay/index.js";
+import { composeWebLink } from "../link.js";
 import { getDaemonReportedVersion } from "../package-version.js";
 import { detectAdvertisedAddress } from "./address.js";
 import { argsSha256, createAuditLogger, type AuditLogger } from "./audit.js";
@@ -95,6 +106,8 @@ export type DaemonOptions = {
    * `config.advertisedIp`. Overridable so tests can simulate a network change between two
    * `link.create` calls without mocking `os.networkInterfaces()` process-wide. */
   detectAddress?: () => ReturnType<typeof detectAdvertisedAddress>;
+  /** Reaches a debugging-port browser for `web.attach`; defaults to raw CDP over `ws`. */
+  connectDevtoolsBrowser?: ConnectDevtoolsBrowser;
 };
 
 export type RunningDaemon = {
@@ -442,9 +455,58 @@ const asLinkCreateParams = (params: unknown): LinkCreateParams => {
   return { ttlSeconds, addressOverride: addressOverride as string | undefined, transport };
 };
 
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "[::1]", "localhost"]);
+
+const asWebAttachParams = (params: unknown): WebAttachParams => {
+  if (typeof params !== "object" || params === null || Array.isArray(params)) {
+    throw new RpcApplicationError("invalid_request", "Params must be an object.");
+  }
+
+  const { url, browserUrl, targetId, ttlSeconds } = params as Record<string, unknown>;
+
+  for (const [field, value] of [["url", url], ["browserUrl", browserUrl], ["targetId", targetId]] as const) {
+    if (value !== undefined && (typeof value !== "string" || value.length === 0)) {
+      throw new RpcApplicationError("invalid_request", `"${field}" must be a non-empty string.`);
+    }
+  }
+
+  if (url === undefined || browserUrl === undefined) {
+    throw new RpcApplicationError("invalid_request", '"url" and "browserUrl" are required.');
+  }
+
+  let parsedBrowserUrl: URL | undefined;
+  try {
+    parsedBrowserUrl = new URL(browserUrl as string);
+  } catch {
+    // Reported below with the other malformed shapes.
+  }
+
+  if (parsedBrowserUrl === undefined || (parsedBrowserUrl.protocol !== "http:" && parsedBrowserUrl.protocol !== "https:")) {
+    throw new RpcApplicationError("invalid_request", `"browserUrl" must be an http(s) URL such as http://127.0.0.1:9222 (got "${browserUrl as string}").`);
+  }
+
+  if (!LOOPBACK_HOSTS.has(parsedBrowserUrl.hostname)) {
+    throw new RpcApplicationError(
+      "invalid_request",
+      `"browserUrl" must be a loopback address (127.0.0.1, [::1] or localhost), because a debugging port gives full control of the browser (got "${browserUrl as string}").`,
+    );
+  }
+
+  if (ttlSeconds !== undefined && (typeof ttlSeconds !== "number" || !Number.isInteger(ttlSeconds) || ttlSeconds <= 0)) {
+    throw new RpcApplicationError("invalid_request", '"ttlSeconds" must be a positive integer.');
+  }
+
+  return { url: url as string, browserUrl: browserUrl as string, targetId: targetId as string | undefined, ttlSeconds };
+};
+
 export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon> => {
   const clock = options.clock ?? { now: () => new Date() };
   const timers = options.timers ?? systemTimers;
+  const connectDevtoolsBrowser = options.connectDevtoolsBrowser ?? connectNodeDevtoolsBrowser;
+  const devtoolsBrowsers = new Map<string, DevtoolsBrowser>();
+  // Keyed by target id, not browserUrl: one tab reached through two spellings of the endpoint must
+  // still have one relay.
+  const relayedTabs = new Map<string, DevtoolsPage>();
   const paths = getStateDirPaths(options.stateDir);
 
   await ensureStateDir(options.stateDir);
@@ -509,6 +571,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
 
       // Reject any calls still in flight before the sockets that would have answered them go away.
       callsManager?.disposeAll();
+      devtoolsBrowsers.forEach((browser) => browser.close());
       // ARCHITECTURE.md §4: close all device sockets (1001) before tearing down the control plane.
       sessionManager?.disposeAll(1001, "daemon_shutdown");
       await listener?.close();
@@ -644,6 +707,29 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
       }
     });
 
+    const mintLink = async (
+      ttlSeconds: number | undefined,
+      addressOverride: string | undefined,
+      transport: LinkCreateParams["transport"],
+    ): Promise<LinkCreateResult> => {
+      // Re-detect the advertised address on every mint (ARCHITECTURE.md §4/§8): a long-lived
+      // daemon that changed networks must not keep minting links with a stale address/SAN.
+      // `refresh` only re-mints the certificate when the address actually changed; applying the
+      // (possibly unchanged) secure context is a cheap no-op the rest of the time, but comparing
+      // material identity avoids even that when nothing changed.
+      const previousMaterial = tls.current();
+      const nextMaterial = await tls.refresh();
+
+      if (nextMaterial !== previousMaterial) {
+        activeListener.applyTls(nextMaterial);
+      }
+
+      // `tls.refresh()` just ran above, so `pinnedKeys()[0]` reflects the material this link's
+      // endpoint will actually serve (opt-in hardening dev-mode: the CLI composes this into the
+      // deep link's `pin` query param — see `LinkCreateResult.pin`).
+      return { ...activeSessionManager.createLink(ttlSeconds, addressOverride, transport), pin: tls.pinnedKeys()[0]! };
+    };
+
     server = await startRpcServer({
       socketPath: getSocketPath(paths),
       dispatch: {
@@ -669,22 +755,29 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
         [RPC_METHODS.linkCreate]: async (params): Promise<LinkCreateResult> => {
           const { ttlSeconds, addressOverride, transport } = asLinkCreateParams(params);
 
-          // Re-detect the advertised address on every mint (ARCHITECTURE.md §4/§8): a long-lived
-          // daemon that changed networks must not keep minting links with a stale address/SAN.
-          // `refresh` only re-mints the certificate when the address actually changed; applying the
-          // (possibly unchanged) secure context is a cheap no-op the rest of the time, but comparing
-          // material identity avoids even that when nothing changed.
-          const previousMaterial = tls.current();
-          const nextMaterial = await tls.refresh();
+          return mintLink(ttlSeconds, addressOverride, transport);
+        },
+        [RPC_METHODS.webAttach]: async (params): Promise<WebAttachResult> => {
+          const { url, browserUrl, targetId, ttlSeconds } = asWebAttachParams(params);
+          let browser = devtoolsBrowsers.get(browserUrl);
 
-          if (nextMaterial !== previousMaterial) {
-            activeListener.applyTls(nextMaterial);
+          if (browser === undefined) {
+            browser = connectDevtoolsBrowser(browserUrl);
+            devtoolsBrowsers.set(browserUrl, browser);
           }
 
-          // `tls.refresh()` just ran above, so `pinnedKeys()[0]` reflects the material this link's
-          // endpoint will actually serve (opt-in hardening dev-mode: the CLI composes this into the
-          // deep link's `pin` query param — see `LinkCreateResult.pin`).
-          return { ...activeSessionManager.createLink(ttlSeconds, addressOverride, transport), pin: tls.pinnedKeys()[0]! };
+          try {
+            return await attachBrowserTab({
+              browser,
+              relayedTabs,
+              url,
+              targetId,
+              openDaemonSocket: openNodeDaemonSocket,
+              mintLink: async () => composeWebLink(url, await mintLink(ttlSeconds, undefined, "web")),
+            });
+          } catch (error) {
+            throw new RpcApplicationError("invalid_request", error instanceof Error ? error.message : String(error));
+          }
         },
         [RPC_METHODS.sessionsList]: (): SessionsListResult => {
           return activeSessionManager.list();

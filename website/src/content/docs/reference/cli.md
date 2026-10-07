@@ -38,6 +38,8 @@ Creates a one-time connection link and prints it.
 | Flag | Description |
 | --- | --- |
 | `--open <target>` | Open the link on a device: `android`, `ios-sim`, or `ios-device` (experimental). `--open web <url>` is for a web page; see [Web pages](#web-pages). |
+| `--browser-url <url>` | With `--open web`: attach a tab of a Chrome launched with `--remote-debugging-port`; see [Attach a Chrome tab](#attach-a-chrome-tab). |
+| `--target-id <id>` | With `--browser-url`: the tab to attach when several tabs match `<url>`. |
 | `--device <id>` | adb serial, simulator UDID, or device UDID, when more than one is available. |
 | `--app-id <id>` | Installed app id for `android` and `ios-device`. Defaults to `appId.<platform>` in `.appduct/config.json`. Not allowed with `ios-sim`. |
 | `--relaunch` | With `ios-device`: stop a running instance of the app first. |
@@ -60,6 +62,18 @@ The link has the form `<scheme>:///?appduct=<payload>&pin=<sha256/...>`. Pass it
 #### Web pages
 
 `appduct sessions link --open web <url>` creates a link for a page served at `<url>`. It needs no device, scheme, or app id, and prints `url` (the page URL with `#appduct=<payload>` added, replacing any fragment) and `script`. Open `url` in a browser, or run `script` in a page that's already open: `window.__APPDUCT__.connect("<payload>")`. The `--ttl` flag applies; `--device`, `--app-id`, and `--relaunch` don't.
+
+##### Attach a Chrome tab
+
+If the page is open in a Chrome you launched with `--remote-debugging-port` and its own `--user-data-dir`, the daemon can attach it for you:
+
+```bash
+appduct sessions link --open web https://staging.example.com/shop --browser-url http://127.0.0.1:9222
+```
+
+The daemon attaches the one tab whose address starts with `<url>`, connects the page through the debugging port, and prints `sessionId`, `url` (the tab's own address) and `targetId`. The page opens no connection of its own, so this works on `https` pages with no permission prompt. `<browser-url>` must be on this machine: `127.0.0.1`, `[::1]` or `localhost`. The page must already load `@appduct/web`. Reloading the page resumes the session.
+
+If no tab matches, or several do, the command fails and lists the open tabs with their target ids. Pass one with `--target-id <id>`; it wins even when several tabs match. A popup, or a page that opens in a new tab, isn't attached: run the command again for it.
 
 A web link points at `127.0.0.1` and the web port, which `appduct daemon status --json` reports as `data.daemon.web_port`. It only works on that port, and a link for a device only works for devices. See [Web pages](/appduct/guides/security/#web-pages) for what the web port accepts.
 
@@ -300,7 +314,7 @@ Default location `~/.appduct/config.json`. Every key is optional. Read when the 
 | `appduct_list_tools` | `selector?`, `group?`, `filter?`, `limit?` (default 50), `offset?` | Tool signatures with group and policy, `total`, and the app's `groups` |
 | `appduct_describe_tool` | `selector?`, `name` | One tool's full descriptor and policy |
 | `appduct_call_tool` | `selector?`, `name`, `args?`, `timeoutMs?` (1,000–600,000; can only shorten) | The tool's result |
-| `appduct_connect` | `target?` (`android`, `ios-sim`, `ios-device`, `web`, `none`), `url?` (required with `web`), `device?`, `appId?`, `relaunch?`, `ttlSeconds?` | `{ sessionId, delivered: true }`, or a `qr`, `deepLink`, and `instructions` for a person; with `web`, `{ sessionId, url, script, expiresAt }` |
+| `appduct_connect` | `target?` (`android`, `ios-sim`, `ios-device`, `web`, `none`), `url?` (required with `web`), `browserUrl?` and `targetId?` (with `web`), `device?`, `appId?`, `relaunch?`, `ttlSeconds?` | `{ sessionId, delivered: true }`, or a `qr`, `deepLink`, and `instructions` for a person; with `web`, `{ sessionId, url, script, expiresAt }`, or with `web` and `browserUrl`, `{ sessionId, url, targetId, attached: true, expiresAt }` once the tab is attached |
 | `appduct_wait_for_session` | `sessionId`, `timeoutMs?` | Resolves when the device connects |
 | `appduct_list_events` | `selector?`, `name?` (glob, e.g. `"cart.*"`), `limit?` (default 50), `offset?` | `{ session, total, limit, events }`, each event `{ name, signature, description }`, plus `payload_schema` when `name` is an exact name |
 | `appduct_events` | `selector?`, `since?`, `limit?` (default 50), `name?` (glob, e.g. `"cart.*"`), `payloadMaxBytes?` (default 4096) | `{ events, cursor, dropped, remaining }`, each event `{ name, payload, ts, seq, sessionId, alias }`, or, once truncated, `{ name, payloadPreview, truncated: true, payloadBytes, ts, seq, sessionId, alias }` |

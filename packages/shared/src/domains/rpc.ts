@@ -8,6 +8,7 @@ export const RPC_METHODS = {
   daemonStatus: "daemon.status",
   daemonShutdown: "daemon.shutdown",
   linkCreate: "link.create",
+  webAttach: "web.attach",
   sessionsList: "sessions.list",
   sessionsDescribe: "sessions.describe",
   sessionsRevoke: "sessions.revoke",
@@ -142,6 +143,28 @@ export type LinkCreateResult = {
    * `cliPins` are configured; embedded pins always win.
    */
   pin: string;
+};
+
+// --- web.attach ---
+
+export type WebAttachParams = {
+  /** The tab's address, or the start of it. The one tab whose URL starts with this is attached. */
+  url: string;
+  /** The debugging endpoint of a Chromium launched with `--remote-debugging-port`, such as `http://127.0.0.1:9222`. */
+  browserUrl: string;
+  /** A CDP target id: picks the tab directly, for when several tabs match `url`. */
+  targetId?: string;
+  ttlSeconds?: number;
+};
+
+export type WebAttachResult = {
+  sessionId: string;
+  /** The tab's own address, as the browser lists it. It carries no link payload. */
+  url: string;
+  /** The CDP target id of the attached tab. */
+  targetId: string;
+  /** Unix seconds. */
+  expiresAt: number;
 };
 
 // --- sessions.list / sessions.describe / sessions.revoke ---

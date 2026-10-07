@@ -157,6 +157,18 @@ export type WebLinkCommandData = {
   expiresAt: number;
 };
 
+/** `appduct sessions link --open web <url> --browser-url <u>`: the tab the daemon attached and the
+ * session it will claim. */
+export type WebAttachCommandData = {
+  attached: true;
+  sessionId: string;
+  url: string;
+  /** The CDP target id of the attached tab. */
+  targetId: string;
+  /** Unix seconds. */
+  expiresAt: number;
+};
+
 /** `appduct sessions ls`: `sessions.list` passthrough, verbatim (ARCHITECTURE.md §10: "--json
  * passthrough"). */
 export type LsCommandData = SessionSummary[];
