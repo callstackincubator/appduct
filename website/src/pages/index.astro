@@ -435,12 +435,14 @@ const platforms = [
 		text-transform: uppercase;
 	}
 
-	/* Platforms: three outlined columns; the whole column is the link. */
+	/* Platforms: a 2x2 grid of outlined cells, hairlines drawn by the grid gap; the whole cell is the link. */
 	.platforms {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 1px;
 		margin-top: clamp(2.5rem, 5vw, 4.5rem);
 		border: 1px solid var(--cs-line);
+		background: var(--cs-line);
 	}
 	.platform {
 		display: flex;
@@ -449,13 +451,11 @@ const platforms = [
 		padding: clamp(1.5rem, 3vw, 2.5rem);
 		text-decoration: none;
 		color: inherit;
+		background-color: var(--cs-bg);
 		transition: background-color 0.15s ease;
 	}
-	.platform + .platform {
-		border-inline-start: 1px solid var(--cs-line);
-	}
 	.platform:hover {
-		background: var(--cs-wash);
+		background-image: linear-gradient(var(--cs-wash), var(--cs-wash));
 	}
 	.platform h3 {
 		margin: 0;
@@ -519,10 +519,6 @@ const platforms = [
 		.split-col + .split-col {
 			padding-inline-start: 0;
 			border-inline-start: 0;
-		}
-		.platform + .platform {
-			border-inline-start: 0;
-			border-top: 1px solid var(--cs-line);
 		}
 	}
 	@media (max-width: 36rem) {
