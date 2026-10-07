@@ -119,7 +119,10 @@ Appduct out by default on both platforms.
    the daemon attaches the tab itself: no `script`, no `https` permission prompt, and the session
    is claimed when the call returns. When no tab or several tabs start with `url`, the error lists
    the open tabs with their target ids; pass one as `targetId` (CLI: `--target-id`). A popup or a
-   page in a new tab isn't attached.
+   page in a new tab isn't attached; the session stays on the page it was attached to.
+   Playwright: `attachPage(page, { link })` from `appduct/client`. Pipe-launched
+   chrome-devtools-mcp, `--autoConnect`, Claude in Chrome, Firefox and Safari use the WebSocket
+   path: `appduct sessions link --open web <url>`.
 4. Production builds need nothing: the root entry is inert unless the bundler sets the
    `development` export condition. To include Appduct in another build, import
    `@appduct/web/enabled`. A React Native app's web build in `expo start --web` needs the Metro
