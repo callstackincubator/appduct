@@ -20,6 +20,8 @@ Consumers:
   (JUnit): every file except `event-registry-frames.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/AppductEventRegistryTest.kt`
   (JUnit): `event-registry-frames.json`
+- `packages/flutter/test/core/*_test.dart` (`flutter test`): every file; `event-registry-frames.json`
+  is checked against the frames the Dart codec encodes
 
 ## The rule
 
