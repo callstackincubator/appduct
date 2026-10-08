@@ -12,6 +12,8 @@ import XCTest
 enum FakeWireEvent: Sendable {
   case connect(AppductConnectOptions)
   case send(String)
+  /// The client closed the connection because the app went to the background.
+  case suspend
 }
 
 /// Scripted fake standing in for `AppductConnectionManager` in `AppductClient` tests, so the
@@ -131,7 +133,10 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   /// Like the real transport: sends `1001 app_backgrounded`, keeps the lease, and reports the
   /// close back to the client.
   func closeForBackground() async {
-    withLock { _closeForBackgroundCallCount += 1 }
+    withLock {
+      _closeForBackgroundCallCount += 1
+      _wireEvents.append(.suspend)
+    }
     simulateClose(code: 1_001, reason: "app_backgrounded")
   }
 

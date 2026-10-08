@@ -23,7 +23,7 @@ import java.io.File
  * `SessionScenariosTests.swift` replays it through the Swift core and
  * `packages/web/src/__tests__/session-scenarios.test.ts` through the web core. The format is
  * documented in `packages/native/fixtures/README.md`: each step drives the client or expects the
- * next output of one of two ordered channels, wire (`connect`, `send`) and app (`state`,
+ * next output of one of two ordered channels, wire (`connect`, `send`, `suspend`) and app (`state`,
  * `session`, `call`, `cancel`). Order between the channels is not asserted.
  *
  * The client runs on a [StandardTestDispatcher] and reads its clock from the same scheduler, so a
@@ -31,10 +31,9 @@ import java.io.File
  * run the scheduler.
  */
 class SessionScenariosTest {
-    @Test
-    fun `replays every scenario in session-scenarios json`() {
-        val scenarios = JSONArray(File(fixturesDir(), "session-scenarios.json").readText(Charsets.UTF_8))
-        assertTrue("session-scenarios.json has no scenarios", scenarios.length() > 0)
+    private fun replayEveryScenarioIn(file: String) {
+        val scenarios = JSONArray(File(fixturesDir(), file).readText(Charsets.UTF_8))
+        assertTrue("$file has no scenarios", scenarios.length() > 0)
 
         val failures = mutableListOf<String>()
         for (index in 0 until scenarios.length()) {
@@ -46,6 +45,13 @@ class SessionScenariosTest {
         }
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
+
+    @Test
+    fun `replays every scenario in session-scenarios json`() = replayEveryScenarioIn("session-scenarios.json")
+
+    @Test
+    fun `replays every scenario in session-scenarios-background json`() =
+        replayEveryScenarioIn("session-scenarios-background.json")
 
     // --- the runner itself ---
 
@@ -170,11 +176,13 @@ private class ScenarioReplay(private val scenario: JSONObject) {
     private val startMs = scenario.getLong("startMs")
     private val jitter = scenario.getDouble("random")
     private lateinit var fake: FakeAppductTransport
+    private lateinit var lifecycle: FakeAppductLifecycleObserver
     private val client =
         AppductClient(
             transportFactory = { _, onMessage, onError, onClose ->
                 FakeAppductTransport(onMessage, onError, onClose).also { fake = it }
             },
+            lifecycleObserverFactory = { onChanged -> FakeAppductLifecycleObserver(onChanged).also { lifecycle = it } },
             dispatcher = dispatcher,
             clock = AppductClock { startMs + scheduler.currentTime },
             random = { jitter },
@@ -284,6 +292,10 @@ private class ScenarioReplay(private val scenario: JSONObject) {
                 }
             }
 
+            "background" -> lifecycle.simulateForegroundChange(background = true)
+
+            "foreground" -> lifecycle.simulateForegroundChange(background = false)
+
             "disconnect" -> driver.launch { client.disconnect() }
 
             else -> throw ScenarioFailure("$label: unknown drive step \"$kind\"")
@@ -322,7 +334,7 @@ private class ScenarioReplay(private val scenario: JSONObject) {
         scheduler.runCurrent()
         val got =
             when (kind) {
-                "connect", "send" -> nextWire()
+                "connect", "send", "suspend" -> nextWire()
                 "state", "session", "call", "cancel" -> app.removeFirstOrNull()
                 else -> throw ScenarioFailure("$label: unknown expect step \"$kind\"")
             } ?: throw ScenarioFailure("$label: expected $wanted but nothing arrived")
@@ -344,6 +356,8 @@ private class ScenarioReplay(private val scenario: JSONObject) {
                     .also { output -> event.options["resumeToken"]?.let { output.put("resumeToken", it) } }
 
             is FakeWireEvent.Send -> JSONObject().put("kind", "send").put("frame", JSONObject(event.text))
+
+            FakeWireEvent.Suspend -> JSONObject().put("kind", "suspend")
         }
     }
 }

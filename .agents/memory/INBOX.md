@@ -84,3 +84,11 @@ One note per PR that hit friction, four lines:
   What went wrong: Swift test code written without a toolchain failed review twice, first on non-Sendable static lets under Swift 6, then on NSLock.withLock below the macOS 13 deployment target.
   Would have prevented it: when no Swift toolchain is available, check new Swift test code against Package.swift's swift-tools-version and deployment targets before pushing.
   Cost: two review rounds
+- 2026-10-08 #214 skill: implement-issue
+  What went wrong: a new Kotlin test asserted on frames right after clearing them while the client still sent its registry frame asynchronously, so CI went red twice.
+  Would have prevented it: in Kotlin client tests, wait for the post-ack tool_registry_snapshot (or delta) before clearing sentMessages, and never prove absence with a zero-wait waitUntil.
+  Cost: review round, CI rerun
+- 2026-10-08 #215 skill: implement-issue
+  What went wrong: a slice that depended on a sibling slice's core fix was stacked on the wrong base, so its scenario failed until the sibling branch was merged in.
+  Would have prevented it: before stacking a slice, check whether its scenarios need behaviour fixed in an open sibling PR and stack on that PR's branch.
+  Cost: review round

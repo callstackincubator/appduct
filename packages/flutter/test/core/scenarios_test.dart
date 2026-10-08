@@ -234,13 +234,13 @@ Future<void> replay(Scenario scenario) async {
 }
 
 void main() {
-  void replays(String file, {String? skip}) {
+  void replays(String file) {
     group(file, () {
-      final scenarios = skip == null ? loadScenarios(file) : <Scenario>[];
+      final scenarios = loadScenarios(file);
 
       test('has scenarios', () {
         expect(scenarios, isNotEmpty);
-      }, skip: skip);
+      });
 
       for (final scenario in scenarios) {
         test('replays: ${scenario.name}', () => replay(scenario));
@@ -249,15 +249,7 @@ void main() {
   }
 
   replays('session-scenarios.json');
-  replays(
-    'session-scenarios-background.json',
-    skip:
-        File(
-          '../native/fixtures/session-scenarios-background.json',
-        ).existsSync()
-        ? null
-        : 'the file arrives with #206 (PR #215); the Dart core replays it as soon as it is on main',
-  );
+  replays('session-scenarios-background.json');
 
   group('the scenario runner', () {
     final ackFrame = ack(graceS: 10);
