@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:appduct/appduct.dart';
 // The core's memory fakes live under src/; the playground test drives its tools through them
 // the way the daemon would, which the public API alone cannot do.
@@ -140,10 +138,11 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 1800));
       await _flush();
 
-      expect(
-        _sent(socket, 'tool_call_progress').map((f) => f['message']),
-        ['warming up', 'almost there', 'done'],
-      );
+      expect(_sent(socket, 'tool_call_progress').map((f) => f['message']), [
+        'warming up',
+        'almost there',
+        'done',
+      ]);
       expect(_sent(socket, 'tool_result').single['result'], {'done': true});
       expect(counter.count, 1);
     });
