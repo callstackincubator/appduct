@@ -6,10 +6,12 @@ import '../core/ports.dart';
 /// (Windows and Linux). A hot restart finds it again; a crash leaves a stale lease behind, which
 /// the daemon refuses at most once.
 ///
-/// The lease is a trust input (it names the daemon and the pin a resume trusts), so it lives only
-/// in a per-user directory that no other user can write to: `$XDG_RUNTIME_DIR`, else
-/// `~/.appduct`, or `%LOCALAPPDATA%` on Windows. A directory that others can write to is
-/// treated as holding no lease, and with no per-user location the lease is not kept.
+/// The lease is a trust input (it names the daemon and the pin a resume trusts, and holds the
+/// resume token), so a file is used only inside an existing directory that no other user can
+/// read or write: `$XDG_RUNTIME_DIR` (0700 by spec), else an existing owner-only `~/.appduct`, or
+/// `%LOCALAPPDATA%` on Windows. Dart cannot set a directory's mode without FFI or a subprocess, so
+/// nothing is created. With no such directory the lease lives in memory only: a hot restart
+/// starts without it, and a file planted by someone else is never read.
 class FileSessionStore implements SessionStore {
   /// [environment] and [isWindows] default to the real process.
   FileSessionStore({
@@ -33,31 +35,40 @@ class FileSessionStore implements SessionStore {
     return home == null || home.isEmpty ? null : '$home/.appduct';
   }
 
-  /// The lease file, or null when there is no per-user location or others can write to it.
-  File? _file({required bool create}) {
+  /// The lease file, or null when there is no owner-only directory.
+  File? _file() {
     final base = _base();
     if (base == null) return null;
     final dir = Directory(base);
-    if (create && !dir.existsSync()) dir.createSync(recursive: true);
     if (!dir.existsSync()) return null;
-    // Group- or world-writable (0o022): another user could plant or swap the lease.
-    if (!_windows && dir.statSync().mode & 18 != 0) return null;
+    // Any group or other permission bit (0o077): another user could read or replace the lease.
+    if (!_windows && dir.statSync().mode & 63 != 0) return null;
     return File('$base${Platform.pathSeparator}$_fileName');
   }
 
+  String? _memory;
+
   @override
   String? read() {
-    final file = _file(create: false);
-    return file != null && file.existsSync() ? file.readAsStringSync() : null;
+    final file = _file();
+    if (file == null) return _memory;
+    return file.existsSync() ? file.readAsStringSync() : null;
   }
 
   @override
-  void write(String value) =>
-      _file(create: true)?.writeAsStringSync(value, flush: true);
+  void write(String value) {
+    final file = _file();
+    if (file == null) {
+      _memory = value;
+    } else {
+      file.writeAsStringSync(value, flush: true);
+    }
+  }
 
   @override
   void clear() {
-    final file = _file(create: false);
+    _memory = null;
+    final file = _file();
     if (file != null && file.existsSync()) file.deleteSync();
   }
 }
