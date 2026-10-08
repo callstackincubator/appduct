@@ -49,6 +49,7 @@ import { dirname, join, resolve } from "node:path";
 import { invalidAppIdMessage, isValidAppId } from "../cli/open-target.js";
 import type { CliResult, InitCommandData } from "../cli/result-types.js";
 import { usageError } from "../errors.js";
+import { isFlutterProject } from "../native-scheme.js";
 import {
   discoverStaticProjectScheme,
   globalConfigDirs,
@@ -216,6 +217,27 @@ const readExistingAppId = (
 
   return value;
 };
+
+/**
+ * The setup steps for a Flutter project (issue #197), printed in place of the React Native
+ * reminder. A project counts as Flutter when its root has a `pubspec.yaml`.
+ */
+const flutterNextSteps = (scheme: string): string[] => [
+  "Add the package with `flutter pub add appduct`, then call `await Appduct.ensureInitialized();` " +
+    "in `main()` before `runApp` — it is what starts the in-app agent endpoint.",
+  "Register your URL scheme on each platform you run. Android: add an `<intent-filter>` to your " +
+    "activity in `android/app/src/main/AndroidManifest.xml` with the actions and categories " +
+    "`android.intent.action.VIEW`, `android.intent.category.DEFAULT` and " +
+    `\`android.intent.category.BROWSABLE\`, and \`<data android:scheme="${scheme}"/>\`. iOS and ` +
+    "macOS: add `CFBundleURLTypes` > `CFBundleURLSchemes` to `ios/Runner/Info.plist` (and " +
+    "`macos/Runner/Info.plist`).",
+  "Allow the connection to your computer. Android: add `<uses-permission " +
+    'android:name="android.permission.INTERNET"/>` to `android/app/src/main/AndroidManifest.xml` ' +
+    "(Flutter only puts it in the debug and profile manifests, so a release build you opt in to " +
+    "Appduct needs it in the main one). iOS: add `NSLocalNetworkUsageDescription` to " +
+    "`ios/Runner/Info.plist`. macOS: set `com.apple.security.network.client` to `true` in both " +
+    "`macos/Runner/DebugProfile.entitlements` and `macos/Runner/Release.entitlements`.",
+];
 
 export const handleInitCommand = async (
   options: InitCommandOptions,
@@ -451,8 +473,12 @@ export const handleInitCommand = async (
         args: ["mcp", "--scheme", scheme],
       },
       nextSteps: [
-        'Add `import "@appduct/react-native/auto";` to your app entry (index.js / App.tsx) — it ' +
-          "is what starts the in-app agent endpoint.",
+        ...((await isFlutterProject(root))
+          ? flutterNextSteps(scheme)
+          : [
+              'Add `import "@appduct/react-native/auto";` to your app entry (index.js / App.tsx) — it ' +
+                "is what starts the in-app agent endpoint.",
+            ]),
         `Add the Appduct MCP server entry to your agent's MCP config. "--scheme ${scheme}" keeps ` +
           `that entry self-contained; ${SCHEME_ENV_VAR} and this ${PROJECT_CONFIG_RELATIVE_PATH} ` +
           "work too.",
