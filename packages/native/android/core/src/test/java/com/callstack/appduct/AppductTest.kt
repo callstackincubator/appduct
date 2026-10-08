@@ -74,6 +74,8 @@ class AppductTest {
             waitUntil { fake.connectCalls.size > before }
             fake.simulateAck(sessionId)
             job.join()
+            // The snapshot is sent after the ack; wait for it so a later clear() cannot race it.
+            waitUntil { fake.sentMessages.any { JSONObject(it).optString("type") == "tool_registry_snapshot" } }
         }
 
     // --- registration ---

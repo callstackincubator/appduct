@@ -267,6 +267,8 @@ All of these paths are relative to the current directory. From a React Native ro
 
 If nothing is found, the error lists every location. If two of these files declare different schemes, the command fails and names both. Dynamic config (`app.config.js`, Gradle scripts) is never run.
 
+In a Flutter project (a directory with a `pubspec.yaml`), step 2 reads `android/app/` instead of `app/`, step 3 finds `ios/Runner/Info.plist` and `macos/Runner/Info.plist`, and `init` prints the Flutter setup steps.
+
 ## Config files
 
 ### Project: `.appduct/config.json`

@@ -356,3 +356,119 @@ describe("artifact-inspect: never reports absent when it cannot actually tell", 
     expect(defaultExecBuffer).toBeInstanceOf(Function);
   });
 });
+
+describe("artifact-inspect: Flutter apps (Dart core marker in the AOT snapshot)", () => {
+  const dartMarker = "appduct-dart-core/0.1.0";
+  const snapshotWith = (marker: string): Buffer =>
+    Buffer.concat([Buffer.from("aot-snapshot-bytes "), Buffer.from(marker), Buffer.from(" more-bytes")]);
+  // What every Flutter release build carries whether or not Appduct's Dart code was compiled in:
+  // the native shim (a Kotlin class in the dex, a Swift class in the Runner binary).
+  const nativeShimOnly = {
+    android: Buffer.from("Ldev/appduct/AppductPlugin; dev.appduct/shim"),
+    ios: Buffer.from("AppductPlugin dev.appduct/shim"),
+  };
+
+  test("an APK whose libapp.so holds the marker reports present with the Dart core signal", async () => {
+    const root = await withFixtureRoot();
+    const apkPath = path.join(root, "flutter.apk");
+
+    await buildZipFixture(apkPath, {
+      "AndroidManifest.xml": "manifest",
+      "classes.dex": nativeShimOnly.android,
+      "lib/arm64-v8a/libapp.so": snapshotWith(dartMarker),
+    });
+
+    const result = await inspectArtifact(apkPath);
+
+    expect(result.platform).toBe("android");
+    expect(result.present).toBe(true);
+    expect(result.signals).toContain("flutter-dart-core-marker");
+  });
+
+  test("an AAB whose libapp.so holds the marker reports present", async () => {
+    const root = await withFixtureRoot();
+    const aabPath = path.join(root, "flutter.aab");
+
+    await buildZipFixture(aabPath, {
+      "base/manifest/AndroidManifest.xml": "manifest",
+      "base/lib/arm64-v8a/libapp.so": snapshotWith(dartMarker),
+    });
+
+    const result = await inspectArtifact(aabPath);
+
+    expect(result.present).toBe(true);
+    expect(result.signals).toContain("flutter-dart-core-marker");
+  });
+
+  test("an IPA whose App.framework/App holds the marker reports present", async () => {
+    const root = await withFixtureRoot();
+    const ipaPath = path.join(root, "flutter.ipa");
+
+    await buildZipFixture(ipaPath, {
+      "Payload/Runner.app/Runner": nativeShimOnly.ios,
+      "Payload/Runner.app/Frameworks/App.framework/App": snapshotWith(dartMarker),
+    });
+
+    const result = await inspectArtifact(ipaPath);
+
+    expect(result.platform).toBe("ios");
+    expect(result.present).toBe(true);
+    expect(result.signals).toContain("flutter-dart-core-marker");
+  });
+
+  test("an unpacked .app whose App.framework/App holds the marker reports present", async () => {
+    const root = await withFixtureRoot();
+    const appPath = path.join(root, "Runner.app");
+
+    await buildAppDirectoryFixture(appPath, {
+      "Frameworks/App.framework/App": snapshotWith(dartMarker),
+    });
+
+    const result = await inspectArtifact(appPath);
+
+    expect(result.present).toBe(true);
+    expect(result.signals).toContain("flutter-dart-core-marker");
+  });
+
+  test("an APK with only the native shim (Dart core compiled out) reports absent", async () => {
+    const root = await withFixtureRoot();
+    const apkPath = path.join(root, "flutter-release.apk");
+
+    await buildZipFixture(apkPath, {
+      "AndroidManifest.xml": "manifest",
+      "classes.dex": nativeShimOnly.android,
+      "lib/arm64-v8a/libapp.so": "aot-snapshot-bytes with no appduct in them",
+    });
+
+    const result = await inspectArtifact(apkPath);
+
+    expect(result.present).toBe(false);
+    expect(result.signals).toEqual([]);
+  });
+
+  test("an IPA with only the native shim (Dart core compiled out) reports absent", async () => {
+    const root = await withFixtureRoot();
+    const ipaPath = path.join(root, "flutter-release.ipa");
+
+    await buildZipFixture(ipaPath, {
+      "Payload/Runner.app/Runner": nativeShimOnly.ios,
+      "Payload/Runner.app/Frameworks/App.framework/App": "aot-snapshot-bytes with no appduct in them",
+    });
+
+    const result = await inspectArtifact(ipaPath);
+
+    expect(result.present).toBe(false);
+  });
+
+  test("a marker with a different version still reports present", async () => {
+    const root = await withFixtureRoot();
+    const apkPath = path.join(root, "flutter-newer.apk");
+
+    await buildZipFixture(apkPath, {
+      "AndroidManifest.xml": "manifest",
+      "lib/arm64-v8a/libapp.so": snapshotWith("appduct-dart-core/12.4.0-beta.1"),
+    });
+
+    expect((await inspectArtifact(apkPath)).present).toBe(true);
+  });
+});

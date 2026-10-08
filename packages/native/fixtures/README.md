@@ -20,14 +20,15 @@ Consumers:
   (JUnit): every file except `event-registry-frames.json` and `session-scenarios.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/AppductEventRegistryTest.kt`
   (JUnit): `event-registry-frames.json`
+- `packages/flutter/test/core/*_test.dart` (`flutter test`): every file except `spki-pin.json`;
+  `event-registry-frames.json` is checked against the frames the Dart codec encodes, and
+  `scenarios_test.dart` replays `session-scenarios.json` and `session-scenarios-background.json`
 - `packages/web/src/__tests__/session-scenarios.test.ts` (vitest),
   `packages/native/ios/Tests/AppductCoreTests/SessionScenariosTests.swift` (XCTest) and
   `packages/native/android/core/src/test/java/com/callstack/appduct/SessionScenariosTest.kt`
-  (JUnit): `session-scenarios.json`.
-- `packages/native/ios/Tests/AppductCoreTests/SessionScenariosTests.swift` (XCTest) and
-  `packages/native/android/core/src/test/java/com/callstack/appduct/SessionScenariosTest.kt`
-  (JUnit): also `session-scenarios-background.json`. The web suite does not load it, because the
-  web core has no background state.
+  (JUnit): `session-scenarios.json`
+- The Swift, Kotlin and Dart suites also load `session-scenarios-background.json`. The web suite
+  does not, because the web core has no background state.
 
 ## The rule
 
