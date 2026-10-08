@@ -200,8 +200,8 @@ an extra and an out-of-order output.
 ### `session-scenarios-background.json`
 
 The same format as `session-scenarios.json`, plus two drive steps and one wire output for the
-app leaving and returning to the foreground. Only the Swift and Kotlin suites load it; the Dart
-core replays it once it owns backgrounding too.
+app leaving and returning to the foreground. The Swift, Kotlin and Dart suites load it; the web
+core has no background state.
 
 | Drive | Fields | Does |
 | --- | --- | --- |
