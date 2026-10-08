@@ -4,7 +4,7 @@ import AppductCore
 /// Replays `packages/native/fixtures/session-scenarios.json` through `AppductClient`, the way
 /// `packages/web/src/__tests__/session-scenarios.test.ts` replays it through the web core. The
 /// format is documented in `packages/native/fixtures/README.md`: each step drives the client or
-/// expects the next output of one of two ordered channels, wire (`connect`, `send`) and app
+/// expects the next output of one of two ordered channels, wire (`connect`, `send`, `suspend`) and app
 /// (`state`, `session`, `call`, `cancel`). Order between the channels is not asserted.
 final class SessionScenariosTests: XCTestCase {
   private static func scenariosURL(_ file: String) -> URL {
@@ -152,6 +152,7 @@ private final class ScenarioReplay {
   private let timeoutSeconds: TimeInterval
   private let timers: FakeClientTimers
   private let transport = FakeTransportSession()
+  private let foreground = FakeForegroundObserver()
   private let client: AppductClient
   private let app = OutputQueue()
   private let responses = ResponseBox()
@@ -170,7 +171,7 @@ private final class ScenarioReplay {
       timers: timers,
       defaultToolTimeoutMs: 10_000,
       requirePrivateIp: true,
-      foregroundObserver: NeverBackgroundedObserver()
+      foregroundObserver: foreground
     )
   }
 
@@ -262,6 +263,12 @@ private final class ScenarioReplay {
         responses.put(.success(JSONValue.from(foundation: step["result"] as Any)), for: call)
       }
 
+    case "background":
+      foreground.simulateForegroundChange(background: true)
+
+    case "foreground":
+      foreground.simulateForegroundChange(background: false)
+
     case "disconnect":
       await client.disconnect()
 
@@ -316,7 +323,7 @@ private final class ScenarioReplay {
 
   private func next(_ kind: String) throws -> [String: Any]? {
     switch kind {
-    case "connect", "send":
+    case "connect", "send", "suspend":
       return try nextWire()
     case "state", "session", "call", "cancel":
       return try app.pop().map { try parseObject($0) }
@@ -343,6 +350,8 @@ private final class ScenarioReplay {
       return output
     case .send(let text):
       return ["kind": "send", "frame": try JSONSerialization.jsonObject(with: Data(text.utf8))]
+    case .suspend:
+      return ["kind": "suspend"]
     }
   }
 

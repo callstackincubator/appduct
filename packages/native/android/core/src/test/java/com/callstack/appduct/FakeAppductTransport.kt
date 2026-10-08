@@ -8,6 +8,9 @@ internal sealed class FakeWireEvent {
     data class Connect(val options: Map<String, Any?>) : FakeWireEvent()
 
     data class Send(val text: String) : FakeWireEvent()
+
+    /** The client closed the connection because the app went to the background. */
+    data object Suspend : FakeWireEvent()
 }
 
 /**
@@ -99,6 +102,7 @@ internal class FakeAppductTransport(
      * close back to the client. */
     override fun closeForBackground(completion: () -> Unit) {
         closeForBackgroundCalls.incrementAndGet()
+        wireEvents.add(FakeWireEvent.Suspend)
         simulateClose(1001, "app_backgrounded")
         completion()
     }
