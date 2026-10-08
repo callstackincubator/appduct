@@ -1125,7 +1125,11 @@ packages/
                    is pure Dart (only dart:async, dart:convert, dart:typed_data, dart:math;
                    a test enforces it): bootstrap link and payload decoding, frame
                    encode/decode, descriptor validation, close-code classification, all
-                   checked against packages/native/fixtures. Test it with
+                   checked against packages/native/fixtures, and the session core
+                   (`createDartCore`: claim and resume, reconnect, keepalive via the socket,
+                   backgrounding, registries, tool calls), a port of packages/web/src/core
+                   over the ports in `ports.dart`, each with a memory fake beside it, and
+                   replaying the session scenarios. Test it with
                    `cd packages/flutter && flutter test` (CI job `flutter` in test.yaml).
 playground/        reference app (Expo dev build)
 playground-native/ plain iOS and Android apps on packages/native, no React Native
