@@ -24,6 +24,10 @@ Consumers:
   `packages/native/ios/Tests/AppductCoreTests/SessionScenariosTests.swift` (XCTest) and
   `packages/native/android/core/src/test/java/com/callstack/appduct/SessionScenariosTest.kt`
   (JUnit): `session-scenarios.json` only.
+- `packages/native/ios/Tests/AppductCoreTests/SessionScenariosTests.swift` (XCTest) and
+  `packages/native/android/core/src/test/java/com/callstack/appduct/SessionScenariosTest.kt`
+  (JUnit): also `session-scenarios-background.json`. The web suite does not load it, because the
+  web core has no background state.
 
 ## The rule
 
@@ -188,6 +192,27 @@ consumes every output before the next drive step.
 
 Hand-written directly as JSON. Each runner also has inline scenarios that must fail, for a missing,
 an extra and an out-of-order output.
+
+### `session-scenarios-background.json`
+
+The same format as `session-scenarios.json`, plus two drive steps and one wire output for the
+app leaving and returning to the foreground. Only the Swift and Kotlin suites load it; the Dart
+core replays it once it owns backgrounding too.
+
+| Drive | Fields | Does |
+| --- | --- | --- |
+| `background` | | the app leaves the foreground |
+| `foreground` | | the app returns to the foreground |
+
+| Expect | Fields | Is |
+| --- | --- | --- |
+| `suspend` | | on the wire channel: the core closing the connection because the app is backgrounded (`1001 app_backgrounded`), keeping the resume lease |
+
+Every scenario here gives the session a 120 s grace window, so the clock can pass the 30 s backoff
+cap without the session expiring. The scenarios cover: backgrounding an active session suspends it
+and no reconnect follows, even after the clock passes the backoff cap; foregrounding resumes at
+once, without waiting for backoff; backgrounding during a backoff wait cancels the wait until the
+app returns; and backgrounding with a call in flight cancels the call with `session_suspended`.
 
 ### `spki-pin.json`
 

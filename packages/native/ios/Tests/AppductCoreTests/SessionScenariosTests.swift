@@ -7,18 +7,18 @@ import AppductCore
 /// expects the next output of one of two ordered channels, wire (`connect`, `send`) and app
 /// (`state`, `session`, `call`, `cancel`). Order between the channels is not asserted.
 final class SessionScenariosTests: XCTestCase {
-  private static let scenariosURL: URL = {
+  private static func scenariosURL(_ file: String) -> URL {
     URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent() // SessionScenariosTests.swift -> AppductCoreTests/
       .deletingLastPathComponent() // AppductCoreTests/ -> Tests/
       .deletingLastPathComponent() // Tests/ -> ios/
       .deletingLastPathComponent() // ios/ -> native/
       .appendingPathComponent("fixtures")
-      .appendingPathComponent("session-scenarios.json")
-  }()
+      .appendingPathComponent(file)
+  }
 
-  func testReplaysEveryScenarioInSessionScenariosJson() async throws {
-    let data = try Data(contentsOf: Self.scenariosURL)
+  private func replayEveryScenario(in file: String) async throws {
+    let data = try Data(contentsOf: Self.scenariosURL(file))
     let scenarios = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [[String: Any]])
     XCTAssertGreaterThan(scenarios.count, 0)
 
@@ -29,6 +29,14 @@ final class SessionScenariosTests: XCTestCase {
         XCTFail("\(error)")
       }
     }
+  }
+
+  func testReplaysEveryScenarioInSessionScenariosJson() async throws {
+    try await replayEveryScenario(in: "session-scenarios.json")
+  }
+
+  func testReplaysEveryScenarioInSessionScenariosBackgroundJson() async throws {
+    try await replayEveryScenario(in: "session-scenarios-background.json")
   }
 
   // MARK: The runner itself

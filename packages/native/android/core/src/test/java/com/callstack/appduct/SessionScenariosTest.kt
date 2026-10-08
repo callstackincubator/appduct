@@ -30,10 +30,9 @@ import java.io.File
  * run the scheduler.
  */
 class SessionScenariosTest {
-    @Test
-    fun `replays every scenario in session-scenarios json`() {
-        val scenarios = JSONArray(File(fixturesDir(), "session-scenarios.json").readText(Charsets.UTF_8))
-        assertTrue("session-scenarios.json has no scenarios", scenarios.length() > 0)
+    private fun replayEveryScenarioIn(file: String) {
+        val scenarios = JSONArray(File(fixturesDir(), file).readText(Charsets.UTF_8))
+        assertTrue("$file has no scenarios", scenarios.length() > 0)
 
         val failures = mutableListOf<String>()
         for (index in 0 until scenarios.length()) {
@@ -45,6 +44,13 @@ class SessionScenariosTest {
         }
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
+
+    @Test
+    fun `replays every scenario in session-scenarios json`() = replayEveryScenarioIn("session-scenarios.json")
+
+    @Test
+    fun `replays every scenario in session-scenarios-background json`() =
+        replayEveryScenarioIn("session-scenarios-background.json")
 
     // --- the runner itself ---
 
