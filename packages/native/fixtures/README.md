@@ -20,6 +20,10 @@ Consumers:
   (JUnit): every file except `event-registry-frames.json` and `session-scenarios.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/AppductEventRegistryTest.kt`
   (JUnit): `event-registry-frames.json`
+- `packages/flutter/test/core/*_test.dart` (`flutter test`): every file except `spki-pin.json`;
+  `event-registry-frames.json` is checked against the frames the Dart codec encodes, and
+  `scenarios_test.dart` replays `session-scenarios.json` (and `session-scenarios-background.json`
+  once it is here, since the Dart core owns backgrounding)
 - `packages/web/src/__tests__/session-scenarios.test.ts` (vitest),
   `packages/native/ios/Tests/AppductCoreTests/SessionScenariosTests.swift` (XCTest) and
   `packages/native/android/core/src/test/java/com/callstack/appduct/SessionScenariosTest.kt`
