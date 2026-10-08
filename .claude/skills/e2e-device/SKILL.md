@@ -182,10 +182,10 @@ R2, resume with no new link. Count a call first, restart, and deliver nothing:
 
 ```bash
 $a tools call "$id" sum --input '{"a":1,"b":2}' --json | jq -e '.data.total == 3'
-$a tools call "$id" call_count --json | jq -e '.data.count == 1'
+$a tools call "$id" call_count --input '{}' --json | jq -e '.data.count == 1'
 restart
 until [ "$(active)" = "$id" ]; do sleep 1; done
-$a tools call "$id" call_count --json | jq -e '.data.count == 0'
+$a tools call "$id" call_count --input '{}' --json | jq -e '.data.count == 0'
 ```
 
 The same session is active again, and the count is back to 0, which only the restarted isolate
