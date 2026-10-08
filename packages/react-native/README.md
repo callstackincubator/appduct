@@ -140,7 +140,7 @@ Omit the session selector when only one session is active; pass an alias or sess
 | --- | --- |
 | **iOS** | 15.1+ (`Appduct.podspec`), New Architecture |
 | **Android** | Autolinked, New Architecture |
-| **Web** | Stub only |
+| **Web** | The same tools work in your web build. Open the link from `appduct sessions link --open web <url>` and the page connects, as long as `metro.config.js` wraps your config in [`withAppduct`](https://callstackincubator.github.io/appduct/guides/build-variants/#strip-appducts-javascript-too) (Metro doesn't set the `development` condition on its own); see [Security](https://callstackincubator.github.io/appduct/guides/security/#web-pages). |
 
 ## Going further
 

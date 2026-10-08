@@ -147,6 +147,28 @@ export type LinkCommandData = {
   target?: OpenTarget;
 };
 
+/** `appduct sessions link --open web <url>`: the page URL carrying the link, and the script that
+ * connects an already-open page instead. */
+export type WebLinkCommandData = {
+  sessionId: string;
+  url: string;
+  script: string;
+  /** Unix seconds. */
+  expiresAt: number;
+};
+
+/** `appduct sessions link --open web <url> --browser-url <u>`: the tab the daemon attached and the
+ * session it will claim. */
+export type WebAttachCommandData = {
+  attached: true;
+  sessionId: string;
+  url: string;
+  /** The CDP target id of the attached tab. */
+  targetId: string;
+  /** Unix seconds. */
+  expiresAt: number;
+};
+
 /** `appduct sessions ls`: `sessions.list` passthrough, verbatim (ARCHITECTURE.md §10: "--json
  * passthrough"). */
 export type LsCommandData = SessionSummary[];
@@ -238,6 +260,7 @@ export type DaemonStatusCommandData = {
     pid: number;
     started_at: string;
     wss_port: number;
+    web_port: number;
     pinned_keys: string[];
     session_count: number;
   };

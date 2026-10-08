@@ -55,16 +55,60 @@ const {
 } = __testables;
 
 describe("withAppduct: default (include unset / true)", () => {
-  test("returns the config untouched -- no resolver installed", () => {
-    const config = { resolver: { sourceExts: ["ts"] } };
-    const result = withAppduct(config);
-    expect(result).toBe(config);
+  const resolveWith = (
+    withOptions: { include?: boolean } | undefined,
+    context: Record<string, unknown>,
+    moduleName: string,
+    platform: string,
+  ) => {
+    const seen: { moduleName: string; conditions: unknown }[] = [];
+    const config = {
+      resolver: {
+        resolveRequest: (ctx: { unstable_conditionNames?: string[] }, name: string, _platform: string | null) => {
+          seen.push({ moduleName: name, conditions: ctx.unstable_conditionNames });
+          return { type: "empty" };
+        },
+      },
+    };
+    const result = withAppduct(config, withOptions) as unknown as typeof config;
+    result.resolver.resolveRequest(
+      { unstable_conditionNames: ["browser", "require"], ...context } as never,
+      moduleName,
+      platform,
+    );
+    return seen[0]!;
+  };
+
+  test("keeps every other setting of the config", () => {
+    const config = { resolver: { sourceExts: ["ts"] }, projectRoot: "/app" };
+    const result = withAppduct(config) as typeof config;
+    expect(result.projectRoot).toBe("/app");
+    expect(result.resolver.sourceExts).toEqual(["ts"]);
   });
 
-  test("explicit include: true also leaves the config untouched", () => {
-    const config = { resolver: { sourceExts: ["ts"] } };
-    const result = withAppduct(config, { include: true });
-    expect(result).toBe(config);
+  test("resolves @appduct/react-native itself unchanged", () => {
+    const seen = resolveWith({ include: true }, { dev: true }, "@appduct/react-native", "web");
+    expect(seen.moduleName).toBe("@appduct/react-native");
+  });
+
+  test("adds the development condition for @appduct/web in a development web bundle", () => {
+    const seen = resolveWith(undefined, { dev: true }, "@appduct/web", "web");
+    expect(seen.conditions).toEqual(["browser", "require", "development"]);
+  });
+
+  test("adds it for the entry @appduct/web/react shares with @appduct/web", () => {
+    const seen = resolveWith(undefined, { dev: true }, "#appduct-web", "web");
+    expect(seen.conditions).toEqual(["browser", "require", "development"]);
+  });
+
+  test("leaves the conditions alone in a production web bundle", () => {
+    const seen = resolveWith(undefined, { dev: false }, "@appduct/web", "web");
+    expect(seen.conditions).toEqual(["browser", "require"]);
+  });
+
+  test("leaves the conditions alone on native", () => {
+    const seen = resolveWith(undefined, { dev: true }, "@appduct/web", "ios");
+    expect(seen.conditions).toEqual(["browser", "require"]);
   });
 });
 

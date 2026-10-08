@@ -23,6 +23,35 @@ With the defaults, Appduct is only in debug builds, so a release build has no Ap
 - **A leaked key.** If your key leaks, someone on the network can impersonate your computer to builds that trust it, until those builds are retired. [Rotate keys](#rotate-keys) to limit the damage.
 - **Exposing Appduct to the internet.** Whether to do that is your decision. If you do, set up [policy](#limit-what-callers-can-run).
 
+## Web pages
+
+A browser can't pin your computer's key, so a web page connects to a separate port instead: plain `ws://` on `127.0.0.1`, which `appduct daemon status --json` reports as `data.daemon.web_port`. The page can't check that it's talking to Appduct, so this port is never reachable from other machines. Treat it like any local port: any process on your computer can open it.
+
+What keeps other websites out is the `Origin` header the browser sends. The daemon refuses a connection with a 403 unless the origin is `localhost`, `127.0.0.1`, or `[::1]` on any port, or is listed in `webOrigins` in `~/.appduct/config.json`:
+
+```json title="~/.appduct/config.json"
+{
+  "webOrigins": ["https://app.example.test"]
+}
+```
+
+Each entry must match the origin exactly, as the browser sends it: scheme, host, and port if it isn't the default. `"https://app.example.test"` doesn't match `"https://app.example.test:8443"`. A connection with no `Origin` is let through. Only a process on your computer sends none, and it could connect anyway. Run `appduct daemon stop` after changing the file.
+
+A page you load from a `webOrigins` entry or a local dev server can claim a link and call any tool you've registered, so list only origins you control. Links work as for devices: one connection, 5 minutes, and a web link can't be used on the device port or the other way round.
+
+A web page can't pin your computer's key, so it can't tell your Appduct from another program listening on that port. Native apps can. Browsers also limit where a page can connect:
+
+- A page on `http://localhost` connects in Chrome, Firefox and Safari.
+- A page on `https://` connects in Firefox, and in Chrome once you grant the local network access permission. Safari blocks it.
+
+Production bundles leave `@appduct/web` out unless they import `@appduct/web/enabled`; see [Build variants](/appduct/guides/build-variants/#web-production-builds). Only import it in builds you control: a page that includes it can claim a link and call every tool you registered.
+
+### DevTools access
+
+A page can also connect through the browser's DevTools protocol, with no WebSocket of its own; see [Drive a web page](/appduct/guides/web-pages/). Whoever can attach to a browser over the DevTools protocol already controls every page in it: they can read the page, run code in it, and call anything it exposes. A DevTools session gives them nothing more. The link only picks which session to use.
+
+So the trust boundary is the debugging port. It is open to every process on your computer, so launch the browser with its own `--user-data-dir` and don't forward the port to another machine. Appduct only attaches to a debugging port on `127.0.0.1`, `[::1]` or `localhost`. Because the page opens no connection, the `Origin` check and `webOrigins` don't apply to it.
+
 ## Choose what a build trusts
 
 Each build trusts your computer in one of two ways.

@@ -2,7 +2,7 @@
 
 [![MIT license][license-badge]][license] [![npm downloads][npm-downloads-badge]][npm-downloads] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-Appduct lets a terminal, a test runner, or an AI agent call functions inside your running iOS, Android, or React Native app. Appduct calls these functions tools. Only the tools you register are reachable.
+Appduct lets a terminal, a test runner, or an AI agent call functions inside your running iOS, Android, React Native or web app. Appduct calls these functions tools. Only the tools you register are reachable.
 
 ## Why you'd want this
 
@@ -89,6 +89,7 @@ appduct tools call seed_cart --input '{"items":3}'
    - [iOS](packages/native/ios/README.md), with Swift Package Manager or CocoaPods
    - [Android](packages/native/android/README.md), from Maven Central
    - [React Native](packages/react-native/README.md). You need a development build; Expo Go doesn't work.
+   - [Web](packages/web/README.md), for any framework or plain JavaScript
 
 To try it before touching your own app, run a playground app: [iOS](playground-native/ios/README.md), [Android](playground-native/android/README.md) or [React Native](playground/README.md).
 
@@ -99,7 +100,7 @@ To try it before touching your own app, run a playground app: [iOS](playground-n
 - [Use Appduct with an agent](https://callstackincubator.github.io/appduct/guides/agents/): MCP config and the agent skill
 - [Call tools from tests](packages/appduct/README.md#test-runners-appductclient): the `appduct/client` API
 - [Registering tools](https://callstackincubator.github.io/appduct/guides/writing-tools/): schemas, long-running tools and events
-- [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/): which builds include Appduct
+- [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/): which builds include Appduct, including web production bundles
 - [Security](https://callstackincubator.github.io/appduct/guides/security/): what it protects against, trust and key rotation
 - [Packages and platform support](https://callstackincubator.github.io/appduct/start/introduction/#packages)
 

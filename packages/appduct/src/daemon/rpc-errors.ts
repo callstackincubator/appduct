@@ -24,3 +24,8 @@ export class RpcApplicationError extends Error {
  * background: says why and how to recover. */
 export const appBackgroundedMessage = (alias: string): string =>
   `Session "${alias}" is suspended because the app is in the background. Bring the app to the foreground to resume it.`;
+
+/** The `session_suspended` message for a call that was pending when the app reconnected on a new
+ * socket: the app dropped the call with the old socket, so its result is lost. */
+export const appReconnectedMessage = (alias: string): string =>
+  `Session "${alias}" reconnected while the call was pending, so its result was lost. The call can be retried.`;

@@ -8,11 +8,14 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "playground:appduct": "./playground/scripts/appduct.sh"
+    "playground:appduct": "./playground/scripts/appduct.sh",
+    "playground-flutter:appduct": "./playground-flutter/scripts/appduct.sh",
+    "playground:web": "pnpm --filter playground-web dev"
   },
   "workspaces": [
     "packages/*",
     "playground",
+    "playground-web",
     "website"
   ],
   "devDependencies": {

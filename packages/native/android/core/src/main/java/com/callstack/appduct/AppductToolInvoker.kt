@@ -33,12 +33,15 @@ internal class AppductToolReplyError(
  *
  * Cancellation is coroutine-native: [TimeoutCancellationException] (this invoker's own
  * `withTimeout`) is reported as `tool_timeout`; any other `CancellationException` (an explicit
- * `tool_cancel` frame, or [abortAllInFlight]) is reported as `tool_cancelled`. Per issue #48
+ * `tool_cancel` frame) is reported as `tool_cancelled`; [abortAllInFlight] sends nothing, as the
+ * socket it would answer on is gone. Per issue #48
  * decision 4 the native SDK does no app-side schema validation, so the only wire error types this
  * emits are `tool_not_found`, `tool_execution_error`, `tool_timeout`, `tool_cancelled`, and
  * `tool_serialization_error` -- `tool_input_validation_error`/`tool_output_validation_error` stay
  * JS-only, where Standard Schema validation lives.
  */
+private const val SESSION_SUSPENDED = "session_suspended"
+
 internal class AppductToolInvoker(
     private val scope: CoroutineScope,
     private val registry: AppductToolRegistry,
@@ -149,8 +152,11 @@ internal class AppductToolInvoker(
                         sendToolError(sessionId, callId, "tool_timeout", "Tool \"$name\" did not respond within ${timeoutMs}ms.")
                     }
                 } catch (e: CancellationException) {
-                    withContext(NonCancellable) {
-                        sendToolError(sessionId, callId, "tool_cancelled", "Tool \"$name\" was cancelled.")
+                    // A suspended session has no socket to answer on; the daemon already failed the call.
+                    if (e.message != SESSION_SUSPENDED) {
+                        withContext(NonCancellable) {
+                            sendToolError(sessionId, callId, "tool_cancelled", "Tool \"$name\" was cancelled.")
+                        }
                     }
                 } catch (e: AppductToolReplyError) {
                     // A caller (the Android bridge, on behalf of `respondToToolCall`) already knows
@@ -191,7 +197,7 @@ internal class AppductToolInvoker(
      * transport itself is gone (session suspended), so nothing could ever deliver one. */
     fun abortAllInFlight() {
         for (job in inFlight.values) {
-            job.cancel(CancellationException("session_suspended"))
+            job.cancel(CancellationException(SESSION_SUSPENDED))
         }
     }
 }

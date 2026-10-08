@@ -38,6 +38,9 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
         "appId": {
           "type": "string",
         },
+        "browserUrl": {
+          "type": "string",
+        },
         "device": {
           "type": "string",
         },
@@ -50,12 +53,19 @@ exports[`mcp: tools/list > the built-in tool shapes match the locked snapshot 1`
             "ios-sim",
             "ios-device",
             "none",
+            "web",
           ],
+          "type": "string",
+        },
+        "targetId": {
           "type": "string",
         },
         "ttlSeconds": {
           "exclusiveMinimum": 0,
           "type": "number",
+        },
+        "url": {
+          "type": "string",
         },
       },
       "type": "object",

@@ -1,8 +1,6 @@
 import type { AppductBuildConfig } from "./Appduct.types";
-import type {
-  AppductNativeEvents,
-  AppductNativeModuleLike,
-} from "./client-types";
+import type { AppductCore, AppductNativeEvents } from "@appduct/shared/sdk";
+
 import { logger } from "./logger";
 
 // Metro/Node's CommonJS `require` is available at runtime in every environment this file actually
@@ -158,7 +156,7 @@ const bridgeListeners: {
 
 const noopSubscription: EventSubscription = { remove() {} };
 
-export const appductNativeModule: AppductNativeModuleLike = {
+export const appductNativeModule: AppductCore = {
   registerTool: (descriptorJson) =>
     resolveNativeModule().registerTool(descriptorJson),
   unregisterTool: (name) => resolveNativeModule().unregisterTool(name),

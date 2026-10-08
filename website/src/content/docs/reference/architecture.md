@@ -82,7 +82,6 @@ The background service keeps running after you upgrade the CLI. The next command
 - Replace UI testing. It skips setup; your UI test tool still drives the screens.
 - Accept connections without a link and a matching key.
 - Relay to computers other than the one running the background service.
-- Run in a web browser. The web build is a stub that does nothing.
 - Call a tool whose input schema can't accept a JSON object. Such tools are listed but can't be called.
 
 ## For the details

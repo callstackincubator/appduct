@@ -54,6 +54,12 @@ export type AppductConfig = {
   eventsLogMaxBytes: number;
   policy: AppductPolicyConfig;
   /**
+   * Origins besides localhost, `127.0.0.1` and `[::1]` (any port) that may connect to the web
+   * listener, each written as a browser sends it, e.g. `"https://app.example.test"`. Compared as
+   * exact strings. Default: none.
+   */
+  webOrigins: string[];
+  /**
    * When the CLI/MCP client finds the running daemon on a different Appduct version, restart it
    * even if that drops live sessions (issue #30, ARCHITECTURE.md §4's "Version drift"). Default
    * `false`: with sessions connected the command fails with both versions and the remedy instead.
@@ -83,6 +89,7 @@ const KNOWN_TOP_LEVEL_KEYS = new Set<string>([
   "daemonLogMaxBytes",
   "eventsLogMaxBytes",
   "policy",
+  "webOrigins",
   "advertisedIp",
   "scheme",
   "restartDaemonOnVersionMismatch",
@@ -166,6 +173,7 @@ export const defaultConfig = (paths: StateDirPaths): AppductConfig => {
     daemonLogMaxBytes: DEFAULT_DAEMON_LOG_MAX_BYTES,
     eventsLogMaxBytes: 10 * 1024 * 1024,
     restartDaemonOnVersionMismatch: false,
+    webOrigins: [],
     policy: {
       default: "allow",
       destructive: "allow",
@@ -259,6 +267,14 @@ export const loadConfig = async (
       parsed.restartDaemonOnVersionMismatch,
       "restartDaemonOnVersionMismatch",
     );
+  }
+
+  if (parsed.webOrigins !== undefined) {
+    if (!Array.isArray(parsed.webOrigins)) {
+      throw configError("webOrigins", "must be an array of origin strings.");
+    }
+
+    config.webOrigins = parsed.webOrigins.map((origin) => requireNonEmptyString(origin, "webOrigins"));
   }
 
   if (parsed.policy !== undefined) {

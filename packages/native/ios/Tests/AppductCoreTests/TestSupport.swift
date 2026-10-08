@@ -8,6 +8,14 @@ import Foundation
 import XCTest
 @testable import AppductCore
 
+/// One thing the client asked of the fake transport, in the order it asked.
+enum FakeWireEvent: Sendable {
+  case connect(AppductConnectOptions)
+  case send(String)
+  /// The client closed the connection because the app went to the background.
+  case suspend
+}
+
 /// Scripted fake standing in for `AppductConnectionManager` in `AppductClient` tests, so the
 /// reconnect/registry/tool-invocation state machine is testable without a real TLS/WebSocket stack.
 final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
@@ -54,6 +62,7 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   private var _lastConnectOptions: AppductConnectOptions?
   private var _closeCallCount = 0
   private var _closeForBackgroundCallCount = 0
+  private var _wireEvents: [FakeWireEvent] = []
 
   /// Set by a test to make the next `connect(options:)` throw instead of succeeding.
   var connectError: (@Sendable () -> Error)?
@@ -91,10 +100,16 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
     withLock { _closeForBackgroundCallCount }
   }
 
+  /// Every `connect` and `send`, interleaved in the order the client made them.
+  var wireEvents: [FakeWireEvent] {
+    withLock { _wireEvents }
+  }
+
   func connect(options: AppductConnectOptions) async throws {
     withLock {
       _connectCallCount += 1
       _lastConnectOptions = options
+      _wireEvents.append(.connect(options))
     }
 
     if let connectError {
@@ -104,7 +119,10 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   }
 
   func send(message: String) async throws {
-    withLock { _sentMessages.append(message) }
+    withLock {
+      _sentMessages.append(message)
+      _wireEvents.append(.send(message))
+    }
   }
 
   func close() async {
@@ -115,7 +133,10 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   /// Like the real transport: sends `1001 app_backgrounded`, keeps the lease, and reports the
   /// close back to the client.
   func closeForBackground() async {
-    withLock { _closeForBackgroundCallCount += 1 }
+    withLock {
+      _closeForBackgroundCallCount += 1
+      _wireEvents.append(.suspend)
+    }
     simulateClose(code: 1_001, reason: "app_backgrounded")
   }
 
