@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'appduct'
-  s.version          = '0.0.1'
+  s.version          = '0.14.0'
   s.summary          = 'Appduct for Flutter.'
   s.description      = <<-DESC
 Appduct for Flutter.

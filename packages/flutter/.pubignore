@@ -1,0 +1,4 @@
+# Native unit-test harnesses; they are not part of the plugin.
+android/shim-test/
+android/src/test/
+darwin/shim-test/
