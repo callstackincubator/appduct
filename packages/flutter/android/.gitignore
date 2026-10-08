@@ -7,3 +7,5 @@
 /build
 /captures
 .cxx
+/shim-test/build
+/shim-test/.kotlin

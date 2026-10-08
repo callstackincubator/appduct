@@ -107,6 +107,19 @@ jobs:
       - name: Test
         if: steps.affected.outputs.run == 'true'
         run: flutter test
+      - name: Test the Android shim state
+        if: steps.affected.outputs.run == 'true'
+        run: gradle -p android/shim-test test
+      - name: Build a host app with the plugin for Android
+        # Compiles AppductPlugin.kt against the real Flutter embedding; the shim-state test above
+        # cannot, because it stubs Flutter out.
+        if: steps.affected.outputs.run == 'true'
+        working-directory: .
+        run: |
+          flutter create --org dev.appduct.host --platforms android "$RUNNER_TEMP/host"
+          cd "$RUNNER_TEMP/host"
+          flutter pub add appduct --path "$GITHUB_WORKSPACE/packages/flutter"
+          flutter build apk --debug
 
   android:
     runs-on: ubuntu-latest
@@ -269,6 +282,53 @@ jobs:
           playground-native/android/app/build/outputs/apk/release/app-release-unsigned.apk
           --assert-absent
 
+  flutter-darwin:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      FLUTTER_VERSION: 3.47.6
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Decide whether the Flutter package is affected
+        id: affected
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ] || git diff --name-only "$BASE_SHA" HEAD \
+            | grep -qE '^(packages/flutter/|\.github/workflows/test\.yaml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Cache Flutter SDK
+        if: steps.affected.outputs.run == 'true'
+        id: flutter-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/flutter
+          key: flutter-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
+      - name: Install Flutter
+        if: steps.affected.outputs.run == 'true' && steps.flutter-cache.outputs.cache-hit != 'true'
+        run: git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git ~/flutter
+      - name: Add Flutter to PATH
+        if: steps.affected.outputs.run == 'true'
+        run: echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Build a host app with the plugin for iOS
+        # Compiles AppductPlugin.swift against the real Flutter framework; the shim-state test in
+        # the ios job cannot, because it stubs Flutter out.
+        if: steps.affected.outputs.run == 'true'
+        run: |
+          flutter create --org dev.appduct.host --platforms ios,macos "$RUNNER_TEMP/host"
+          cd "$RUNNER_TEMP/host"
+          flutter pub add appduct --path "$GITHUB_WORKSPACE/packages/flutter"
+          flutter build ios --debug --no-codesign
+          flutter build macos --debug
+
   ios:
     runs-on: macos-latest
     timeout-minutes: 45
@@ -368,6 +428,8 @@ jobs:
         run: |
           swift build -c release
           swift test
+      - name: Test the Flutter shim state
+        run: swift test --package-path packages/flutter/darwin
       - name: Build AppductCore for iOS
         # `swift build` above targets the *host* -- macOS -- where `#if canImport(UIKit)` is false
         # and UIKitAppductForegroundObserver is compiled out entirely. Until this step existed, no
