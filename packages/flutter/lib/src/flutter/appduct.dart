@@ -54,10 +54,17 @@ abstract final class Appduct {
   }
 
   /// Registers a tool the daemon can call. The returned function unregisters it.
+  ///
+  /// [outputSchema] describes the result object. The hints tell the agent what calling the tool
+  /// does; leave one out to say nothing about it.
   void Function() registerTool(
     String name, {
     required String description,
     Map<String, Object?>? inputSchema,
+    Map<String, Object?>? outputSchema,
+    bool? readOnlyHint,
+    bool? destructiveHint,
+    bool? idempotentHint,
     Duration? timeout,
     String? group,
     required AppductToolHandler handler,
@@ -112,6 +119,10 @@ final class _Noop implements Appduct {
     String name, {
     required String description,
     Map<String, Object?>? inputSchema,
+    Map<String, Object?>? outputSchema,
+    bool? readOnlyHint,
+    bool? destructiveHint,
+    bool? idempotentHint,
     Duration? timeout,
     String? group,
     required AppductToolHandler handler,
@@ -329,6 +340,10 @@ final class _Live with WidgetsBindingObserver implements Appduct {
     String name, {
     required String description,
     Map<String, Object?>? inputSchema,
+    Map<String, Object?>? outputSchema,
+    bool? readOnlyHint,
+    bool? destructiveHint,
+    bool? idempotentHint,
     Duration? timeout,
     String? group,
     required AppductToolHandler handler,
@@ -338,6 +353,15 @@ final class _Live with WidgetsBindingObserver implements Appduct {
       'name': name,
       'description': description,
       'input_schema': ?inputSchema,
+      'output_schema': ?outputSchema,
+      if (readOnlyHint != null ||
+          destructiveHint != null ||
+          idempotentHint != null)
+        'annotations': {
+          'readOnlyHint': ?readOnlyHint,
+          'destructiveHint': ?destructiveHint,
+          'idempotentHint': ?idempotentHint,
+        },
       if (timeout != null) 'timeout_ms': timeout.inMilliseconds,
       'group': ?group,
     }, (args, context) => handler(args, _Context(context)));

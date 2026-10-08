@@ -1,0 +1,7 @@
+{
+  "scheme": "appduct-flutter",
+  "appId": {
+    "ios": "com.callstack.appduct.playgroundFlutter",
+    "android": "com.callstack.appduct.playground_flutter"
+  }
+}

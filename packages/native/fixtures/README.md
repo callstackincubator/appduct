@@ -10,23 +10,28 @@ instead of shipping silently.
 Consumers:
 
 - `packages/shared/src/__tests__/fixtures-conformance.test.ts` (vitest): every file except
-  `spki-pin.json`, `event-registry-frames.json` and `session-scenarios.json`
+  `spki-pin.json`, `event-registry-frames.json`, `session-scenarios.json` and
+  `session-scenarios-background.json`
 - `packages/appduct/src/__tests__/spki-pin.test.ts` (vitest): `spki-pin.json` only
 - `packages/native/ios/Tests/AppductCoreTests/FixturesConformanceTests.swift` (XCTest): every file
-  except `event-registry-frames.json` and `session-scenarios.json`
+  except `event-registry-frames.json`, `session-scenarios.json` and
+  `session-scenarios-background.json`
 - `packages/native/ios/Tests/AppductCoreTests/AppductEventRegistryTests.swift` (XCTest):
   `event-registry-frames.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/FixturesConformanceTest.kt`
-  (JUnit): every file except `event-registry-frames.json` and `session-scenarios.json`
+  (JUnit): every file except `event-registry-frames.json`, `session-scenarios.json` and
+  `session-scenarios-background.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/AppductEventRegistryTest.kt`
   (JUnit): `event-registry-frames.json`
 - `packages/flutter/test/core/*_test.dart` (`flutter test`): every file except `spki-pin.json`;
   `event-registry-frames.json` is checked against the frames the Dart codec encodes, and
-  `scenarios_test.dart` replays `session-scenarios.json` (and `session-scenarios-background.json`
-  once it is here, since the Dart core owns backgrounding)
-- `packages/web/src/__tests__/session-scenarios.test.ts` (vitest) and
-  `packages/native/ios/Tests/AppductCoreTests/SessionScenariosTests.swift` (XCTest):
-  `session-scenarios.json` only. The Kotlin core does not replay it yet.
+  `scenarios_test.dart` replays `session-scenarios.json` and `session-scenarios-background.json`
+- `packages/web/src/__tests__/session-scenarios.test.ts` (vitest),
+  `packages/native/ios/Tests/AppductCoreTests/SessionScenariosTests.swift` (XCTest) and
+  `packages/native/android/core/src/test/java/com/callstack/appduct/SessionScenariosTest.kt`
+  (JUnit): `session-scenarios.json`
+- The Swift, Kotlin and Dart suites also load `session-scenarios-background.json`. The web suite
+  does not, because the web core has no background state.
 
 ## The rule
 
@@ -141,8 +146,11 @@ is the clock's starting Unix time in milliseconds, `random` is the constant the 
 returns, and `steps` run in order. With `random` at 0.5, the first reconnect delay is 250 ms, and
 the second consecutive one 500 ms. The scenarios here cover the paths where session behaviour has
 broken before: resuming with the rotated token after a drop, at the jittered delay and not before;
-grace expiry reporting the session lost; and a terminal `1008` that never reconnects, even after
-time passes the 30 s backoff cap.
+grace expiry reporting the session lost; a terminal `1008` that never reconnects, even after
+time passes the 30 s backoff cap; and tool calls: a call that outlasts its `timeout_ms` answering
+`tool_timeout`, a `tool_cancel` arriving before the timeout, a late result putting nothing on the wire,
+and a socket drop cancelling a call in flight with `session_suspended` and sending nothing. After a
+drop, the `state` output comes before the `cancel` output in every core.
 
 A step either drives the core, `{ "drive": <name>, ... }`, or expects an output,
 `{ "expect": <name>, ... }`.
@@ -183,13 +191,35 @@ Every connection that gets an ack is followed by a `tool_registry_snapshot` `sen
 `tools` array when none are registered), so a scenario expects it.
 
 Each runner maps the steps onto its core's existing fakes. The TypeScript runner opens each new
-fake socket itself and turns the first frame it sees into the `connect` output. The Swift runner
-reads the `connect` call and the `send` calls from its fake transport, which sees the connect
-options rather than the frame. A scenario that must not depend on how a core orders its work
+fake socket itself and turns the first frame it sees into the `connect` output. The Swift and
+Kotlin runners read the `connect` call and the `send` calls from their fake transport, which sees
+the connect options rather than the frame. The Kotlin runner runs the core on a test dispatcher and
+clock, so an `expect` finds its output once the scheduler has run, or never. A scenario that must not depend on how a core orders its work
 consumes every output before the next drive step.
 
 Hand-written directly as JSON. Each runner also has inline scenarios that must fail, for a missing,
 an extra and an out-of-order output.
+
+### `session-scenarios-background.json`
+
+The same format as `session-scenarios.json`, plus two drive steps and one wire output for the
+app leaving and returning to the foreground. The Swift, Kotlin and Dart suites load it; the web
+core has no background state.
+
+| Drive | Fields | Does |
+| --- | --- | --- |
+| `background` | | the app leaves the foreground |
+| `foreground` | | the app returns to the foreground |
+
+| Expect | Fields | Is |
+| --- | --- | --- |
+| `suspend` | | on the wire channel: the core closing the connection because the app is backgrounded (`1001 app_backgrounded`), keeping the resume lease |
+
+Every scenario here gives the session a 120 s grace window, so the clock can pass the 30 s backoff
+cap without the session expiring. The scenarios cover: backgrounding an active session suspends it
+and no reconnect follows, even after the clock passes the backoff cap; foregrounding resumes at
+once, without waiting for backoff; backgrounding during a backoff wait cancels the wait, so no connect
+follows even after the delay passes, until the app returns; and backgrounding with a call in flight cancels the call with `session_suspended`.
 
 ### `spki-pin.json`
 

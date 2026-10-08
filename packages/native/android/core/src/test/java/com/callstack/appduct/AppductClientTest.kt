@@ -369,46 +369,6 @@ class AppductClientTest {
         }
 
     @Test
-    fun `abortAllInFlight's reply send observes its real outcome instead of a forced cancellation`() =
-        runBlocking {
-            // Regression test (issue #48 review): onSocketLost's abortAllInFlight() cancels every
-            // in-flight handler's Job directly (no tool_cancel frame is possible once the socket is
-            // gone), hitting the exact same gap as an explicit tool_cancel -- see the test above.
-            // Here the wire send legitimately fails (the transport is gone): before the fix, the
-            // awaiting coroutine would observe a JobCancellationException artifact instead of the
-            // real send failure; the fix (withContext(NonCancellable)) lets it observe the actual
-            // cause, so the reported error is the real transport failure, not a cancellation
-            // artifact -- proving the send was genuinely attempted rather than short-circuited.
-            val (client, fake) = newClient()
-            client.connectAndAck(fake)
-            val errors = CopyOnWriteArrayList<AppductUnifiedError>()
-            client.addErrorListener { errors.add(it) }
-            val started = CompletableDeferred<Unit>()
-            client.registerTool(AppductToolDescriptor(name = "slow", description = "Never finishes.")) { _, _ ->
-                started.complete(Unit)
-                kotlinx.coroutines.delay(60_000)
-                null
-            }
-            fake.sentMessages.clear()
-
-            fake.simulateMessage(
-                JSONObject().put("type", "tool_call").put("session_id", "sess-1").put("id", "call-1").put("name", "slow").put(
-                    "args",
-                    JSONObject(),
-                ),
-            )
-            started.await()
-
-            fake.deferSendCompletion = true
-            fake.nextSendError = IllegalStateException("socket is gone")
-            fake.simulateClose(1000, "socket_lost")
-
-            waitUntil { errors.any { it.phase == "tool" } }
-            val toolError = errors.first { it.phase == "tool" }
-            assertEquals("socket is gone", toolError.cause?.message)
-        }
-
-    @Test
     fun `a slow tool times out on its declared timeoutMs`() =
         runBlocking {
             val (client, fake) = newClient()
