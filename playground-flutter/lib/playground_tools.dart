@@ -47,6 +47,12 @@ void Function() registerPlaygroundTools(
         },
         'required': ['a', 'b'],
       },
+      outputSchema: {
+        'type': 'object',
+        'properties': {
+          'total': {'type': 'number'},
+        },
+      },
       handler: (args, _) {
         counter.bump();
         return {'total': (args['a']! as num) + (args['b']! as num)};
@@ -56,6 +62,13 @@ void Function() registerPlaygroundTools(
       'call_count',
       description:
           'Reports how many times the counted tools (sum, slow_task) have run. Read-only.',
+      outputSchema: {
+        'type': 'object',
+        'properties': {
+          'count': {'type': 'number'},
+        },
+      },
+      readOnlyHint: true,
       group: 'counter',
       handler: (_, _) => {'count': counter.count},
     ),
@@ -63,6 +76,14 @@ void Function() registerPlaygroundTools(
       'reset_counter',
       description:
           'Resets the call counter to zero. Destructive; a no-op when it is already zero.',
+      outputSchema: {
+        'type': 'object',
+        'properties': {
+          'count': {'type': 'number'},
+        },
+      },
+      destructiveHint: true,
+      idempotentHint: true,
       group: 'counter',
       handler: (_, _) {
         counter.reset();
@@ -73,6 +94,12 @@ void Function() registerPlaygroundTools(
       'slow_task',
       description:
           'Takes about 1.5 s and reports progress along the way. Counts as a call in call_count.',
+      outputSchema: {
+        'type': 'object',
+        'properties': {
+          'done': {'type': 'boolean'},
+        },
+      },
       group: 'diagnostics/progress',
       timeout: const Duration(seconds: 5),
       handler: (_, context) async {
@@ -91,6 +118,7 @@ void Function() registerPlaygroundTools(
     appduct.registerTool(
       'throwing_tool',
       description: 'Always fails with tool_execution_error. Changes nothing.',
+      readOnlyHint: true,
       group: 'diagnostics',
       handler: (_, _) =>
           throw StateError('throwing_tool always fails on purpose.'),
