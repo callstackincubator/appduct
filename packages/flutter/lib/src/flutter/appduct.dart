@@ -24,10 +24,11 @@ abstract interface class ToolCallContext {
   void reportProgress(num progress, [String? message]);
 }
 
-typedef AppductToolHandler = FutureOr<Object?> Function(
-  Map<String, Object?> args,
-  ToolCallContext context,
-);
+typedef AppductToolHandler =
+    FutureOr<Object?> Function(
+      Map<String, Object?> args,
+      ToolCallContext context,
+    );
 
 /// The entry point of the binding. Call [ensureInitialized] before `runApp`.
 abstract final class Appduct {
@@ -171,7 +172,8 @@ final class _Live with WidgetsBindingObserver implements Appduct {
     final device = _Device();
     _device = device;
     _shim = Shim(fallbackDevice: _fallbackDevice());
-    _store = ShimSessionStore(_shim);
+    _shimStore = _ports.leaseStore == null ? ShimSessionStore(_shim) : null;
+    _store = _ports.leaseStore ?? _shimStore!;
     _core = createDartCore(
       DartCorePorts(
         transport: _ports.transport,
@@ -179,6 +181,7 @@ final class _Live with WidgetsBindingObserver implements Appduct {
         clock: _ports.clock,
         random: _ports.random,
         device: device,
+        allowPrivateLanOnly: _ports.allowPrivateLanOnly,
       ),
     );
     _tools = ToolHost(_core);
@@ -193,7 +196,8 @@ final class _Live with WidgetsBindingObserver implements Appduct {
   final BindingPorts _ports;
   late final _Device _device;
   late final Shim _shim;
-  late final ShimSessionStore _store;
+  late final ShimSessionStore? _shimStore;
+  late final SessionStore _store;
   late final AppductCore _core;
   late final ToolHost _tools;
   late final StreamSubscription<StateChangeEvent> _stateChanges;
@@ -220,13 +224,13 @@ final class _Live with WidgetsBindingObserver implements Appduct {
       return;
     }
     _device._fields = activation.device;
-    _store.load(activation.lease);
+    _shimStore?.load(activation.lease);
 
     // After a hot restart the process still holds the links the app started from: the route name
     // and APPDUCT_LINK last as long as the process, whichever session the lease belongs to now.
     // Their tokens are spent, so feeding them again would replace the live session; the lease
     // resumes it instead. Only the shim's pending links are new, and they are filtered by session.
-    final lease = activation.lease;
+    final lease = _store.read();
     final leased = _leasedSessionId(lease);
     final links = <String>{
       ...activation.links,

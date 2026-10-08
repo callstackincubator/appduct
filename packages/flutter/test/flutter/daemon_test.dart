@@ -17,7 +17,11 @@ void main() {
   setUp(() {
     daemon = RealDaemon();
     leaseDir = Directory.systemTemp.createTempSync('appduct-lease-');
+    // The store only uses a directory nobody else can read, which a temp directory is not on every host.
+    Process.runSync('chmod', ['700', leaseDir.path]);
     FakeShim().install();
+    // The test binding answers every HTTP request with a 400; this test needs the real network.
+    HttpOverrides.global = null;
   });
 
   tearDown(() async {

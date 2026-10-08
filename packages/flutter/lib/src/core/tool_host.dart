@@ -10,10 +10,8 @@ import 'json.dart';
 /// future created before the call that fails when awaited does not reach the handler's `try`/`catch`
 /// across the zone boundary; it surfaces as an uncaught error and the call answers `tool_timeout`.
 /// Create every future the handler awaits inside the handler.
-typedef ToolHandler = FutureOr<Object?> Function(
-  JsonObject args,
-  ToolContext context,
-);
+typedef ToolHandler =
+    FutureOr<Object?> Function(JsonObject args, ToolContext context);
 
 /// What a [ToolHandler] can see and do while its call is in flight.
 class ToolContext {

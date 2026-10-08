@@ -210,45 +210,51 @@ void main() {
   group('the event registry', () {
     final event = {'name': 'tapped', 'description': 'A tap.'};
 
-    test('sends no event_registry frame when the ack does not carry event_registry', () async {
-      final h = Harness();
-      h.core.registerEvent(event);
-      final socket = await h.claim();
-      h.core.registerEvent({...event, 'name': 'later'});
+    test(
+      'sends no event_registry frame when the ack does not carry event_registry',
+      () async {
+        final h = Harness();
+        h.core.registerEvent(event);
+        final socket = await h.claim();
+        h.core.registerEvent({...event, 'name': 'later'});
 
-      expect(socket.frames().map((f) => f['type']), [
-        'session_claim',
-        'tool_registry_snapshot',
-      ]);
-    });
+        expect(socket.frames().map((f) => f['type']), [
+          'session_claim',
+          'tool_registry_snapshot',
+        ]);
+      },
+    );
 
-    test('sends a snapshot after the tool snapshot, then deltas, when the ack carries event_registry', () async {
-      final h = Harness();
-      h.core.registerEvent(event);
-      final socket = await h.claim(eventRegistry: true);
-      h.core.registerEvent({...event, 'name': 'later'});
-      h.core.unregisterEvent('later');
+    test(
+      'sends a snapshot after the tool snapshot, then deltas, when the ack carries event_registry',
+      () async {
+        final h = Harness();
+        h.core.registerEvent(event);
+        final socket = await h.claim(eventRegistry: true);
+        h.core.registerEvent({...event, 'name': 'later'});
+        h.core.unregisterEvent('later');
 
-      expect(socket.frames().skip(2), [
-        {
-          'type': 'event_registry_snapshot',
-          'session_id': sessionId,
-          'events': [event],
-        },
-        {
-          'type': 'event_registry_delta',
-          'session_id': sessionId,
-          'operation': 'upsert',
-          'event': {'name': 'later', 'description': 'A tap.'},
-        },
-        {
-          'type': 'event_registry_delta',
-          'session_id': sessionId,
-          'operation': 'remove',
-          'name': 'later',
-        },
-      ]);
-    });
+        expect(socket.frames().skip(2), [
+          {
+            'type': 'event_registry_snapshot',
+            'session_id': sessionId,
+            'events': [event],
+          },
+          {
+            'type': 'event_registry_delta',
+            'session_id': sessionId,
+            'operation': 'upsert',
+            'event': {'name': 'later', 'description': 'A tap.'},
+          },
+          {
+            'type': 'event_registry_delta',
+            'session_id': sessionId,
+            'operation': 'remove',
+            'name': 'later',
+          },
+        ]);
+      },
+    );
   });
 
   group('posting events', () {
@@ -370,23 +376,26 @@ void main() {
       expect(h.store.value, isNull);
     });
 
-    test('clears the store and reports the session lost when the daemon rejects the resume with 1008', () async {
-      final h = Harness();
-      (await h.claim()).drop();
-      await settle();
-      h.clock.advance(250);
-      h.last
-        ..open()
-        ..closeFromDaemon(1008, 'invalid_resume_token');
-      await settle();
+    test(
+      'clears the store and reports the session lost when the daemon rejects the resume with 1008',
+      () async {
+        final h = Harness();
+        (await h.claim()).drop();
+        await settle();
+        h.clock.advance(250);
+        h.last
+          ..open()
+          ..closeFromDaemon(1008, 'invalid_resume_token');
+        await settle();
 
-      expect(h.core.state, ClientState.closed);
-      expect(h.sessions.last.reason, 'invalid_resume_token');
-      expect(h.store.value, isNull);
+        expect(h.core.state, ClientState.closed);
+        expect(h.sessions.last.reason, 'invalid_resume_token');
+        expect(h.store.value, isNull);
 
-      h.clock.advance(60000);
-      expect(h.transport.sockets, hasLength(2));
-    });
+        h.clock.advance(60000);
+        expect(h.transport.sockets, hasLength(2));
+      },
+    );
 
     test(
       'reports the session lost at once when the daemon closes with 1000',
@@ -401,21 +410,24 @@ void main() {
       },
     );
 
-    test('keeps retrying after a resume the daemon closes with a non-terminal code', () async {
-      final h = Harness();
-      (await h.claim()).drop();
-      await settle();
-      h.clock.advance(250);
-      h.last
-        ..open()
-        ..closeFromDaemon(1011, 'restarting');
-      await settle();
+    test(
+      'keeps retrying after a resume the daemon closes with a non-terminal code',
+      () async {
+        final h = Harness();
+        (await h.claim()).drop();
+        await settle();
+        h.clock.advance(250);
+        h.last
+          ..open()
+          ..closeFromDaemon(1011, 'restarting');
+        await settle();
 
-      expect(h.core.state, ClientState.reconnecting);
-      expect(h.errors.last.phase, 'socket');
-      h.clock.advance(500);
-      expect(h.transport.sockets, hasLength(3));
-    });
+        expect(h.core.state, ClientState.reconnecting);
+        expect(h.errors.last.phase, 'socket');
+        h.clock.advance(500);
+        expect(h.transport.sockets, hasLength(3));
+      },
+    );
 
     test('retries a resume whose socket could not be opened', () async {
       final h = Harness();
@@ -494,21 +506,24 @@ void main() {
   });
 
   group('disconnecting', () {
-    test('closes the socket with 1000, clears the store and reports the session lost', () async {
-      final h = Harness();
-      final socket = await h.claim();
+    test(
+      'closes the socket with 1000, clears the store and reports the session lost',
+      () async {
+        final h = Harness();
+        final socket = await h.claim();
 
-      await h.core.disconnect();
-      await settle();
+        await h.core.disconnect();
+        await settle();
 
-      expect(socket.closedByCore, (code: 1000, reason: 'client_close'));
-      expect(h.core.state, ClientState.closed);
-      expect(h.states.last.reason, 'closed_by_app');
-      expect(h.sessions.last.type, SessionChangeType.lost);
-      expect(h.sessions.last.reason, 'closed_by_app');
-      expect(h.store.value, isNull);
-      expect(h.core.sessionId, isNull);
-    });
+        expect(socket.closedByCore, (code: 1000, reason: 'client_close'));
+        expect(h.core.state, ClientState.closed);
+        expect(h.states.last.reason, 'closed_by_app');
+        expect(h.sessions.last.type, SessionChangeType.lost);
+        expect(h.sessions.last.reason, 'closed_by_app');
+        expect(h.store.value, isNull);
+        expect(h.core.sessionId, isNull);
+      },
+    );
 
     test('stops a reconnect in progress', () async {
       final h = Harness();

@@ -1,6 +1,5 @@
 // P2: one test against a real daemon. It needs `pnpm build` first (it starts packages/appduct's
 // built CLI with `node`) and runs in the Flutter CI job after that step.
-import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 

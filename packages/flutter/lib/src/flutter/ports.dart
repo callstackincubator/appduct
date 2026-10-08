@@ -12,6 +12,8 @@ class BindingPorts {
     required this.environment,
     required this.isRootIsolate,
     required this.warn,
+    required this.allowPrivateLanOnly,
+    this.leaseStore,
   });
 
   final Transport transport;
@@ -28,4 +30,11 @@ class BindingPorts {
   final bool Function() isRootIsolate;
 
   final void Function(String message) warn;
+
+  /// Whether links may only point at the local network.
+  final bool allowPrivateLanOnly;
+
+  /// Where the lease lives on a platform with no native shim (Windows, Linux). Null keeps it in the
+  /// shim.
+  final SessionStore? leaseStore;
 }

@@ -23,6 +23,7 @@ class DartCorePorts {
     required this.clock,
     required this.random,
     required this.device,
+    this.allowPrivateLanOnly = true,
   });
 
   final Transport transport;
@@ -32,6 +33,10 @@ class DartCorePorts {
   /// Reconnect jitter.
   final Random random;
   final DeviceFields device;
+
+  /// Whether a link or `connect` may only point at the local network. On unless the build turns it
+  /// off.
+  final bool allowPrivateLanOnly;
 }
 
 /// The session the core holds: the token to resume it with and the endpoint to resume against.
@@ -77,7 +82,8 @@ class _Pending {
 
 /// The session core: a Dart port of the web core (`packages/web/src/core`), itself a port of the
 /// Swift and Kotlin cores. It owns the claim and resume handshake, reconnect with full jitter, the
-/// grace timer, the keepalive pings, backgrounding, the tool and event registries and their
+/// grace timer, the keepalive (the core hands the socket its interval, and a missed pong is the
+/// socket's own 1001 close), backgrounding, the tool and event registries and their
 /// frames, and per-call deadline and cancel.
 ///
 /// Everything runs on one isolate and every callback runs to completion before the next starts, so
@@ -436,6 +442,13 @@ class _DartCore implements AppductCore {
       );
     }
 
+    if (_ports.allowPrivateLanOnly &&
+        !isLocalAddress(input.ip.contains(':') ? 6 : 4, input.ip)) {
+      throw const AppductException(
+        'Appduct only connects to a local network address.',
+      );
+    }
+
     final supersedingReconnect =
         _state == ClientState.reconnecting || supersede;
     if (_connection.isBusy && !supersedingReconnect) {
@@ -494,7 +507,8 @@ class _DartCore implements AppductCore {
     final bootstrap = decodeBootstrap(link.payload);
     // A link may only point at the local network, however it was delivered.
     if (bootstrap == null ||
-        !isLocalAddress(bootstrap.family, bootstrap.address)) {
+        (_ports.allowPrivateLanOnly &&
+            !isLocalAddress(bootstrap.family, bootstrap.address))) {
       _emitError('bootstrap', 'Invalid or expired Appduct bootstrap payload.');
       return;
     }

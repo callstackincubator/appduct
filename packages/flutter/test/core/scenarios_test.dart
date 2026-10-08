@@ -252,8 +252,9 @@ void main() {
   replays(
     'session-scenarios-background.json',
     skip:
-        File('../native/fixtures/session-scenarios-background.json')
-            .existsSync()
+        File(
+          '../native/fixtures/session-scenarios-background.json',
+        ).existsSync()
         ? null
         : 'the file arrives with #206 (PR #215); the Dart core replays it as soon as it is on main',
   );
@@ -325,18 +326,21 @@ void main() {
       },
     );
 
-    test('fails a scenario that expects two outputs of one channel in the wrong order', () async {
-      final swapped = inline([
-        ...claimThenActive.take(2),
-        {'expect': 'state', 'state': 'active'},
-        {'expect': 'state', 'state': 'connecting'},
-        ...claimThenActive.skip(3),
-      ]);
+    test(
+      'fails a scenario that expects two outputs of one channel in the wrong order',
+      () async {
+        final swapped = inline([
+          ...claimThenActive.take(2),
+          {'expect': 'state', 'state': 'active'},
+          {'expect': 'state', 'state': 'connecting'},
+          ...claimThenActive.skip(3),
+        ]);
 
-      await expectLater(
-        replay(swapped),
-        throwsA(predicate((e) => '$e'.contains('step 3'))),
-      );
-    });
+        await expectLater(
+          replay(swapped),
+          throwsA(predicate((e) => '$e'.contains('step 3'))),
+        );
+      },
+    );
   });
 }

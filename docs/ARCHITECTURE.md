@@ -1133,9 +1133,11 @@ packages/
                    adapters (no Flutter import): the pinned `wss` transport (empty
                    SecurityContext, every leaf checked against the SPKI pin), trust
                    resolution from the `APPDUCT_PINS` / `APPDUCT_TRUST` build defines, and a
-                   file lease store. Test it with `cd packages/flutter && flutter test` after
-                   `pnpm build`: one test runs against the built daemon (CI job `flutter` in
-                   test.yaml).
+                   file lease store. `lib/src/flutter/composition.dart` wires them into the
+                   binding (the lease file on Windows and Linux, the shim elsewhere) and reads
+                   `APPDUCT_ALLOW_PRIVATE_LAN_ONLY` (default true). Test it with
+                   `cd packages/flutter && flutter test` after `pnpm build`: two tests run
+                   against the built daemon (CI job `flutter` in test.yaml).
 playground/        reference app (Expo dev build)
 playground-native/ plain iOS and Android apps on packages/native, no React Native
 ```
