@@ -383,6 +383,11 @@ Guard: `isEventDescriptor`; conformance vectors in `packages/native/fixtures/eve
   fails fast with `session_suspended`. The session records why in `suspendReason`:
   `app_backgrounded` when the socket closed with `1001 app_backgrounded` (§7), otherwise
   `connection_lost`. Resuming clears it.
+- `ACTIVE → ACTIVE` (socket replacement): a valid `session_resume` that arrives while the
+  old socket is still open closes it with `1000 session_replaced` and makes the new socket
+  the session's only one. The session never suspends, so a tool call still pending on the old
+  socket fails fast with `session_suspended` when the resume lands (the app dropped it with
+  that socket), and the daemon ignores any frame the old socket still delivers.
 - `SUSPENDED → ACTIVE`: a `session_resume` on a fresh socket within
   `graceSeconds` (default 600) of suspension, with a valid (unrotated-since,
   unexpired) `resume_token`. The `resume_token` rotates again on this success, and the
@@ -401,7 +406,7 @@ not prose. Grouped by trigger:
 
 | Code | Reason | When |
 | --- | --- | --- |
-| 1000 | `session_replaced` | a fresh claim/resume for the same session id supersedes a still-open socket |
+| 1000 | `session_replaced` | a `session_resume` for the same session id supersedes a still-open socket |
 | 1000 | `revoked` | `sessions.revoke` closed this session's socket |
 | 1003 | `binary_frame_not_supported` | a binary WebSocket frame arrived (text frames only) |
 | 1008 | `pre_claim_timeout` | no `session_claim`/`session_resume` arrived within 10 s of connecting |

@@ -11,6 +11,9 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **New: `appduct init` and scheme discovery understand Flutter projects.** Run from a directory with a `pubspec.yaml`, they read the URL scheme from `android/app/`, `ios/Runner` and `macos/Runner`, and `init` prints the Flutter setup steps.
+- **Fix: a tool call no longer hangs until its timeout when the app reconnects while its old connection is still open.** The call now fails at once with `session_suspended` and can be retried.
+- **Docs: the website has a Web setup page and lists web on the home page.** See [Web setup](https://callstackincubator.github.io/appduct/install/web/).
 - **Docs: which browsers and launch setups connect a web page without a permission prompt, and how to choose between DevTools and WebSocket.** See [Drive a web page](https://callstackincubator.github.io/appduct/guides/web-pages/) and [Security](https://callstackincubator.github.io/appduct/guides/security/#devtools-access).
 - **New: `appduct_connect({ target: "web", url, browserUrl })` and `appduct sessions link --open web <url> --browser-url <u>` attach a tab of a Chrome launched with `--remote-debugging-port`, with no permission prompt on `https` pages.** When several tabs match, the error lists their target ids; pass one as `targetId` or `--target-id`.
 - **New: `attachPage(page, { link })` in `appduct/client` runs a web page's session through a Playwright page, so an `https` page connects with no network connection of its own.** A reload resumes the session; a popup or a page in a new target is not relayed.

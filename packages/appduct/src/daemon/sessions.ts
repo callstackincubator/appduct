@@ -533,6 +533,12 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       return;
     }
 
+    // A socket that was replaced by a resume may still deliver frames while it closes; the
+    // session now belongs to the new socket, so those frames are dropped.
+    if (socket !== session.socket) {
+      return;
+    }
+
     switch (message.type) {
       case "tool_registry_snapshot": {
         if (!isToolRegistrySnapshotMessage(message)) {
