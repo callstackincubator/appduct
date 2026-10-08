@@ -492,7 +492,9 @@ class _DartCore implements AppductCore {
 
   Future<void> _processLink(BootstrapLink link) async {
     final bootstrap = decodeBootstrap(link.payload);
-    if (bootstrap == null) {
+    // A link may only point at the local network, however it was delivered.
+    if (bootstrap == null ||
+        !isLocalAddress(bootstrap.family, bootstrap.address)) {
       _emitError('bootstrap', 'Invalid or expired Appduct bootstrap payload.');
       return;
     }
