@@ -19,6 +19,7 @@ class IoTransport implements Transport {
   Socket open(Uri url, String? pin, SocketEvents events) {
     final pins = _trust.pinsFor(pin);
     final client = HttpClient(context: SecurityContext(withTrustedRoots: false))
+      ..connectionTimeout = const Duration(seconds: 15)
       ..badCertificateCallback = (cert, host, port) {
         final actual = spkiPin(cert.der);
         return actual != null && pins.contains(actual);
