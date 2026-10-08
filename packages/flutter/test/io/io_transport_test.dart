@@ -100,6 +100,17 @@ void main() {
       );
     });
 
+    test('reports a bad trust setting when it opens, not when it is built', () {
+      final transport = IoTransport.resolving(
+        () => TrustPolicy.parse(trust: 'pinn'),
+      );
+
+      expect(
+        () => transport.open(url(), server.pin, Recorder().events),
+        throwsA(isA<TrustConfigError>()),
+      );
+    });
+
     test('closes with 1008 when the daemon sends a binary frame', () async {
       final rec = Recorder();
       final socket = IoTransport(

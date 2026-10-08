@@ -10,14 +10,18 @@ import 'trust.dart';
 /// accepts a leaf only when the SHA-256 of its public key is one of the pins [TrustPolicy]
 /// resolved. A connection that fails that check never gets an HTTP request out.
 class IoTransport implements Transport {
-  IoTransport(this._trust);
+  IoTransport(TrustPolicy trust) : _trust = (() => trust);
 
-  final TrustPolicy _trust;
+  /// Resolves the policy on each [open], so a bad build setting fails the connect and not the
+  /// app's start.
+  IoTransport.resolving(this._trust);
 
-  /// Throws [TrustConfigError] when the build trusts the link's pin and [pin] is null.
+  final TrustPolicy Function() _trust;
+
+  /// Throws [TrustConfigError] when the build's trust setting is invalid or trusts the link's pin and [pin] is null.
   @override
   Socket open(Uri url, String? pin, SocketEvents events) {
-    final pins = _trust.pinsFor(pin);
+    final pins = _trust().pinsFor(pin);
     final client = HttpClient(context: SecurityContext(withTrustedRoots: false))
       ..connectionTimeout = const Duration(seconds: 15)
       ..badCertificateCallback = (cert, host, port) {

@@ -10,8 +10,12 @@ const device = DeviceFields(
   os: 'Android 16',
 );
 
-ConnectInput connectInput({String? pin, int? expiresAt}) => ConnectInput(
-  ip: '192.168.1.10',
+ConnectInput connectInput({
+  String? pin,
+  int? expiresAt,
+  String ip = '192.168.1.10',
+}) => ConnectInput(
+  ip: ip,
   port: 8443,
   sessionId: sessionId,
   token: 'claim-token',
@@ -45,6 +49,7 @@ class Harness {
     MemorySessionStore? store,
     ManualClock? clock,
     MemoryTransport? transport,
+    bool allowPrivateLanOnly = true,
   }) : store = store ?? MemorySessionStore(),
        clock = clock ?? ManualClock(startMs),
        transport = transport ?? MemoryTransport() {
@@ -55,6 +60,7 @@ class Harness {
         clock: this.clock,
         random: const FixedRandom(0.5),
         device: device,
+        allowPrivateLanOnly: allowPrivateLanOnly,
       ),
     );
     core.stateChanges.listen(states.add);
