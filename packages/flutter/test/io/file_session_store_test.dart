@@ -4,13 +4,24 @@ import 'package:appduct/src/io/io.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  late Directory dir;
+  late Directory runtime;
+  late Directory home;
 
-  setUp(() => dir = Directory.systemTemp.createTempSync('appduct-store-'));
-  tearDown(() => dir.deleteSync(recursive: true));
+  setUp(() {
+    runtime = Directory.systemTemp.createTempSync('appduct-runtime-');
+    home = Directory.systemTemp.createTempSync('appduct-home-');
+    if (!Platform.isWindows) Process.runSync('chmod', ['700', runtime.path]);
+  });
+  tearDown(() {
+    runtime.deleteSync(recursive: true);
+    home.deleteSync(recursive: true);
+  });
 
-  FileSessionStore store([String app = 'shop']) =>
-      FileSessionStore(appName: app, directory: dir);
+  FileSessionStore store([String app = 'shop']) => FileSessionStore(
+    appName: app,
+    environment: {'XDG_RUNTIME_DIR': runtime.path, 'HOME': home.path},
+    isWindows: false,
+  );
 
   group('FileSessionStore', () {
     test('reads nothing before anything is written', () {
@@ -49,26 +60,69 @@ void main() {
       expect(store('chat').read(), 'chat-lease');
     });
 
-    test('puts the lease in the system temp directory by default', () {
-      final s = FileSessionStore(appName: 'appduct-default-dir-test')
-        ..write('x');
-      addTearDown(s.clear);
+    test(
+      'keeps the lease in the user runtime directory, not the shared temp',
+      () {
+        store('runtime-dir-test').write('x');
 
+        expect(
+          runtime.listSync().any((e) => e.path.contains('runtime-dir-test')),
+          isTrue,
+        );
+        expect(
+          Directory.systemTemp.listSync().whereType<File>().any(
+            (e) => e.path.contains('runtime-dir-test'),
+          ),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'falls back to a private directory under home without a runtime dir',
+      () {
+        final s = FileSessionStore(
+          appName: 'shop',
+          environment: {'HOME': home.path},
+          isWindows: false,
+        )..write('lease');
+
+        expect(s.read(), 'lease');
+        expect(Directory('${home.path}/.appduct').existsSync(), isTrue);
+      },
+    );
+
+    test('uses the local app data directory on Windows', () {
+      final s = FileSessionStore(
+        appName: 'shop',
+        environment: {'LOCALAPPDATA': runtime.path, 'HOME': home.path},
+        isWindows: true,
+      )..write('lease');
+
+      expect(s.read(), 'lease');
+      expect(runtime.listSync(recursive: true).whereType<File>(), hasLength(1));
+    });
+
+    test('keeps no lease when no per-user location is known', () {
+      final s = FileSessionStore(
+        appName: 'shop',
+        environment: const {},
+        isWindows: false,
+      )..write('lease');
+
+      expect(s.read(), isNull);
+    });
+
+    test('ignores a lease in a directory other users can write to', () {
+      store().write('planted');
+      Process.runSync('chmod', ['777', runtime.path]);
+
+      expect(store().read(), isNull);
+      store().write('overwritten');
       expect(
-        Directory.systemTemp.listSync().any(
-          (e) => e.path.contains('appduct-default-dir-test'),
-        ),
-        isTrue,
+        File(runtime.listSync().single.path).readAsStringSync(),
+        'planted',
       );
-    });
-
-    test('cannot be read by other users on a shared machine', () {
-      store().write('secret');
-
-      final file = dir.listSync().whereType<File>().single;
-      if (!Platform.isWindows) {
-        expect(file.statSync().mode & 0x3f, 0, reason: 'group/other bits');
-      }
-    });
+    }, skip: Platform.isWindows);
   });
 }

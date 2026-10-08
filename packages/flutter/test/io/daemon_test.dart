@@ -73,7 +73,8 @@ void main() {
         transport: transport,
         sessionStore: FileSessionStore(
           appName: 'daemon-test',
-          directory: leaseDir,
+          environment: {'XDG_RUNTIME_DIR': leaseDir.path},
+          isWindows: false,
         ),
         clock: _TimerClock(),
         random: Random(),
