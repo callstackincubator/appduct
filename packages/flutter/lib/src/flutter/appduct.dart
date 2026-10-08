@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -38,7 +39,10 @@ abstract final class Appduct {
   /// out or when another isolate or engine already owns it.
   static Appduct ensureInitialized() {
     if (!appductEnabled) return _noop;
-    return _instance ?? installAppduct(productionPorts());
+    final existing = _instance;
+    if (existing != null) return existing;
+    developer.log('started', name: appductDartCoreMarker);
+    return installAppduct(productionPorts());
   }
 
   static Appduct get instance {
