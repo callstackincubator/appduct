@@ -78,9 +78,6 @@ class MemorySocket implements Socket {
 
   @override
   void keepalive(Duration interval) => keepaliveInterval = interval;
-
-  @override
-  Future<void> ping() => Future.value();
 }
 
 class MemoryTransport implements Transport {

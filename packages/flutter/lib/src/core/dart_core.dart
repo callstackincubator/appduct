@@ -470,9 +470,6 @@ class _DartCore implements AppductCore {
       sessionId: input.sessionId,
       token: input.token,
       pin: input.pin,
-      deviceManufacturer: input.deviceManufacturer,
-      deviceModel: input.deviceModel,
-      deviceOs: input.deviceOs,
     );
     try {
       _setState(ClientState.connecting);

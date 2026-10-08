@@ -553,25 +553,28 @@ void main() {
       expect(socket.keepaliveInterval, isNull);
     });
 
-    test('reconnects and resumes when the socket reports a missed pong', () async {
-      final h = Harness();
-      final socket = await h.claim();
+    test(
+      'reconnects and resumes when the socket reports a missed pong',
+      () async {
+        final h = Harness();
+        final socket = await h.claim();
 
-      socket.missPong();
-      await settle();
-      expect(h.core.state, ClientState.reconnecting);
+        socket.missPong();
+        await settle();
+        expect(h.core.state, ClientState.reconnecting);
 
-      h.clock.advance(250);
-      h.last
-        ..open()
-        ..receive(ack(resumeToken: 'resume-2'));
-      await settle();
+        h.clock.advance(250);
+        h.last
+          ..open()
+          ..receive(ack(resumeToken: 'resume-2'));
+        await settle();
 
-      expect(h.last.frames().first['type'], 'session_resume');
-      expect(h.last.frames().first['resume_token'], 'resume-1');
-      expect(h.core.state, ClientState.active);
-      expect(h.sessions.last.type, SessionChangeType.resumed);
-    });
+        expect(h.last.frames().first['type'], 'session_resume');
+        expect(h.last.frames().first['resume_token'], 'resume-1');
+        expect(h.core.state, ClientState.active);
+        expect(h.sessions.last.type, SessionChangeType.resumed);
+      },
+    );
   });
 
   group('frames the core refuses', () {

@@ -26,11 +26,9 @@ abstract interface class Socket {
   /// Closes with [code]: 1000, 1001, 1008 or 1011.
   void close(int code, String reason);
 
-  /// Sends a WebSocket protocol-level ping (`docs/PROTOCOL.md` section 3). Completes when the pong
-  /// arrives and completes with an error when it does not arrive in time or the ping cannot be
-  /// sent.
-  Future<void> ping();
-
+  /// Has the socket ping every [interval] (`docs/PROTOCOL.md` section 3) and close itself when a
+  /// pong goes missing. That close is not terminal: the core resumes from it. Called once, after
+  /// the ack.
   void keepalive(Duration interval);
 }
 

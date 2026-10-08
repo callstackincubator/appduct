@@ -1126,7 +1126,7 @@ packages/
                    a test enforces it): bootstrap link and payload decoding, frame
                    encode/decode, descriptor validation, close-code classification, all
                    checked against packages/native/fixtures, and the session core
-                   (`createDartCore`: claim and resume, reconnect, keepalive pings,
+                   (`createDartCore`: claim and resume, reconnect, keepalive via the socket,
                    backgrounding, registries, tool calls), a port of packages/web/src/core
                    over the ports in `ports.dart`, each with a memory fake beside it, and
                    replaying the session scenarios. Test it with

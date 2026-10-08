@@ -4,6 +4,12 @@ import 'app_core.dart';
 import 'json.dart';
 
 /// Runs a tool for one call.
+///
+/// The host runs the handler in its own error zone. An error thrown, or from a future the handler
+/// awaits that was created inside the handler, answers the call with `tool_execution_error`. A
+/// future created before the call that fails when awaited does not reach the handler's `try`/`catch`
+/// across the zone boundary; it surfaces as an uncaught error and the call answers `tool_timeout`.
+/// Create every future the handler awaits inside the handler.
 typedef ToolHandler =
     FutureOr<Object?> Function(JsonObject args, ToolContext context);
 

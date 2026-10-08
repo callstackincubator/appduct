@@ -13,9 +13,6 @@ class ConnectInput {
     required this.token,
     required this.expiresAt,
     this.pin,
-    this.deviceManufacturer,
-    this.deviceModel,
-    this.deviceOs,
   });
 
   final String ip;
@@ -30,11 +27,6 @@ class ConnectInput {
 
   /// The link's `sha256/...` SPKI pin, when it carried one.
   final String? pin;
-
-  /// Override the [DeviceFields] the core was built with.
-  final String? deviceManufacturer;
-  final String? deviceModel;
-  final String? deviceOs;
 }
 
 /// A call the daemon made; the app answers with `respondToToolCall`.

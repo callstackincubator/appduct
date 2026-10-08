@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'lease.dart';
@@ -7,8 +6,6 @@ import 'ports.dart';
 
 /// The daemon closes the socket with 1009 on a larger frame (`docs/PROTOCOL.md` section 3).
 const maxFrameBytes = 262144;
-
-const _missedPingsBeforeLoss = 2;
 
 /// An outgoing frame over the daemon's limit; refused before it reaches the socket.
 class FrameTooLargeException implements Exception {
@@ -30,9 +27,6 @@ class ConnectionOptions {
     this.token,
     this.resumeToken,
     this.pin,
-    this.deviceManufacturer,
-    this.deviceModel,
-    this.deviceOs,
   });
 
   final String ip;
@@ -45,9 +39,6 @@ class ConnectionOptions {
   /// Sends `session_resume` instead.
   final String? resumeToken;
   final String? pin;
-  final String? deviceManufacturer;
-  final String? deviceModel;
-  final String? deviceOs;
 }
 
 class ConnectionHandlers {
@@ -79,9 +70,6 @@ class _Current {
 
   /// Why this side closed the socket, reported from `onClose` in place of the echoed wire code.
   ({int code, String reason})? closedByCore;
-
-  TimerHandle? keepalive;
-  int missedPings = 0;
 }
 
 bool _isJsonObject(String text) {
@@ -93,8 +81,8 @@ bool _isJsonObject(String text) {
 }
 
 /// One socket to the daemon: the first frame, the ack check, the lease the ack hands us, the
-/// keepalive pings and the session-id rule for every later frame (`docs/PROTOCOL.md` sections 3
-/// and 4). Port of the web core's `createConnection`, plus the pings the browser sends itself.
+/// keepalive it hands the socket and the session-id rule for every later frame (`docs/PROTOCOL.md` sections 3
+/// and 4). Port of the web core's `createConnection`, plus the keepalive the browser runs itself.
 class Connection {
   Connection({
     required Transport transport,
@@ -128,14 +116,7 @@ class Connection {
     _sessionStore.write(lease.disconnectedAt(_clock.now()).encode());
   }
 
-  void _stopKeepalive(_Current entry) {
-    final timer = entry.keepalive;
-    if (timer != null) _clock.clearTimeout(timer);
-    entry.keepalive = null;
-  }
-
   void _fail(_Current entry, String message, int code, String reason) {
-    _stopKeepalive(entry);
     entry.phase = _Phase.failed;
     entry.lastError = message;
     entry.closedByCore = (code: code, reason: reason);
@@ -153,9 +134,9 @@ class Connection {
     return SessionClaim(
       sessionId: options.sessionId,
       token: options.token!,
-      deviceManufacturer: options.deviceManufacturer ?? _device.manufacturer,
-      deviceModel: options.deviceModel ?? _device.model,
-      deviceOs: options.deviceOs ?? _device.os,
+      deviceManufacturer: _device.manufacturer,
+      deviceModel: _device.model,
+      deviceOs: _device.os,
     );
   }
 
@@ -164,33 +145,6 @@ class Connection {
       message.sessionId == options.sessionId &&
       message.keepaliveIntervalS > 0 &&
       message.graceS > 0;
-
-  void _scheduleKeepalive(_Current entry, SessionAck ack) {
-    final intervalMs = (ack.keepaliveIntervalS * 1000).round();
-    void tick() {
-      entry.keepalive = _clock.setTimeout(tick, intervalMs);
-      unawaited(
-        entry.socket!.ping().then(
-          (_) => entry.missedPings = 0,
-          onError: (Object _) {
-            entry.missedPings += 1;
-            if (entry.missedPings >= _missedPingsBeforeLoss &&
-                _current == entry &&
-                entry.phase == _Phase.active) {
-              _fail(
-                entry,
-                'Appduct keepalive ping went unanswered.',
-                1011,
-                'ping_timeout',
-              );
-            }
-          },
-        ),
-      );
-    }
-
-    entry.keepalive = _clock.setTimeout(tick, intervalMs);
-  }
 
   void _handleMessage(_Current entry, String text) {
     final message = decodeFrame(text);
@@ -229,7 +183,9 @@ class Connection {
         ).encode(),
       );
       entry.phase = _Phase.active;
-      _scheduleKeepalive(entry, ack);
+      entry.socket!.keepalive(
+        Duration(milliseconds: (ack.keepaliveIntervalS * 1000).round()),
+      );
       _handlers.onAck(ack);
       return;
     }
@@ -278,7 +234,6 @@ class Connection {
           onClose: (code, reason) {
             if (_current != entry) return;
             _current = null;
-            _stopKeepalive(entry);
             final byCore = entry.closedByCore;
             if (byCore != null) (code, reason) = (byCore.code, byCore.reason);
             if (code == 1000) {
@@ -340,7 +295,6 @@ class Connection {
     _sessionStore.clear();
     final entry = _current;
     _current = null;
-    if (entry != null) _stopKeepalive(entry);
     entry?.socket?.close(1000, 'client_close');
   }
 }
