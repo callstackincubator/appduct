@@ -103,6 +103,9 @@ void Function() registerPlaygroundTools(
       group: 'diagnostics/progress',
       timeout: const Duration(seconds: 5),
       handler: (_, context) async {
+        // The hot-restart device check waits for this line before it restarts, so the call is
+        // known to be running.
+        debugPrint('slow_task started');
         for (final (progress, message) in const [
           (0.33, 'warming up'),
           (0.66, 'almost there'),

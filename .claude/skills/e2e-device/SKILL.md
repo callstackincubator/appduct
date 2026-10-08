@@ -162,24 +162,50 @@ cd playground-flutter
 until grep -q "Flutter run key commands" /tmp/flutter-run.log; do sleep 2; done
 cd ..
 # deliver a link and wait for an active session, then:
-before=$($a sessions ls --json | jq -r '.data[0].sessionId')
 ```
 
-R2, resume with no new link. `kill -USR2 $(cat /tmp/flutter-run.pid)` hot-restarts the app (the log
-says "Restarted application"). Without delivering anything, wait for the session to be active again
-and check it is the same one: `$a sessions ls --json | jq -e --arg id "$before" '.data[] | select(.sessionId==$id and .state=="active")'`,
-then `$a tools call sum --input '{"a":1,"b":2}' --json | jq -e '.data.total == 3'`.
-
-R3, a call in flight fails at once. Start `slow_task` (about 1.5 s), restart 0.5 s in, and time it:
+A replaced or reinstalled session stays in `sessions ls` as `suspended` for 600 s, so never take
+`.data[0]` and never call a tool without a selector (it fails with `ambiguous_session`). Pick the
+active session and pass its id as the selector in every call below:
 
 ```bash
-( time $a tools call slow_task --input '{}' --json ) > /tmp/slow.out 2>&1 &
-sleep 0.5 && kill -USR2 $(cat /tmp/flutter-run.pid)
+active() { $a sessions ls --json | jq -r '[.data[] | select(.state=="active")][0].sessionId // empty'; }
+until id=$(active) && [ -n "$id" ]; do sleep 2; done
+restart() { # hot restart, then wait for the new "Restarted application" line
+  n=$(grep -c "Restarted application" /tmp/flutter-run.log)
+  kill -USR2 $(cat /tmp/flutter-run.pid)
+  until [ "$(grep -c "Restarted application" /tmp/flutter-run.log)" -gt "$n" ]; do sleep 1; done
+}
+```
+
+R2, resume with no new link. Count a call first, restart, and deliver nothing:
+
+```bash
+$a tools call "$id" sum --input '{"a":1,"b":2}' --json | jq -e '.data.total == 3'
+$a tools call "$id" call_count --json | jq -e '.data.count == 1'
+restart
+until [ "$(active)" = "$id" ]; do sleep 1; done
+$a tools call "$id" call_count --json | jq -e '.data.count == 0'
+```
+
+The same session is active again, and the count is back to 0, which only the restarted isolate
+can say. 
+R3, a call in flight fails at once. The playground's `slow_task` prints `slow_task started` to the
+run log when the handler begins, so the restart goes out only once the call is running:
+
+```bash
+n=$(grep -c "slow_task started" /tmp/flutter-run.log)
+( time $a tools call "$id" slow_task --input '{}' --json ) > /tmp/slow.out 2>&1 &
+until [ "$(grep -c "slow_task started" /tmp/flutter-run.log)" -gt "$n" ]; do sleep 0.1; done
+restart
 wait; cat /tmp/slow.out
 ```
 
-The call fails with `session_suspended` well before the 5 s tool timeout. Then repeat the R2 resume
-check. Stop `flutter run` with `kill $(cat /tmp/flutter-run.pid)` when done.
+The call fails with `session_suspended` well before the 5 s tool timeout, and its message contains
+`while the call was pending`. A message that says `is not active` means the call arrived while the
+session was already suspended: the run proves nothing, repeat it. Then repeat the R2 resume check
+(`until [ "$(active)" = "$id" ]` and a `call_count` of 0). Stop `flutter run` with
+`kill $(cat /tmp/flutter-run.pid)` when done.
 
 **L3, links through the shim with Flutter deep linking off (Android).** In
 `playground-flutter/android/app/src/main/AndroidManifest.xml` add
@@ -250,6 +276,10 @@ $a tools call reset_counter --input '{}' --json | jq -e '.data.count == 0' \
 && echo SMOKE_OK
 $a tools call throwing_tool --input '{}' --json; echo "exit=$? (non-zero expected, type tool_execution_error)"
 ```
+
+Against the Flutter playground (after a reinstall or a second link), stale `suspended` sessions
+make a selector-less call fail with `ambiguous_session`: set `a="pnpm playground-flutter:appduct --"`,
+`id=$(active)` as in the hot-restart section, and write each call as `$a tools call "$id" <tool> ...`.
 
 A checked-in script for this pass is planned; until it exists, this chain is the suite.
 
