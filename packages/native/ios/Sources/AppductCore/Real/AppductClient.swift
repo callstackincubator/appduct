@@ -89,6 +89,8 @@ public actor AppductClient {
     let task: Task<Void, Never>
     var cancelled = false
     var timedOut = false
+    /// The socket died under the call, so there is nothing to answer on.
+    var suspended = false
     /// "client_cancelled" (default for an explicit `tool_cancel` with no reason)/the wire
     /// `tool_cancel.reason`, "timeout", or "session_suspended" -- surfaced to a native `ToolHandler`
     /// via `ToolCallContext.cancelReason()` and to the RN bridge's `onToolCancel` event.

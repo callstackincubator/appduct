@@ -7,6 +7,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -311,7 +312,10 @@ private class ScenarioReplay(private val scenario: JSONObject) {
                 response.await()
             } catch (e: CancellationException) {
                 app.addLast(
-                    JSONObject().put("kind", "cancel").put("call", context.callId).put("reason", e.message ?: "unknown"),
+                    JSONObject()
+                        .put("kind", "cancel")
+                        .put("call", context.callId)
+                        .put("reason", if (e is TimeoutCancellationException) "timeout" else e.message ?: "unknown"),
                 )
                 throw e
             }

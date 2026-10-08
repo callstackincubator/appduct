@@ -89,7 +89,7 @@ extension AppductClient {
     // and this is a late result/throw -- ignore it, matching the JS client's dev-warning-and-drop.
     guard let call = inFlightCalls[id] else { return }
 
-    if call.timedOut {
+    if call.timedOut || call.suspended {
       return
     }
 
@@ -220,6 +220,7 @@ extension AppductClient {
   func abortAllInFlight() {
     for call in inFlightCalls.values {
       call.cancelled = true
+      call.suspended = true
       call.cancelReason = call.cancelReason ?? "session_suspended"
       call.task.cancel()
     }
