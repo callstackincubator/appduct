@@ -138,8 +138,11 @@ is the clock's starting Unix time in milliseconds, `random` is the constant the 
 returns, and `steps` run in order. With `random` at 0.5, the first reconnect delay is 250 ms, and
 the second consecutive one 500 ms. The scenarios here cover the paths where session behaviour has
 broken before: resuming with the rotated token after a drop, at the jittered delay and not before;
-grace expiry reporting the session lost; and a terminal `1008` that never reconnects, even after
-time passes the 30 s backoff cap.
+grace expiry reporting the session lost; a terminal `1008` that never reconnects, even after
+time passes the 30 s backoff cap; and tool calls: a call that outlasts its `timeout_ms` answering
+`tool_timeout`, a `tool_cancel` arriving before the timeout, a late result putting nothing on the wire,
+and a socket drop cancelling a call in flight with `session_suspended` and sending nothing. After a
+drop, the `state` output comes before the `cancel` output in every core.
 
 A step either drives the core, `{ "drive": <name>, ... }`, or expects an output,
 `{ "expect": <name>, ... }`.

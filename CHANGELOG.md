@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: a tool call in flight when the connection drops no longer tries to send a `tool_cancelled` reply on the dead connection in the iOS and Android SDKs.** The call is cancelled with `session_suspended`, as on web.
 - **Fix: a tool call no longer hangs until its timeout when the app reconnects while its old connection is still open.** The call now fails at once with `session_suspended` and can be retried.
 - **Docs: the website has a Web setup page and lists web on the home page.** See [Web setup](https://callstackincubator.github.io/appduct/install/web/).
 - **Docs: which browsers and launch setups connect a web page without a permission prompt, and how to choose between DevTools and WebSocket.** See [Drive a web page](https://callstackincubator.github.io/appduct/guides/web-pages/) and [Security](https://callstackincubator.github.io/appduct/guides/security/#devtools-access).
