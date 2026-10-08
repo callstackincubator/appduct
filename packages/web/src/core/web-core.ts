@@ -29,6 +29,7 @@ class HandshakeClosedError extends Error {
   constructor(
     message: string,
     readonly code: number | undefined,
+    readonly reason: string | undefined,
   ) {
     super(message);
   }
@@ -183,7 +184,7 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
     },
 
     onClose({ code, reason, error }) {
-      const settled = settlePending(new HandshakeClosedError(reason ?? error ?? "Appduct connection closed.", code));
+      const settled = settlePending(new HandshakeClosedError(reason ?? error ?? "Appduct connection closed.", code, reason));
       if (settled) return;
       onSocketLost(code, reason, error);
     },
@@ -310,7 +311,7 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
       if (error instanceof HandshakeClosedError && isTerminalCloseCode(error.code)) {
         // The daemon rejected the resume itself. Retrying the same frame until the grace window
         // ends would leave the app "reconnecting" for minutes before it reports the loss.
-        finalizeSessionLost(error.message);
+        finalizeSessionLost(error.reason ?? "rejected_by_daemon");
         return;
       }
       scheduleReconnect(myEpoch);

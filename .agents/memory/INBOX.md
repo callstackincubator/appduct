@@ -80,3 +80,7 @@ One note per PR that hit friction, four lines:
   What went wrong: the daemon's per-tab relay was keyed by the raw browserUrl string and recorded only after async setup, so two spellings of one URL, and then two concurrent attaches, each left two relays on one tab; it took two extra review rounds.
   Would have prevented it: key per-target state by the target's own id, and record it synchronously right after the first await that yields the target, with a test that attaches the same target twice concurrently.
   Cost: review round
+- 2026-10-07 #207 skill: implement-issue
+  What went wrong: Swift test code written without a toolchain failed review twice, first on non-Sendable static lets under Swift 6, then on NSLock.withLock below the macOS 13 deployment target.
+  Would have prevented it: when no Swift toolchain is available, check new Swift test code against Package.swift's swift-tools-version and deployment targets before pushing.
+  Cost: two review rounds

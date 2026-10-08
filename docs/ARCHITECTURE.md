@@ -433,6 +433,10 @@ Rules:
   successful resume the resume token is **rotated** (old one invalid immediately).
 - `ACTIVE → SUSPENDED` (socket close/error/heartbeat loss): the tool registry, device
   metadata, and alias are retained. Pending tool calls fail fast with `session_suspended`.
+- `ACTIVE → ACTIVE` via `session_resume` while the old socket is still open: the daemon closes
+  the old socket (`1000 session_replaced`), adopts the new one and emits `session_resumed`
+  without suspending. Calls pending on the old socket fail fast with `session_suspended`
+  (the app aborted them with that socket) and frames the old socket still delivers are dropped.
 - `SUSPENDED → ACTIVE` via `session_resume` on a fresh socket within
   `graceSeconds`. A session resumes only on the listener it was claimed on; a resume on the
   other listener closes `1008 wrong_transport` and leaves the resume token valid. After resume the app re-sends a full
@@ -689,6 +693,10 @@ developer's private key.
 `app.config.js` / `app.config.ts` are deliberately **not** evaluated — running arbitrary project
 code to read one string is a far larger blast radius than this warrants. Dynamic-config projects
 use `--scheme`, `APPDUCT_SCHEME`, or `appduct init --scheme <s>`.
+
+In a Flutter project (`pubspec.yaml` at the root) the Android probes in b run against `android/`
+instead of the root, and `appduct init` prints the Flutter setup steps in place of the React
+Native reminder.
 
 `appduct init`, run in an app root, writes that project `.appduct/config.json` (`scheme`, and
 `appId.ios`/`appId.android` via `--ios-app-id <id>`/`--android-app-id <id>`) and prints the
@@ -1112,6 +1120,24 @@ packages/
                    (standalone Gradle project, packages/native/android) core. Not an
                    npm/pnpm workspace package -- no package.json. §11,
                    docs/internal/native-core.md.
+  flutter/         Flutter plugin `appduct`, not published yet. Not an npm/pnpm workspace
+                   package -- no package.json, so turbo and pnpm never see it. `lib/src/core/`
+                   is pure Dart (only dart:async, dart:convert, dart:typed_data, dart:math;
+                   a test enforces it): bootstrap link and payload decoding, frame
+                   encode/decode, descriptor validation, close-code classification, all
+                   checked against packages/native/fixtures, and the session core
+                   (`createDartCore`: claim and resume, reconnect, keepalive via the socket,
+                   backgrounding, registries, tool calls), a port of packages/web/src/core
+                   over the ports in `ports.dart`, each with a memory fake beside it, and
+                   replaying the session scenarios. `lib/src/io/` holds the dart:io
+                   adapters (no Flutter import): the pinned `wss` transport (empty
+                   SecurityContext, every leaf checked against the SPKI pin), trust
+                   resolution from the `APPDUCT_PINS` / `APPDUCT_TRUST` build defines, and a
+                   file lease store. `lib/src/flutter/composition.dart` wires them into the
+                   binding (the lease file on Windows and Linux, the shim elsewhere) and reads
+                   `APPDUCT_ALLOW_PRIVATE_LAN_ONLY` (default true). Test it with
+                   `cd packages/flutter && flutter test` after `pnpm build`: two tests run
+                   against the built daemon (CI job `flutter` in test.yaml).
 playground/        reference app (Expo dev build)
 playground-native/ plain iOS and Android apps on packages/native, no React Native
 ```
