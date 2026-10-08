@@ -1116,6 +1116,13 @@ packages/
                    (standalone Gradle project, packages/native/android) core. Not an
                    npm/pnpm workspace package -- no package.json. §11,
                    docs/internal/native-core.md.
+  flutter/         Flutter plugin `appduct`, not published yet. Not an npm/pnpm workspace
+                   package -- no package.json, so turbo and pnpm never see it. `lib/src/core/`
+                   is pure Dart (only dart:async, dart:convert, dart:typed_data, dart:math;
+                   a test enforces it): bootstrap link and payload decoding, frame
+                   encode/decode, descriptor validation, close-code classification, all
+                   checked against packages/native/fixtures. Test it with
+                   `cd packages/flutter && flutter test` (CI job `flutter` in test.yaml).
 playground/        reference app (Expo dev build)
 playground-native/ plain iOS and Android apps on packages/native, no React Native
 ```

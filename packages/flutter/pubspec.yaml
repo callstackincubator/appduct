@@ -1,0 +1,28 @@
+name: appduct
+description: Call functions inside a running Flutter app from a terminal, a test runner or an agent.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+  flutter: ">=3.38.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.appduct
+        pluginClass: AppductPlugin
+      ios:
+        pluginClass: AppductPlugin
+      macos:
+        pluginClass: AppductPlugin

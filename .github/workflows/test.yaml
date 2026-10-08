@@ -51,6 +51,63 @@ jobs:
       - name: Run JavaScript tests
         run: pnpm test
 
+  flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # The version the package is tested against; the package itself supports Flutter 3.38 and later.
+      FLUTTER_VERSION: 3.47.6
+    defaults:
+      run:
+        working-directory: packages/flutter
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Decide whether the Flutter package is affected
+        # Done in a step rather than with `on.paths` so the job stays a green check on every PR.
+        # Pushes and reusable-workflow calls always run it.
+        id: affected
+        working-directory: .
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ] || git diff --name-only "$BASE_SHA" HEAD \
+            | grep -qE '^(packages/flutter/|packages/native/fixtures/|\.github/workflows/test\.yaml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Cache Flutter SDK
+        if: steps.affected.outputs.run == 'true'
+        id: flutter-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/flutter
+          key: flutter-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
+      - name: Install Flutter
+        if: steps.affected.outputs.run == 'true' && steps.flutter-cache.outputs.cache-hit != 'true'
+        working-directory: .
+        run: git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git ~/flutter
+      - name: Add Flutter to PATH
+        if: steps.affected.outputs.run == 'true'
+        run: echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+      - name: Install dependencies
+        if: steps.affected.outputs.run == 'true'
+        run: flutter pub get
+      - name: Check formatting
+        if: steps.affected.outputs.run == 'true'
+        run: dart format --set-exit-if-changed .
+      - name: Analyze
+        if: steps.affected.outputs.run == 'true'
+        run: dart analyze --fatal-infos
+      - name: Test
+        if: steps.affected.outputs.run == 'true'
+        run: flutter test
+
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 45
