@@ -11,6 +11,8 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: events posted from an iOS app now report their time in milliseconds, like Android's.**
+  A script reading `data.ts` from `appduct events tail` or `appduct events since` no longer needs to multiply it by 1,000.
 - **Fix: the iOS and Android SDKs no longer report a "Failed to send a tool response frame." error when the connection drops during a tool call.**
 - **New: `appduct init` and scheme discovery understand Flutter projects.** Run from a directory with a `pubspec.yaml`, they read the URL scheme from `android/app/`, `ios/Runner` and `macos/Runner`, and `init` prints the Flutter setup steps.
 - **Fix: a tool call no longer hangs until its timeout when the app reconnects while its old connection is still open.** The call now fails at once with `session_suspended` and can be retried.

@@ -275,6 +275,11 @@ client; surfaced daemon-side as an `app_event` (`events.subscribe`, `appduct eve
 retained per-session (`events.since`, §8) so a request/response caller (an MCP client, a script)
 can ask "what happened?" after the fact instead of only listening live.
 
+`ts` is Unix milliseconds — the unit Kotlin's `System.currentTimeMillis()` and Swift's
+`timers.now()` already report, and the one the daemon forwards unchanged inside `app_event`'s
+`data`. The guard accepts any finite number, so an app that stamps seconds is not rejected: it
+reaches its callers as a timestamp 1 000× in the past, which is what iOS did until #154.
+
 ## 5. Tool descriptor shape
 
 ```jsonc

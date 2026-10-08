@@ -272,7 +272,9 @@ public actor AppductClient {
 
   public struct AppductNotActiveError: Error, Sendable {}
 
-  /// Emits an `event` frame while active (PROTOCOL.md §7); rejects otherwise.
+  /// Emits an `event` frame while active (PROTOCOL.md §4); rejects otherwise. `ts` is Unix
+  /// milliseconds, the same unit `timers.now()` reports and Kotlin's `System.currentTimeMillis()`
+  /// sends.
   public func postEvent(_ name: String, payload: JSONValue? = nil) async throws {
     guard clientState == .active, let sessionId = heldSession?.sessionId else {
       throw AppductNotActiveError()
@@ -282,7 +284,7 @@ public actor AppductClient {
       "type": .string("event"),
       "session_id": .string(sessionId),
       "name": .string(name),
-      "ts": .number(timers.now() / 1_000),
+      "ts": .number(timers.now()),
     ]
     if let payload { message["payload"] = payload }
 
