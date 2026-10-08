@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **New: Flutter apps use Appduct through the `appduct` package on pub.dev, on Android, iOS, macOS, Windows and Linux.** Appduct is included in debug and profile builds, and a release build leaves it out unless you opt in with `--dart-define=APPDUCT_ENABLED=true` (`=false` opts out of debug and profile); see [Flutter setup](https://callstackincubator.github.io/appduct/install/flutter/).
 - **New: `appduct init` and scheme discovery understand Flutter projects.** Run from a directory with a `pubspec.yaml`, they read the URL scheme from `android/app/`, `ios/Runner` and `macos/Runner`, and `init` prints the Flutter setup steps.
 - **Fix: a tool call no longer hangs until its timeout when the app reconnects while its old connection is still open.** The call now fails at once with `session_suspended` and can be retried.
 - **Docs: the website has a Web setup page and lists web on the home page.** See [Web setup](https://callstackincubator.github.io/appduct/install/web/).

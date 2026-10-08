@@ -120,9 +120,26 @@ A new link also replaces a session the app already has. Under link trust, someon
        | `com.callstack.appduct.TRUST` | `"link"` or `"pin"` |
        | `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean, defaults to `true` |
      </TabItem>
+     <TabItem label="Flutter">
+       Pass the settings as compile-time defines. A file keeps them out of your shell history:
+
+       ```json title="appduct.release.json"
+       {
+         "APPDUCT_PINS": "sha256/REPLACE_WITH_KEYGEN_OUTPUT",
+         "APPDUCT_TRUST": "pin",
+         "APPDUCT_ALLOW_PRIVATE_LAN_ONLY": "true"
+       }
+       ```
+
+       ```bash
+       flutter build apk --dart-define-from-file=appduct.release.json
+       ```
+
+       `APPDUCT_PINS` takes comma-separated `sha256/...` pins, and setting it switches the build to `"pin"` trust. `APPDUCT_TRUST` is `"link"` or `"pin"`.
+     </TabItem>
    </Tabs>
 
-3. Rebuild the app. For Expo, run prebuild again. These are native settings, so a reload isn't enough.
+3. Rebuild the app. For Expo, run prebuild again. For Flutter, build again. These are build-time settings, so a reload isn't enough.
 
 4. Check what the build uses. In React Native, `getAppductBuildConfig()` returns `{ trust, hasEmbeddedPins, allowPrivateLanOnly }`; on iOS and Android, read `Appduct.shared.buildConfig` or `Appduct.buildConfig`. It never shows the pins themselves.
 
@@ -132,7 +149,7 @@ A new link also replaces a session the app already has. Under link trust, someon
 
 ### Local network only
 
-`allowPrivateLanOnly` defaults to `true`: the app only follows links that point to a local IPv4 address (private ranges like `192.168.x.x`, or `127.0.0.1`). It's a safety default for development, not a statement that Appduct works only on a LAN. Only native build settings can change it.
+`allowPrivateLanOnly` defaults to `true`: the app only follows links that point to a local IPv4 address (private ranges like `192.168.x.x`, or `127.0.0.1`). It's a safety default for development, not a statement that Appduct works only on a LAN. Only build settings can change it: the native settings above, or `APPDUCT_ALLOW_PRIVATE_LAN_ONLY` in a Flutter app.
 
 ## Rotate keys
 

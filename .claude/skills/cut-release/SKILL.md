@@ -1,16 +1,19 @@
 ---
 name: cut-release
-description: Cut a release of the three npm packages - propose the version from the Unreleased changelog, bump versions in lockstep, open the release PR, and after it merges create the GitHub release that triggers publishing, only on an explicit yes. Use when asked to release, cut a version, tag or publish.
+description: Cut a release of the three npm packages and the Flutter package - propose the version from the Unreleased changelog, bump versions in lockstep, open the release PR, and after it merges create the GitHub release that triggers publishing, only on an explicit yes. Use when asked to release, cut a version, tag or publish.
 model: sonnet
 effort: low
 ---
 
 # Cut a release
 
-The three packages (`@appduct/shared`, `appduct`, `@appduct/react-native`) share one version.
-Podspecs and Gradle read it from `package.json`, so the version lives in exactly three files.
-Publishing is `.github/workflows/deploy.yaml`, triggered by a published GitHub release whose
-tag is `v<version>`.
+The three npm packages (`@appduct/shared`, `appduct`, `@appduct/react-native`) and the Flutter
+package (`appduct` on pub.dev) share one version. Podspecs and Gradle read it from `package.json`,
+and the Flutter package carries it in `pubspec.yaml`, `darwin/appduct.podspec` and
+`android/build.gradle.kts`, so the version lives in exactly six files. Publishing is
+`.github/workflows/deploy.yaml`, triggered by a published GitHub release whose tag is
+`v<version>`; it refuses to run if the six files disagree
+(`node scripts/release-version.mjs`).
 
 Two phases. Never run phase 2 inside a `work-issue` loop or without the explicit yes.
 
@@ -40,6 +43,19 @@ Read the `cut-release` section of `.agents/memory/LESSONS.md` before starting, p
    done
    ```
 
+   Then the Flutter package, whose version also goes in `packages/flutter/CHANGELOG.md` as a new
+   `## $v` heading above the previous one with a line of notes (pub.dev warns, and the publish
+   dry run fails, when that file does not name the version):
+
+   ```bash
+   sed -i.bak -E "s/^version: .*/version: $v/" packages/flutter/pubspec.yaml
+   sed -i.bak -E "s/(s\.version +=) '[^']*'/\1 '$v'/" packages/flutter/darwin/appduct.podspec
+   sed -i.bak -E "s/^version = \"[^\"]*\"/version = \"$v\"/" packages/flutter/android/build.gradle.kts
+   rm packages/flutter/pubspec.yaml.bak packages/flutter/darwin/appduct.podspec.bak packages/flutter/android/build.gradle.kts.bak
+   node scripts/release-version.mjs   # prints $v when all six files agree
+   (cd packages/flutter && dart pub publish --dry-run)
+   ```
+
    In `CHANGELOG.md`, rename `## Unreleased` to `## <version> (<YYYY-MM-DD>)` and insert a
    new empty `## Unreleased` above it. Run `pnpm install --frozen-lockfile` to confirm the
    lockfile is unchanged, then `pnpm build && pnpm test`.
@@ -67,5 +83,10 @@ gh release create "v$v" --target main --title "v$v" \
   --notes "$(sed -n "/^## $v/,/^## /p" CHANGELOG.md | sed '$d')"
 gh run list --workflow deploy.yaml --limit 1                   # publishing started
 ```
+
+The `publish-pub` job needs the package claimed on pub.dev with automated publishing enabled
+for this repository (tag pattern `v{{version}}`, environment `pub.dev`). If the first release
+has not had that done by a maintainer, say so before creating the release: the npm packages
+publish either way, and the pub job fails.
 
 Report the release URL and the deploy run. Do not retry a failed publish; report it.

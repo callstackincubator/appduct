@@ -1,6 +1,6 @@
 ---
 title: Introduction
-description: Appduct lets a terminal, a test runner, or an AI agent call functions inside your running React Native, iOS, or Android app.
+description: Appduct lets a terminal, a test runner, or an AI agent call functions inside your running React Native, Flutter, iOS, or Android app.
 sidebar:
   order: 1
 ---
@@ -9,7 +9,7 @@ import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 Appduct lets a terminal, a test runner, or an AI agent call functions inside your app while it's running. You choose what's callable by registering a few functions, called **tools**. Nothing else in the app is reachable.
 
-It works with React Native apps, and with plain iOS (Swift) and Android (Kotlin) apps.
+It works with React Native and Flutter apps, and with plain iOS (Swift) and Android (Kotlin) apps.
 
 ## Who it's for
 
@@ -42,6 +42,7 @@ For more detail, see [How it works](/appduct/reference/architecture/).
 | [`appduct`](/appduct/guides/cli/) (npm) | The CLI, the background service, and the MCP server |
 | [`@appduct/react-native`](/appduct/install/react-native/) (npm) | The React Native library and Expo config plugin |
 | [`@appduct/web`](/appduct/install/web/) (npm) | The web library for any framework or plain JavaScript |
+| [`appduct`](/appduct/install/flutter/) (pub.dev) | The Flutter package |
 | [`AppductCore`](/appduct/install/ios/) | The iOS library, through Swift Package Manager or CocoaPods |
 | [`com.callstack.appduct:core`](/appduct/install/android/) | The Android library on Maven Central, paired with `core-noop` for release builds |
 
@@ -50,6 +51,7 @@ For more detail, see [How it works](/appduct/reference/architecture/).
 | Where | Requirement |
 | --- | --- |
 | React Native app | iOS 15.1+ and Android, New Architecture. A development build or bare React Native app; Expo Go isn't supported. The web build of the same app registers the same tools once `metro.config.js` wraps your config in `withAppduct`; open the page with `appduct sessions link --open web <url>`. |
+| Flutter app | Flutter 3.38+ on iOS 15+, Android 7.0 (API 24)+, macOS, Windows or Linux. Flutter web isn't supported. |
 | iOS app without React Native | iOS 15.1+. Installing with Swift Package Manager needs Xcode 16.3 or newer. |
 | Android app without React Native | Android 7.0 (API 24) or newer. |
 | Web page | Any framework or none, in a browser on the same computer as the CLI. Chrome, Firefox and Safari on `http://localhost`; see [Drive a web page](/appduct/guides/web-pages/) for `https`. |
@@ -67,6 +69,7 @@ For more detail, see [How it works](/appduct/reference/architecture/).
 
 <CardGrid>
   <LinkCard title="React Native setup" description="Add Appduct to an Expo or bare React Native app." href="/appduct/install/react-native/" />
+  <LinkCard title="Flutter setup" description="Add Appduct to a Flutter app, in Dart." href="/appduct/install/flutter/" />
   <LinkCard title="iOS setup" description="Add Appduct to a plain iOS app, in Swift." href="/appduct/install/ios/" />
   <LinkCard title="Android setup" description="Add Appduct to a plain Android app, in Kotlin." href="/appduct/install/android/" />
 </CardGrid>

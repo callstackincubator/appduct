@@ -6,18 +6,32 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+const repoRoot = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../..",
+);
 const script = join(repoRoot, "scripts", "release-version.mjs");
 
 const roots: string[] = [];
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
 
-type Versions = { npm?: string; flutter?: string };
+type Versions = {
+  npm?: string;
+  flutter?: string;
+  podspec?: string;
+  gradle?: string;
+};
 
 /** A repo layout with the three npm packages at `npm` and the Flutter package at `flutter`. */
-function fixture({ npm = "0.15.0", flutter = "0.15.0" }: Versions = {}): string {
+function fixture({
+  npm = "0.15.0",
+  flutter = "0.15.0",
+  podspec = "0.15.0",
+  gradle = "0.15.0",
+}: Versions = {}): string {
   const root = mkdtempSync(join(tmpdir(), "release-version-"));
   roots.push(root);
   for (const name of ["shared", "appduct", "react-native"]) {
@@ -32,11 +46,23 @@ function fixture({ npm = "0.15.0", flutter = "0.15.0" }: Versions = {}): string 
     join(root, "packages", "flutter", "pubspec.yaml"),
     `name: appduct\nversion: ${flutter}\npublish_to: none\n`,
   );
+  mkdirSync(join(root, "packages", "flutter", "darwin"), { recursive: true });
+  writeFileSync(
+    join(root, "packages", "flutter", "darwin", "appduct.podspec"),
+    `Pod::Spec.new do |s|\n  s.name             = 'appduct'\n  s.version          = '${podspec}'\nend\n`,
+  );
+  mkdirSync(join(root, "packages", "flutter", "android"), { recursive: true });
+  writeFileSync(
+    join(root, "packages", "flutter", "android", "build.gradle.kts"),
+    `group = "dev.appduct"\nversion = "${gradle}"\n`,
+  );
   return root;
 }
 
 function run(root: string, ...args: string[]) {
-  const result = spawnSync("node", [script, "--root", root, ...args], { encoding: "utf8" });
+  const result = spawnSync("node", [script, "--root", root, ...args], {
+    encoding: "utf8",
+  });
   return { code: result.status, out: result.stdout, err: result.stderr };
 }
 
@@ -52,6 +78,18 @@ describe("release version check", () => {
     expect(result.err).toContain("0.14.0");
   });
 
+  it("rejects a podspec whose version differs from the npm packages", () => {
+    const result = run(fixture({ podspec: "0.14.0" }));
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("appduct.podspec");
+  });
+
+  it("rejects an Android build whose version differs from the npm packages", () => {
+    const result = run(fixture({ gradle: "0.14.0" }));
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("android/build.gradle.kts");
+  });
+
   it("rejects npm packages whose versions differ", () => {
     const root = fixture();
     writeFileSync(
@@ -64,7 +102,14 @@ describe("release version check", () => {
   });
 
   it("rejects a prerelease version", () => {
-    const result = run(fixture({ npm: "0.15.0-rc.1", flutter: "0.15.0-rc.1" }));
+    const result = run(
+      fixture({
+        npm: "0.15.0-rc.1",
+        flutter: "0.15.0-rc.1",
+        podspec: "0.15.0-rc.1",
+        gradle: "0.15.0-rc.1",
+      }),
+    );
     expect(result.code).toBe(1);
     expect(result.err).toContain("Prerelease");
   });

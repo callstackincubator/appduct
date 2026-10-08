@@ -128,6 +128,11 @@ jobs:
       - name: Test
         if: steps.affected.outputs.run == 'true'
         run: flutter test
+      - name: Check the package can be published
+        # The same dry run deploy.yaml does before a release, so pub.dev's checks fail on the PR
+        # that breaks them. Warnings fail it too.
+        if: steps.affected.outputs.run == 'true'
+        run: dart pub publish --dry-run
       - name: Test the Android shim state
         if: steps.affected.outputs.run == 'true'
         run: gradle -p android/shim-test test
