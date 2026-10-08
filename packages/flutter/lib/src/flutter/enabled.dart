@@ -10,6 +10,5 @@ const appductEnabled = bool.fromEnvironment(
 );
 
 /// Written once by [Appduct.ensureInitialized] behind [appductEnabled]. `appduct doctor` looks for
-/// this string in `libapp.so` and `App.framework/App`; keep the prefix, and the version in step
-/// with `pubspec.yaml`.
-const appductDartCoreMarker = 'appduct-dart-core/0.0.1';
+/// this string in `libapp.so` and `App.framework/App`; keep the prefix.
+const appductDartCoreMarker = 'appduct-dart-core/';

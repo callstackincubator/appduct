@@ -68,7 +68,7 @@
  * fallback signals therefore fire on that harmless stub exactly as they would on the real module, and
  * can no longer prove inclusion by themselves.
  *
- * Flutter: the Dart core writes `appduct-dart-core/<version>` into the AOT snapshot only when
+ * Flutter: the Dart core writes `appduct-dart-core/` into the AOT snapshot only when
  * `appductEnabled` is true; that string in `libapp.so` / `App.framework/App` is a third
  * authoritative signal on both platforms. The native shim is in every Flutter build and proves
  * nothing, so doctor reports on the Dart core alone.

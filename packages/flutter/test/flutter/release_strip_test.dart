@@ -82,15 +82,4 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
-
-  test('the marker carries the package version', () {
-    final pubspec = File('pubspec.yaml').readAsStringSync();
-    final version = RegExp(
-      r'^version: (\S+)',
-      multiLine: true,
-    ).firstMatch(pubspec)![1];
-    final enabled = File('lib/src/flutter/enabled.dart').readAsStringSync();
-
-    expect(enabled, contains("'$_marker$version'"));
-  });
 }
