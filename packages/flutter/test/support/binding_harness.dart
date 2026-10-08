@@ -38,6 +38,7 @@ class BindingHarness {
     MemoryTransport? transport,
     ManualClock? clock,
     this.allowPrivateLanOnly = true,
+    this.leaseStore,
   }) : shim = shim ?? FakeShim(),
        transport = transport ?? MemoryTransport(),
        clock = clock ?? ManualClock(startMs) {
@@ -49,6 +50,7 @@ class BindingHarness {
   final ManualClock clock;
   final bool rootIsolate;
   final bool allowPrivateLanOnly;
+  final SessionStore? leaseStore;
   final Map<String, String> environment;
   final warnings = <String>[];
   late final Appduct appduct;
@@ -64,6 +66,7 @@ class BindingHarness {
         allowPrivateLanOnly: allowPrivateLanOnly,
         isRootIsolate: () => rootIsolate,
         warn: warnings.add,
+        leaseStore: leaseStore,
       ),
     );
     await flush();
