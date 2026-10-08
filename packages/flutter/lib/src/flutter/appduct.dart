@@ -223,13 +223,15 @@ final class _Live with WidgetsBindingObserver implements Appduct {
     _device._fields = activation.device;
     _store.load(activation.lease);
 
-    // After a hot restart the process still holds the link the session started from. Its token is
-    // spent, so feeding it again would replace the live session; the lease resumes it instead.
-    final leased = _leasedSessionId(activation.lease);
+    // After a hot restart the process still holds the links the app started from: the route name
+    // and APPDUCT_LINK last as long as the process, whichever session the lease belongs to now.
+    // Their tokens are spent, so feeding them again would replace the live session; the lease
+    // resumes it instead. Only the shim's pending links are new, and they are filtered by session.
+    final lease = activation.lease;
+    final leased = _leasedSessionId(lease);
     final links = <String>{
       ...activation.links,
-      ?_coldStartLink(),
-      ?_desktopLink(),
+      if (lease == null) ...[?_coldStartLink(), ?_desktopLink()],
     }..removeWhere((link) => leased != null && _sessionIdOf(link) == leased);
     if (links.isEmpty) {
       await _core.restoreSession();
