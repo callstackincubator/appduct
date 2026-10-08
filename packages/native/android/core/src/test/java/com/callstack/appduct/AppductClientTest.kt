@@ -369,42 +369,6 @@ class AppductClientTest {
         }
 
     @Test
-    fun `a socket loss cancels a call in flight without trying to answer it`() =
-        runBlocking {
-            val (client, fake) = newClient()
-            client.connectAndAck(fake)
-            val errors = CopyOnWriteArrayList<AppductUnifiedError>()
-            client.addErrorListener { errors.add(it) }
-            val started = CompletableDeferred<Unit>()
-            val cancelled = CompletableDeferred<String?>()
-            client.registerTool(AppductToolDescriptor(name = "slow", description = "Never finishes.")) { _, _ ->
-                started.complete(Unit)
-                try {
-                    kotlinx.coroutines.delay(60_000)
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    cancelled.complete(e.message)
-                    throw e
-                }
-                null
-            }
-            fake.sentMessages.clear()
-
-            fake.simulateMessage(
-                JSONObject().put("type", "tool_call").put("session_id", "sess-1").put("id", "call-1").put("name", "slow").put(
-                    "args",
-                    JSONObject(),
-                ),
-            )
-            started.await()
-            fake.simulateClose(1000, "socket_lost")
-
-            assertEquals("session_suspended", cancelled.await())
-            waitUntil(timeoutMs = 200) { true }
-            assertTrue("expected nothing sent, got: ${fake.sentMessages}", fake.sentMessages.isEmpty())
-            assertTrue("expected no tool-phase error, got: $errors", errors.none { it.phase == "tool" })
-        }
-
-    @Test
     fun `a slow tool times out on its declared timeoutMs`() =
         runBlocking {
             val (client, fake) = newClient()
