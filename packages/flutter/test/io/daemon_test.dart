@@ -50,13 +50,14 @@ void main() {
   late AppductCore core;
   late _SpyTransport transport;
 
-  Future<Map<String, Object?>> cli(List<String> args) async {
+  /// The CLI's `--json` stdout: one JSON document, or NDJSON for streaming commands.
+  Future<String> cli(List<String> args) async {
     final result = await Process.run(
       'node',
       [_bin, ...args, '--json'],
       environment: {'APPDUCT_STATE_DIR': stateDir.path},
     );
-    return jsonDecode(result.stdout as String) as Map<String, Object?>;
+    return result.stdout as String;
   }
 
   setUp(() {
@@ -125,7 +126,8 @@ void main() {
 
       final claimed = next(SessionChangeType.claimed);
       final minted = await cli(['sessions', 'link', '--scheme', 'appduct-e2e']);
-      final link = (minted['data']! as Map)['deepLink']! as String;
+      final link =
+          ((jsonDecode(minted) as Map)['data']! as Map)['deepLink']! as String;
       expect(core.handleUrl(link), isTrue);
       await claimed;
       expect(core.state, ClientState.active);
@@ -141,11 +143,11 @@ void main() {
         return out;
       }
 
-      expect(jsonEncode(await callAdd()), contains('"sum":5'));
+      expect(await callAdd(), contains('"sum":5'));
 
       await core.postEvent('cart.seeded', {'items': 3});
       final events = await cli(['events', 'since', '0']);
-      expect(jsonEncode(events), contains('cart.seeded'));
+      expect(events, contains('cart.seeded'));
 
       final resumed = next(SessionChangeType.resumed);
       transport.sockets.last.close(1001, 'test_drop');
@@ -153,7 +155,7 @@ void main() {
 
       expect(core.state, ClientState.active);
       expect(transport.sockets, hasLength(2));
-      expect(jsonEncode(await callAdd()), contains('"sum":5'));
+      expect(await callAdd(), contains('"sum":5'));
     },
     skip: _skip,
     timeout: const Timeout(Duration(seconds: 90)),

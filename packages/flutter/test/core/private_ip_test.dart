@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:appduct/src/core/core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/harness.dart';

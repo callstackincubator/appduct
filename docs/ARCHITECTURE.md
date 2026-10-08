@@ -1129,8 +1129,13 @@ packages/
                    (`createDartCore`: claim and resume, reconnect, keepalive via the socket,
                    backgrounding, registries, tool calls), a port of packages/web/src/core
                    over the ports in `ports.dart`, each with a memory fake beside it, and
-                   replaying the session scenarios. Test it with
-                   `cd packages/flutter && flutter test` (CI job `flutter` in test.yaml).
+                   replaying the session scenarios. `lib/src/io/` holds the dart:io
+                   adapters (no Flutter import): the pinned `wss` transport (empty
+                   SecurityContext, every leaf checked against the SPKI pin), trust
+                   resolution from the `APPDUCT_PINS` / `APPDUCT_TRUST` build defines, and a
+                   file lease store. Test it with `cd packages/flutter && flutter test` after
+                   `pnpm build`: one test runs against the built daemon (CI job `flutter` in
+                   test.yaml).
 playground/        reference app (Expo dev build)
 playground-native/ plain iOS and Android apps on packages/native, no React Native
 ```

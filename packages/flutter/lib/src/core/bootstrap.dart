@@ -111,6 +111,24 @@ Bootstrap? decodeBootstrap(String base64url) {
   );
 }
 
+/// Whether [address] is somewhere a daemon on the developer's own network lives: loopback, RFC 1918
+/// IPv4, or IPv6 loopback, link-local and unique-local. [address] is as [Bootstrap.address] formats
+/// it (lowercase, `::` compressed).
+bool isLocalAddress(int family, String address) {
+  if (family == 4) {
+    final octets = address.split('.').map(int.tryParse).toList();
+    if (octets.length != 4 || octets.contains(null)) return false;
+    final [first!, second!, _, _] = octets;
+    return first == 10 ||
+        first == 127 ||
+        (first == 172 && second >= 16 && second <= 31) ||
+        (first == 192 && second == 168);
+  }
+  return address == '::1' ||
+      address.startsWith('fe80:') ||
+      RegExp(r'^f[cd][0-9a-f]{2}:').hasMatch(address);
+}
+
 Uint8List? _decodeBase64Url(String input) {
   if (input.isEmpty) return null;
   try {
