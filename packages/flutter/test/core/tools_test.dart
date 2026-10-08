@@ -115,23 +115,20 @@ void main() {
       });
     });
 
-    test(
-      'is answered tool_execution_error when the failure type is not an app-side error type',
-      () async {
-        final (h, socket) = await active();
-        socket.receive(toolCall('c1'));
+    test('is answered tool_execution_error when the failure type is not an app-side error type', () async {
+      final (h, socket) = await active();
+      socket.receive(toolCall('c1'));
 
-        h.core.respondToToolCall(
-          'c1',
-          error: const ToolFailure('weird', 'Nope.'),
-        );
+      h.core.respondToToolCall(
+        'c1',
+        error: const ToolFailure('weird', 'Nope.'),
+      );
 
-        expect(
-          (afterSnapshot(socket).single['error']! as Map)['type'],
-          'tool_execution_error',
-        );
-      },
-    );
+      expect(
+        (afterSnapshot(socket).single['error']! as Map)['type'],
+        'tool_execution_error',
+      );
+    });
 
     test('forwards progress while in flight', () async {
       final (h, socket) = await active();
@@ -289,21 +286,18 @@ void main() {
   });
 
   group('when the socket closes with a call in flight', () {
-    test(
-      'the app is told the call was cancelled with session_suspended and nothing is sent',
-      () async {
-        final (h, socket) = await active();
-        socket.receive(toolCall('c1'));
+    test('the app is told the call was cancelled with session_suspended and nothing is sent', () async {
+      final (h, socket) = await active();
+      socket.receive(toolCall('c1'));
 
-        socket.drop();
-        await settle();
+      socket.drop();
+      await settle();
 
-        expect(h.toolCancels.single.id, 'c1');
-        expect(h.toolCancels.single.reason, 'session_suspended');
-        expect(afterSnapshot(socket), isEmpty);
-        expect(h.core.state, ClientState.reconnecting);
-      },
-    );
+      expect(h.toolCancels.single.id, 'c1');
+      expect(h.toolCancels.single.reason, 'session_suspended');
+      expect(afterSnapshot(socket), isEmpty);
+      expect(h.core.state, ClientState.reconnecting);
+    });
 
     test('reports the new state before the cancel', () async {
       final (h, socket) = await active();
@@ -473,27 +467,24 @@ void main() {
       expect(error['message'], contains('boom'));
     });
 
-    test(
-      'answers tool_execution_error when an unawaited future in the handler fails',
-      () async {
-        final (_, socket, _) = await hosted((_, _) {
-          unawaited(
-            Future<void>.delayed(
-              Duration.zero,
-              () => throw StateError('late boom'),
-            ),
-          );
-          return Completer<Object?>().future;
-        });
+    test('answers tool_execution_error when an unawaited future in the handler fails', () async {
+      final (_, socket, _) = await hosted((_, _) {
+        unawaited(
+          Future<void>.delayed(
+            Duration.zero,
+            () => throw StateError('late boom'),
+          ),
+        );
+        return Completer<Object?>().future;
+      });
 
-        socket.receive(toolCall('c1'));
-        await Future<void>.delayed(const Duration(milliseconds: 10));
+      socket.receive(toolCall('c1'));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
 
-        final error = afterSnapshot(socket).single['error']! as Map;
-        expect(error['type'], 'tool_execution_error');
-        expect(error['message'], contains('late boom'));
-      },
-    );
+      final error = afterSnapshot(socket).single['error']! as Map;
+      expect(error['type'], 'tool_execution_error');
+      expect(error['message'], contains('late boom'));
+    });
 
     test('answers with the type of a ToolFailure the handler throws', () async {
       final (_, socket, _) = await hosted(
@@ -526,22 +517,19 @@ void main() {
       expect(await seen.cancelled, 'timeout');
     });
 
-    test(
-      'tells the handler it was cancelled with session_suspended when the socket closes',
-      () async {
-        late ToolContext seen;
-        final (_, socket, _) = await hosted((_, context) {
-          seen = context;
-          return Completer<Object?>().future;
-        });
-        socket.receive(toolCall('c1'));
-        await settle();
+    test('tells the handler it was cancelled with session_suspended when the socket closes', () async {
+      late ToolContext seen;
+      final (_, socket, _) = await hosted((_, context) {
+        seen = context;
+        return Completer<Object?>().future;
+      });
+      socket.receive(toolCall('c1'));
+      await settle();
 
-        socket.drop();
+      socket.drop();
 
-        expect(await seen.cancelled, 'session_suspended');
-      },
-    );
+      expect(await seen.cancelled, 'session_suspended');
+    });
 
     test('sends the progress a handler reports', () async {
       final (_, socket, _) = await hosted((_, context) {
@@ -555,22 +543,19 @@ void main() {
       expect(afterSnapshot(socket).single, containsPair('progress', 0.25));
     });
 
-    test(
-      'puts nothing on the wire for what a handler returns after its call timed out',
-      () async {
-        final late = Completer<Object?>();
-        final (h, socket, _) = await hosted((_, _) => late.future);
-        socket.receive(toolCall('c1'));
-        await settle();
-        h.clock.advance(5000);
-        final sent = socket.sent.length;
+    test('puts nothing on the wire for what a handler returns after its call timed out', () async {
+      final late = Completer<Object?>();
+      final (h, socket, _) = await hosted((_, _) => late.future);
+      socket.receive(toolCall('c1'));
+      await settle();
+      h.clock.advance(5000);
+      final sent = socket.sent.length;
 
-        late.complete('too late');
-        await settle();
+      late.complete('too late');
+      await settle();
 
-        expect(socket.sent, hasLength(sent));
-      },
-    );
+      expect(socket.sent, hasLength(sent));
+    });
 
     test('stops serving a tool once it is unregistered', () async {
       final (h, socket, host) = await hosted((_, _) => 1);

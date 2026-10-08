@@ -144,24 +144,20 @@ void main() {
       },
     );
 
-    test(
-      'keeps no file and ignores a planted lease in a directory others can read',
-      () {
-        File('${runtime.path}/appduct-shop.lease').writeAsStringSync('planted');
-        Process.runSync('chmod', ['755', runtime.path]);
-        final s = store();
+    test('keeps no file and ignores a planted lease in a directory others can read', () {
+      File('${runtime.path}/appduct-shop.lease').writeAsStringSync('planted');
+      Process.runSync('chmod', ['755', runtime.path]);
+      final s = store();
 
-        expect(s.read(), isNull);
-        s.write('mine');
-        expect(s.read(), 'mine');
-        expect(
-          File('${runtime.path}/appduct-shop.lease').readAsStringSync(),
-          'planted',
-        );
-        expect(store().read(), isNull);
-      },
-      skip: Platform.isWindows,
-    );
+      expect(s.read(), isNull);
+      s.write('mine');
+      expect(s.read(), 'mine');
+      expect(
+        File('${runtime.path}/appduct-shop.lease').readAsStringSync(),
+        'planted',
+      );
+      expect(store().read(), isNull);
+    }, skip: Platform.isWindows);
 
     test('ignores a lease in a directory other users can write to', () {
       Process.runSync('chmod', ['777', runtime.path]);

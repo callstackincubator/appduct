@@ -12,10 +12,14 @@ import 'harness.dart' show ack, sessionId, startMs;
 export 'harness.dart' show ack, sessionId, startMs;
 
 /// A well-formed Appduct link for the session in [ack], valid for a minute after [startMs].
-String appductLink({String scheme = 'myapp', String? session}) {
+String appductLink({
+  String scheme = 'myapp',
+  String? session,
+  List<int> address = const [192, 168, 1, 10],
+}) {
   final id = utf8.encode(session ?? sessionId);
   final bytes = BytesBuilder()
-    ..add([2, 4, 192, 168, 1, 10, 0x20, 0xfb, id.length])
+    ..add([2, 4, ...address, 0x20, 0xfb, id.length])
     ..add(id)
     ..add(List.filled(32, 7))
     ..add(
@@ -33,6 +37,7 @@ class BindingHarness {
     this.environment = const {},
     MemoryTransport? transport,
     ManualClock? clock,
+    this.allowPrivateLanOnly = true,
   }) : shim = shim ?? FakeShim(),
        transport = transport ?? MemoryTransport(),
        clock = clock ?? ManualClock(startMs) {
@@ -43,6 +48,7 @@ class BindingHarness {
   final MemoryTransport transport;
   final ManualClock clock;
   final bool rootIsolate;
+  final bool allowPrivateLanOnly;
   final Map<String, String> environment;
   final warnings = <String>[];
   late final Appduct appduct;
@@ -55,6 +61,7 @@ class BindingHarness {
         clock: clock,
         random: const FixedRandom(0.5),
         environment: environment,
+        allowPrivateLanOnly: allowPrivateLanOnly,
         isRootIsolate: () => rootIsolate,
         warn: warnings.add,
       ),

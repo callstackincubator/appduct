@@ -41,9 +41,8 @@ void main() {
         final rec = Recorder();
         final next = rec.messages.stream.first;
 
-        final socket = IoTransport(
-          TrustPolicy.parse(),
-        ).open(url(), server.pin, rec.events);
+        final socket = IoTransport(TrustPolicy.parse())
+            .open(url(), server.pin, rec.events);
         await rec.opened.future.timeout(const Duration(seconds: 5));
         socket.send('hello');
 
@@ -76,15 +75,13 @@ void main() {
 
     test('trusts only the embedded pins when the build has them', () async {
       final embeddedMatch = Recorder();
-      IoTransport(
-        TrustPolicy.parse(pins: server.pin),
-      ).open(url(), wrongPin, embeddedMatch.events);
+      IoTransport(TrustPolicy.parse(pins: server.pin))
+          .open(url(), wrongPin, embeddedMatch.events);
       await embeddedMatch.opened.future.timeout(const Duration(seconds: 5));
 
       final embeddedMiss = Recorder();
-      IoTransport(
-        TrustPolicy.parse(pins: wrongPin),
-      ).open(url(), server.pin, embeddedMiss.events);
+      IoTransport(TrustPolicy.parse(pins: wrongPin))
+          .open(url(), server.pin, embeddedMiss.events);
       await embeddedMiss.closed.future.timeout(const Duration(seconds: 5));
 
       expect(embeddedMiss.opened.isCompleted, isFalse);
@@ -93,18 +90,17 @@ void main() {
 
     test('refuses to open without a pin to check when trust is "link"', () {
       expect(
-        () => IoTransport(
-          TrustPolicy.parse(),
-        ).open(url(), null, Recorder().events),
+        () =>
+            IoTransport(TrustPolicy.parse())
+                .open(url(), null, Recorder().events),
         throwsA(isA<TrustConfigError>()),
       );
     });
 
     test('closes with 1008 when the daemon sends a binary frame', () async {
       final rec = Recorder();
-      final socket = IoTransport(
-        TrustPolicy.parse(),
-      ).open(url(), server.pin, rec.events);
+      final socket = IoTransport(TrustPolicy.parse())
+          .open(url(), server.pin, rec.events);
       await rec.opened.future.timeout(const Duration(seconds: 5));
 
       socket.send('binary');
@@ -117,9 +113,8 @@ void main() {
 
     test('send throws once the socket is closed', () async {
       final rec = Recorder();
-      final socket = IoTransport(
-        TrustPolicy.parse(),
-      ).open(url(), server.pin, rec.events);
+      final socket = IoTransport(TrustPolicy.parse())
+          .open(url(), server.pin, rec.events);
       await rec.opened.future.timeout(const Duration(seconds: 5));
       socket.close(1000, 'done');
       await rec.closed.future.timeout(const Duration(seconds: 5));
@@ -129,9 +124,8 @@ void main() {
 
     test('accepts a keepalive interval on an open socket', () async {
       final rec = Recorder();
-      final socket = IoTransport(
-        TrustPolicy.parse(),
-      ).open(url(), server.pin, rec.events);
+      final socket = IoTransport(TrustPolicy.parse())
+          .open(url(), server.pin, rec.events);
       await rec.opened.future.timeout(const Duration(seconds: 5));
 
       expect(

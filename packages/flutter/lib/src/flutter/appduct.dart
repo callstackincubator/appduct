@@ -24,11 +24,10 @@ abstract interface class ToolCallContext {
   void reportProgress(num progress, [String? message]);
 }
 
-typedef AppductToolHandler =
-    FutureOr<Object?> Function(
-      Map<String, Object?> args,
-      ToolCallContext context,
-    );
+typedef AppductToolHandler = FutureOr<Object?> Function(
+  Map<String, Object?> args,
+  ToolCallContext context,
+);
 
 /// The entry point of the binding. Call [ensureInitialized] before `runApp`.
 abstract final class Appduct {

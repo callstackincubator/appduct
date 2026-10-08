@@ -116,4 +116,35 @@ void main() {
       expect(h.shim.lease, isNull);
     },
   );
+
+  group('the private address check', () {
+    final publicLink = appductLink(address: [8, 8, 8, 8]);
+
+    setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    });
+
+    test('refuses a link to a public address by default', () async {
+      final h = BindingHarness(environment: {'APPDUCT_LINK': publicLink});
+      final appduct = await h.start();
+
+      expect(h.transport.sockets, isEmpty);
+      await expectLater(
+        appduct.connect(publicLink),
+        throwsA(isA<AppductException>()),
+      );
+      expect(h.transport.sockets, isEmpty);
+    });
+
+    test('lets a link to a public address through when turned off', () async {
+      final h = BindingHarness(
+        environment: {'APPDUCT_LINK': publicLink},
+        allowPrivateLanOnly: false,
+      );
+      await h.start();
+
+      expect(h.transport.sockets.single.url.host, '8.8.8.8');
+    });
+  });
 }
