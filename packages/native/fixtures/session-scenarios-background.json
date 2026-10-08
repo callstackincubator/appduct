@@ -65,6 +65,24 @@
     ]
   },
   {
+    "name": "sends no connect when backgrounded during a backoff wait, even after the delay passes",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":120}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}},
+      {"drive":"drop"},
+      {"expect":"state","state":"reconnecting"},
+      {"drive":"background"},
+      {"drive":"advance","ms":31000}
+    ]
+  },
+  {
     "name": "cancels a call in flight with session_suspended when backgrounded",
     "startMs": 1700000000000,
     "random": 0.5,
