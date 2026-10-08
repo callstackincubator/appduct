@@ -189,6 +189,117 @@ void main() {
       expect(h.appduct.state.value, ClientState.active);
     });
 
+    testWidgets('registers again when the description or schema changes', (
+      tester,
+    ) async {
+      final (_, socket) = await active();
+      Widget app({
+        String name = 'screen',
+        String description = 'The screen.',
+        Map<String, Object?> schema = const {'type': 'object'},
+        Duration? timeout,
+        String? group,
+      }) => MaterialApp(
+        home: AppductTool(
+          name: name,
+          description: description,
+          inputSchema: schema,
+          timeout: timeout,
+          group: group,
+          handler: (_, _) => 1,
+          child: const Text('x'),
+        ),
+      );
+      List<String> upserts() => [
+        for (final f in sent(socket, 'tool_registry_delta'))
+          if (f['operation'] == 'upsert') f.toString(),
+      ];
+
+      await tester.pumpWidget(app());
+      await tester.pumpWidget(app(description: 'A better screen.'));
+      await tester.pumpWidget(
+        app(
+          description: 'A better screen.',
+          schema: {'type': 'object', 'required': <String>[]},
+        ),
+      );
+      await tester.pumpWidget(
+        app(
+          description: 'A better screen.',
+          schema: {'type': 'object', 'required': <String>[]},
+          timeout: const Duration(seconds: 3),
+          group: 'ui',
+        ),
+      );
+      await tester.pump();
+      await flush();
+
+      final all = upserts();
+      expect(all, hasLength(4));
+      expect(all[1], contains('A better screen.'));
+      expect(all[2], contains('required'));
+      expect(all.last, contains('timeout_ms: 3000'));
+      expect(all.last, contains('group: ui'));
+    });
+
+    testWidgets('an equal schema built again does not register again', (
+      tester,
+    ) async {
+      final (_, socket) = await active();
+      Widget app() => MaterialApp(
+        home: AppductTool(
+          name: 'screen',
+          description: 'The screen.',
+          inputSchema: {
+            'type': 'object',
+            'properties': {
+              'id': {'type': 'string'},
+            },
+          },
+          handler: (_, _) => 1,
+          child: const Text('x'),
+        ),
+      );
+
+      await tester.pumpWidget(app());
+      await tester.pumpWidget(app());
+      await tester.pump();
+
+      expect(
+        sent(
+          socket,
+          'tool_registry_delta',
+        ).where((f) => f['operation'] == 'upsert'),
+        hasLength(1),
+      );
+    });
+
+    testWidgets('a renamed tool answers under the new name only', (
+      tester,
+    ) async {
+      final (_, socket) = await active();
+      Widget app(String name) => MaterialApp(
+        home: AppductTool(
+          name: name,
+          description: 'The screen.',
+          handler: (_, _) => name,
+          child: const Text('x'),
+        ),
+      );
+
+      await tester.pumpWidget(app('old'));
+      await tester.pumpWidget(app('new'));
+      socket
+        ..receive(toolCall('c1', 'old'))
+        ..receive(toolCall('c2', 'new'));
+      await tester.pump();
+      await flush();
+
+      final results = sent(socket, 'tool_result');
+      expect(results, hasLength(1));
+      expect(results.single['result'], 'new');
+    });
+
     testWidgets('unregisters when disposed', (tester) async {
       final (_, socket) = await active();
       await tester.pumpWidget(
