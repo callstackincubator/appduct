@@ -26,7 +26,7 @@ Map<String, Object?> toolError(String id, String type, String message) => {
   'error': {'type': type, 'message': message},
 };
 
-/// An active session with the `slow` tool registered, and the frames sent since the snapshot.
+/// An active session with the `slow` tool registered.
 Future<(Harness, MemorySocket)> active() async {
   final h = Harness();
   h.core.registerTool(slow);
@@ -34,8 +34,9 @@ Future<(Harness, MemorySocket)> active() async {
   return (h, socket);
 }
 
+/// The frames sent after the claim and the snapshot.
 List<Map<String, Object?>> afterSnapshot(MemorySocket socket) =>
-    socket.frames().skip(1).toList();
+    socket.frames().skip(2).toList();
 
 void main() {
   group('a tool call', () {

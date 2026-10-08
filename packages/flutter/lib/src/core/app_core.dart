@@ -113,6 +113,17 @@ class ToolFailure implements Exception {
   String toString() => 'ToolFailure($type): $message';
 }
 
+/// A connect that cannot proceed: invalid or expired input, a session already in progress, or a
+/// handshake the daemon refused.
+class AppductException implements Exception {
+  const AppductException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 /// `postEvent` with no active session.
 class NotActiveException implements Exception {
   const NotActiveException(this.message);

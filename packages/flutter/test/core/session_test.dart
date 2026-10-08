@@ -165,7 +165,7 @@ void main() {
         h.core.unregisterTool('echo');
         h.core.unregisterTool('echo');
 
-        expect(socket.frames().skip(1), [
+        expect(socket.frames().skip(2), [
           {
             'type': 'tool_registry_delta',
             'session_id': sessionId,
@@ -217,6 +217,7 @@ void main() {
         h.core.registerEvent({...event, 'name': 'later'});
 
         expect(socket.frames().map((f) => f['type']), [
+          'session_claim',
           'tool_registry_snapshot',
         ]);
       },
@@ -231,7 +232,7 @@ void main() {
         h.core.registerEvent({...event, 'name': 'later'});
         h.core.unregisterEvent('later');
 
-        expect(socket.frames().skip(1), [
+        expect(socket.frames().skip(2), [
           {
             'type': 'event_registry_snapshot',
             'session_id': sessionId,

@@ -6,7 +6,8 @@ import 'json.dart';
 const protocolVersion = 2;
 const _maxDeviceFieldLength = 256;
 
-const _toolErrorTypes = {
+/// The seven `tool_error` types an app may send.
+const toolErrorTypes = {
   'tool_not_found',
   'tool_input_validation_error',
   'tool_output_validation_error',
@@ -21,6 +22,9 @@ const _toolErrorTypes = {
 sealed class WireMessage {
   const WireMessage();
 
+  /// The session the frame belongs to; null only for [UnknownMessage].
+  String? get sessionId;
+
   JsonObject toJson();
 }
 
@@ -29,6 +33,9 @@ class UnknownMessage extends WireMessage {
   const UnknownMessage(this.type);
 
   final String type;
+
+  @override
+  String? get sessionId => null;
 
   @override
   JsonObject toJson() => {'type': type};
@@ -43,6 +50,7 @@ class SessionClaim extends WireMessage {
     this.deviceOs,
   });
 
+  @override
   final String sessionId;
   final String token;
   final String? deviceManufacturer;
@@ -64,6 +72,7 @@ class SessionClaim extends WireMessage {
 class SessionResume extends WireMessage {
   const SessionResume({required this.sessionId, required this.resumeToken});
 
+  @override
   final String sessionId;
   final String resumeToken;
 
@@ -86,6 +95,7 @@ class SessionAck extends WireMessage {
     required this.eventRegistry,
   });
 
+  @override
   final String sessionId;
   final String alias;
   final String resumeToken;
@@ -113,6 +123,7 @@ class SessionAck extends WireMessage {
 class ToolRegistrySnapshot extends WireMessage {
   const ToolRegistrySnapshot({required this.sessionId, required this.tools});
 
+  @override
   final String sessionId;
   final List<ToolDescriptor> tools;
 
@@ -127,6 +138,7 @@ class ToolRegistrySnapshot extends WireMessage {
 class ToolRegistryUpsert extends WireMessage {
   const ToolRegistryUpsert({required this.sessionId, required this.tool});
 
+  @override
   final String sessionId;
   final ToolDescriptor tool;
 
@@ -142,6 +154,7 @@ class ToolRegistryUpsert extends WireMessage {
 class ToolRegistryRemove extends WireMessage {
   const ToolRegistryRemove({required this.sessionId, required this.name});
 
+  @override
   final String sessionId;
   final String name;
 
@@ -157,6 +170,7 @@ class ToolRegistryRemove extends WireMessage {
 class EventRegistrySnapshot extends WireMessage {
   const EventRegistrySnapshot({required this.sessionId, required this.events});
 
+  @override
   final String sessionId;
   final List<EventDescriptor> events;
 
@@ -171,6 +185,7 @@ class EventRegistrySnapshot extends WireMessage {
 class EventRegistryUpsert extends WireMessage {
   const EventRegistryUpsert({required this.sessionId, required this.event});
 
+  @override
   final String sessionId;
   final EventDescriptor event;
 
@@ -186,6 +201,7 @@ class EventRegistryUpsert extends WireMessage {
 class EventRegistryRemove extends WireMessage {
   const EventRegistryRemove({required this.sessionId, required this.name});
 
+  @override
   final String sessionId;
   final String name;
 
@@ -206,6 +222,7 @@ class ToolCall extends WireMessage {
     required this.args,
   });
 
+  @override
   final String sessionId;
   final String id;
   final String name;
@@ -228,6 +245,7 @@ class ToolResult extends WireMessage {
     required this.result,
   });
 
+  @override
   final String sessionId;
   final String id;
 
@@ -252,6 +270,7 @@ class ToolError extends WireMessage {
     this.details,
   });
 
+  @override
   final String sessionId;
   final String id;
 
@@ -281,6 +300,7 @@ class ToolCallProgress extends WireMessage {
     this.message,
   });
 
+  @override
   final String sessionId;
   final String id;
   final num? progress;
@@ -303,6 +323,7 @@ class ToolCancel extends WireMessage {
     required this.reason,
   });
 
+  @override
   final String sessionId;
   final String id;
   final String reason;
@@ -326,6 +347,7 @@ class EventFrame extends WireMessage {
     required this.ts,
   });
 
+  @override
   final String sessionId;
   final String name;
   final Object? payload;
@@ -550,7 +572,7 @@ ToolError? _toolError(JsonObject json) {
   if (!_isSessionId(json['session_id']) ||
       !isBoundedString(json['id'], maxWireIdLength) ||
       error == null ||
-      !_toolErrorTypes.contains(error['type']) ||
+      !toolErrorTypes.contains(error['type']) ||
       !isBoundedString(error['message'], maxWireStringLength)) {
     return null;
   }
