@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -222,11 +223,14 @@ final class _Live with WidgetsBindingObserver implements Appduct {
     _device._fields = activation.device;
     _store.load(activation.lease);
 
+    // After a hot restart the process still holds the link the session started from. Its token is
+    // spent, so feeding it again would replace the live session; the lease resumes it instead.
+    final leased = _leasedSessionId(activation.lease);
     final links = <String>{
       ...activation.links,
       ?_coldStartLink(),
       ?_desktopLink(),
-    };
+    }..removeWhere((link) => leased != null && _sessionIdOf(link) == leased);
     if (links.isEmpty) {
       await _core.restoreSession();
     } else {
@@ -247,6 +251,22 @@ final class _Live with WidgetsBindingObserver implements Appduct {
     };
     if (!kDebugMode || !desktop.contains(defaultTargetPlatform)) return null;
     return _ports.environment['APPDUCT_LINK'];
+  }
+
+  static String? _leasedSessionId(String? lease) {
+    if (lease == null) return null;
+    try {
+      final decoded = jsonDecode(lease);
+      final id = decoded is Map ? decoded['sessionId'] : null;
+      return id is String ? id : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static String? _sessionIdOf(String link) {
+    final parsed = parseBootstrapLink(link);
+    return parsed == null ? null : decodeBootstrap(parsed.payload)?.sessionId;
   }
 
   static bool _isAppductLink(String link) =>

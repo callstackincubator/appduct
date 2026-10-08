@@ -71,9 +71,9 @@ void main() {
     testWidgets('resumes instead of reusing the defaultRouteName link', (
       tester,
     ) async {
+      final first = await connected(BindingHarness());
       tester.platformDispatcher.defaultRouteNameTestValue = appductLink();
       addTearDown(tester.platformDispatcher.clearDefaultRouteNameTestValue);
-      final first = await connected(BindingHarness());
       final restarted = restart(first);
       await restarted.start();
 
@@ -83,9 +83,7 @@ void main() {
     test('resumes instead of reusing the APPDUCT_LINK link', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
-      final first = await connected(
-        BindingHarness(environment: {'APPDUCT_LINK': appductLink()}),
-      );
+      final first = await connected(BindingHarness());
       final restarted = restart(
         first,
         environment: {'APPDUCT_LINK': appductLink()},
