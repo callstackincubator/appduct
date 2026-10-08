@@ -440,70 +440,24 @@ jobs:
           echo "::error::Timed out waiting for deployment $DEPLOYMENT_ID to validate. Re-running this job resumes watching it rather than uploading again."
           exit 1
 
-  publish-pub:
-    # With the other irreversible publishes: pub.dev has no unpublish for a version (it can only be
-    # retracted), so it waits for the npm publishes like the CocoaPods and Maven jobs do.
+  start-pub-publish:
+    # pub.dev refuses OIDC tokens from `release` events -- it accepts only `push` and
+    # `workflow_dispatch` -- so the publish lives in publish-pub.yaml and this job starts it at the
+    # release tag. A workflow_dispatch may be started with GITHUB_TOKEN (given `actions: write`),
+    # unlike a tag push made by it, which GitHub would not turn into a workflow run.
     #
-    # No stored secret. The job asks GitHub for an OIDC token for audience https://pub.dev and
-    # hands it to `dart pub` as the publish credential. A maintainer enables this once on pub.dev
-    # (package Admin tab > Automated publishing > GitHub Actions: this repository, tag pattern
-    # `v{{version}}`, environment `pub.dev`), after claiming the package name. Until then this job
-    # fails and publishes nothing.
+    # Last, with the other irreversible publishes: pub.dev has no unpublish, so it waits for the
+    # npm publishes. Nothing needs this job, so a pub.dev problem never fails the npm release; the
+    # publish run shows its own result under Actions > Publish to pub.dev and can be started again
+    # by hand on the tag.
     needs: [publish-cli, publish-react-native]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: pub.dev
+    timeout-minutes: 5
     permissions:
-      id-token: write
+      actions: write
     env:
-      # Publishing needs the Flutter SDK because the package depends on it. Same version as test.yaml.
-      FLUTTER_VERSION: 3.47.6
-    defaults:
-      run:
-        working-directory: packages/flutter
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # The release's tag: pub.dev checks that the tag names the version being published.
-          ref: ${{ github.event.release.tag_name }}
-          persist-credentials: false
-      - name: Install Flutter
-        working-directory: .
-        run: |
-          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git ~/flutter
-          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
-      - name: Resolve the package version
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        working-directory: .
-        run: |
-          version=$(node scripts/release-version.mjs --tag "$RELEASE_TAG")
-          name=$(sed -n 's/^name:[[:space:]]*//p' packages/flutter/pubspec.yaml)
-          echo "PUB_VERSION=$version" >> "$GITHUB_ENV"
-          echo "PUB_NAME=$name" >> "$GITHUB_ENV"
-      - name: Check whether this version is already on pub.dev
-        # Makes a re-run of a partially-failed deploy safe: a second publish of a version is an error.
-        run: |
-          http=$(curl -sS -o /dev/null -w '%{http_code}' \
-            "https://pub.dev/api/packages/$PUB_NAME/versions/$PUB_VERSION" || echo 000)
-          if [ "$http" = "200" ]; then
-            echo "ALREADY_PUBLISHED=true" >> "$GITHUB_ENV"
-            echo "::notice::$PUB_NAME $PUB_VERSION is already on pub.dev; skipping the publish."
-          else
-            echo "ALREADY_PUBLISHED=false" >> "$GITHUB_ENV"
-          fi
-      - name: Show what would be published
-        if: env.ALREADY_PUBLISHED == 'false'
-        run: |
-          flutter pub get
-          echo "Publishing $PUB_NAME $PUB_VERSION"
-          dart pub publish --dry-run
-      - name: Publish to pub.dev
-        if: env.ALREADY_PUBLISHED == 'false'
-        run: |
-          token=$(curl -sS --fail -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://pub.dev" | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).value')
-          echo "::add-mask::$token"
-          PUB_TOKEN="$token" dart pub token add https://pub.dev --env-var PUB_TOKEN
-          PUB_TOKEN="$token" dart pub publish --force
+      - name: Start the pub.dev publish at the release tag
+        run: gh workflow run publish-pub.yaml --repo "$GITHUB_REPOSITORY" --ref "$RELEASE_TAG"

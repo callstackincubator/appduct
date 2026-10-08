@@ -2,3 +2,10 @@
 android/shim-test/
 android/src/test/
 darwin/shim-test/
+
+# Everything .gitignore excludes. A .pubignore makes pub skip .gitignore, so these would
+# otherwise be uploaded after a `flutter test`, and a published version can never be deleted.
+.dart_tool/
+.flutter-plugins-dependencies
+/build/
+/pubspec.lock

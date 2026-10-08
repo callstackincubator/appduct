@@ -154,8 +154,10 @@ On Windows and Linux the CLI can't open a link in your app, so you create a link
 - Set `APPDUCT_LINK` when you start the app in debug mode:
 
   ```bash
-  APPDUCT_LINK="$(appduct sessions link --scheme myapp)" flutter run -d linux
+  APPDUCT_LINK="$(appduct sessions link --scheme myapp --json | jq -r .data.deepLink)" flutter run -d linux
   ```
+
+  The command needs [`jq`](https://jqlang.org); without it, copy the `deepLink` value from the `--json` output.
 
 - Call `connect` from your own code, for example from a debug menu or a test:
 

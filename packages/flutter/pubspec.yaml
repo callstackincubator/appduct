@@ -39,3 +39,9 @@ flutter:
       macos:
         pluginClass: AppductPlugin
         sharedDarwinSource: true
+      windows:
+        dartPluginClass: AppductDesktopPlugin
+        fileName: src/flutter/desktop_plugin.dart
+      linux:
+        dartPluginClass: AppductDesktopPlugin
+        fileName: src/flutter/desktop_plugin.dart

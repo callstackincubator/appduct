@@ -84,9 +84,13 @@ gh release create "v$v" --target main --title "v$v" \
 gh run list --workflow deploy.yaml --limit 1                   # publishing started
 ```
 
-The `publish-pub` job needs the package claimed on pub.dev with automated publishing enabled
-for this repository (tag pattern `v{{version}}`, environment `pub.dev`). If the first release
-has not had that done by a maintainer, say so before creating the release: the npm packages
-publish either way, and the pub job fails.
+The pub.dev publish is its own workflow, `publish-pub.yaml`, which the `start-pub-publish` job
+in `deploy.yaml` starts at the release tag once the npm jobs succeed (pub.dev refuses tokens from
+`release` events, so it cannot run inside `deploy.yaml`). It needs the package claimed on pub.dev
+with automated publishing enabled for this repository: tag pattern `v{{version}}`, environment
+`pub.dev`, and "enable publishing from workflow_dispatch events". If the first release has not
+had that done by a maintainer, say so before creating the release: the npm packages publish
+either way, and the pub run fails. Check it with `gh run list --workflow publish-pub.yaml --limit 1`;
+a failed run can be started again from the Actions tab on the same tag.
 
 Report the release URL and the deploy run. Do not retry a failed publish; report it.

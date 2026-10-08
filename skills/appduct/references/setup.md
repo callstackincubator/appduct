@@ -128,8 +128,8 @@ uses the `appduct` pub package. Install `appduct` for the CLI as in step 1 above
    root; it reads the scheme from `android/app/`, `ios/Runner` and `macos/Runner`.
 6. Run the app in debug mode and connect: `appduct sessions link --open ios-sim` (or
    `--open android`). On Windows and Linux the CLI cannot open the link: start the app with
-   `APPDUCT_LINK="$(appduct sessions link --scheme myapp)" flutter run -d linux`, or call
-   `await Appduct.instance.connect(link)`. `APPDUCT_LINK` is read in debug builds only.
+   `APPDUCT_LINK="$(appduct sessions link --scheme myapp --json | jq -r .data.deepLink)" flutter run -d linux`,
+   or call `await Appduct.instance.connect(link)`. `APPDUCT_LINK` is read in debug builds only.
 
 Appduct is in debug and profile builds. A release build leaves it out; build with
 `--dart-define=APPDUCT_ENABLED=true` to include it (`=false` leaves it out of debug and profile
