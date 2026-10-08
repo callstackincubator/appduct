@@ -64,6 +64,50 @@ void main() {
       expect(delta, contains('input_schema'));
     });
 
+    test('announces the output schema and annotations it was given', () async {
+      final (h, socket) = await active();
+      h.appduct.registerTool(
+        'reset',
+        description: 'Resets.',
+        outputSchema: {
+          'type': 'object',
+          'properties': {
+            'count': {'type': 'number'},
+          },
+        },
+        destructiveHint: true,
+        idempotentHint: true,
+        handler: (_, _) => null,
+      );
+      await flush();
+
+      final tool = sent(socket, 'tool_registry_delta').single['tool']! as Map;
+      expect(tool['output_schema'], {
+        'type': 'object',
+        'properties': {
+          'count': {'type': 'number'},
+        },
+      });
+      expect(tool['annotations'], {
+        'destructiveHint': true,
+        'idempotentHint': true,
+      });
+    });
+
+    test('announces no annotations when no hint is given', () async {
+      final (h, socket) = await active();
+      h.appduct.registerTool(
+        'plain',
+        description: 'Plain.',
+        handler: (_, _) => null,
+      );
+      await flush();
+
+      final tool = sent(socket, 'tool_registry_delta').single['tool']! as Map;
+      expect(tool.containsKey('annotations'), isFalse);
+      expect(tool.containsKey('output_schema'), isFalse);
+    });
+
     test('the returned function unregisters the tool', () async {
       final (h, socket) = await active();
       final unregister = h.appduct.registerTool(
@@ -240,6 +284,35 @@ void main() {
       expect(all[2], contains('required'));
       expect(all.last, contains('timeout_ms: 3000'));
       expect(all.last, contains('group: ui'));
+    });
+
+    testWidgets('a changed read-only hint registers the tool again', (
+      tester,
+    ) async {
+      final (_, socket) = await active();
+      Widget app({bool? readOnly}) => MaterialApp(
+        home: AppductTool(
+          name: 'screen',
+          description: 'The screen.',
+          readOnlyHint: readOnly,
+          outputSchema: {'type': 'object'},
+          handler: (_, _) => 1,
+          child: const Text('x'),
+        ),
+      );
+
+      await tester.pumpWidget(app());
+      await tester.pumpWidget(app(readOnly: true));
+      await tester.pump();
+      await flush();
+
+      final upserts = [
+        for (final f in sent(socket, 'tool_registry_delta'))
+          if (f['operation'] == 'upsert') f['tool']! as Map,
+      ];
+      expect(upserts, hasLength(2));
+      expect(upserts.last['annotations'], {'readOnlyHint': true});
+      expect(upserts.last['output_schema'], {'type': 'object'});
     });
 
     testWidgets('an equal schema built again does not register again', (
