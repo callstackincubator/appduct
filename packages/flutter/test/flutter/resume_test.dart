@@ -41,11 +41,14 @@ void main() {
   });
 
   group('a hot restart that sees the link the session started from', () {
-    Future<BindingHarness> connected(BindingHarness first) async {
+    Future<BindingHarness> connected(
+      BindingHarness first, {
+      String? session,
+    }) async {
       await first.start();
-      final done = first.appduct.connect(appductLink());
+      final done = first.appduct.connect(appductLink(session: session));
       await flush();
-      await first.acceptLast();
+      await first.acceptLast(session: session);
       await done;
       return first;
     }
@@ -60,11 +63,14 @@ void main() {
       environment: environment,
     );
 
-    Future<void> expectResumed(BindingHarness restarted) async {
+    Future<void> expectResumed(
+      BindingHarness restarted, {
+      String? session,
+    }) async {
       expect(restarted.appduct.state.value, ClientState.reconnecting);
       expect(restarted.transport.sockets, hasLength(2));
       expect(restarted.shim.lease, isNotNull);
-      await restarted.acceptLast();
+      await restarted.acceptLast(session: session);
       expect(restarted.appduct.state.value, ClientState.active);
     }
 
@@ -100,6 +106,33 @@ void main() {
       await restarted.start();
 
       await expectResumed(restarted);
+    });
+
+    group('when a later link started a different session', () {
+      testWidgets('resumes instead of reusing the defaultRouteName link', (
+        tester,
+      ) async {
+        final first = await connected(BindingHarness(), session: 'session-2');
+        tester.platformDispatcher.defaultRouteNameTestValue = appductLink();
+        addTearDown(tester.platformDispatcher.clearDefaultRouteNameTestValue);
+        final restarted = restart(first);
+        await restarted.start();
+
+        await expectResumed(restarted, session: 'session-2');
+      });
+
+      test('resumes instead of reusing the APPDUCT_LINK link', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        final first = await connected(BindingHarness(), session: 'session-2');
+        final restarted = restart(
+          first,
+          environment: {'APPDUCT_LINK': appductLink()},
+        );
+        await restarted.start();
+
+        await expectResumed(restarted, session: 'session-2');
+      });
     });
   });
 }

@@ -24,9 +24,10 @@ Map<String, Object?> ack({
   int graceS = 600,
   String resumeToken = 'resume-1',
   num keepaliveIntervalS = 15,
+  String? session,
 }) => {
   'type': 'session_ack',
-  'session_id': sessionId,
+  'session_id': session ?? sessionId,
   'status': 'ok',
   'alias': 'pixel',
   'resume_token': resumeToken,

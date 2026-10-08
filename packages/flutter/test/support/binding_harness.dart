@@ -12,8 +12,8 @@ import 'harness.dart' show ack, sessionId, startMs;
 export 'harness.dart' show ack, sessionId, startMs;
 
 /// A well-formed Appduct link for the session in [ack], valid for a minute after [startMs].
-String appductLink({String scheme = 'myapp'}) {
-  final id = utf8.encode(sessionId);
+String appductLink({String scheme = 'myapp', String? session}) {
+  final id = utf8.encode(session ?? sessionId);
   final bytes = BytesBuilder()
     ..add([2, 4, 192, 168, 1, 10, 0x20, 0xfb, id.length])
     ..add(id)
@@ -64,10 +64,10 @@ class BindingHarness {
   }
 
   /// The daemon accepts the newest socket.
-  Future<void> acceptLast() async {
+  Future<void> acceptLast({String? session}) async {
     transport.sockets.last
       ..open()
-      ..receive(ack());
+      ..receive(ack(session: session));
     await flush();
   }
 }
