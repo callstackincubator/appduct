@@ -9,6 +9,7 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "playground:appduct": "./playground/scripts/appduct.sh",
+    "playground-flutter:appduct": "./playground-flutter/scripts/appduct.sh",
     "playground:web": "pnpm --filter playground-web dev"
   },
   "workspaces": [

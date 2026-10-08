@@ -76,7 +76,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ "$EVENT_NAME" != "pull_request" ] || git diff --name-only "$BASE_SHA" HEAD \
-            | grep -qE '^(packages/flutter/|packages/native/fixtures/|packages/appduct/|packages/shared/|scripts/check-flutter-release\.sh$|\.github/workflows/test\.yaml$)'; then
+            | grep -qE '^(packages/flutter/|playground-flutter/|packages/native/fixtures/|packages/appduct/|packages/shared/|scripts/check-flutter-release\.sh$|\.github/workflows/test\.yaml$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -151,6 +151,18 @@ jobs:
         if: steps.affected.outputs.run == 'true'
         working-directory: .
         run: scripts/check-flutter-release.sh android "$RUNNER_TEMP/host"
+      - name: Check and test the Flutter playground
+        if: steps.affected.outputs.run == 'true'
+        working-directory: playground-flutter
+        run: |
+          flutter pub get
+          dart format --set-exit-if-changed .
+          dart analyze --fatal-infos
+          flutter test
+      - name: Build the Flutter playground for Android
+        if: steps.affected.outputs.run == 'true'
+        working-directory: playground-flutter
+        run: flutter build apk --debug
 
   android:
     runs-on: ubuntu-latest
@@ -331,7 +343,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ "$EVENT_NAME" != "pull_request" ] || git diff --name-only "$BASE_SHA" HEAD \
-            | grep -qE '^(packages/flutter/|packages/appduct/|scripts/check-flutter-release\.sh$|\.github/workflows/test\.yaml$)'; then
+            | grep -qE '^(packages/flutter/|playground-flutter/|packages/appduct/|scripts/check-flutter-release\.sh$|\.github/workflows/test\.yaml$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -380,6 +392,13 @@ jobs:
       - name: Check release builds leave the Dart core out unless asked
         if: steps.affected.outputs.run == 'true'
         run: scripts/check-flutter-release.sh ios "$RUNNER_TEMP/host"
+      - name: Build the Flutter playground for iOS and macOS
+        if: steps.affected.outputs.run == 'true'
+        working-directory: playground-flutter
+        run: |
+          flutter pub get
+          flutter build ios --debug --no-codesign
+          flutter build macos --debug
 
   ios:
     runs-on: macos-latest

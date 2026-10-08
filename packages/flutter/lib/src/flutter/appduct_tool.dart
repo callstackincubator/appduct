@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'appduct.dart';
 
 /// Registers a tool while it is mounted. A rebuild or hot reload registers again only when the
-/// name, description, schema, timeout or group changed; the handler of the latest build serves
+/// name, description, schemas, hints, timeout or group changed; the handler of the latest build serves
 /// the next call.
 class AppductTool extends StatefulWidget {
   const AppductTool({
@@ -13,6 +13,10 @@ class AppductTool extends StatefulWidget {
     required this.handler,
     required this.child,
     this.inputSchema,
+    this.outputSchema,
+    this.readOnlyHint,
+    this.destructiveHint,
+    this.idempotentHint,
     this.timeout,
     this.group,
   });
@@ -22,6 +26,10 @@ class AppductTool extends StatefulWidget {
   final AppductToolHandler handler;
   final Widget child;
   final Map<String, Object?>? inputSchema;
+  final Map<String, Object?>? outputSchema;
+  final bool? readOnlyHint;
+  final bool? destructiveHint;
+  final bool? idempotentHint;
   final Duration? timeout;
   final String? group;
 
@@ -42,6 +50,10 @@ class _AppductToolState extends State<AppductTool> {
     widget.name,
     description: widget.description,
     inputSchema: widget.inputSchema,
+    outputSchema: widget.outputSchema,
+    readOnlyHint: widget.readOnlyHint,
+    destructiveHint: widget.destructiveHint,
+    idempotentHint: widget.idempotentHint,
     timeout: widget.timeout,
     group: widget.group,
     handler: (args, context) => widget.handler(args, context),
@@ -54,7 +66,11 @@ class _AppductToolState extends State<AppductTool> {
         oldWidget.description == widget.description &&
         oldWidget.timeout == widget.timeout &&
         oldWidget.group == widget.group &&
-        _deepEquals(oldWidget.inputSchema, widget.inputSchema)) {
+        oldWidget.readOnlyHint == widget.readOnlyHint &&
+        oldWidget.destructiveHint == widget.destructiveHint &&
+        oldWidget.idempotentHint == widget.idempotentHint &&
+        _deepEquals(oldWidget.inputSchema, widget.inputSchema) &&
+        _deepEquals(oldWidget.outputSchema, widget.outputSchema)) {
       return;
     }
     _unregister();
