@@ -14,11 +14,8 @@ class MemorySocket implements Socket {
   /// Text frames the core sent, in order.
   final List<String> sent = [];
 
-  /// Protocol-level pings the core sent.
-  int pingCount = 0;
-
-  /// While true, a ping completes with an error, as when no pong comes back.
-  bool failPings = false;
+  /// The interval the core asked the socket to ping at, once it asked.
+  Duration? keepaliveInterval;
 
   bool _isOpen = false;
   bool _closed = false;
@@ -54,6 +51,10 @@ class MemorySocket implements Socket {
     _deliverClose(null, null);
   }
 
+  /// The socket's own keepalive gave up waiting for a pong: it closes with 1001, which the core
+  /// resumes from.
+  void missPong() => _deliverClose(1001, 'ping_timeout');
+
   void _deliverClose(int? code, String? reason) {
     if (_closed) return;
     _closed = true;
@@ -76,10 +77,10 @@ class MemorySocket implements Socket {
   }
 
   @override
-  Future<void> ping() {
-    pingCount += 1;
-    return failPings ? Future.error(StateError('no pong')) : Future.value();
-  }
+  void keepalive(Duration interval) => keepaliveInterval = interval;
+
+  @override
+  Future<void> ping() => Future.value();
 }
 
 class MemoryTransport implements Transport {

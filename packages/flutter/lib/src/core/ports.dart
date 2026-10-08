@@ -30,6 +30,8 @@ abstract interface class Socket {
   /// arrives and completes with an error when it does not arrive in time or the ping cannot be
   /// sent.
   Future<void> ping();
+
+  void keepalive(Duration interval);
 }
 
 /// Opens a WebSocket to the daemon at [url]. [pin] is the link's `sha256/...` SPKI pin, when the

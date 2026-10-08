@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:appduct/src/core/core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -536,71 +538,39 @@ void main() {
   });
 
   group('keepalive', () {
-    test('pings on the interval the ack gave', () async {
+    test('hands the socket the interval the ack gave', () async {
       final h = Harness();
       final socket = await h.claim();
 
-      h.clock.advance(14999);
-      expect(socket.pingCount, 0);
-      h.clock.advance(1);
-      expect(socket.pingCount, 1);
-      h.clock.advance(15000);
-      expect(socket.pingCount, 2);
+      expect(socket.keepaliveInterval, const Duration(seconds: 15));
     });
 
-    test('stops pinging once the socket is gone', () async {
+    test('asks for no keepalive before the ack', () async {
       final h = Harness();
-      final socket = await h.claim();
-      socket.drop();
-      await settle();
+      unawaited(h.core.connect(connectInput()));
+      final socket = h.last..open();
 
-      h.clock.advance(60000);
-
-      expect(socket.pingCount, 0);
+      expect(socket.keepaliveInterval, isNull);
     });
 
-    test(
-      'reconnects and resumes after pings go unanswered for a blocked stretch',
-      () async {
-        final h = Harness();
-        final socket = await h.claim();
-        socket.failPings = true;
-
-        // The isolate is blocked for a minute: four pings come due at once.
-        h.clock.advance(60000);
-        await settle();
-        expect(socket.closedByCore?.code, 1011);
-        await settle();
-        expect(h.core.state, ClientState.reconnecting);
-
-        h.clock.advance(250);
-        h.last
-          ..open()
-          ..receive(ack(resumeToken: 'resume-2'));
-        await settle();
-
-        expect(h.last.frames().first['type'], 'session_resume');
-        expect(h.last.frames().first['resume_token'], 'resume-1');
-        expect(h.core.state, ClientState.active);
-        expect(h.sessions.last.type, SessionChangeType.resumed);
-      },
-    );
-
-    test('keeps the socket after a single missed pong', () async {
+    test('reconnects and resumes when the socket reports a missed pong', () async {
       final h = Harness();
       final socket = await h.claim();
-      socket.failPings = true;
-      h.clock.advance(15000);
+
+      socket.missPong();
       await settle();
-      socket.failPings = false;
-      h.clock.advance(15000);
-      await settle();
-      socket.failPings = true;
-      h.clock.advance(15000);
+      expect(h.core.state, ClientState.reconnecting);
+
+      h.clock.advance(250);
+      h.last
+        ..open()
+        ..receive(ack(resumeToken: 'resume-2'));
       await settle();
 
-      expect(socket.closedByCore, isNull);
+      expect(h.last.frames().first['type'], 'session_resume');
+      expect(h.last.frames().first['resume_token'], 'resume-1');
       expect(h.core.state, ClientState.active);
+      expect(h.sessions.last.type, SessionChangeType.resumed);
     });
   });
 
