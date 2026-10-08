@@ -23,7 +23,7 @@ void main() {
       await appduct.connect(appductLink());
       await appduct.disconnect();
       await h.shim.pushLink(appductLink());
-      await pumpEventQueue();
+      await flush();
 
       expect(h.transport.sockets, isEmpty);
       expect(appduct.state.value, ClientState.idle);

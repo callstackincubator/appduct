@@ -11,7 +11,7 @@ void main() {
     final appduct = await h.start();
 
     final done = appduct.connect(appductLink());
-    await pumpEventQueue();
+    await flush();
     await h.acceptLast();
     await done;
 
@@ -30,7 +30,7 @@ void main() {
     final h = BindingHarness();
     final appduct = await h.start();
     final done = appduct.connect(appductLink());
-    await pumpEventQueue();
+    await flush();
     await h.acceptLast();
     await done;
 
@@ -63,7 +63,7 @@ void main() {
       final h = BindingHarness();
       await h.start();
       final done = h.appduct.connect(appductLink());
-      await pumpEventQueue();
+      await flush();
       await h.acceptLast();
       await done;
       return h;
@@ -75,7 +75,7 @@ void main() {
       WidgetsBinding.instance.handleAppLifecycleStateChanged(
         AppLifecycleState.paused,
       );
-      await pumpEventQueue();
+      await flush();
 
       expect(h.transport.sockets.single.closedByCore, (
         code: 1001,
@@ -88,12 +88,12 @@ void main() {
       WidgetsBinding.instance.handleAppLifecycleStateChanged(
         AppLifecycleState.paused,
       );
-      await pumpEventQueue();
+      await flush();
 
       WidgetsBinding.instance.handleAppLifecycleStateChanged(
         AppLifecycleState.resumed,
       );
-      await pumpEventQueue();
+      await flush();
 
       expect(h.transport.sockets, hasLength(2));
     });
@@ -105,13 +105,13 @@ void main() {
       final h = BindingHarness();
       final appduct = await h.start();
       final done = appduct.connect(appductLink());
-      await pumpEventQueue();
+      await flush();
       await h.acceptLast();
       await done;
       expect(h.shim.lease, contains('"resumeToken":"resume-1"'));
 
       await appduct.disconnect();
-      await pumpEventQueue();
+      await flush();
 
       expect(h.shim.lease, isNull);
     },

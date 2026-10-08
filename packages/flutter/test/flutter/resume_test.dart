@@ -10,7 +10,7 @@ void main() {
       final first = BindingHarness();
       await first.start();
       final done = first.appduct.connect(appductLink());
-      await pumpEventQueue();
+      await flush();
       await first.acceptLast();
       await done;
       expect(first.shim.lease, isNotNull);

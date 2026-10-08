@@ -19,7 +19,7 @@ Future<(BindingHarness, MemorySocket)> active() async {
   final h = BindingHarness();
   await h.start();
   final done = h.appduct.connect(appductLink());
-  await pumpEventQueue();
+  await flush();
   await h.acceptLast();
   await done;
   return (h, h.transport.sockets.last);
@@ -41,7 +41,7 @@ void main() {
       );
 
       socket.receive(toolCall('c1', 'sum', {'a': 1, 'b': 2}));
-      await pumpEventQueue();
+      await flush();
 
       expect(sent(socket, 'tool_result').single['result'], 3);
     });
@@ -56,7 +56,7 @@ void main() {
         group: 'math',
         handler: (_, _) => null,
       );
-      await pumpEventQueue();
+      await flush();
 
       final delta = sent(socket, 'tool_registry_delta').single.toString();
       expect(delta, contains('timeout_ms: 5000'));
@@ -74,7 +74,7 @@ void main() {
 
       unregister();
       socket.receive(toolCall('c1', 'sum'));
-      await pumpEventQueue();
+      await flush();
 
       expect(sent(socket, 'tool_result'), isEmpty);
     });
@@ -88,7 +88,7 @@ void main() {
       );
 
       socket.receive(toolCall('c1', 'boom'));
-      await pumpEventQueue();
+      await flush();
 
       expect(
         (sent(socket, 'tool_error').single['error']! as Map)['type'],
@@ -108,7 +108,7 @@ void main() {
       );
 
       socket.receive(toolCall('c1', 'work'));
-      await pumpEventQueue();
+      await flush();
 
       final progress = sent(socket, 'tool_call_progress').single;
       expect(progress['progress'], 0.5);
@@ -128,15 +128,16 @@ void main() {
         },
       );
       socket.receive(toolCall('c1', 'wait'));
-      await pumpEventQueue();
+      await flush();
       expect(seen!.isCancelled, isFalse);
 
       socket.receive({
         'type': 'tool_cancel',
         'session_id': sessionId,
         'id': 'c1',
+        'reason': 'client_cancelled',
       });
-      await pumpEventQueue();
+      await flush();
 
       expect(seen!.isCancelled, isTrue);
       await seen!.cancelled;
@@ -175,12 +176,15 @@ void main() {
       await tester.pump();
 
       expect(
-        sent(socket, 'tool_registry_delta').where((f) => f['op'] == 'add'),
+        sent(
+          socket,
+          'tool_registry_delta',
+        ).where((f) => f['operation'] == 'upsert'),
         hasLength(1),
       );
       socket.receive(toolCall('c1', 'screen'));
       await tester.pump();
-      await pumpEventQueue();
+      await flush();
       expect(sent(socket, 'tool_result').single['result'], 'two');
       expect(h.appduct.state.value, ClientState.active);
     });
@@ -201,7 +205,7 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: Text('gone')));
       socket.receive(toolCall('c1', 'screen'));
       await tester.pump();
-      await pumpEventQueue();
+      await flush();
 
       expect(sent(socket, 'tool_result'), isEmpty);
     });

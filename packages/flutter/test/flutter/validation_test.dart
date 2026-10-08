@@ -18,7 +18,7 @@ Future<MemorySocket> activeWithEcho() async {
   final h = BindingHarness();
   await h.start();
   final done = h.appduct.connect(appductLink());
-  await pumpEventQueue();
+  await flush();
   await h.acceptLast();
   await done;
   h.appduct.registerTool(
@@ -37,7 +37,7 @@ Future<Map<String, Object?>> call(MemorySocket socket, String argsJson) async {
   socket.receive(
     '{"type":"tool_call","session_id":"$sessionId","id":"c1","name":"echo","args":$argsJson}',
   );
-  await pumpEventQueue();
+  await flush();
   return socket.frames().last;
 }
 

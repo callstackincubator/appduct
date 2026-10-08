@@ -49,7 +49,7 @@ class BindingHarness {
 
   /// Initialises the binding and lets the activation finish.
   Future<Appduct> start() async {
-    appduct = createAppduct(
+    appduct = installAppduct(
       BindingPorts(
         transport: transport,
         clock: clock,
@@ -59,7 +59,7 @@ class BindingHarness {
         warn: warnings.add,
       ),
     );
-    await pumpEventQueue();
+    await flush();
     return appduct;
   }
 
@@ -68,6 +68,14 @@ class BindingHarness {
     transport.sockets.last
       ..open()
       ..receive(ack());
-    await pumpEventQueue();
+    await flush();
+  }
+}
+
+/// Lets pending microtasks run. Unlike `pumpEventQueue` it also works inside `testWidgets`, whose
+/// fake zone never fires a zero-length timer.
+Future<void> flush() async {
+  for (var i = 0; i < 50; i++) {
+    await Future<void>.value();
   }
 }
