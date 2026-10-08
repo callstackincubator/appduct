@@ -73,7 +73,8 @@ If the project uses a dynamic `app.config.js` / `app.config.ts`, discovery does 
    entry, then xcodegen's `project.yml`. From a bare React Native root the iOS plist probe
    reaches `ios/<App>/Info.plist`, but the Android ones expect an Android project root
    (`android/`), so pass `appduct init --scheme <scheme>` with the scheme you configured in
-   step 3 whenever discovery comes up empty. It also refuses to guess when two probes
+   step 3 whenever discovery comes up empty. In a Flutter project (a `pubspec.yaml` in the
+   directory) the Android probes read `android/app/` and `init` prints Flutter steps. It also refuses to guess when two probes
    resolve different schemes — `--scheme` is the answer there too. Add
    `--android-app-id <applicationId> --ios-app-id <bundle-id>` so device delivery works
    without an `--app-id` on every call.

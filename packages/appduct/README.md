@@ -126,6 +126,8 @@ $ appduct tools ls --group checkout
    3. **iOS**: any `Info.plist` up to two levels below the app root (excluding `Pods`, `build`, `node_modules`, `DerivedData`) for the first `CFBundleURLSchemes` entry, then xcodegen's `project.yml` for the same key under `info.properties.CFBundleURLTypes`
 6. otherwise an error naming every location above
 
+In a Flutter project root (a directory with a `pubspec.yaml`), the Android probes read `android/app/` instead of `app/`, and the iOS and macOS ones find `ios/Runner/Info.plist` and `macos/Runner/Info.plist`. `appduct init` there prints the Flutter setup steps instead of the React Native reminder.
+
 In an Expo app root, none of this needs configuring; a plain Xcode or Gradle app root doesn't either, once its `Info.plist`/`AndroidManifest.xml`/`build.gradle` already declares deep links. These probes never execute `app.config.js`/`app.config.ts`, `xcodebuild`, `plutil`, or a Gradle evaluation — each is a plain, defensively-parsed read of a static project file. If your project uses dynamic config, or the probes can't make sense of your setup, use `--scheme`, `APPDUCT_SCHEME`, or `appduct init --scheme <s>` instead.
 
 **Disagreement is never guessed away.** If more than one native probe resolves to a different scheme (say, an `android/` and an `ios/` tree in the same repo declaring different values), resolution fails with a usage error naming every conflicting source instead of picking one.

@@ -694,6 +694,10 @@ developer's private key.
 code to read one string is a far larger blast radius than this warrants. Dynamic-config projects
 use `--scheme`, `APPDUCT_SCHEME`, or `appduct init --scheme <s>`.
 
+In a Flutter project (`pubspec.yaml` at the root) the Android probes in b run against `android/`
+instead of the root, and `appduct init` prints the Flutter setup steps in place of the React
+Native reminder.
+
 `appduct init`, run in an app root, writes that project `.appduct/config.json` (`scheme`, and
 `appId.ios`/`appId.android` via `--ios-app-id <id>`/`--android-app-id <id>`) and prints the
 MCP server entry to paste plus the `import "@appduct/react-native/auto"` reminder. It never
