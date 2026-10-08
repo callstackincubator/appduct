@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -263,6 +264,30 @@ class AppductClientTest {
             val error = fake.awaitToolError()
             assertEquals("tool_execution_error", error.getJSONObject("error").getString("type"))
             assertEquals("kaboom", error.getJSONObject("error").getString("message"))
+        }
+
+    @Test
+    fun `a thrown handler error over the frame limit replies tool_serialization_error`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            client.connectAndAck(fake)
+            client.registerTool(AppductToolDescriptor(name = "boom", description = "Throws.")) { _, _ ->
+                throw RuntimeException("x".repeat(300_000))
+            }
+            fake.sentMessages.clear()
+
+            fake.simulateMessage(
+                JSONObject().put("type", "tool_call").put("session_id", "sess-1").put("id", "call-1").put("name", "boom").put(
+                    "args",
+                    JSONObject(),
+                ),
+            )
+
+            val error = fake.awaitToolError().getJSONObject("error")
+            assertEquals("tool_serialization_error", error.getString("type"))
+            assertTrue(Regex("^Appduct frame is \\d+ bytes, over the 262144-byte limit\\.$").matches(error.getString("message")))
+            assertFalse(error.has("details"))
+            assertEquals(AppductClientState.active, client.state)
         }
 
     @Test

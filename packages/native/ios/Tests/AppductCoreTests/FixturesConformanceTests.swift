@@ -349,4 +349,31 @@ final class FixturesConformanceTests: XCTestCase {
     let finalState = await client.state
     XCTAssertEqual(finalState, .active)
   }
+
+  func testToolErrorOverTheFrameLimitIsAnsweredWithToolSerializationError() async throws {
+    let (client, transport) = try await activeClient()
+    try client.registerTool(ToolDescriptor(name: "huge_error", description: "Throws a huge error."), handler: { _, _ in
+      throw AppductToolHandlerError(
+        type: "tool_execution_error",
+        message: String(repeating: "x", count: 300_000),
+        details: .string(String(repeating: "y", count: 300_000))
+      )
+    })
+    try await waitUntil("the registry delta reached the wire") { !self.frames(transport, ofType: "tool_registry_delta").isEmpty }
+
+    transport.simulateIncoming("{\"type\":\"tool_call\",\"session_id\":\"session-1\",\"id\":\"id-a\",\"name\":\"huge_error\",\"args\":{}}")
+
+    try await waitUntil("a tool error reached the wire") { !self.frames(transport, ofType: "tool_error").isEmpty }
+    let errors = frames(transport, ofType: "tool_error")
+    XCTAssertEqual(errors.count, 1)
+    XCTAssertEqual(errors[0]["id"] as? String, "id-a")
+    let body = errors[0]["error"] as? [String: Any]
+    XCTAssertEqual(body?["type"] as? String, "tool_serialization_error")
+    let message = body?["message"] as? String ?? ""
+    XCTAssertTrue(message.hasPrefix("Appduct frame is "), message)
+    XCTAssertTrue(message.hasSuffix(" bytes, over the 262144-byte limit."), message)
+    XCTAssertNil(body?["details"])
+    let finalState = await client.state
+    XCTAssertEqual(finalState, .active)
+  }
 }

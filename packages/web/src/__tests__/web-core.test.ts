@@ -247,6 +247,27 @@ describe("answering tool calls", () => {
     ]);
   });
 
+  it("answers an error over the frame limit with tool_serialization_error, not a timeout", async () => {
+    const h = setup();
+    h.core.registerTool(toolDescriptor("sum"));
+    const socket = await h.claim();
+    socket.receive(toolCall("call_1", "sum"));
+
+    const error = { type: "tool_execution_error", message: "x".repeat(300_000), details: { big: "y".repeat(300_000) } };
+    h.core.respondToToolCall("call_1", null, JSON.stringify(error));
+    h.clock.advance(10_000);
+
+    const errors = ofType(socket, "tool_error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toEqual({
+      type: "tool_error",
+      session_id: SESSION_ID,
+      id: "call_1",
+      error: { type: "tool_serialization_error", message: expect.stringMatching(/^Appduct frame is \d+ bytes, over the 262144-byte limit\.$/) },
+    });
+    expect(h.core.getState()).toBe("active");
+  });
+
   it("answers a call to an unknown tool with tool_not_found without involving the SDK", async () => {
     const h = setup();
     const socket = await h.claim();
