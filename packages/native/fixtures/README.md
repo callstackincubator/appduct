@@ -20,8 +20,7 @@ Consumers:
   (JUnit): every file except `event-registry-frames.json` and `session-scenarios.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/AppductEventRegistryTest.kt`
   (JUnit): `event-registry-frames.json`
-- `packages/flutter/test/core/*_test.dart` (`flutter test`): every file except `spki-pin.json` and
-  `frame-limits.json` (its vectors are copied into `frame_limit_test.dart` until it loads the file);
+- `packages/flutter/test/core/*_test.dart` (`flutter test`): every file except `spki-pin.json`;
   `event-registry-frames.json` is checked against the frames the Dart codec encodes, and
   `scenarios_test.dart` replays `session-scenarios.json` (and `session-scenarios-background.json`
   once it is here, since the Dart core owns backgrounding)
@@ -204,7 +203,8 @@ refuses it, answers a tool call with `tool_error` of type `tool_serialization_er
 event to the error listener, and the message is exactly
 `Appduct frame is <frameBytes> bytes, over the 262144-byte limit.` Either way the session stays
 active. The multibyte vectors stay under the limit in characters while going over it in bytes.
-Suites also check that a tool registry snapshot over the limit is reported to the error listener.
+Suites also check that a tool registry snapshot over the limit is reported to the error listener,
+and that a `tool_error` over the limit is answered with a `tool_serialization_error` naming its size.
 
 ### `spki-pin.json`
 

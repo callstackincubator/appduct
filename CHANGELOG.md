@@ -11,7 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
-- **Fix: a tool result over 256 KiB no longer drops the session.** The call fails with `tool_serialization_error` and a message naming the size and the limit; an oversized event is reported to the app's error listener instead. Applies to iOS, Android, React Native and web.
+- **Fix: a tool result over 256 KiB no longer drops the session.** The call fails with `tool_serialization_error` and a message naming the size and the limit; an oversized event is reported to the app's error listener instead.
 - **New: `appduct init` and scheme discovery understand Flutter projects.** Run from a directory with a `pubspec.yaml`, they read the URL scheme from `android/app/`, `ios/Runner` and `macos/Runner`, and `init` prints the Flutter setup steps.
 - **Fix: a tool call no longer hangs until its timeout when the app reconnects while its old connection is still open.** The call now fails at once with `session_suspended` and can be retried.
 - **Docs: the website has a Web setup page and lists web on the home page.** See [Web setup](https://callstackincubator.github.io/appduct/install/web/).

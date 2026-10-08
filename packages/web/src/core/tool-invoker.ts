@@ -58,8 +58,21 @@ export const createToolInvoker = (deps: ToolInvokerDeps): ToolInvoker => {
     }
   };
 
+  /** Sends the call's answer; one over the frame limit becomes a `tool_serialization_error` naming its size. */
+  const reply = (sessionId: string, id: string, frame: { type: string } & Record<string, unknown>) => {
+    try {
+      deps.send({ ...frame, session_id: sessionId, id });
+    } catch (error) {
+      if (error instanceof FrameTooLargeError) {
+        send({ type: "tool_error", session_id: sessionId, id, error: { type: "tool_serialization_error", message: error.message } });
+      } else {
+        deps.onSendError("Failed to send a tool response frame.");
+      }
+    }
+  };
+
   const sendError = (sessionId: string, id: string, error: Record<string, unknown>) =>
-    send({ type: "tool_error", session_id: sessionId, id, error });
+    reply(sessionId, id, { type: "tool_error", error });
 
   /** Takes `id` out of flight, or returns undefined when it is not (or no longer) in flight. */
   const finish = (id: string): InFlight | undefined => {
@@ -122,15 +135,7 @@ export const createToolInvoker = (deps: ToolInvokerDeps): ToolInvoker => {
         });
         return;
       }
-      try {
-        deps.send({ type: "tool_result", session_id: sessionId, id, result });
-      } catch (error) {
-        if (error instanceof FrameTooLargeError) {
-          sendError(sessionId, id, { type: "tool_serialization_error", message: error.message });
-        } else {
-          deps.onSendError("Failed to send a tool response frame.");
-        }
-      }
+      reply(sessionId, id, { type: "tool_result", result });
     },
 
     progress(id, progress, message) {

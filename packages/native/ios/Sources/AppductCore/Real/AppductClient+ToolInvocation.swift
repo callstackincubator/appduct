@@ -214,6 +214,8 @@ extension AppductClient {
           "error": .object(errorObject),
         ])
       )
+    } catch let tooLarge as AppductFrameTooLargeError {
+      await sendToolError(id: id, sessionId: sessionId, type: "tool_serialization_error", message: tooLarge.message)
     } catch {
       emitError(
         AppductUnifiedErrorEvent(phase: "tool", message: sendFailureMessage(error, fallback: "Failed to send a tool response frame."))

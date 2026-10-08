@@ -55,21 +55,30 @@ class ToolInvoker {
     }
   }
 
+  /// One over the frame limit becomes a `tool_serialization_error` naming its size.
   void _sendError(
     String sessionId,
     String id,
     String type,
     String message, {
     Object? details,
-  }) => _sendReply(
-    ToolError(
-      sessionId: sessionId,
-      id: id,
-      errorType: type,
-      message: message,
-      details: details,
-    ),
-  );
+  }) {
+    try {
+      _send(
+        ToolError(
+          sessionId: sessionId,
+          id: id,
+          errorType: type,
+          message: message,
+          details: details,
+        ),
+      );
+    } on FrameTooLargeException catch (error) {
+      _sendError(sessionId, id, 'tool_serialization_error', error.message);
+    } on Object {
+      _onSendError('Failed to send a tool response frame.');
+    }
+  }
 
   /// Takes [id] out of flight, or returns null when it is not (or no longer) in flight.
   _InFlight? _finish(String id) {
