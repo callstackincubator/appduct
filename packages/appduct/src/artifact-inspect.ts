@@ -68,6 +68,11 @@
  * fallback signals therefore fire on that harmless stub exactly as they would on the real module, and
  * can no longer prove inclusion by themselves.
  *
+ * Flutter: the Dart core writes `appduct-dart-core/<version>` into the AOT snapshot only when
+ * `appductEnabled` is true; that string in `libapp.so` / `App.framework/App` is a third
+ * authoritative signal on both platforms. The native shim is in every Flutter build and proves
+ * nothing, so doctor reports on the Dart core alone.
+ *
  * `appduct doctor` is strictly better than the runtime check it replaces: it runs in CI, before
  * distribution, against the thing actually shipped. The keep-rule marker closes the
  * previously-documented gap where a bare-RN app with no config plugin and no keep rule could evade
@@ -91,7 +96,8 @@ export type DetectionSignal =
   | "ios-info-plist-keys"
   | "android-keep-rule-marker"
   | "android-dex-package-symbol"
-  | "android-manifest-meta-data-keys";
+  | "android-manifest-meta-data-keys"
+  | "flutter-dart-core-marker";
 
 export type ArtifactInspection = {
   platform: ArtifactPlatform;
@@ -141,6 +147,12 @@ const ANDROID_DEX_PACKAGE_MARKERS = [
   "com.callstackincubator.appduct",
 ];
 const ANDROID_MANIFEST_KEY_MARKERS = ["com.callstack.appduct.", "com.callstackincubator.appduct."];
+
+// Written by `Appduct.ensureInitialized()` in packages/flutter/lib/src/flutter/enabled.dart, behind
+// `appductEnabled`, so it lands in the Dart AOT snapshot (`libapp.so`, `App.framework/App`) only
+// when the Dart core was compiled in. Strings are not renamed by `--obfuscate`. The native shim
+// ships in every Flutter build and is not evidence, so only this marker decides `present`.
+const FLUTTER_DART_CORE_MARKER = "appduct-dart-core/";
 
 const bufferIncludesAscii = (haystack: Buffer, needle: string): boolean => {
   return haystack.includes(Buffer.from(needle, "utf8"));
@@ -374,6 +386,10 @@ const detectIosSignals = (bytes: Buffer): DetectionSignal[] => {
     signals.push("ios-info-plist-keys");
   }
 
+  if (bufferIncludesAscii(bytes, FLUTTER_DART_CORE_MARKER)) {
+    signals.push("flutter-dart-core-marker");
+  }
+
   return signals;
 };
 
@@ -400,6 +416,10 @@ const detectAndroidSignals = (bytes: Buffer): DetectionSignal[] => {
     )
   ) {
     signals.push("android-manifest-meta-data-keys");
+  }
+
+  if (bufferIncludesAscii(bytes, FLUTTER_DART_CORE_MARKER)) {
+    signals.push("flutter-dart-core-marker");
   }
 
   return signals;
@@ -455,9 +475,10 @@ export const inspectArtifact = async (
   // that dropped one doesn't read as absent) -- the Info.plist keys are corroborating only and
   // can't flip `present` on their own either.
   const present =
-    platform === "android"
+    signals.includes("flutter-dart-core-marker") ||
+    (platform === "android"
       ? signals.includes("android-keep-rule-marker")
-      : signals.includes("ios-core-marker-symbol") || signals.includes("ios-objc-class-symbol");
+      : signals.includes("ios-core-marker-symbol") || signals.includes("ios-objc-class-symbol"));
 
   return {
     platform,

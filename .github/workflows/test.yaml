@@ -76,7 +76,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ "$EVENT_NAME" != "pull_request" ] || git diff --name-only "$BASE_SHA" HEAD \
-            | grep -qE '^(packages/flutter/|packages/native/fixtures/|packages/appduct/|packages/shared/|\.github/workflows/test\.yaml$)'; then
+            | grep -qE '^(packages/flutter/|packages/native/fixtures/|packages/appduct/|packages/shared/|scripts/check-flutter-release\.sh$|\.github/workflows/test\.yaml$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -141,6 +141,16 @@ jobs:
           cd "$RUNNER_TEMP/host"
           flutter pub add appduct --path "$GITHUB_WORKSPACE/packages/flutter"
           flutter build apk --debug
+      - name: Run the disabled-flag tests
+        # The flag is a compile-time constant, so these tests only run when it is off.
+        if: steps.affected.outputs.run == 'true'
+        run: flutter test --dart-define=APPDUCT_ENABLED=false test/flutter/disabled_test.dart
+      - name: Check release APKs leave the Dart core out unless asked
+        # Release builds with and without APPDUCT_ENABLED=true, with and without --obfuscate, each
+        # checked with `appduct doctor`.
+        if: steps.affected.outputs.run == 'true'
+        working-directory: .
+        run: scripts/check-flutter-release.sh android "$RUNNER_TEMP/host"
 
   android:
     runs-on: ubuntu-latest
@@ -321,7 +331,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           if [ "$EVENT_NAME" != "pull_request" ] || git diff --name-only "$BASE_SHA" HEAD \
-            | grep -qE '^(packages/flutter/|\.github/workflows/test\.yaml$)'; then
+            | grep -qE '^(packages/flutter/|packages/appduct/|scripts/check-flutter-release\.sh$|\.github/workflows/test\.yaml$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -349,6 +359,27 @@ jobs:
           flutter pub add appduct --path "$GITHUB_WORKSPACE/packages/flutter"
           flutter build ios --debug --no-codesign
           flutter build macos --debug
+      - name: Set up pnpm via corepack
+        if: steps.affected.outputs.run == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/corepack"
+          corepack enable --install-directory "$RUNNER_TEMP/corepack" pnpm
+          echo "$RUNNER_TEMP/corepack" >> "$GITHUB_PATH"
+          corepack prepare --activate
+      - name: Set up Node.js
+        if: steps.affected.outputs.run == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Build the CLI
+        if: steps.affected.outputs.run == 'true'
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm build
+      - name: Check release builds leave the Dart core out unless asked
+        if: steps.affected.outputs.run == 'true'
+        run: scripts/check-flutter-release.sh ios "$RUNNER_TEMP/host"
 
   ios:
     runs-on: macos-latest
