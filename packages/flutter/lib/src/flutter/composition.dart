@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -6,37 +5,44 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../core/core.dart';
+import '../io/io.dart';
 import 'ports.dart';
 
-/// The real ports. The only place the binding reaches the process environment, the clock and the
-/// isolate.
-BindingPorts productionPorts() => BindingPorts(
-  transport: const _PendingTransport(),
-  clock: _SystemClock(),
-  random: Random(),
-  environment: Platform.environment,
-  isRootIsolate: () => RootIsolateToken.instance != null,
-  warn: debugPrint,
+/// `--dart-define=APPDUCT_ALLOW_PRIVATE_LAN_ONLY=false` lets a link point at a public address.
+const _allowPrivateLanOnly = bool.fromEnvironment(
+  'APPDUCT_ALLOW_PRIVATE_LAN_ONLY',
+  defaultValue: true,
 );
 
-/// Stands where the `dart:io` transport goes. It fails every connect, so a build before that
-/// adapter is wired reports the missing transport instead of hanging.
-class _PendingTransport implements Transport {
-  const _PendingTransport();
-
-  @override
-  Socket open(Uri url, String? pin, SocketEvents events) =>
-      throw UnsupportedError('The dart:io transport is not wired yet.');
+/// The real ports. The only place the binding reaches the process environment, the clock and the
+/// isolate. The parameters default to the real process; tests narrow them to one platform.
+BindingPorts productionPorts({
+  Map<String, String>? environment,
+  bool? isWindows,
+  bool? isLinux,
+}) {
+  final env = environment ?? Platform.environment;
+  final windows = isWindows ?? Platform.isWindows;
+  final linux = isLinux ?? Platform.isLinux;
+  return BindingPorts(
+    transport: IoTransport.resolving(TrustPolicy.fromEnvironment),
+    clock: SystemClock(),
+    random: Random(),
+    environment: env,
+    isRootIsolate: () => RootIsolateToken.instance != null,
+    warn: debugPrint,
+    allowPrivateLanOnly: _allowPrivateLanOnly,
+    leaseStore: windows || linux
+        ? FileSessionStore(
+            appName: _appName(),
+            environment: env,
+            isWindows: windows,
+          )
+        : null,
+  );
 }
 
-class _SystemClock implements Clock {
-  @override
-  int now() => DateTime.now().millisecondsSinceEpoch;
-
-  @override
-  TimerHandle setTimeout(void Function() run, int ms) =>
-      Timer(Duration(milliseconds: ms), run);
-
-  @override
-  void clearTimeout(TimerHandle handle) => (handle as Timer).cancel();
+String _appName() {
+  final path = Platform.resolvedExecutable.split(RegExp(r'[/\\]')).last;
+  return path.isEmpty ? 'app' : path;
 }

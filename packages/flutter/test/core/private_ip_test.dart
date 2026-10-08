@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:appduct/src/core/core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/harness.dart';
@@ -58,5 +60,37 @@ void main() {
         },
       );
     }
+  });
+
+  test('connect() rejects a public address without opening a socket', () async {
+    final h = Harness();
+
+    await expectLater(
+      h.core.connect(connectInput(ip: '8.8.8.8')),
+      throwsA(isA<AppductException>()),
+    );
+
+    expect(h.transport.sockets, isEmpty);
+  });
+
+  group('with the private address check off', () {
+    test('connect() reaches a public address', () async {
+      final h = Harness(allowPrivateLanOnly: false);
+
+      unawaited(h.core.connect(connectInput(ip: '8.8.8.8')));
+      await settle();
+
+      expect(h.transport.sockets.single.url.host, '8.8.8.8');
+    });
+
+    test('connects to a public address', () async {
+      final h = Harness(allowPrivateLanOnly: false);
+
+      expect(h.core.handleUrl(linkTo([8, 8, 8, 8])), isTrue);
+      await settle();
+
+      expect(h.errors, isEmpty);
+      expect(h.transport.sockets.single.url.host, '8.8.8.8');
+    });
   });
 }

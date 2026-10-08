@@ -1,7 +1,5 @@
 // P2: one test against a real daemon. It needs `pnpm build` first (it starts packages/appduct's
 // built CLI with `node`) and runs in the Flutter CI job after that step.
-import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -9,27 +7,8 @@ import 'package:appduct/src/core/core.dart';
 import 'package:appduct/src/io/io.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-final _bin = File('../appduct/bin.js').absolute.path;
-final _built = File('../appduct/dist/bin.js').existsSync();
+import '../support/daemon.dart';
 
-/// Skipped on a developer machine that has not built the daemon; in CI a missing build fails.
-final Object _skip = _built || Platform.environment.containsKey('CI')
-    ? false
-    : 'run `pnpm build` at the repo root to build the daemon first';
-
-class _TimerClock implements Clock {
-  @override
-  int now() => DateTime.now().millisecondsSinceEpoch;
-
-  @override
-  TimerHandle setTimeout(void Function() run, int ms) =>
-      Timer(Duration(milliseconds: ms), run);
-
-  @override
-  void clearTimeout(TimerHandle handle) => (handle as Timer).cancel();
-}
-
-/// Hands out the sockets [IoTransport] opens so the test can cut one.
 class _SpyTransport implements Transport {
   _SpyTransport(this._inner);
 
@@ -45,28 +24,14 @@ class _SpyTransport implements Transport {
 }
 
 void main() {
-  late Directory stateDir;
+  late RealDaemon daemon;
   late Directory leaseDir;
   late AppductCore core;
   late _SpyTransport transport;
 
-  /// The CLI's `--json` stdout: one JSON document, or NDJSON for streaming commands.
-  Future<String> cli(List<String> args) async {
-    final result = await Process.run(
-      'node',
-      [_bin, ...args, '--json'],
-      environment: {'APPDUCT_STATE_DIR': stateDir.path},
-    );
-    return result.stdout as String;
-  }
-
   setUp(() {
-    stateDir = Directory.systemTemp.createTempSync('appduct-daemon-');
+    daemon = RealDaemon();
     leaseDir = Directory.systemTemp.createTempSync('appduct-lease-');
-    // The link must point at an address the app can reach, so the daemon advertises loopback.
-    File('${stateDir.path}/config.json').writeAsStringSync(
-      jsonEncode({'wssPort': 0, 'advertisedIp': '127.0.0.1'}),
-    );
     transport = _SpyTransport(IoTransport(TrustPolicy.parse()));
     core = createDartCore(
       DartCorePorts(
@@ -76,7 +41,7 @@ void main() {
           environment: {'XDG_RUNTIME_DIR': leaseDir.path},
           isWindows: false,
         ),
-        clock: _TimerClock(),
+        clock: SystemClock(),
         random: Random(),
         device: ioDeviceFields(),
       ),
@@ -85,12 +50,7 @@ void main() {
 
   tearDown(() async {
     await core.disconnect();
-    await Process.run(
-      'node',
-      [_bin, 'daemon', 'stop'],
-      environment: {'APPDUCT_STATE_DIR': stateDir.path},
-    );
-    stateDir.deleteSync(recursive: true);
+    await daemon.stop();
     leaseDir.deleteSync(recursive: true);
   });
 
@@ -126,15 +86,13 @@ void main() {
           .timeout(const Duration(seconds: 20));
 
       final claimed = next(SessionChangeType.claimed);
-      final minted = await cli(['sessions', 'link', '--scheme', 'appduct-e2e']);
-      final link =
-          ((jsonDecode(minted) as Map)['data']! as Map)['deepLink']! as String;
+      final link = await daemon.mintLink();
       expect(core.handleUrl(link), isTrue);
       await claimed;
       expect(core.state, ClientState.active);
 
       Future<Object?> callAdd() async {
-        final out = await cli([
+        final out = await daemon.cli([
           'tools',
           'call',
           'add',
@@ -147,7 +105,7 @@ void main() {
       expect(await callAdd(), contains('"sum":5'));
 
       await core.postEvent('cart.seeded', {'items': 3});
-      final events = await cli(['events', 'since', '0']);
+      final events = await daemon.cli(['events', 'since', '0']);
       expect(events, contains('cart.seeded'));
 
       final resumed = next(SessionChangeType.resumed);
@@ -158,7 +116,7 @@ void main() {
       expect(transport.sockets, hasLength(2));
       expect(await callAdd(), contains('"sum":5'));
     },
-    skip: _skip,
+    skip: daemonSkip,
     timeout: const Timeout(Duration(seconds: 90)),
   );
 }

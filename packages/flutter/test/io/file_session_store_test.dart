@@ -17,13 +17,28 @@ void main() {
     home.deleteSync(recursive: true);
   });
 
-  FileSessionStore store([String app = 'shop']) => FileSessionStore(
-    appName: app,
-    environment: {'XDG_RUNTIME_DIR': runtime.path, 'HOME': home.path},
-    isWindows: false,
-  );
+  FileSessionStore store([String app = 'shop', int pid = 1]) =>
+      FileSessionStore(
+        appName: app,
+        pid: pid,
+        environment: {'XDG_RUNTIME_DIR': runtime.path, 'HOME': home.path},
+        isWindows: false,
+      );
 
   group('FileSessionStore', () {
+    test('ignores a lease an earlier process left behind', () {
+      store('shop', 1).write('lease-1');
+
+      expect(store('shop', 2).read(), isNull);
+    });
+
+    test('a process overwrites the lease an earlier one left', () {
+      store('shop', 1).write('lease-1');
+      store('shop', 2).write('lease-2');
+
+      expect(store('shop', 2).read(), 'lease-2');
+    });
+
     test('reads nothing before anything is written', () {
       expect(store().read(), isNull);
     });
