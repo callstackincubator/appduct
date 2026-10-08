@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:io' as io show pid;
 
 import '../core/ports.dart';
 
@@ -13,16 +14,19 @@ import '../core/ports.dart';
 /// nothing is created. With no such directory the lease lives in memory only: a hot restart
 /// starts without it, and a file planted by someone else is never read.
 class FileSessionStore implements SessionStore {
-  /// [environment] and [isWindows] default to the real process.
+  /// [environment], [isWindows] and [pid] default to the real process.
   FileSessionStore({
     required String appName,
     Map<String, String>? environment,
     bool? isWindows,
-  }) : _windows = isWindows ?? Platform.isWindows,
+    int? pid,
+  }) : _pid = pid ?? io.pid,
+       _windows = isWindows ?? Platform.isWindows,
        _env = environment ?? Platform.environment,
        _fileName =
            'appduct-${appName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')}.lease';
 
+  final int _pid;
   final bool _windows;
   final Map<String, String> _env;
   final String _fileName;
@@ -52,7 +56,14 @@ class FileSessionStore implements SessionStore {
   String? read() {
     final file = _file();
     if (file == null) return _memory;
-    return file.existsSync() ? file.readAsStringSync() : null;
+    if (!file.existsSync()) return null;
+    // "<pid>\n<lease>": a lease another process wrote is a stale one, as no file outlives a
+    // process the way the shim's memory does.
+    final text = file.readAsStringSync();
+    final split = text.indexOf('\n');
+    return split > 0 && text.substring(0, split) == '$_pid'
+        ? text.substring(split + 1)
+        : null;
   }
 
   @override
@@ -61,7 +72,7 @@ class FileSessionStore implements SessionStore {
     if (file == null) {
       _memory = value;
     } else {
-      file.writeAsStringSync(value, flush: true);
+      file.writeAsStringSync('$_pid\n$value', flush: true);
     }
   }
 

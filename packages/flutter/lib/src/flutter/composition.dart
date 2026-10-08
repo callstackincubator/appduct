@@ -25,7 +25,7 @@ BindingPorts productionPorts({
   final windows = isWindows ?? Platform.isWindows;
   final linux = isLinux ?? Platform.isLinux;
   return BindingPorts(
-    transport: IoTransport(TrustPolicy.fromEnvironment()),
+    transport: IoTransport.resolving(TrustPolicy.fromEnvironment),
     clock: SystemClock(),
     random: Random(),
     environment: env,
