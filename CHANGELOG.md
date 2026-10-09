@@ -11,6 +11,8 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Changed: `@appduct/react-native` names its shared API type `AppductPublicApi`.** The old name
+  `CordierePublicApi` still imports, with a deprecation warning, until 0.16.0 removes it.
 - **New: Flutter apps use Appduct through the `appduct` package on pub.dev, on Android, iOS, macOS, Windows and Linux.** Appduct is included in debug and profile builds, and a release build leaves it out unless you opt in with `--dart-define=APPDUCT_ENABLED=true` (`=false` opts out of debug and profile); see [Flutter setup](https://callstackincubator.github.io/appduct/install/flutter/).
 - **Fix: a tool result over 256 KiB no longer drops the session.** The call fails with `tool_serialization_error` and a message naming the size and the limit; an oversized event is reported to the app's error listener instead.
 - **New: on iOS, tool calls keep working for about 30 seconds after the app is backgrounded, instead of failing at once.** After that a call fails with `session_suspended`; needs an app built with this release.

@@ -5,7 +5,7 @@
  * https://callstackincubator.github.io/appduct/guides/build-variants/#strip-appducts-javascript-too) — swap `@appduct/react-native` (and `/auto`)
  * for this entry so no Appduct code, native or JS, ships in that build.
  *
- * Typed against the same `CordierePublicApi` interface as `./index.ts` (see
+ * Typed against the same `AppductPublicApi` interface as `./index.ts` (see
  * `__tests__/noop-parity.test.ts`) so the two cannot drift.
  */
 import type { ToolDescriptor } from "@appduct/shared";
@@ -27,6 +27,7 @@ import { createToolGroupFactory } from "@appduct/shared/inert";
 
 export * from "./Appduct.types";
 export type {
+  AppductPublicApi,
   CordierePublicApi,
   AppductSubscription,
   AppductToolGroupRegistrar,

@@ -36,6 +36,7 @@ export type AppductNativeModuleLike = AppductCore;
 export { appductNativeModule };
 export { appductClient };
 export type {
+  AppductPublicApi,
   CordierePublicApi,
   AppductSubscription,
   AppductToolGroupRegistrar,
