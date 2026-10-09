@@ -47,9 +47,10 @@ Dark is the default and the only mode for marketing surfaces.
 
 - Fonts are free: Switzer (Fontshare, ITF Free Font License) and Geist Mono (OFL),
   self-hosted. No paid or proprietary fonts. Fallbacks: Arial; system monospace.
-- Headlines run two beats; the second is in the accent: "Your agent stops tapping. *It calls
-  your app.*" No italics.
-- The motto: "Your app is an MCP server now."
+- Headlines run two beats; the second is in the accent: "Your app is an *MCP server now.*"
+  No italics.
+- The motto, used as the hero headline, on the social card and on the banner: "Your app is an
+  MCP server now."
 - Platforms are always listed in this order: iOS, Android, React Native, Flutter, Web.
 - Mono labels carry structure: nav links, buttons, tabs, section numbers, package names,
   metadata. Sentences are never mono.
@@ -70,8 +71,8 @@ Dark is the default and the only mode for marketing surfaces.
 ## Components
 
 - **Wordmark.** "APPDUCT" in Switzer 500, uppercase, `on-accent` on an `accent` block with
-  tight padding, followed by a `BY CALLSTACK` mono chip in `muted` on `#1a1a1a`. The block is
-  the bright cyan in every theme.
+  tight padding, followed by a `BY CALLSTACK` mono chip in `muted` on `#1a1a1a` (dropped on
+  phones). The block is the bright cyan in every theme.
 - **Nav.** Sticky, `rgb(10 10 10 / 0.86)` with backdrop blur, hairline under it. Wordmark left,
   mono links centred, a dark `GET STARTED` button right.
 - **Buttons.** Mono uppercase 0.75rem, 2.5rem tall, square. Primary: accent fill, dark text.
@@ -142,8 +143,10 @@ All imagery is ordered dithering of a generated scene, drawn on canvas.
 In order, each section in the frame:
 
 1. **Nav.**
-2. **Hero:** the two-beat headline ("Your agent stops tapping. *It calls your app.*"), a
-   one-sentence lede, a primary button and the install command bar. Then the race, on the
+2. **Hero:** the motto as the headline ("Your app is an *MCP server now.*"), a one-sentence
+   lede, a primary button and the install command bar. Beside them on wide screens, a window
+   titled `agent · tools/list` showing the app's three tools as the agent sees them (name and
+   argument in the accent, a plain-English line under each); hidden below 64rem. Then the race, on the
    ducts: two phones running the same app. Left, an agent taps through sign-in, three
    products and the cart, with a clock running at 5× and a tap counter. Right, the agent
    makes three MCP tool calls (`login`, `seed_cart`, `open_screen`) and reaches checkout in

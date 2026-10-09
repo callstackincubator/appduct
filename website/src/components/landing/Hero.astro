@@ -2,28 +2,43 @@
 // The hero, a race: two agents drive the same app to the same checkout screen. On the left
 // the agent taps through the UI (sign in, three products, the cart); on the right it calls three
 // of the app's tools over MCP and is there in seconds. Two clocks tell you why you'd want it.
-import { site } from '../../landing/content';
+import { hero, site } from '../../landing/content';
 import CopyCommand from './CopyCommand.astro';
 import Dither from './Dither.astro';
 import MiniApp from './MiniApp.astro';
 import PixelIcon from './PixelIcon.astro';
+import Window from './Window.astro';
 
-interface Props {
-	title: string;
-	lede: string;
-}
-const { title, lede } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
 <section class="hero" aria-labelledby="hero-title">
-	<div class="hero-copy">
-		<h1 class="h1" id="hero-title" set:html={title} />
-		<p class="lede">{lede}</p>
-		<div class="actions">
-			<a class="btn" href={`${base}/start/quick-start/`}>Get started <span aria-hidden="true">→</span></a>
-			<CopyCommand command={site.install} />
+	<div class="hero-top">
+		<div class="hero-copy">
+			<h1 class="h1" id="hero-title" set:html={hero.title} />
+			<p class="lede">{hero.lede}</p>
+			<div class="actions">
+				<a class="btn" href={`${base}/start/quick-start/`}>Get started <span aria-hidden="true">→</span></a>
+				<CopyCommand command={site.install} />
+			</div>
 		</div>
+
+		<Window title="agent · tools/list" class="hero-tools">
+			<p class="tools-app"><i aria-hidden="true"></i>{hero.app}<span>{hero.tools.length} tools</span></p>
+			<ul class="tools">
+				{
+					hero.tools.map(({ name, args, about }) => (
+						<li>
+							<code>
+								{name}
+								<span>({args})</span>
+							</code>
+							<span>{about}</span>
+						</li>
+					))
+				}
+			</ul>
+		</Window>
 	</div>
 
 	<div
@@ -65,15 +80,24 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 </script>
 
 <style>
+	.hero-top {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 24rem;
+		align-items: center;
+		gap: var(--pad);
+		padding: clamp(2.5rem, 6vw, 5rem) var(--pad);
+	}
 	.hero-copy {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 1.25rem;
-		padding: clamp(3rem, 8vw, 6rem) var(--pad) clamp(2.5rem, 5vw, 4rem);
 	}
 	.hero-copy .h1 {
-		max-width: 18ch;
+		max-width: 15ch;
+		/* Pull the capitals up to the padding edge, so the space above them matches the space
+		   under the buttons: Switzer's line box sits about 0.18em above its cap height. */
+		margin-top: -0.18em;
 	}
 	.hero-copy .h1 :global(em) {
 		font-style: normal;
@@ -90,6 +114,53 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 	.actions :global(.cmd) {
 		width: min(100%, 22rem);
 		padding-block: 0.25rem;
+	}
+
+	/* The app's tools as the agent lists them: what "an MCP server" means here. */
+	.hero-tools {
+		font-family: var(--font-mono);
+		font-size: 0.8125rem;
+	}
+	.tools-app {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin: 0;
+		padding: 0.75rem 1rem;
+		border-bottom: 1px solid var(--line);
+		color: var(--text);
+	}
+	.tools-app i {
+		width: 6px;
+		height: 6px;
+		background: var(--accent);
+	}
+	.tools-app span {
+		margin-inline-start: auto;
+		color: var(--faint);
+	}
+	.tools {
+		margin: 0;
+		padding: 0.5rem 0;
+		list-style: none;
+	}
+	.tools li {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		padding: 0.5rem 1rem;
+	}
+	.tools code {
+		font-family: inherit;
+		color: var(--accent);
+	}
+	.tools code span {
+		color: var(--code-punc);
+	}
+	.tools li > span {
+		font-family: var(--font-display);
+		font-size: 0.875rem;
+		color: var(--muted);
 	}
 
 	.viz {
@@ -175,6 +246,15 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 		color: var(--accent);
 	}
 
+	@media (max-width: 64rem) {
+		/* Narrower than this the window would squeeze the headline; the race below shows the same tools. */
+		.hero-top {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.hero-tools {
+			display: none;
+		}
+	}
 	@media (max-width: 40rem) {
 		/* On a phone the clocks carry the left lane; the tap count would only crowd it. */
 		.strip--taps {
