@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Docs: the Build variants guide now tells apps with `expo` installed to exclude Appduct through `package.json`.** The `react-native.config.js` exclusion it showed before does nothing on Expo SDK 54, so Appduct still shipped; see [Leave Appduct out permanently](https://callstackincubator.github.io/appduct/guides/build-variants/#leave-appduct-out-permanently).
 - **Fix: `appduct init`'s next steps now match the project it found.** A React Native app still gets
   the `@appduct/react-native/auto` import, including when `init` runs from its `ios/` or `android/`
   directory; a plain iOS or Android app gets the wiring that app needs. An Android app that already
