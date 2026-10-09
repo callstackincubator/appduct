@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Docs: a new home page, and every page now has a link preview when shared.** Agents can read the home page as Markdown at [index.md](https://callstackincubator.github.io/appduct/index.md).
 - **Fix: `appduct init`'s next steps now match the project it found.** A React Native app still gets
   the `@appduct/react-native/auto` import, including when `init` runs from its `ios/` or `android/`
   directory; a plain iOS or Android app gets the wiring that app needs. An Android app that already

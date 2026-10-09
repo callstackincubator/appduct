@@ -1,0 +1,31 @@
+---
+// A dithered pixel scene in the accent colour, drawn on a canvas: the Apex "pixel photo" look,
+// generated instead of shipped as an image. It fills its positioned parent. The scenes live in
+// dither.ts: `ducts` (tubes bundling into the app, pulses running along them) and `flow` (soft
+// bands of light).
+interface Props {
+	scene?: 'ducts' | 'flow';
+	/** Where the ducts bundle, 0..1 across: put it behind the app. */
+	focus?: number;
+	/** Size of one dither cell in CSS pixels. */
+	cell?: number;
+	class?: string;
+}
+const { scene = 'ducts', focus = 0.74, cell = 2, class: className } = Astro.props;
+---
+
+<canvas
+	class:list={['dither', className]}
+	data-scene={scene}
+	data-focus={focus}
+	data-cell={cell}
+	aria-hidden="true"></canvas>
+
+<script>
+	// The scene code loads only when the canvas first comes near the viewport.
+	import { whenNear } from './lazy';
+
+	for (const canvas of document.querySelectorAll<HTMLCanvasElement>('canvas.dither')) {
+		whenNear(canvas, () => void import('./dither').then((m) => m.animateDither(canvas)));
+	}
+</script>

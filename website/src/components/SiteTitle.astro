@@ -1,38 +1,45 @@
 ---
+// The same wordmark as the landing page's nav: an accent block, then "by Callstack".
 const { siteTitleHref } = Astro.locals.starlightRoute;
 ---
 
 <a href={siteTitleHref} class="site-title">
-	<span class="wordmark" translate="no">appduct</span>
+	<span class="wordmark" translate="no">Appduct</span>
 	<span class="by">by Callstack</span>
 </a>
 
 <style>
 	.site-title {
 		display: flex;
-		align-items: baseline;
-		gap: 0.875rem;
+		align-items: center;
+		gap: 0.5rem;
 		text-decoration: none;
-		color: var(--sl-color-white);
 		white-space: nowrap;
 		min-width: 0;
 	}
 	.wordmark {
+		padding: 0.0625rem 0.3125rem;
+		/* The brand cyan in both themes, as on the landing page. */
+		background: #3ddcff;
+		color: #0a0a0a;
 		font-family: var(--cs-font-display);
-		font-weight: 400;
-		font-size: 1.5rem;
-		letter-spacing: -0.05em;
-		line-height: 1;
+		font-weight: 500;
+		font-size: 1.125rem;
+		line-height: 1.25;
+		letter-spacing: -0.01em;
+		text-transform: uppercase;
 	}
 	.by {
+		padding: 0.25rem 0.375rem;
+		background: var(--sl-color-gray-6);
 		font-family: var(--cs-font-mono);
-		font-size: 0.6875rem;
-		letter-spacing: 0.055em;
+		font-size: 0.625rem;
+		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: var(--cs-muted);
+		color: var(--sl-color-gray-3);
 	}
 	.site-title:hover .wordmark {
-		color: var(--cs-accent);
+		background: #86ebff;
 	}
 	@media (max-width: 30rem) {
 		.by {

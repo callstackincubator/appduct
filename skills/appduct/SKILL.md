@@ -1,6 +1,6 @@
 ---
 name: appduct
-description: Drive an Appduct-enabled app (React Native, Flutter, iOS, Android or web) from the terminal or over MCP — connect a device, list the tools the app registers, call them — and write tools that agents can use well. Use when the user mentions Appduct, wants to pair or connect a device, invoke app-defined tools from the CLI or MCP, or asks to add Appduct to an app or write tools for it.
+description: Drive an Appduct-enabled app (iOS, Android, React Native, Flutter or web) from the terminal or over MCP — connect a device, list the tools the app registers, call them — and write tools that agents can use well. Use when the user mentions Appduct, wants to pair or connect a device, invoke app-defined tools from the CLI or MCP, or asks to add Appduct to an app or write tools for it.
 ---
 
 # Appduct

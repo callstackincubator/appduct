@@ -1,0 +1,495 @@
+---
+// A tiny shop app inside a device frame, for the hero animations. It has no behaviour of its
+// own: miniapp.ts drives it. `kind` picks the frame (iPhone, Android phone or a browser window);
+// a script can change it later through data-kind.
+interface Props {
+	kind?: 'ios' | 'android' | 'web';
+	class?: string;
+}
+const { kind = 'ios', class: className } = Astro.props;
+const products = [
+	{ name: 'Runner Low', price: '$120', art: 'a' },
+	{ name: 'Cotton Tee', price: '$32', art: 'b' },
+	{ name: 'Field Cap', price: '$24', art: 'c' },
+	{ name: 'Day Pack', price: '$68', art: 'd' },
+];
+---
+
+<div class:list={['device', className]} data-kind={kind} aria-hidden="true">
+	<div class="chrome-web">
+		<span class="dots"><i></i><i></i><i></i></span>
+		<span class="url">localhost:5173/shop</span>
+	</div>
+	<div class="screen">
+		<span class="island"></span>
+		<span class="punch"></span>
+
+		<div class="bar">
+			<span class="back" data-tap="back">‹</span>
+			<span class="title" data-title>Shop</span>
+			<b class="cart" data-tap="cart" data-badge>0</b>
+		</div>
+
+		<!-- Sign in -->
+		<div class="view" data-view="signin">
+			<p class="big">Sign in</p>
+			<span class="field" data-tap="email"><span data-email></span><i class="caret"></i></span>
+			<span class="field" data-tap="password"><span data-password></span></span>
+			<span class="button" data-tap="signin">Sign in</span>
+		</div>
+
+		<!-- Home -->
+		<div class="view" data-view="home">
+			<p class="hello">Hi, <span data-user>Ana</span></p>
+			<div class="grid">
+				{
+					products.map((p, i) => (
+						<span class="tile" data-tap={`product-${i}`}>
+							<span class:list={['art', `art-${p.art}`]} />
+							<span class="tile-name">{p.name}</span>
+							<span class="tile-price">{p.price}</span>
+						</span>
+					))
+				}
+			</div>
+		</div>
+
+		<!-- Product -->
+		<div class="view" data-view="product">
+			<span class="art art-hero art-a" data-product-art></span>
+			<p class="big" data-product-name>Runner Low</p>
+			<p class="muted" data-product-price>$120</p>
+			<span class="button" data-tap="add">Add to cart</span>
+		</div>
+
+		<!-- Cart -->
+		<div class="view" data-view="cart">
+			<p class="empty muted">Your cart is empty</p>
+			{
+				products.slice(0, 3).map((p) => (
+					<div class="row" data-row>
+						<span class:list={['art', 'art-sm', `art-${p.art}`]} />
+						<span class="row-name">{p.name}</span>
+						<span class="row-price">{p.price}</span>
+					</div>
+				))
+			}
+			<div class="row total" data-total>
+				<span class="row-name">Total</span>
+				<span class="row-price">$176</span>
+			</div>
+			<span class="button" data-tap="checkout" data-total>Checkout</span>
+		</div>
+
+		<!-- Checkout -->
+		<div class="view" data-view="checkout">
+			<p class="muted small">Total</p>
+			<p class="amount">$176.00</p>
+			<span class="field card">•••• 4242</span>
+			<span class="button button--accent" data-tap="pay">Pay now</span>
+		</div>
+
+		<span class="nav-android"><i></i><i></i><i></i></span>
+		<span class="tap-ring" data-ring></span>
+	</div>
+</div>
+
+<style>
+	/*
+	 * Pixel-stepped corners: square, but still unmistakably a phone. A clip-path would also clip
+	 * a CSS border at the corners, so the outline is drawn instead: the stepped shape in the
+	 * border grey, and the same shape 1px smaller on top of it in the body colour.
+	 */
+	.device {
+		--w: 13.5rem;
+		--steps: polygon(
+			0 8px, 4px 8px, 4px 4px, 8px 4px, 8px 0,
+			calc(100% - 8px) 0, calc(100% - 8px) 4px, calc(100% - 4px) 4px, calc(100% - 4px) 8px, 100% 8px,
+			100% calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) calc(100% - 4px), calc(100% - 8px) calc(100% - 4px), calc(100% - 8px) 100%,
+			8px 100%, 8px calc(100% - 4px), 4px calc(100% - 4px), 4px calc(100% - 8px), 0 calc(100% - 8px)
+		);
+		position: relative;
+		isolation: isolate;
+		display: flex;
+		flex-direction: column;
+		width: var(--w);
+		aspect-ratio: 9 / 18.5;
+		padding: 0.5rem;
+		background: #313131;
+		clip-path: var(--steps);
+		transition:
+			width 0.5s ease,
+			aspect-ratio 0.5s ease;
+	}
+	.device::before {
+		content: '';
+		position: absolute;
+		inset: 1px;
+		z-index: -1;
+		background: #050505;
+		clip-path: var(--steps);
+	}
+	.device[data-kind='web'] {
+		--w: 20rem;
+		aspect-ratio: 4 / 4.2;
+		padding: 1px;
+		clip-path: none;
+	}
+	.device[data-kind='web']::before {
+		clip-path: none;
+	}
+
+	.chrome-web {
+		display: none;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.5rem 0.625rem;
+		border-bottom: 1px solid var(--line);
+		font-family: var(--font-mono);
+		font-size: 0.625rem;
+		color: var(--faint);
+	}
+	.device[data-kind='web'] .chrome-web {
+		display: flex;
+	}
+	.dots {
+		display: flex;
+		gap: 4px;
+	}
+	.dots i {
+		width: 6px;
+		height: 6px;
+		background: var(--line-strong);
+	}
+	.url {
+		flex: 1;
+		padding: 0.125rem 0.5rem;
+		background: var(--field);
+	}
+
+	.screen {
+		position: relative;
+		flex: 1;
+		overflow: hidden;
+		background: #0d0d0d;
+		font-family: var(--font-display);
+		color: var(--text);
+	}
+	.island,
+	.punch {
+		position: absolute;
+		top: 6px;
+		left: 50%;
+		translate: -50% 0;
+		background: #000;
+		z-index: 3;
+	}
+	.island {
+		width: 34%;
+		height: 12px;
+	}
+	.punch {
+		display: none;
+		width: 8px;
+		height: 8px;
+	}
+	.device[data-kind='android'] .island,
+	.device[data-kind='web'] .island {
+		display: none;
+	}
+	.device[data-kind='android'] .punch {
+		display: block;
+	}
+	.nav-android {
+		position: absolute;
+		inset: auto 0 0;
+		display: none;
+		justify-content: center;
+		gap: 22%;
+		padding: 6px 0;
+		background: #0d0d0d;
+		border-top: 1px solid var(--line);
+		z-index: 2;
+	}
+	.nav-android i {
+		width: 6px;
+		height: 6px;
+		border: 1px solid var(--faint);
+	}
+	.device[data-kind='android'] .nav-android {
+		display: flex;
+	}
+
+	.bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 1.625rem 0.75rem 0.5rem;
+		border-bottom: 1px solid var(--line);
+		font-size: 0.8125rem;
+	}
+	.device[data-kind='web'] .bar,
+	.device[data-kind='android'] .bar {
+		padding-top: 0.75rem;
+	}
+	.device[data-kind='android'] .bar {
+		padding-top: 1.25rem;
+	}
+	/* The back arrow shows only on screens that have one; elsewhere the title starts flush left. */
+	.back {
+		display: none;
+		color: var(--faint);
+	}
+	.screen[data-back] .back {
+		display: inline;
+	}
+	.title {
+		flex: 1;
+	}
+	/* The cart is just its count, in a square on the right. */
+	.cart {
+		min-width: 1rem;
+		padding: 0 0.1875rem;
+		font-family: var(--font-mono);
+		font-size: 0.625rem;
+		font-weight: 400;
+		text-align: center;
+		line-height: 1rem;
+		background: var(--field);
+		color: var(--muted);
+		transition:
+			background-color 0.2s,
+			color 0.2s;
+	}
+	.cart.is-full {
+		background: var(--accent);
+		color: var(--on-accent);
+	}
+
+	.view {
+		position: absolute;
+		inset: 3.5rem 0 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 0.875rem 0.75rem;
+		opacity: 0;
+		translate: 8px 0;
+		pointer-events: none;
+		transition:
+			opacity 0.28s ease,
+			translate 0.28s ease;
+	}
+	.device[data-kind='web'] .view,
+	.device[data-kind='android'] .view {
+		inset-block-start: 2.75rem;
+	}
+	.device[data-kind='android'] .view {
+		inset-block-start: 3.125rem;
+	}
+	.view.is-on {
+		opacity: 1;
+		translate: 0 0;
+	}
+	.big {
+		margin: 0 0 0.25rem;
+		font-size: 1.125rem;
+		font-weight: 500;
+		letter-spacing: -0.02em;
+	}
+	.hello {
+		margin: 0 0 0.25rem;
+		font-size: 1rem;
+		font-weight: 500;
+		letter-spacing: -0.02em;
+	}
+	.muted {
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.8125rem;
+	}
+	.small {
+		font-size: 0.6875rem;
+		font-family: var(--font-mono);
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+	}
+	.field {
+		display: flex;
+		align-items: center;
+		height: 1.875rem;
+		padding: 0 0.5rem;
+		background: var(--field);
+		border: 1px solid var(--line);
+		font-family: var(--font-mono);
+		font-size: 0.6875rem;
+		color: var(--muted);
+		transition: border-color 0.2s;
+	}
+	.field.is-focus {
+		border-color: var(--text);
+	}
+	.caret {
+		display: none;
+		width: 1px;
+		height: 0.875rem;
+		margin-left: 1px;
+		background: var(--text);
+	}
+	.field.is-focus .caret {
+		display: inline-block;
+	}
+	.button {
+		display: grid;
+		place-items: center;
+		height: 2rem;
+		margin-top: 0.25rem;
+		border: 1px solid var(--line-strong);
+		font-family: var(--font-mono);
+		font-size: 0.625rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		transition: background-color 0.15s;
+	}
+	.button.is-pressed {
+		background: var(--line-strong);
+	}
+	.button--accent {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: var(--on-accent);
+	}
+	.view[data-view='cart'] .button,
+	.view[data-view='checkout'] .button,
+	.view[data-view='product'] .button {
+		margin-top: auto;
+		margin-bottom: 1.75rem;
+	}
+	.device[data-kind='web'] .view .button {
+		margin-bottom: 0.5rem;
+	}
+	.amount {
+		margin: 0 0 0.75rem;
+		font-size: 1.875rem;
+		font-weight: 500;
+		letter-spacing: -0.04em;
+	}
+
+	.grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.5rem;
+	}
+	.device[data-kind='web'] .grid {
+		grid-template-columns: repeat(4, 1fr);
+	}
+	.tile {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		font-size: 0.6875rem;
+	}
+	.tile-price {
+		font-family: var(--font-mono);
+		font-size: 0.625rem;
+		color: var(--muted);
+	}
+
+	/* Product art: little dithered squares, the same pixel language as the page. */
+	.art {
+		display: block;
+		aspect-ratio: 1;
+		margin-bottom: 0.25rem;
+		background-color: var(--field);
+		background-size: 4px 4px;
+	}
+	.art-a {
+		background-image: radial-gradient(rgb(var(--accent-rgb) / 0.9) 1px, transparent 1.2px);
+	}
+	.art-b {
+		background-image: radial-gradient(rgb(255 255 255 / 0.55) 1px, transparent 1.2px);
+	}
+	.art-c {
+		background-image: linear-gradient(90deg, rgb(var(--accent-rgb) / 0.6) 1.5px, transparent 1.5px);
+	}
+	.art-d {
+		background-image: linear-gradient(rgb(255 255 255 / 0.35) 1.5px, transparent 1.5px);
+	}
+	.art-hero {
+		width: 100%;
+		background-size: 5px 5px;
+	}
+	.art-sm {
+		width: 1.75rem;
+		margin: 0;
+	}
+
+	.row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid var(--line);
+		font-size: 0.75rem;
+		opacity: 0;
+		translate: 8px 0;
+		transition:
+			opacity 0.3s ease,
+			translate 0.3s ease;
+	}
+	.row.is-on,
+	.total.is-on {
+		opacity: 1;
+		translate: 0 0;
+	}
+	.row-name {
+		flex: 1;
+	}
+	.row-price {
+		font-family: var(--font-mono);
+		font-size: 0.6875rem;
+		color: var(--muted);
+	}
+	.total {
+		border-bottom: 0;
+	}
+	.view[data-view='cart'] .button[data-total] {
+		opacity: 0;
+		transition: opacity 0.3s;
+	}
+	.view[data-view='cart'] .button[data-total].is-on {
+		opacity: 1;
+	}
+	.empty {
+		position: absolute;
+		top: 1rem;
+		transition: opacity 0.2s;
+	}
+	.view.has-items .empty {
+		opacity: 0;
+	}
+
+	.tap-ring {
+		position: absolute;
+		z-index: 5;
+		width: 1.75rem;
+		height: 1.75rem;
+		margin: -0.875rem 0 0 -0.875rem;
+		border: 2px solid var(--text);
+		background: rgb(255 255 255 / 0.12);
+		opacity: 0;
+		transition:
+			left 0.38s ease,
+			top 0.38s ease,
+			opacity 0.2s,
+			scale 0.12s;
+		pointer-events: none;
+	}
+	.tap-ring.is-on {
+		opacity: 1;
+	}
+	.tap-ring.is-down {
+		scale: 0.7;
+		background: rgb(255 255 255 / 0.3);
+	}
+</style>

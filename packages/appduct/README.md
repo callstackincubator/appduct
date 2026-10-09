@@ -1,6 +1,6 @@
 [![Appduct][appduct-banner]][repo]
 
-### Call functions in your running iOS, Android, Flutter or React Native app from a terminal, a test or an agent
+### Call functions in your running iOS, Android, React Native, Flutter or web app from a terminal, a test or an agent
 
 [![MIT license][license-badge]][license] [![npm downloads][npm-downloads-badge]][npm-downloads] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 

@@ -1,0 +1,196 @@
+---
+// The hero, a race: two agents drive the same app to the same checkout screen. On the left
+// the agent taps through the UI (sign in, three products, the cart); on the right it calls three
+// of the app's tools over MCP and is there in seconds. Two clocks tell you why you'd want it.
+import { site } from '../../landing/content';
+import CopyCommand from './CopyCommand.astro';
+import Dither from './Dither.astro';
+import MiniApp from './MiniApp.astro';
+import PixelIcon from './PixelIcon.astro';
+
+interface Props {
+	title: string;
+	lede: string;
+}
+const { title, lede } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<section class="hero" aria-labelledby="hero-title">
+	<div class="hero-copy">
+		<h1 class="h1" id="hero-title" set:html={title} />
+		<p class="lede">{lede}</p>
+		<div class="actions">
+			<a class="btn" href={`${base}/start/quick-start/`}>Get started <span aria-hidden="true">→</span></a>
+			<CopyCommand command={site.install} />
+		</div>
+	</div>
+
+	<div
+		class="viz"
+		data-race
+		role="img"
+		aria-label="Two agents bring the same app to its checkout screen. Tapping through the UI takes about a minute; calling three of the app's tools over MCP takes three seconds."
+	>
+		<Dither scene="ducts" focus={0.75} />
+		<div class="lanes">
+			<div class="lane lane--hand">
+				<div class="lane-head">
+					<PixelIcon name="agent" size={18} />
+					<PixelIcon name="hand" size={18} />
+					<span class="clock" data-clock-hand>00:00</span>
+				</div>
+				<MiniApp kind="ios" class="race-device" />
+				<div class="strip strip--taps"><span data-taps>0</span> taps</div>
+			</div>
+			<div class="lane lane--call">
+				<div class="lane-head">
+					<PixelIcon name="agent" size={18} />
+					<PixelIcon name="plug" size={18} />
+					<span class="clock" data-clock-call>00:00</span>
+				</div>
+				<MiniApp kind="ios" class="race-device" />
+				<div class="strip strip--term" data-term></div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<script>
+	// The animation code loads only when the animation first comes near the viewport.
+	import { whenNear } from './lazy';
+
+	const root = document.querySelector<HTMLElement>('[data-race]');
+	if (root) whenNear(root, () => void import('./race').then((m) => m.default(root)));
+</script>
+
+<style>
+	.hero-copy {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1.25rem;
+		padding: clamp(3rem, 8vw, 6rem) var(--pad) clamp(2.5rem, 5vw, 4rem);
+	}
+	.hero-copy .h1 {
+		max-width: 18ch;
+	}
+	.hero-copy .h1 :global(em) {
+		font-style: normal;
+		color: var(--accent);
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem;
+		width: 100%;
+		margin-top: 0.75rem;
+	}
+	.actions :global(.cmd) {
+		width: min(100%, 22rem);
+		padding-block: 0.25rem;
+	}
+
+	.viz {
+		position: relative;
+		border-top: 1px solid var(--line);
+		overflow: hidden;
+	}
+	.lanes {
+		position: relative;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+	}
+	.lane {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		padding: clamp(1.5rem, 4vw, 3rem) var(--pad);
+	}
+	.lane + .lane {
+		border-left: 1px solid var(--line-strong);
+	}
+	.lane-head {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.375rem 0.75rem;
+		background: var(--bg);
+		border: 1px solid var(--line-strong);
+		color: var(--faint);
+	}
+	.clock {
+		font-family: var(--font-mono);
+		font-size: 1.5rem;
+		letter-spacing: 0.02em;
+		color: var(--muted);
+		font-variant-numeric: tabular-nums;
+	}
+	.lane--call .lane-head {
+		color: var(--accent);
+	}
+	.lane--call .clock {
+		color: var(--text);
+	}
+	.lane--call.is-done .lane-head {
+		border-color: var(--accent);
+		background: var(--accent);
+		color: var(--on-accent);
+	}
+	.lane--call.is-done .clock {
+		color: var(--on-accent);
+	}
+	.lane--hand.is-done .lane-head {
+		border-color: var(--text);
+	}
+	.lane :global(.device) {
+		--w: 12.5rem;
+	}
+	.strip {
+		width: min(100%, 24rem);
+		min-height: 4.75rem;
+		padding: 0.5rem 0.75rem;
+		background: var(--bg);
+		border: 1px solid var(--line-strong);
+		font-family: var(--font-mono);
+		font-size: 0.6875rem;
+		line-height: 1.6;
+		color: var(--code-fg);
+		overflow-wrap: anywhere;
+	}
+	.strip--taps {
+		display: grid;
+		place-items: center;
+		color: var(--faint);
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+	}
+	.strip--taps span {
+		color: var(--text);
+		font-size: 1.25rem;
+	}
+	.strip :global(.p) {
+		color: var(--accent);
+	}
+
+	@media (max-width: 40rem) {
+		/* On a phone the clocks carry the left lane; the tap count would only crowd it. */
+		.strip--taps {
+			display: none;
+		}
+		.lane {
+			padding-inline: 0.5rem;
+		}
+		.lane :global(.device) {
+			--w: 9.5rem;
+		}
+		.clock {
+			font-size: 1.125rem;
+		}
+		.strip {
+			font-size: 0.5625rem;
+		}
+	}
+</style>

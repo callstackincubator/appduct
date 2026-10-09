@@ -9,16 +9,6 @@ This page explains what happens between your terminal and your app, as far as it
 
 ## The pieces
 
-```
-            your computer                                    devices
-┌───────────────────────────────────────────┐
-│  appduct CLI ─────┐                       │
-│  MCP clients ─────┼──► background service ◄┼──── encrypted ──── iPhone   (session A)
-│  test runners ────┘    (the daemon)       ◄┼──── connections ── Pixel    (session B)
-│                        ~/.appduct/        ◄┼─────────────────── Simulator (session C)
-└───────────────────────────────────────────┘
-```
-
 - **The background service** (`appduct daemon`) runs on your computer, one per user. It holds the private key, listens for devices on one port (8443 by default), keeps every session, and applies policy. It starts on the first command that needs it and keeps running on its own; nothing a device does stops it.
 - **The CLI, the MCP server, and `appduct/client`** don't connect to devices themselves. They send requests to the background service over a local socket that only your user can open. That's why they always agree: they make the same requests.
 - **Your app** registers tools and connects *to* your computer, not the other way round. That's what makes physical phones work.

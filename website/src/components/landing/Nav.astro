@@ -1,0 +1,86 @@
+---
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const links = [
+	{ text: 'How it works', href: '#how' },
+	{ text: 'Platforms', href: '#platforms' },
+	{ text: 'Agents', href: '#agents' },
+	{ text: 'Docs', href: `${base}/start/introduction/` },
+	{ text: 'GitHub', href: 'https://github.com/callstackincubator/appduct' },
+];
+---
+
+<header class="nav">
+	<div class="frame nav-inner">
+		<a class="brand" href={`${base}/`}>
+			<span class="wordmark" translate="no">Appduct</span>
+			<span class="by label">by Callstack</span>
+		</a>
+		<nav class="links" aria-label="Main">
+			{links.map(({ text, href }) => <a class="label" href={href}>{text}</a>)}
+		</nav>
+		<a class="btn btn--dark" href={`${base}/start/quick-start/`}>Get started</a>
+	</div>
+</header>
+
+<style>
+	.nav {
+		position: sticky;
+		top: 0;
+		z-index: 20;
+		background: rgb(10 10 10 / 0.86);
+		backdrop-filter: blur(10px);
+		border-bottom: 1px solid var(--line);
+	}
+	.nav-inner {
+		display: flex;
+		align-items: center;
+		gap: 1.5rem;
+		min-height: 3.75rem;
+		padding-inline: var(--pad);
+	}
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		text-decoration: none;
+	}
+	.wordmark {
+		padding: 0.0625rem 0.3125rem;
+		background: var(--accent);
+		color: var(--on-accent);
+		font-family: var(--font-display);
+		font-weight: 500;
+		font-size: 1.125rem;
+		line-height: 1.25;
+		letter-spacing: -0.01em;
+		text-transform: uppercase;
+	}
+	.by {
+		padding: 0.25rem 0.375rem;
+		background: #1a1a1a;
+		color: var(--muted);
+		font-size: 0.625rem;
+		white-space: nowrap;
+	}
+	.links {
+		display: flex;
+		gap: 1.75rem;
+		margin-inline: auto;
+	}
+	.links a {
+		color: var(--muted);
+		text-decoration: none;
+		transition: color 120ms;
+	}
+	.links a:hover {
+		color: var(--text);
+	}
+	@media (max-width: 52rem) {
+		.links {
+			display: none;
+		}
+		.nav-inner > .btn {
+			margin-inline-start: auto;
+		}
+	}
+</style>

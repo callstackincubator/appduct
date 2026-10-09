@@ -96,10 +96,6 @@ h1#_top {
 	border-top-color: var(--cs-line);
 }
 
-/* Code blocks: the purple left rule from the deck's CodeBlock. */
-.expressive-code .frame pre {
-	border-inline-start: 3px solid var(--cs-purple) !important;
-}
 .expressive-code .frame .header {
 	gap: 0;
 }
@@ -143,7 +139,7 @@ h1#_top {
 	background: var(--cs-wash);
 }
 .sidebar-content ul ul li:has(> a[aria-current='page']) {
-	border-inline-start-color: var(--cs-purple);
+	border-inline-start-color: var(--cs-brand);
 }
 
 /* ---------- Right-hand table of contents ---------- */
@@ -164,11 +160,11 @@ mobile-starlight-toc a[aria-current='true'] {
 /* ---------- Asides ---------- */
 .starlight-aside {
 	border: 1px solid var(--cs-line);
-	border-inline-start: 3px solid var(--sl-color-asides-border, var(--cs-purple));
+	border-inline-start: 3px solid var(--sl-color-asides-border, var(--cs-brand));
 	background: var(--cs-wash);
 }
 .starlight-aside--note {
-	--sl-color-asides-border: var(--cs-purple);
+	--sl-color-asides-border: var(--cs-brand);
 	--sl-color-asides-text-accent: var(--cs-accent);
 }
 .starlight-aside--tip {
@@ -205,7 +201,7 @@ mobile-starlight-toc a[aria-current='true'] {
 	transition: border-color 0.15s ease;
 }
 .sl-link-card:hover {
-	border-color: var(--cs-purple) !important;
+	border-color: var(--cs-brand) !important;
 	background: var(--cs-wash) !important;
 }
 .sl-link-card .title {
@@ -224,9 +220,9 @@ mobile-starlight-toc a[aria-current='true'] {
 	text-transform: uppercase;
 }
 .sl-link-button.primary {
-	background: var(--cs-purple) !important;
-	border-color: var(--cs-purple) !important;
-	color: #ffffff !important;
+	background: var(--sl-color-bg-accent) !important;
+	border-color: var(--sl-color-bg-accent) !important;
+	color: var(--sl-color-text-invert) !important;
 }
 
 .sl-badge {
@@ -244,7 +240,7 @@ starlight-tabs .tab {
 }
 starlight-tabs .tab:has([aria-selected='true']),
 starlight-tabs [role='tab'][aria-selected='true'] {
-	--sl-tab-color-border: var(--cs-purple) !important;
+	--sl-tab-color-border: var(--cs-brand) !important;
 }
 starlight-tabs [role='tab'] {
 	font-family: var(--cs-font-mono);
@@ -266,7 +262,7 @@ starlight-tabs [role='tab'][aria-selected='true'] {
 	font-family: var(--cs-font-mono);
 	font-weight: 400 !important;
 	background: transparent !important;
-	border: 1px solid var(--cs-purple);
+	border: 1px solid var(--cs-brand);
 	color: var(--sl-color-white) !important;
 }
 .sl-steps > li::after {
@@ -292,7 +288,7 @@ starlight-file-tree {
 	transition: border-color 0.15s ease;
 }
 .pagination-links a:hover {
-	border-color: var(--cs-purple) !important;
+	border-color: var(--cs-brand) !important;
 }
 .pagination-links a > span {
 	font-family: var(--cs-font-mono);

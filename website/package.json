@@ -8,10 +8,12 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "typecheck": "astro check"
+    "typecheck": "astro check",
+    "og": "node scripts/og.mjs"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.3.1",
+    "@astrojs/sitemap": "^3.7.4",
     "@astrojs/starlight": "^0.42.2",
     "@fontsource/geist-mono": "^5.3.0",
     "astro": "^7.3.3",
@@ -21,6 +23,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "playwright-core": "1.56.1",
     "typescript": "~5.9.2"
   }
 }
