@@ -15,11 +15,11 @@ Which builds include Appduct and what an included build trusts are separate deci
 
 One environment variable controls the native module on both platforms:
 
-| `APPDUCT_ENABLED` | Debug build | Release build |
-| --- | --- | --- |
-| not set (default) | Included | Not included |
-| `1` or `true` | Included | Included |
-| `0` or `false` | Not included | Not included |
+| `APPDUCT_ENABLED` | Debug build | Release build | Any other name |
+| --- | --- | --- | --- |
+| not set (default) | Included | Not included | iOS: not included. Android: build fails — see [A custom build type or configuration name](#a-custom-build-type-or-configuration-name) |
+| `1` or `true` | Included | Included | Included (Android needs one `matchingFallbacks` line first) |
+| `0` or `false` | Not included | Not included | Not included |
 
 Values are case-insensitive.
 
@@ -37,9 +37,24 @@ To leave it out even of debug builds:
 APPDUCT_ENABLED=0 npx expo prebuild && APPDUCT_ENABLED=0 npx expo run:ios
 ```
 
-:::caution[Build names matter]
-The default applies to Xcode configurations named exactly `Debug` and `Release`, and Gradle build types named exactly `debug` and `release`. A custom name, such as a `staging` configuration, doesn't get Appduct unless you set `APPDUCT_ENABLED=1` for that pipeline.
-:::
+### A custom build type or configuration name
+
+Both platforms key inclusion off the name, and each handles an unfamiliar name differently.
+
+On iOS, the default links Appduct only into a configuration named `Debug`, so a `Staging` configuration is left unlinked. `APPDUCT_ENABLED=1` lifts the restriction instead of adding a name, so it covers `Staging`, `Internal`, whatever you call it. One exception: if your app lists its own `configurations` for this package in its `react-native.config.js`, that list replaces ours entirely, variable or not. Delete that entry, or add your configuration names to it.
+
+On Android you need one line first. Appduct publishes only `debug` and `release` variants, so when Appduct is in the build — the variable unset, `1` or `true` — an app with a `staging` **build type** fails at dependency resolution with `No matching variant of project :appduct_react-native was found`:
+
+```groovy title="android/app/build.gradle"
+buildTypes {
+  staging {
+    initWith release
+    matchingFallbacks = ["release"]   // or ["debug"] for a debuggable staging build
+  }
+}
+```
+
+At `0` or `false` the package is excluded from the build altogether, so nothing fails and no line is needed. The fallback picks which of Appduct's two variants `staging` compiles against. A `release` fallback follows `APPDUCT_ENABLED`: Appduct ships only when it's `1` or `true`. A `debug` fallback always carries the real implementation, because that variant is a debug build. A `staging` **product flavor** is something else and needs nothing — `stagingDebug` and `stagingRelease` behave like `debug` and `release`.
 
 **A misspelled value falls back to the default.** On Expo, prebuild fails with an error. In a bare React Native project, nothing reports it. Check the built app with [`appduct doctor`](#verify-the-built-app).
 
@@ -136,6 +151,8 @@ To make sure a project never includes Appduct on a platform, regardless of envir
     <Aside type="caution">
     If your app has `expo` installed, including a bare React Native app that added Expo modules, use the **With expo** tab instead. On Expo SDK 54 this file's `null` is ignored and Appduct still ships.
     </Aside>
+
+    If this entry already lists `configurations` for this package (see [A custom build type or configuration name](#a-custom-build-type-or-configuration-name)), replace that `platforms` block with the one above. Both write the same key, so whichever comes last in the file wins.
 
     Check that the exclusion worked. From your app root:
 

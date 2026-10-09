@@ -27,9 +27,17 @@ const devOnly = {
   ios: { configurations: ["Debug"] },
 };
 
+/**
+ * `configurations: []` is CocoaPods' "no restriction": the pod links into every Xcode
+ * configuration the project actually has. Listing `["Debug", "Release"]` instead would widen this
+ * by spelling and miss a configuration called `Staging` or `Internal`, and `pod install` hard-fails
+ * with "Unknown configuration whitelisted: Release" in a project that has no `Release` at all.
+ * Only the opt-in widens this way; the dev-only default above still names `Debug`, so a build is
+ * never carried by a name guess.
+ */
 const everyBuild = {
   android: ANDROID_BASE,
-  ios: { configurations: ["Debug", "Release"] },
+  ios: { configurations: [] },
 };
 
 /** `null` marks a platform as not linkable, which is how a package opts itself out. */

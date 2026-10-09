@@ -23,6 +23,7 @@ export { useAppductTool } from "@appduct/web/react";
 export { parseBootstrapPayload, parseBootstrapUrl } from "./bootstrap";
 export { createAppductClient, type AppductClient, type CreateAppductClientOptions } from "@appduct/shared/sdk";
 export type {
+  AppductPublicApi,
   CordierePublicApi,
   AppductSubscription,
   AppductToolGroupRegistrar,
