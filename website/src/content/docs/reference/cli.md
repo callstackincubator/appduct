@@ -135,6 +135,8 @@ Streams the events your app posts with `postEvent` until you stop it. With `--js
 | `--name <glob>` | Only events whose name matches this glob (`*` matches any run of characters; a pattern without `*` is an exact name), e.g. `"cart.*"`. Matches the whole name, case-sensitively. |
 | `--payload-max-bytes <n>` | Cap each event's payload to this many UTF-8 bytes of its JSON. Over the cap, the line's `data` carries `payloadPreview`/`payloadBytes`/`truncated: true` instead of `payload`. No default — payloads print whole unless you set this. |
 
+In each line, `data` carries what your app sent: `name`, `payload`, and the `ts` your app stamped it with, in Unix milliseconds. The timestamp leading the line is when the daemon received the event — a separate value, not a rounded version of `data.ts`.
+
 Device connections and tool calls are not printed. To see when a device connects, use `appduct sessions ls`.
 
 Each device keeps its last 256 app events (`eventBufferSize`), however many tool calls run in between. They're discarded when the session ends.

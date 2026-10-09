@@ -342,9 +342,13 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
   };
 
   const onSocketLost = (code: number | undefined, reason: string | undefined, lastError: string | undefined) => {
-    // The socket is gone, so no `tool_cancel` could arrive for what is in flight: abort it here.
+    handleSocketLost(code, reason, lastError);
+    // The socket is gone, so no `tool_cancel` could arrive for what is in flight: abort it here,
+    // after the state change, which is the order the Swift and Kotlin cores report them in.
     invoker.abortAll();
+  };
 
+  const handleSocketLost = (code: number | undefined, reason: string | undefined, lastError: string | undefined) => {
     const session = held;
     if (!session) {
       setState("closed", "socket_closed");

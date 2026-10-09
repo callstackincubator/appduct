@@ -19,6 +19,7 @@ public actor AppductClient {
   let defaultToolTimeoutMs: Int
   let requirePrivateIp: Bool
   let foregroundObserver: any AppductForegroundObserving
+  let backgroundTime: any AppductBackgroundTime
 
   // MARK: Unified session state
 
@@ -70,6 +71,8 @@ public actor AppductClient {
   var destroyed = false
   var lastErrorDetails: AppductErrorDetails?
   var foregroundSubscription: (any AppductDisposable)?
+  /// The OS background time held while the app is backgrounded with an active session.
+  var backgroundHold: (any AppductDisposable)?
 
   // MARK: Tool registry (registration order preserved)
 
@@ -89,6 +92,8 @@ public actor AppductClient {
     let task: Task<Void, Never>
     var cancelled = false
     var timedOut = false
+    /// The socket died under the call, so there is nothing to answer on.
+    var suspended = false
     /// "client_cancelled" (default for an explicit `tool_cancel` with no reason)/the wire
     /// `tool_cancel.reason`, "timeout", or "session_suspended" -- surfaced to a native `ToolHandler`
     /// via `ToolCallContext.cancelReason()` and to the RN bridge's `onToolCancel` event.
@@ -111,8 +116,14 @@ public actor AppductClient {
     timers: any AppductClientTimers = SystemAppductClientTimers(),
     defaultToolTimeoutMs: Int = APPDUCT_DEFAULT_TOOL_TIMEOUT_MS,
     requirePrivateIp: Bool? = nil,
-    foregroundObserver: (any AppductForegroundObserving)? = nil
+    foregroundObserver: (any AppductForegroundObserving)? = nil,
+    backgroundTime: (any AppductBackgroundTime)? = nil
   ) {
+    #if canImport(UIKit)
+      self.backgroundTime = backgroundTime ?? UIKitAppductBackgroundTime()
+    #else
+      self.backgroundTime = backgroundTime ?? NoBackgroundTime()
+    #endif
     self.transport = transport
     self.timers = timers
     self.defaultToolTimeoutMs = defaultToolTimeoutMs
@@ -270,7 +281,9 @@ public actor AppductClient {
 
   public struct AppductNotActiveError: Error, Sendable {}
 
-  /// Emits an `event` frame while active (PROTOCOL.md §7); rejects otherwise.
+  /// Emits an `event` frame while active (PROTOCOL.md §4); rejects otherwise. `ts` is Unix
+  /// milliseconds, the same unit `timers.now()` reports and Kotlin's `System.currentTimeMillis()`
+  /// sends.
   public func postEvent(_ name: String, payload: JSONValue? = nil) async throws {
     guard clientState == .active, let sessionId = heldSession?.sessionId else {
       throw AppductNotActiveError()
@@ -280,7 +293,7 @@ public actor AppductClient {
       "type": .string("event"),
       "session_id": .string(sessionId),
       "name": .string(name),
-      "ts": .number(timers.now() / 1_000),
+      "ts": .number(timers.now()),
     ]
     if let payload { message["payload"] = payload }
 
@@ -320,6 +333,9 @@ public actor AppductClient {
     }
 
     await transport.close()
+    // Only now: once the last background task ends iOS may suspend the app, and the close frame
+    // has to have left first.
+    releaseBackgroundTime()
   }
 
   public struct AppductClientClosedError: Error, Sendable {}
@@ -334,6 +350,7 @@ public actor AppductClient {
     abortAllInFlight()
     foregroundSubscription?.dispose()
     await transport.invalidate()
+    releaseBackgroundTime()
   }
 
   func sendWire(_ value: JSONValue) async throws {
