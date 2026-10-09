@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
-By default, Appduct is in your **debug** builds and not in your **release** builds. A release build doesn't contain its native code at all, rather than containing it switched off. This page covers changing that default and checking what actually shipped.
+By default, Appduct is in your **debug** builds and not in your **release** builds (in Flutter, **debug** and **profile**). A release build doesn't contain its native code at all, rather than containing it switched off. This page covers changing that default and checking what actually shipped.
 
 Which builds include Appduct and what an included build trusts are separate decisions. For trust, see [Security](/appduct/guides/security/).
 
@@ -15,11 +15,11 @@ Which builds include Appduct and what an included build trusts are separate deci
 
 One environment variable controls the native module on both platforms:
 
-| `APPDUCT_ENABLED` | Debug build | Release build |
-| --- | --- | --- |
-| not set (default) | Included | Not included |
-| `1` or `true` | Included | Included |
-| `0` or `false` | Not included | Not included |
+| `APPDUCT_ENABLED` | Debug build | Release build | Any other name |
+| --- | --- | --- | --- |
+| not set (default) | Included | Not included | iOS: not included. Android: build fails — see [A custom build type or configuration name](#a-custom-build-type-or-configuration-name) |
+| `1` or `true` | Included | Included | Included (Android needs one `matchingFallbacks` line first) |
+| `0` or `false` | Not included | Not included | Not included |
 
 Values are case-insensitive.
 
@@ -37,13 +37,53 @@ To leave it out even of debug builds:
 APPDUCT_ENABLED=0 npx expo prebuild && APPDUCT_ENABLED=0 npx expo run:ios
 ```
 
-:::caution[Build names matter]
-The default applies to Xcode configurations named exactly `Debug` and `Release`, and Gradle build types named exactly `debug` and `release`. A custom name, such as a `staging` configuration, doesn't get Appduct unless you set `APPDUCT_ENABLED=1` for that pipeline.
-:::
+### A custom build type or configuration name
+
+Both platforms key inclusion off the name, and each handles an unfamiliar name differently.
+
+On iOS, the default links Appduct only into a configuration named `Debug`, so a `Staging` configuration is left unlinked. `APPDUCT_ENABLED=1` lifts the restriction instead of adding a name, so it covers `Staging`, `Internal`, whatever you call it. One exception: if your app lists its own `configurations` for this package in its `react-native.config.js`, that list replaces ours entirely, variable or not. Delete that entry, or add your configuration names to it.
+
+On Android you need one line first. Appduct publishes only `debug` and `release` variants, so when Appduct is in the build — the variable unset, `1` or `true` — an app with a `staging` **build type** fails at dependency resolution with `No matching variant of project :appduct_react-native was found`:
+
+```groovy title="android/app/build.gradle"
+buildTypes {
+  staging {
+    initWith release
+    matchingFallbacks = ["release"]   // or ["debug"] for a debuggable staging build
+  }
+}
+```
+
+At `0` or `false` the package is excluded from the build altogether, so nothing fails and no line is needed. The fallback picks which of Appduct's two variants `staging` compiles against. A `release` fallback follows `APPDUCT_ENABLED`: Appduct ships only when it's `1` or `true`. A `debug` fallback always carries the real implementation, because that variant is a debug build. A `staging` **product flavor** is something else and needs nothing — `stagingDebug` and `stagingRelease` behave like `debug` and `release`.
 
 **A misspelled value falls back to the default.** On Expo, prebuild fails with an error. In a bare React Native project, nothing reports it. Check the built app with [`appduct doctor`](#verify-the-built-app).
 
 When Appduct is included, `pod install` and Gradle print `[appduct] native module INCLUDED in this build`. Nothing prints when it's left out. Treat the line as an early warning; `appduct doctor` is the real check.
+
+## Flutter: the `APPDUCT_ENABLED` define
+
+Flutter takes the same switch as a compile-time define instead of an environment variable:
+
+| `--dart-define=APPDUCT_ENABLED=` | Debug and profile build | Release build |
+| --- | --- | --- |
+| not set (default) | Included | Not included |
+| `true` | Included | Included |
+| `false` | Not included | Not included |
+
+To include Appduct in a release build, for example an internal build your CI or an agent drives:
+
+```bash
+flutter build apk --release --dart-define=APPDUCT_ENABLED=true
+flutter build ios --release --dart-define=APPDUCT_ENABLED=true
+```
+
+To leave it out even of debug and profile builds, pass `--dart-define=APPDUCT_ENABLED=false`.
+
+The define applies to the whole app, so the Dart code is removed or kept as one. A build that leaves Appduct out still compiles your `Appduct.ensureInitialized()` and `registerTool` calls; they do nothing and never throw, so shared code needs no `if` checks.
+
+**An included release build needs the platform settings a debug build gets for free.** Flutter adds the Android `INTERNET` permission only to the debug and profile manifests, so add it to `android/app/src/main/AndroidManifest.xml`. On iOS add `NSLocalNetworkUsageDescription` to `Info.plist`, and on macOS set `com.apple.security.network.client` to `true` in `Release.entitlements`. See [Flutter setup](/appduct/install/flutter/#set-up-the-app).
+
+Pin an included release build to your key with `APPDUCT_PINS` and `APPDUCT_TRUST`, passed with `--dart-define-from-file` so the pins live in a file rather than on a command line. See [Ship Appduct in a release build](/appduct/install/flutter/#ship-appduct-in-a-release-build).
 
 ## Strip Appduct's JavaScript too
 
@@ -73,6 +113,21 @@ const { registerTool, useAppductTool } = __DEV__
 ```
 
 Removing both the native module and the JavaScript is what an app store reviewer who expects no remote-control code at all will want to see. Either half alone still gives you a working app where Appduct does nothing.
+
+## Web: production builds
+
+`@appduct/web` leaves itself out of production bundles in any bundler. Its root entry resolves to the real code under the `development` export condition and to an inert entry with the same API under any other. The inert entry registers nothing, opens no connection and doesn't define `window.__APPDUCT__`, so your code needs no conditionals.
+
+| Build | `import "@appduct/web"` | `import "@appduct/web/enabled"` |
+| --- | --- | --- |
+| Development (Vite, webpack and Next.js set `development`; Metro doesn't, see below) | Included | Included |
+| Production | Inert | Included |
+
+To include Appduct in a build that isn't `development`, such as a staging build, import `@appduct/web/enabled` there. That entry is always the real one, so only import it in builds you control; see [Security](/appduct/guides/security/#web-pages).
+
+**React Native web on Metro needs `withAppduct` to connect in development.** Metro never sets the `development` condition, so `expo start --web` bundles the inert entry unless your `metro.config.js` wraps the config in [`withAppduct`](#strip-appducts-javascript-too). With it, development web bundles include Appduct and production web bundles leave it out. Without it, the page never connects, and nothing warns.
+
+A bundler that sets no `development` condition, such as plain esbuild, gives you the inert entry in development too. `connect()` then logs one warning that names this page's two fixes: set the `development` condition (esbuild: `--conditions=development`), or import `@appduct/web/enabled`. Nothing else warns.
 
 ## Leave Appduct out permanently
 
@@ -134,6 +189,8 @@ Apps using Appduct without React Native get the same debug-only default through 
 - **Android:** `debugImplementation` of `core`, `releaseImplementation` of `core-noop`. Depend on `core` for a variant to include it. See [Android setup](/appduct/install/android/#ship-appduct-in-a-release-build).
 
 `APPDUCT_ENABLED` doesn't apply to these apps.
+
+A Flutter app has its own define; see [Flutter](#flutter-the-appduct_enabled-define).
 
 ## Verify the built app
 

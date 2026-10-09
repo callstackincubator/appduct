@@ -8,7 +8,7 @@
 
 import { randomBytes } from "node:crypto";
 
-import { encodeBootstrap, type AddressFamily, type AgentEndpoint } from "@appduct/shared";
+import { encodeBootstrap, type AddressFamily, type AgentEndpoint, type LinkTransport } from "@appduct/shared";
 
 import type { Clock } from "../cli/types.js";
 import type { EventBus } from "./event-bus.js";
@@ -23,6 +23,8 @@ export type PendingLink = {
   token: Buffer;
   createdAt: Date;
   expiresAt: Date;
+  /** The listener this link can be claimed on, and only that one. */
+  transport: LinkTransport;
 };
 
 export type CreatedLink = {
@@ -32,8 +34,9 @@ export type CreatedLink = {
 };
 
 export type PendingLinkRegistryOptions = {
-  /** Resolves the current advertised endpoint at mint time (address may be re-detected). */
-  getEndpoint: () => AgentEndpoint;
+  /** Resolves the current advertised endpoint of a transport at mint time (the native address may
+   * be re-detected). */
+  getEndpoint: (transport: LinkTransport) => AgentEndpoint;
   clock: Clock;
   timers: TimerFns;
   eventBus: EventBus;
@@ -42,8 +45,9 @@ export type PendingLinkRegistryOptions = {
 export type PendingLinkRegistry = {
   /** `addressOverride` forces the endpoint address encoded into this one link's bootstrap payload
    * (the emulator/simulator fast path: `127.0.0.1`), leaving the detected endpoint used by
-   * every other link unaffected. */
-  create: (ttlSeconds: number, addressOverride?: string) => CreatedLink;
+   * every other link unaffected. It does not apply to a `web` link, whose address is always the
+   * loopback one the web listener binds. */
+  create: (ttlSeconds: number, addressOverride?: string, transport?: LinkTransport) => CreatedLink;
   /** Looks up a pending link without consuming it (used to distinguish "unknown" from "already claimed"). */
   get: (sessionId: string) => PendingLink | undefined;
   /** Removes and returns the link (successful claim consumes its single use). */
@@ -102,15 +106,15 @@ export const createPendingLinkRegistry = (options: PendingLinkRegistryOptions): 
   };
 
   return {
-    create: (ttlSeconds, addressOverride) => {
+    create: (ttlSeconds, addressOverride, transport = "native") => {
       const sessionId = generateSessionId();
       const token = randomBytes(TOKEN_BYTES);
       const createdAt = options.clock.now();
       const expiresAt = new Date(createdAt.getTime() + ttlSeconds * 1000);
-      const detectedEndpoint = options.getEndpoint();
+      const detectedEndpoint = options.getEndpoint(transport);
       // Overriding only ever changes the address (and its family); the port stays the daemon's
       // real wss port, since the listener already binds all interfaces (ARCHITECTURE.md §8).
-      const endpoint: AgentEndpoint = addressOverride
+      const endpoint: AgentEndpoint = addressOverride && transport === "native"
         ? {
             family: (addressOverride.includes(":") ? 6 : 4) as AddressFamily,
             address: addressOverride,
@@ -139,7 +143,7 @@ export const createPendingLinkRegistry = (options: PendingLinkRegistryOptions): 
         }
       }, ttlSeconds * 1000);
 
-      const link: PendingLink = { sessionId, token, createdAt, expiresAt };
+      const link: PendingLink = { sessionId, token, createdAt, expiresAt, transport };
       records.set(sessionId, { link, attempts: 0, timer });
 
       const deepLinkPayload = encodeBootstrap({

@@ -18,7 +18,7 @@ import type {
   InferToolResult,
 } from "../Appduct.types";
 import { jsonSchema } from "../Appduct.types";
-import type { CordierePublicApi } from "../public-api";
+import type { AppductPublicApi } from "../public-api";
 
 (globalThis as { __DEV__?: boolean }).__DEV__ = true;
 
@@ -48,7 +48,7 @@ const exactType =
 describe("handler inference across every accepted schema form (issue #27)", () => {
   test("compiles against the shared public API type", async () => {
     const { registerTool } = (await import("../noop")) as Pick<
-      CordierePublicApi,
+      AppductPublicApi,
       "registerTool"
     >;
 

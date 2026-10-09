@@ -3,6 +3,7 @@ package com.callstack.appduct
 import android.content.Context
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,6 +21,16 @@ import org.json.JSONObject
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+/** Wall-clock port: the epoch-millisecond time the client stamps disconnects and events with.
+ * Tests substitute a clock that reads their test scheduler. */
+internal fun interface AppductClock {
+    fun nowMs(): Long
+}
+
+internal object AppductSystemClock : AppductClock {
+    override fun nowMs(): Long = System.currentTimeMillis()
+}
 
 /** A subscription returned by `AppductClient.addXListener`; call [remove] to unsubscribe. */
 internal class AppductSubscription internal constructor(private val onRemove: () -> Unit) {
@@ -99,6 +110,9 @@ private data class ConnectOptionsInternal(
  */
 internal class AppductClient private constructor(
     private val defaultToolTimeoutMs: Long,
+    private val dispatcher: CoroutineDispatcher,
+    private val clock: AppductClock,
+    private val random: () -> Double,
     private val transportFactory: (
         emitStateChange: (String) -> Unit,
         emitMessageRaw: (String) -> Unit,
@@ -109,8 +123,12 @@ internal class AppductClient private constructor(
 ) {
     /** Real entry point: the transport is a real [AppductConnectionManager] over [context], and
      * foreground/background is observed via [AppductProcessLifecycleObserver]. */
+    @OptIn(ExperimentalCoroutinesApi::class)
     constructor(context: Context, defaultToolTimeoutMs: Long = APPDUCT_DEFAULT_TOOL_TIMEOUT_MS) : this(
         defaultToolTimeoutMs,
+        Dispatchers.Default.limitedParallelism(1),
+        AppductSystemClock,
+        Math::random,
         { onState: (String) -> Unit, onMessage: (String) -> Unit, onError: (AppductErrorDetails) -> Unit, onClose: (Map<String, Any?>) -> Unit ->
             AppductConnectionManager(context, onState, onMessage, onError, onClose)
         },
@@ -119,7 +137,9 @@ internal class AppductClient private constructor(
 
     /** Test-only entry point: substitutes a scripted [AppductTransport] and, by default, a
      * [AppductAppLifecycleObserver] that never reports backgrounded, so the whole client is
-     * exercisable on the plain JVM with no `Context`, no OkHttp, and no Robolectric. */
+     * exercisable on the plain JVM with no `Context`, no OkHttp, and no Robolectric. Passing a test
+     * [dispatcher], [clock] and [random] runs `delay` and `withTimeout` in virtual time. */
+    @OptIn(ExperimentalCoroutinesApi::class)
     internal constructor(
         transportFactory: (
             emitStateChange: (String) -> Unit,
@@ -130,14 +150,18 @@ internal class AppductClient private constructor(
         defaultToolTimeoutMs: Long = APPDUCT_DEFAULT_TOOL_TIMEOUT_MS,
         lifecycleObserverFactory: (onBackgroundedChanged: (Boolean) -> Unit) -> AppductAppLifecycleObserver =
             { AppductNoopLifecycleObserver() },
+        dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
+        clock: AppductClock = AppductSystemClock,
+        random: () -> Double = Math::random,
     ) : this(
         defaultToolTimeoutMs,
+        dispatcher,
+        clock,
+        random,
         transportFactory,
         lifecycleObserverFactory,
     )
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val dispatcher = Dispatchers.Default.limitedParallelism(1)
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
     private val transport: AppductTransport =
@@ -320,7 +344,7 @@ internal class AppductClient private constructor(
                 return@withContext false
             }
 
-            val nowMs = System.currentTimeMillis()
+            val nowMs = clock.nowMs()
             if (isAppductResumeLeaseExpired(lease, nowMs)) {
                 transport.clearResumeLease()
                 return@withContext false
@@ -398,12 +422,12 @@ internal class AppductClient private constructor(
                 // JS side rather than failing the whole event.
             }
         }
-        message.put("ts", System.currentTimeMillis())
+        message.put("ts", clock.nowMs())
 
         try {
             rawSend(message.toString())
         } catch (e: Throwable) {
-            emitError(AppductUnifiedError(phase = "socket", message = "Failed to send event \"$name\".", cause = e))
+            emitError(AppductUnifiedError(phase = "socket", message = e.sendFailureMessage("Failed to send event \"$name\"."), cause = e))
         }
     }
 
@@ -432,7 +456,7 @@ internal class AppductClient private constructor(
         if (destroyed) throw IllegalStateException("Appduct client was destroyed.")
 
         val options = toConnectOptionsInternal(input)
-        val nowSeconds = System.currentTimeMillis() / 1000
+        val nowSeconds = clock.nowMs() / 1000
         if (!isConnectOptionsValid(options, nowSeconds)) {
             throw IllegalArgumentException("Invalid or expired Appduct bootstrap payload.")
         }
@@ -491,7 +515,7 @@ internal class AppductClient private constructor(
     }
 
     private suspend fun handleUrlInternal(url: String) {
-        val nowSeconds = System.currentTimeMillis() / 1000
+        val nowSeconds = clock.nowMs() / 1000
         val allowPrivateLanOnly =
             try {
                 transport.getBuildConfig().allowPrivateLanOnly
@@ -644,7 +668,7 @@ internal class AppductClient private constructor(
         if (resumeInFlight || destroyed || myEpoch != epoch) return
         val session = heldSession ?: return
 
-        val nowMs = System.currentTimeMillis()
+        val nowMs = clock.nowMs()
         val disconnectedAtMs = session.disconnectedAtMs ?: nowMs
         session.disconnectedAtMs = disconnectedAtMs
         if (nowMs - disconnectedAtMs >= (session.graceS * 1000).toLong()) {
@@ -714,7 +738,7 @@ internal class AppductClient private constructor(
             return
         }
 
-        val delayMs = computeAppductFullJitterBackoffMs(reconnectAttempt)
+        val delayMs = computeAppductFullJitterBackoffMs(reconnectAttempt, random = random)
         reconnectAttempt += 1
 
         reconnectJob =
@@ -729,7 +753,7 @@ internal class AppductClient private constructor(
         if (graceJob != null) return
         val session = heldSession ?: return
 
-        val nowMs = System.currentTimeMillis()
+        val nowMs = clock.nowMs()
         val disconnectedAtMs = session.disconnectedAtMs ?: nowMs
         session.disconnectedAtMs = disconnectedAtMs
         val remainingGraceMs = (session.graceS * 1000).toLong() - (nowMs - disconnectedAtMs)
@@ -901,7 +925,7 @@ internal class AppductClient private constructor(
             return
         }
 
-        val nowMs = System.currentTimeMillis()
+        val nowMs = clock.nowMs()
         val disconnectedAtMs = session.disconnectedAtMs ?: nowMs
         session.disconnectedAtMs = disconnectedAtMs
         if (nowMs - disconnectedAtMs >= (session.graceS * 1000).toLong()) {
@@ -931,7 +955,7 @@ internal class AppductClient private constructor(
         try {
             rawSend(message.toString())
         } catch (e: Throwable) {
-            emitError(AppductUnifiedError(phase = "tool", message = "Failed to send the tool registry snapshot.", cause = e))
+            emitError(AppductUnifiedError(phase = "tool", message = e.sendFailureMessage("Failed to send the tool registry snapshot."), cause = e))
         }
 
         if (eventSnapshot == null) return@withLock
@@ -959,7 +983,7 @@ internal class AppductClient private constructor(
         try {
             rawSend(frame.toString())
         } catch (e: Throwable) {
-            emitError(AppductUnifiedError(phase = "tool", message = "Failed to sync the event registry.", cause = e))
+            emitError(AppductUnifiedError(phase = "tool", message = e.sendFailureMessage("Failed to sync the event registry."), cause = e))
         }
     }
 
@@ -981,12 +1005,18 @@ internal class AppductClient private constructor(
             try {
                 rawSend(json.toString())
             } catch (e: Throwable) {
-                emitError(AppductUnifiedError(phase = "tool", message = "Failed to sync the tool registry.", cause = e))
+                emitError(AppductUnifiedError(phase = "tool", message = e.sendFailureMessage("Failed to sync the tool registry."), cause = e))
             }
         }
     }
 
-    private suspend fun rawSend(json: String) =
+    private suspend fun rawSend(json: String) {
+        val bytes = json.toByteArray(Charsets.UTF_8).size
+        if (bytes > APPDUCT_MAX_FRAME_BYTES) throw AppductFrameTooLargeError(bytes)
+        sendToTransport(json)
+    }
+
+    private suspend fun sendToTransport(json: String) =
         suspendCancellableCoroutine<Unit> { cont ->
             transport.send(json) { error ->
                 if (error != null) cont.resumeWithException(error) else cont.resume(Unit)

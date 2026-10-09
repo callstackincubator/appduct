@@ -41,18 +41,11 @@ jobs:
           # restoring a pnpm store from a prior run's cache would let a poisoned cache entry slip
           # dependencies into a published package. Every run resolves and installs cleanly.
       - name: Validate production release version
+        # The three npm packages and the Flutter package must carry one version, and it must be
+        # the release tag's.
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          version=$(node -e '
-            const packages = ["shared", "appduct", "react-native"].map(
-              (name) => require(`./packages/${name}/package.json`).version,
-            );
-            if (new Set(packages).size !== 1) throw new Error(`Package versions differ: ${packages.join(", ")}`);
-            if (packages[0].includes("-")) throw new Error(`Prerelease versions are not publishable: ${packages[0]}`);
-            process.stdout.write(packages[0]);
-          ')
-          test "$RELEASE_TAG" = "v$version"
+        run: node scripts/release-version.mjs --tag "$RELEASE_TAG"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build packages
@@ -446,3 +439,25 @@ jobs:
           done
           echo "::error::Timed out waiting for deployment $DEPLOYMENT_ID to validate. Re-running this job resumes watching it rather than uploading again."
           exit 1
+
+  start-pub-publish:
+    # pub.dev refuses OIDC tokens from `release` events -- it accepts only `push` and
+    # `workflow_dispatch` -- so the publish lives in publish-pub.yaml and this job starts it at the
+    # release tag. A workflow_dispatch may be started with GITHUB_TOKEN (given `actions: write`),
+    # unlike a tag push made by it, which GitHub would not turn into a workflow run.
+    #
+    # Last, with the other irreversible publishes: pub.dev has no unpublish, so it waits for the
+    # npm publishes. Nothing needs this job, so a pub.dev problem never fails the npm release; the
+    # publish run shows its own result under Actions > Publish to pub.dev and can be started again
+    # by hand on the tag.
+    needs: [publish-cli, publish-react-native]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - name: Start the pub.dev publish at the release tag
+        run: gh workflow run publish-pub.yaml --repo "$GITHUB_REPOSITORY" --ref "$RELEASE_TAG"

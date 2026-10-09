@@ -12,7 +12,35 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./sdk": {
+      "types": "./dist/sdk/index.d.ts",
+      "import": "./dist/sdk.js",
+      "default": "./dist/sdk.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react.js",
+      "default": "./dist/react.js"
+    },
+    "./inert": {
+      "types": "./dist/inert/index.d.ts",
+      "import": "./dist/inert.js",
+      "default": "./dist/inert.js"
+    },
     "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "sdk": [
+        "dist/sdk/index.d.ts"
+      ],
+      "react": [
+        "dist/react/index.d.ts"
+      ],
+      "inert": [
+        "dist/inert/index.d.ts"
+      ]
+    }
   },
   "keywords": [
     "appduct",
@@ -29,14 +57,27 @@
     "build": "tsc -p tsconfig.build.json && node scripts/bundle.mjs",
     "clean": "rm -rf dist",
     "lint": "eslint src",
-    "test": "vitest run --config ../../vitest.config.ts src/__tests__",
+    "test": "vitest run --config ../../vitest.config.ts src",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
+    "@types/react": "~19.1.1",
     "esbuild": "^0.25.12",
-    "typescript": "~5.9.2"
+    "react": "19.1.0",
+    "typescript": "~5.9.2",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.2",
+    "zod4": "npm:zod@^4.4.3"
   },
   "files": [
     "dist"
-  ]
+  ],
+  "peerDependencies": {
+    "react": "*"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  }
 }

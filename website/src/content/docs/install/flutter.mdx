@@ -1,0 +1,305 @@
+---
+title: Flutter setup
+description: Add Appduct to a Flutter app, register tools in Dart, and connect it to the CLI.
+sidebar:
+  label: Flutter
+  order: 5
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+This page adds the `appduct` package to a Flutter app. You register tools in Dart, and the CLI or an agent calls them the same way as in any other Appduct app. The app can run on Android, iOS, macOS, Windows or Linux. Flutter web isn't supported.
+
+**Requirements**
+
+- Flutter 3.38 or newer (Dart 3.10), iOS 15 or newer, Android 7.0 (API 24) or newer.
+- The `appduct` CLI on your computer: `npm install -g appduct` (Node 20 or newer).
+
+Appduct is in your **debug** and **profile** builds and not in your **release** builds. To change that, see [Ship Appduct in a release build](#ship-appduct-in-a-release-build).
+
+## Set up the app
+
+<Steps>
+
+1. Add the package:
+
+   ```bash
+   flutter pub add appduct
+   ```
+
+2. Start Appduct in `main()`, before `runApp`:
+
+   ```dart title="lib/main.dart"
+   import 'package:appduct/appduct.dart';
+   import 'package:flutter/material.dart';
+
+   void main() {
+     WidgetsFlutterBinding.ensureInitialized();
+     Appduct.ensureInitialized();
+     runApp(const ShopApp());
+   }
+   ```
+
+   It has to run before `runApp`, so that Appduct sees its connection link before your router does. Calling it in a release build does nothing.
+
+3. Give the app a URL scheme. Appduct connects by opening a link like `myapp:///?appduct=…` in your app. Do this for each platform you run on:
+
+   <Tabs syncKey="flutter-platform">
+     <TabItem label="Android">
+       Add an intent filter to your activity in `android/app/src/main/AndroidManifest.xml`:
+
+       ```xml title="android/app/src/main/AndroidManifest.xml"
+       <intent-filter>
+         <action android:name="android.intent.action.VIEW" />
+         <category android:name="android.intent.category.DEFAULT" />
+         <category android:name="android.intent.category.BROWSABLE" />
+         <data android:scheme="myapp" />
+       </intent-filter>
+       ```
+     </TabItem>
+     <TabItem label="iOS and macOS">
+       Add the scheme to `ios/Runner/Info.plist`, and to `macos/Runner/Info.plist` if you run on macOS:
+
+       ```xml title="ios/Runner/Info.plist"
+       <key>CFBundleURLTypes</key>
+       <array>
+         <dict>
+           <key>CFBundleURLSchemes</key>
+           <array>
+             <string>myapp</string>
+           </array>
+         </dict>
+       </array>
+       ```
+     </TabItem>
+     <TabItem label="Windows and Linux">
+       Nothing to register. These platforms have no link delivery from the CLI; you pass the link to the app yourself, see [Connect a desktop app](#connect-a-desktop-app).
+     </TabItem>
+   </Tabs>
+
+   The scheme can differ from the one your app uses for its own deep links.
+
+4. Allow the connection to your computer:
+
+   - **Android:** add the internet permission to `android/app/src/main/AndroidManifest.xml`. Flutter only puts it in the debug and profile manifests, so without it in the main one, a release build you opt in to Appduct can't connect.
+
+     ```xml
+     <uses-permission android:name="android.permission.INTERNET" />
+     ```
+
+   - **iOS:** add a local network usage description to `ios/Runner/Info.plist`. iOS shows it when the app first connects to a computer on your network.
+
+     ```xml
+     <key>NSLocalNetworkUsageDescription</key>
+     <string>Lets Appduct connect to your computer during development.</string>
+     ```
+
+   - **macOS:** set the network client entitlement to `true` in both `macos/Runner/DebugProfile.entitlements` and `macos/Runner/Release.entitlements`.
+
+     ```xml
+     <key>com.apple.security.network.client</key>
+     <true/>
+     ```
+
+5. Register a tool, for example right after `ensureInitialized`:
+
+   ```dart
+   Appduct.instance.registerTool(
+     'seed_cart',
+     description: 'Fill the cart with test items.',
+     inputSchema: {
+       'type': 'object',
+       'properties': {
+         'items': {'type': 'number'},
+       },
+       'required': ['items'],
+     },
+     handler: (args, context) {
+       final items = (args['items'] as num).toInt();
+       return {'added': items};
+     },
+   );
+   ```
+
+   See [Register tools in Dart](#register-tools-in-dart) for the details.
+
+6. In your project directory, record your application ids so the CLI can open links on a device:
+
+   ```bash
+   appduct init --android-app-id com.example.shop --ios-app-id com.example.shop
+   ```
+
+   This writes `.appduct/config.json`, which you commit, reads the scheme from your platform projects, and prints the MCP config entry for this app.
+
+</Steps>
+
+## Connect and check it works
+
+Run the app in debug mode on a simulator, an emulator or a USB device, then, from your project directory:
+
+```bash
+appduct sessions link --open ios-sim     # or: --open android
+appduct tools ls
+appduct tools call seed_cart --input '{"items":3}'
+```
+
+For a physical iPhone, run `appduct sessions link --qr` and scan the code with its camera. The phone must be on the same local network as your computer. See [Connect a device](/appduct/guides/cli/#connect-a-device) for other options.
+
+The app restores its session after a short network drop and after a hot restart. If the app process is killed, connect again with a new link.
+
+## Connect a desktop app
+
+On Windows and Linux the CLI can't open a link in your app, so you create a link and hand it to the app yourself. This works on macOS too. Use either of two ways:
+
+- Set `APPDUCT_LINK` when you start the app in debug mode:
+
+  ```bash
+  APPDUCT_LINK="$(appduct sessions link --scheme myapp --json | jq -r .data.deepLink)" flutter run -d linux
+  ```
+
+  The command needs [`jq`](https://jqlang.org); without it, copy the `deepLink` value from the `--json` output.
+
+- Call `connect` from your own code, for example from a debug menu or a test:
+
+  ```dart
+  await Appduct.instance.connect(link);
+  ```
+
+  `connect` throws an `AppductException` when the string isn't an Appduct link or the daemon refuses it.
+
+A link works once and expires after 5 minutes, so a new `flutter run` needs a new link. A hot restart resumes the session without one. `APPDUCT_LINK` is ignored in profile and release builds.
+
+On Windows and Linux, a crash leaves a stale session record behind. The next start can fail to resume once; connect again with a new link.
+
+## Register tools in Dart
+
+- **Schemas are plain JSON Schema**, written as a `Map<String, Object?>`. Appduct doesn't validate arguments against them: they tell agents what to send. To reject bad arguments before your handler runs, wrap it in `validated(schema, handler)` from `package:appduct/validation.dart`; mismatches fail the call with `tool_input_validation_error`.
+- **Read numbers as `num`.** A JSON number reaches your handler as an `int` or a `double`, depending on how the caller wrote it: `3` is an `int`, `3.0` a `double`. `args['items'] as double` throws for `3`, so cast with `as num` and convert: `(args['items'] as num).toInt()`.
+- **Return** `null`, a number, string, bool, a `List`, a `Map<String, Object?>`, or nested combinations. Anything else, such as a `DateTime`, fails the call with `tool_serialization_error`.
+- **Fail a call on purpose** by throwing `ToolFailure('tool_execution_error', 'Cart is locked')`. Any other thrown error fails the call with `tool_execution_error` and its message.
+- **Handlers run on your app's main isolate**, so they can touch widgets, state and plugins. A handler that computes for a long time freezes your UI and delays other calls. Move the work to another isolate:
+
+  ```dart
+  Appduct.instance.registerTool(
+    'hash_catalog',
+    description: 'Hash the downloaded catalog.',
+    timeout: const Duration(seconds: 30),
+    handler: (args, context) => Isolate.run(() => hashCatalog(catalogPath)),
+  );
+  ```
+
+  Code inside `Isolate.run` can't call Appduct or plugins. Pass it plain data and return plain data.
+- **Create every future a handler awaits inside the handler.** A handler runs in its own error zone. If it awaits a future created earlier, such as a field you built at startup, and that future fails, the error doesn't reach your `try`/`catch`; the call then ends with `tool_timeout` instead of `tool_execution_error`.
+
+  ```dart
+  // Fails the call with tool_execution_error:
+  handler: (args, context) async => await api.fetchCart(),
+
+  // Ends with tool_timeout if _cartFuture fails:
+  handler: (args, context) async => await _cartFuture,
+  ```
+
+- **Progress and cancellation:** `context.reportProgress(0.5, 'halfway')` sends progress. `context.cancelled` completes when the caller cancels, the call times out or the app goes to the background, and `context.isCancelled` tells you the same.
+- **Optional arguments:** `timeout` (default 10 seconds) and `group`. See [Writing tools](/appduct/guides/writing-tools/) for what each one does.
+- **Unregistering:** `registerTool` returns a function; call it to unregister. Registering the same name again replaces the first handler.
+- **Tools tied to a screen:** wrap a widget in `AppductTool` to register a tool while the widget is mounted:
+
+  ```dart
+  AppductTool(
+    name: 'read_cart_total',
+    description: 'Read the total shown on the cart screen.',
+    handler: (args, context) => {'total': cart.total},
+    child: const CartScreen(),
+  )
+  ```
+
+## Watch the connection and send events
+
+`Appduct.instance.state` is a `ValueListenable` holding `idle`, `connecting`, `active`, `reconnecting` or `closed`. To tell a test or agent that something happened, call `postEvent`; it's dropped when no session is connected:
+
+```dart
+Appduct.instance.registerEvent(
+  'cart.changed',
+  description: 'The cart contents changed.',
+  payloadSchema: {
+    'type': 'object',
+    'properties': {
+      'count': {'type': 'number'},
+    },
+  },
+);
+
+await Appduct.instance.postEvent('cart.changed', {'count': 3});
+```
+
+`registerEvent` is optional: it lists the event for agents before it is posted. `appduct events ls` shows what is declared. Read events with [`appduct events tail`](/appduct/guides/cli/#watch-events), or [wait for one from a test](/appduct/guides/cli/#drive-the-app-from-a-test-suite). Call `disconnect()` to end the session.
+
+## Ship Appduct in a release build
+
+A Flutter release build leaves Appduct out: no connection code runs and the tools you register do nothing. To include it in an internal or QA build, or to leave it out of debug and profile builds, set `APPDUCT_ENABLED` when you build:
+
+| `--dart-define=APPDUCT_ENABLED=` | Debug and profile build | Release build |
+| --- | --- | --- |
+| not set (default) | Included | Not included |
+| `true` | Included | Included |
+| `false` | Not included | Not included |
+
+```bash
+flutter build apk --release --dart-define=APPDUCT_ENABLED=true
+flutter build ios --release --dart-define=APPDUCT_ENABLED=true
+```
+
+An included release build still needs the platform settings from [step 4](#set-up-the-app): on Android, `INTERNET` in the main manifest.
+
+Pin that build to your key before it leaves your team. Put the settings in a file so they stay out of your shell history, and pass it with `--dart-define-from-file`:
+
+```json title="appduct.release.json"
+{
+  "APPDUCT_ENABLED": "true",
+  "APPDUCT_PINS": "sha256/REPLACE_WITH_KEYGEN_OUTPUT",
+  "APPDUCT_TRUST": "pin",
+  "APPDUCT_ALLOW_PRIVATE_LAN_ONLY": "true"
+}
+```
+
+```bash
+flutter build apk --release --dart-define-from-file=appduct.release.json
+```
+
+| Define | Value |
+| --- | --- |
+| `APPDUCT_PINS` | Comma-separated `sha256/...` pins, printed by `appduct keygen` |
+| `APPDUCT_TRUST` | `pin` or `link`. Any other value fails every connection attempt. |
+| `APPDUCT_ALLOW_PRIVATE_LAN_ONLY` | `true` (default): links must point to a local network address. `false` also allows public addresses. |
+
+With pins set, the app refuses any other computer, whatever the link says. See [Security](/appduct/guides/security/) for what each mode protects against.
+
+Always check the built app, not the build command:
+
+```bash
+appduct doctor build/app/outputs/flutter-apk/app-release.apk --assert-absent
+appduct doctor build/ios/iphoneos/Runner.app --assert-absent
+```
+
+## Troubleshooting
+
+**`Appduct.instance` throws "Call Appduct.ensureInitialized() before runApp".** Call `Appduct.ensureInitialized()` in `main()` before using `Appduct.instance`.
+
+**The app opens the link but never connects, on Android.** The main manifest lacks the `INTERNET` permission. A debug build works without it, because Flutter adds it to the debug manifest; an included release build doesn't.
+
+**Nothing connects on a physical iPhone.** Allow Local Network access for the app in Settings, and check that `NSLocalNetworkUsageDescription` is in `Info.plist`.
+
+**Nothing connects on macOS.** Check that `com.apple.security.network.client` is `true` in both entitlement files.
+
+**The log says "Appduct is off in this engine" or "in this isolate".** Appduct runs in one engine and its main isolate. A second Flutter engine, or code in a background isolate, gets a version that does nothing.
+
+**A tool call ends with `tool_timeout` and the handler awaited an earlier future.** See [the note on futures](#register-tools-in-dart) above.
+
+**The scheme isn't found by `appduct init`.** Run it from the Flutter project root; it reads `android/app/`, `ios/Runner` and `macos/Runner`. Or pass `--scheme myapp`.
+
+## Next steps
+
+- [Write more useful tools](/appduct/guides/writing-tools/): schemas, timeouts, and groups. Tool registration lives in Dart, on this page.
+- [Connect an agent](/appduct/guides/agents/) such as Claude Code or Cursor over MCP.
+- [Drive the app from a CLI or an E2E test](/appduct/guides/cli/).
+- [Keep Appduct out of your release builds](/appduct/guides/build-variants/#flutter-the-appduct_enabled-define), and verify it with `appduct doctor`.

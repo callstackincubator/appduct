@@ -56,10 +56,38 @@ Deliberately out of scope, so the boundaries of the design are explicit:
 └──────────────────────────────────────────────────────────┘
 ```
 
+Browsers reach the daemon on a second listener, `ws://127.0.0.1:<webPort>`, not drawn above.
+
 - One daemon per operator machine (per user). It is long-lived and never exits because
   of anything a device does.
 - Devices connect **to** the daemon over pinned `wss://`; that direction is what works for
   physical phones.
+- Web pages connect to a second listener: plain `ws://` on `127.0.0.1` and `webPort`, never
+  reachable from other machines. A browser can't pin the key, so the listener refuses an upgrade
+  with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`. A page the test runner
+  drives through Playwright can skip that listener: `attachPage(page, { link })` (`appduct/client`)
+  exposes a binding on the page, and `src/devtools-relay/` passes the page's session frames to the
+  same listener over a Node socket, which sends no `Origin`. The page selects it with
+  `connect(link, { transport: "devtools" })`, so an `https` page needs no `webOrigins` entry and
+  opens no connection of its own. One binding serves a page for its lifetime; a later `attachPage`
+  re-points it at the new link, which suspends the first link's session for its grace period; until
+  it expires, `connect()` with no selector is `ambiguous_session`, so select the new session with
+  `connect({ selector: link.sessionId })` or `waitForSession`. The binding belongs to the page's target, so a popup or a navigation
+  that creates a new target is not relayed. A page in a Chrome launched with `--remote-debugging-port`
+  needs no Playwright: `web.attach` (§5) has the daemon pick the tab through the `DevtoolsBrowser`
+  port (raw CDP over `ws`, one WebSocket per relayed tab, memory fake beside it), add the binding,
+  run the connect script and run the same relay itself, so the session outlives the call. A link is claimable
+  only on the listener of its transport (`link.create`'s `transport`, §5). The page side is
+  `packages/web` (`@appduct/web`): a TypeScript port of the native session core under the same SDK
+  layer as React Native. It has three entries. `.` resolves by export condition: `development`
+  gives `./enabled`, anything else gives the inert entry, which has the same API, registers
+  nothing, opens no connection, never defines `window.__APPDUCT__`, and warns once on `connect()`.
+  `./enabled` is the real client, importable explicitly. It reads `#appduct=` on load, removes it
+  from the address bar and claims, resumes from `sessionStorage` after a reload, and publishes
+  `window.__APPDUCT__.connect` (and `receive`, which the relay calls) for the `script` that `appduct_connect` returns.
+  `@appduct/web/react` adds `useAppductTool`, built from the same `createUseAppductTool` as React
+  Native's; React Native's `browser` export condition resolves to `@appduct/web` so a web build
+  needs no web-specific code. Without a `window` (server rendering) every call does nothing.
 - The CLI and MCP server never touch sockets, keys, or state files directly; everything
   goes through the daemon RPC.
 
@@ -100,6 +128,7 @@ The daemon refuses to load a key file that is group/world-readable.
   "policy": { "default": "allow", "destructive": "allow" },
   "advertisedIp": null,
   "scheme": null,
+  "webOrigins": [],
   "restartDaemonOnVersionMismatch": false
 }
 ```
@@ -265,9 +294,10 @@ Methods:
 
 | Method | Params | Result |
 | --- | --- | --- |
-| `daemon.status` | — | `{ version, pid, startedAt, wssPort, pinnedKeys: [spkiPin], sessions: SessionSummary[], pendingLinks }` — `pendingLinks` counts minted-but-unclaimed links (not sessions, §6, but live state a restart destroys; §4's version drift check reads it). Absent from daemons that predate this field. |
+| `daemon.status` | — | `{ version, pid, startedAt, wssPort, webPort, pinnedKeys: [spkiPin], sessions: SessionSummary[], pendingLinks }` — `pendingLinks` counts minted-but-unclaimed links (not sessions, §6, but live state a restart destroys; §4's version drift check reads it). Absent from daemons that predate this field. |
 | `daemon.shutdown` | — | `{ ok: true }` (then exits) |
-| `link.create` | `{ ttlSeconds?, addressOverride? }` | `{ sessionId, deepLinkPayload, endpoint: { family, address, port }, expiresAt }` — `deepLinkPayload` is the base64url bootstrap blob; callers compose `<scheme>:///?appduct=<payload>`. `addressOverride` forces the advertised address (the emulator/simulator fast path uses it to force `127.0.0.1`). |
+| `link.create` | `{ ttlSeconds?, addressOverride?, transport? }` | `{ sessionId, deepLinkPayload, endpoint: { family, address, port }, expiresAt }` — `deepLinkPayload` is the base64url bootstrap blob; callers compose `<scheme>:///?appduct=<payload>`. `addressOverride` forces the advertised address (the emulator/simulator fast path uses it to force `127.0.0.1`). `transport` is `"native"` (default) or `"web"`: a web link encodes `127.0.0.1` and `daemon.status`'s `webPort`, ignores `addressOverride`, and can only be claimed on the plain-HTTP web listener (which refuses an upgrade with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`); a link presented on the other transport's listener closes `1008 wrong_transport`. |
+| `web.attach` | `{ url, browserUrl, targetId?, ttlSeconds? }` | `{ sessionId, url, targetId, expiresAt }` — picks the tab with `targetId`, else the one tab of the browser at `browserUrl` whose URL starts with `url`, and fails with `invalid_request` listing the open tabs and their target ids when none or several match. It then mints a web link, adds the binding over CDP, connects the page with `transport: "devtools"` and relays it until the tab closes. |
 | `sessions.list` | — | `SessionSummary[]` |
 | `sessions.describe` | `{ selector? }` | full session detail incl. device metadata, state timestamps, tool count |
 | `sessions.revoke` | `{ selector? }` | `{ ok: true }` — closes socket (code 1000), frees alias |
@@ -403,14 +433,19 @@ Rules:
   successful resume the resume token is **rotated** (old one invalid immediately).
 - `ACTIVE → SUSPENDED` (socket close/error/heartbeat loss): the tool registry, device
   metadata, and alias are retained. Pending tool calls fail fast with `session_suspended`.
-- `SUSPENDED → ACTIVE` via `session_resume` on a fresh pinned socket within
-  `graceSeconds`. After resume the app re-sends a full `tool_registry_snapshot`
-  (authoritative; replaces the retained registry).
+- `ACTIVE → ACTIVE` via `session_resume` while the old socket is still open: the daemon closes
+  the old socket (`1000 session_replaced`), adopts the new one and emits `session_resumed`
+  without suspending. Calls pending on the old socket fail fast with `session_suspended`
+  (the app aborted them with that socket) and frames the old socket still delivers are dropped.
+- `SUSPENDED → ACTIVE` via `session_resume` on a fresh socket within
+  `graceSeconds`. A session resumes only on the listener it was claimed on; a resume on the
+  other listener closes `1008 wrong_transport` and leaves the resume token valid. After resume the app re-sends a full
+  `tool_registry_snapshot` (authoritative; replaces the retained registry).
 - Session ids and aliases never collide across live sessions. Terminal states
   (`DISCARDED`, `EXPIRED`, `REVOKED`) free the alias.
-- There is **no limit** on concurrent sessions; all share the single wss listener.
+- There is **no limit** on concurrent sessions; all share the two listeners (pinned wss and local web).
 
-## 7. Wire protocol v2 (app ↔ daemon, over pinned wss)
+## 7. Wire protocol v2 (app ↔ daemon, over pinned wss or the local web listener)
 
 **[PROTOCOL.md](PROTOCOL.md) is the normative reference** for the message catalog, frame
 rules, close codes, keepalive, and the `ToolDescriptor` shape. Don't duplicate it here; the
@@ -658,6 +693,10 @@ developer's private key.
 `app.config.js` / `app.config.ts` are deliberately **not** evaluated — running arbitrary project
 code to read one string is a far larger blast radius than this warrants. Dynamic-config projects
 use `--scheme`, `APPDUCT_SCHEME`, or `appduct init --scheme <s>`.
+
+In a Flutter project (`pubspec.yaml` at the root) the Android probes in b run against `android/`
+instead of the root, and `appduct init` prints the Flutter setup steps in place of the React
+Native reminder.
 
 `appduct init`, run in an app root, writes that project `.appduct/config.json` (`scheme`, and
 now `appId.ios`/`appId.android` via `--ios-app-id <id>`/`--android-app-id <id>`) and prints the MCP
@@ -1056,7 +1095,15 @@ it.
 packages/
   shared/          @appduct/shared — wire protocol v2 (messages, bootstrap codec,
                    tool descriptors, error types), RPC method/param/result types,
-                   Standard Schema helpers. No runtime deps.
+                   Standard Schema helpers. No runtime deps. Also the TypeScript SDK
+                   layer every JS binding builds on, as three separate entries so the CLI
+                   (root entry only) never loads it: `/sdk` (`createAppduct(core)`, the
+                   `AppductCore` interface a platform binding implements, schema
+                   conversion, tool groups; never imports react), `/react`
+                   (`createUseAppductTool`; `react` is an optional peer dependency) and
+                   `/inert` (the few runtime values a noop entry needs, no client code).
+                   A noop entry may import from `/inert` only: importing `/sdk` would ship
+                   the whole client in release builds.
   appduct/      CLI + daemon + MCP:
     src/daemon/    lifecycle (pidfile, UDS server, auto-spawn helpers), session engine,
                    link minter, tls (key loading and leaf-cert minting on top of
@@ -1070,7 +1117,10 @@ packages/
     src/mcp/       stdio MCP server
     src/events/    waitForAppEvent, the drain-then-live event wait shared by mcp/ and client/
     src/client/    appduct/client, the programmatic client for test runners
-  react-native/    @appduct/react-native (entries: ., /auto, /noop, /metro, app.plugin.js). Depends only on
+    src/devtools-relay/  relays a page's session frames between a Playwright binding and the
+                   daemon's web listener (`attachPage` and `web.attach` wire it); ports with memory fakes beside them
+  react-native/    @appduct/react-native (entries: ., /auto, /noop, /metro, app.plugin.js). Implements
+                   `AppductCore` with its TurboModule and keeps the public API; depends only on
                    @appduct/shared — no third-party runtime deps, which is why no
                    JSON Schema validator ships with it (§11's raw schema form). Vendors
                    packages/native at build time (see below) rather than depending on it.
@@ -1078,6 +1128,24 @@ packages/
                    (standalone Gradle project, packages/native/android) core. Not an
                    npm/pnpm workspace package -- no package.json. §11,
                    docs/internal/native-core.md.
+  flutter/         Flutter plugin `appduct`, not published yet. Not an npm/pnpm workspace
+                   package -- no package.json, so turbo and pnpm never see it. `lib/src/core/`
+                   is pure Dart (only dart:async, dart:convert, dart:typed_data, dart:math;
+                   a test enforces it): bootstrap link and payload decoding, frame
+                   encode/decode, descriptor validation, close-code classification, all
+                   checked against packages/native/fixtures, and the session core
+                   (`createDartCore`: claim and resume, reconnect, keepalive via the socket,
+                   backgrounding, registries, tool calls), a port of packages/web/src/core
+                   over the ports in `ports.dart`, each with a memory fake beside it, and
+                   replaying the session scenarios. `lib/src/io/` holds the dart:io
+                   adapters (no Flutter import): the pinned `wss` transport (empty
+                   SecurityContext, every leaf checked against the SPKI pin), trust
+                   resolution from the `APPDUCT_PINS` / `APPDUCT_TRUST` build defines, and a
+                   file lease store. `lib/src/flutter/composition.dart` wires them into the
+                   binding (the lease file on Windows and Linux, the shim elsewhere) and reads
+                   `APPDUCT_ALLOW_PRIVATE_LAN_ONLY` (default true). Test it with
+                   `cd packages/flutter && flutter test` after `pnpm build`: two tests run
+                   against the built daemon (CI job `flutter` in test.yaml).
 playground/        reference app (Expo dev build)
 playground-native/ plain iOS and Android apps on packages/native, no React Native
 ```

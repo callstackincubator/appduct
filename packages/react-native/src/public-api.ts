@@ -1,4 +1,9 @@
 import type { ToolDescriptor } from "@appduct/shared";
+import type {
+  AppductSubscription,
+  AppductToolGroupRegistrar,
+} from "@appduct/shared/sdk";
+import type { UseAppductToolOptions } from "@appduct/shared/react";
 import type { DependencyList } from "react";
 
 import type {
@@ -12,27 +17,15 @@ import type {
   AppductToolRegistration,
   AppductUnifiedListenerMap,
 } from "./Appduct.types";
-import type { UseAppductToolOptions } from "./useAppductTool";
 
-export type AppductSubscription = { remove(): void };
-
-/** `createToolGroup`'s result: `registerTool` with `group` bound (a registration passed to it
- * cannot set its own `group`). */
-export type AppductToolGroupRegistrar = <
-  TInputSchema extends AppductRuntimeSchema | undefined,
-  TOutputSchema extends AppductRuntimeSchema | undefined,
->(
-  registration: AppductToolRegistration<TInputSchema, TOutputSchema> & {
-    group?: undefined;
-  },
-) => AppductSubscription;
+export type { AppductSubscription, AppductToolGroupRegistrar };
 
 /**
  * Public API surface shared by the `.` (real) and `./noop` (inert) entries (ARCHITECTURE.md §11).
  * Both entries are typed against this single interface so they cannot drift — see
  * `__tests__/noop-parity.test.ts`, which mirrors the pattern of `connect-options-parity.test.ts`.
  */
-export type CordierePublicApi = {
+export type AppductPublicApi = {
   registerTool<
     TInputSchema extends AppductRuntimeSchema | undefined,
     TOutputSchema extends AppductRuntimeSchema | undefined,
@@ -85,3 +78,12 @@ export type CordierePublicApi = {
 
   getAppductBuildConfig(): AppductBuildConfig;
 };
+
+/**
+ * The name this type shipped under before the product was called Appduct. Removing it is #161,
+ * whose first step is marking the removal `Breaking:` in `CHANGELOG.md` — anything else lets
+ * `cut-release` ship it as a patch and break the apps this tag is warning.
+ *
+ * @deprecated Use `AppductPublicApi`. Removed in 0.16.0 (#161).
+ */
+export type CordierePublicApi = AppductPublicApi;

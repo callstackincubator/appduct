@@ -289,6 +289,18 @@ try Appduct.shared.register(name: "show_alert", description: "Shows a native ale
 `ToolCallContext.reportProgress(progress:message:)` and `.cancelReason()` are themselves safe to
 call from any thread and need no such hop.
 
+## Backgrounding
+
+When the app goes to the background, tool calls keep working for as long as iOS lets the app
+run, about 30 seconds. A call that finishes within that time returns its result. After that,
+calls fail at once with `session_suspended` and a message saying the app is in the background,
+including a call still running when the time ends. `appduct sessions ls` shows the session as
+`suspended (app in background)`.
+The session resumes on its own when the app returns to the foreground.
+
+Appduct asks iOS for this time the way any app can. It needs no background mode, entitlement or
+`Info.plist` change, and it does not bring the app to the foreground.
+
 ## Troubleshooting
 
 **`handle(_:)` always returns `false`.** The URL doesn't carry a `appduct` query parameter —

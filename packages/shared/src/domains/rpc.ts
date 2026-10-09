@@ -8,6 +8,7 @@ export const RPC_METHODS = {
   daemonStatus: "daemon.status",
   daemonShutdown: "daemon.shutdown",
   linkCreate: "link.create",
+  webAttach: "web.attach",
   sessionsList: "sessions.list",
   sessionsDescribe: "sessions.describe",
   sessionsRevoke: "sessions.revoke",
@@ -75,6 +76,8 @@ export type DaemonStatusResult = {
   /** ISO 8601. */
   startedAt: string;
   wssPort: number;
+  /** The port of the plain-HTTP listener on `127.0.0.1` that web pages connect to. */
+  webPort: number;
   pinnedKeys: string[];
   sessions: SessionSummary[];
   /**
@@ -109,8 +112,14 @@ export type DaemonShutdownResult = { ok: true };
 
 // --- link.create ---
 
+/** Which listener may claim a link: the pinned-TLS one (`native`) or the `127.0.0.1` web one. */
+export type LinkTransport = "native" | "web";
+
 export type LinkCreateParams = {
   ttlSeconds?: number;
+  /** Defaults to `native`. A `web` link encodes `127.0.0.1` and the web port, ignores
+   * `addressOverride`, and can only be claimed on the web listener. */
+  transport?: LinkTransport;
   /** Forces the advertised address encoded into the bootstrap payload (ARCHITECTURE.md §8's
    * emulator/simulator fast path: `127.0.0.1`, since the wss listener already binds all
    * interfaces). Omitted for the normal LAN/QR delivery path. */
@@ -134,6 +143,28 @@ export type LinkCreateResult = {
    * `cliPins` are configured; embedded pins always win.
    */
   pin: string;
+};
+
+// --- web.attach ---
+
+export type WebAttachParams = {
+  /** The tab's address, or the start of it. The one tab whose URL starts with this is attached. */
+  url: string;
+  /** The debugging endpoint of a Chromium launched with `--remote-debugging-port`, such as `http://127.0.0.1:9222`. */
+  browserUrl: string;
+  /** A CDP target id: picks the tab directly, for when several tabs match `url`. */
+  targetId?: string;
+  ttlSeconds?: number;
+};
+
+export type WebAttachResult = {
+  sessionId: string;
+  /** The tab's own address, as the browser lists it. It carries no link payload. */
+  url: string;
+  /** The CDP target id of the attached tab. */
+  targetId: string;
+  /** Unix seconds. */
+  expiresAt: number;
 };
 
 // --- sessions.list / sessions.describe / sessions.revoke ---

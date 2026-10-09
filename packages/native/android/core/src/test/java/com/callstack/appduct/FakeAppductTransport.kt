@@ -3,6 +3,16 @@ package com.callstack.appduct
 import org.json.JSONObject
 import java.util.concurrent.CopyOnWriteArrayList
 
+/** One thing the client asked of a [FakeAppductTransport], in the order it asked. */
+internal sealed class FakeWireEvent {
+    data class Connect(val options: Map<String, Any?>) : FakeWireEvent()
+
+    data class Send(val text: String) : FakeWireEvent()
+
+    /** The client closed the connection because the app went to the background. */
+    data object Suspend : FakeWireEvent()
+}
+
 /**
  * A scripted [AppductTransport] driving [AppductClient] tests on the plain JVM -- no
  * `Context`, no OkHttp, no Robolectric. `connect()`/`send()`/`close()` succeed synchronously by
@@ -19,6 +29,9 @@ internal class FakeAppductTransport(
 
     val sentMessages = CopyOnWriteArrayList<String>()
     val connectCalls = CopyOnWriteArrayList<Map<String, Any?>>()
+
+    /** Every `connect()` and every accepted `send()`, interleaved in call order. */
+    val wireEvents = CopyOnWriteArrayList<FakeWireEvent>()
 
     @Volatile var nextConnectError: Throwable? = null
 
@@ -48,6 +61,7 @@ internal class FakeAppductTransport(
         completion: (Throwable?) -> Unit,
     ) {
         connectCalls.add(rawOptions)
+        wireEvents.add(FakeWireEvent.Connect(rawOptions))
         val error = nextConnectError
         if (error != null) {
             rawState = "error"
@@ -63,7 +77,10 @@ internal class FakeAppductTransport(
         completion: (Throwable?) -> Unit,
     ) {
         val error = nextSendError
-        if (error == null) sentMessages.add(message)
+        if (error == null) {
+            sentMessages.add(message)
+            wireEvents.add(FakeWireEvent.Send(message))
+        }
 
         if (deferSendCompletion) {
             Thread {
@@ -85,6 +102,7 @@ internal class FakeAppductTransport(
      * close back to the client. */
     override fun closeForBackground(completion: () -> Unit) {
         closeForBackgroundCalls.incrementAndGet()
+        wireEvents.add(FakeWireEvent.Suspend)
         simulateClose(1001, "app_backgrounded")
         completion()
     }

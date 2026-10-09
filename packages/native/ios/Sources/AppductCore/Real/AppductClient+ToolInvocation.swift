@@ -89,7 +89,7 @@ extension AppductClient {
     // and this is a late result/throw -- ignore it, matching the JS client's dev-warning-and-drop.
     guard let call = inFlightCalls[id] else { return }
 
-    if call.timedOut {
+    if call.timedOut || call.suspended {
       return
     }
 
@@ -127,6 +127,8 @@ extension AppductClient {
           "result": value,
         ])
       )
+    } catch let tooLarge as AppductFrameTooLargeError {
+      await sendToolError(id: id, sessionId: sessionId, type: "tool_serialization_error", message: tooLarge.message)
     } catch {
       emitError(
         AppductUnifiedErrorEvent(phase: "tool", message: "Failed to send a tool response frame.")
@@ -187,7 +189,9 @@ extension AppductClient {
     do {
       try await sendWire(.object(object))
     } catch {
-      emitError(AppductUnifiedErrorEvent(phase: "tool", message: "Failed to send a tool response frame."))
+      emitError(
+        AppductUnifiedErrorEvent(phase: "tool", message: sendFailureMessage(error, fallback: "Failed to send a tool response frame."))
+      )
     }
   }
 
@@ -210,8 +214,12 @@ extension AppductClient {
           "error": .object(errorObject),
         ])
       )
+    } catch let tooLarge as AppductFrameTooLargeError {
+      await sendToolError(id: id, sessionId: sessionId, type: "tool_serialization_error", message: tooLarge.message)
     } catch {
-      emitError(AppductUnifiedErrorEvent(phase: "tool", message: "Failed to send a tool response frame."))
+      emitError(
+        AppductUnifiedErrorEvent(phase: "tool", message: sendFailureMessage(error, fallback: "Failed to send a tool response frame."))
+      )
     }
   }
 
@@ -220,6 +228,7 @@ extension AppductClient {
   func abortAllInFlight() {
     for call in inFlightCalls.values {
       call.cancelled = true
+      call.suspended = true
       call.cancelReason = call.cancelReason ?? "session_suspended"
       call.task.cancel()
     }

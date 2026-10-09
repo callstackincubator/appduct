@@ -778,6 +778,92 @@ describe("tools.call: suspend mid-call", () => {
   }, 10_000);
 });
 
+describe("tools.call: socket replaced mid-call", () => {
+  test("a call pending on the old socket rejects with session_suspended when the app resumes on a new socket", async () => {
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
+    await snapshotTools(daemon, app, [{ name: "echo" }]);
+
+    // The old socket receives the tool_call and never answers: the app lost it on reconnect.
+    const gotToolCall = new Promise<void>((resolve) => {
+      app.socket.on("message", (data) => {
+        if ((JSON.parse(data.toString("utf8")) as { type: string }).type === "tool_call") {
+          resolve();
+        }
+      });
+    });
+    const pendingCall = rpcCall(daemon.paths.socketPath, "tools.call", {
+      selector: app.alias,
+      name: "echo",
+      args: {},
+    });
+    const rejected = pendingCall.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await gotToolCall;
+
+    // The app reconnects while the old socket is still open.
+    const newSocket = await connectClient(daemon);
+    const resumed = waitForEvent(daemon, "session_resumed");
+    newSocket.send(
+      JSON.stringify({
+        type: "session_resume",
+        protocol_version: 2,
+        session_id: app.sessionId,
+        resume_token: app.resumeToken,
+      }),
+    );
+    await nextMessage(newSocket);
+    await resumed;
+
+    const startedAt = Date.now();
+    const error = (await rejected) as { message: string; data?: { type: string } };
+    expect(error.data?.type).toBe("session_suspended");
+    expect(error.message).toContain("reconnected while the call was pending");
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+
+    newSocket.close();
+  }, 10_000);
+
+  test("a call made after the app resumed on a new socket is answered by that socket", async () => {
+    const daemon = await startTestDaemon();
+    const app = await claimApp(daemon);
+    await snapshotTools(daemon, app, [{ name: "echo" }]);
+
+    const newSocket = await connectClient(daemon);
+    const resumed = waitForEvent(daemon, "session_resumed");
+    newSocket.send(
+      JSON.stringify({
+        type: "session_resume",
+        protocol_version: 2,
+        session_id: app.sessionId,
+        resume_token: app.resumeToken,
+      }),
+    );
+    await nextMessage(newSocket);
+    await resumed;
+
+    newSocket.on("message", (data) => {
+      const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
+      if (msg.type === "tool_call") {
+        newSocket.send(
+          JSON.stringify({ type: "tool_result", session_id: app.sessionId, id: msg.id, result: "from-new-socket" }),
+        );
+      }
+    });
+
+    const result = await rpcCall(daemon.paths.socketPath, "tools.call", {
+      selector: app.alias,
+      name: "echo",
+      args: {},
+    });
+    expect(result).toEqual({ result: "from-new-socket", callId: expect.any(String) });
+
+    newSocket.close();
+  }, 10_000);
+});
+
 describe("tools.cancel", () => {
   test("sends tool_cancel to the app; the app's tool_cancelled reply rejects the pending call", async () => {
     const daemon = await startTestDaemon();
