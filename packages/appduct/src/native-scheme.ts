@@ -49,12 +49,16 @@ export type NativeSchemeProbeResult = {
 };
 
 export type NativeSchemeDiscovery = {
-  /** `undefined` when no probe resolved a scheme. */
-  result?: NativeSchemeProbeResult;
+  /** Every probe that resolved a scheme, in probe order (all agree on the scheme, or discovery
+   * throws). Empty when none did. */
+  results: NativeSchemeProbeResult[];
   /** Every probe's human-readable description, in order, for {@link describeMissingScheme}-style
    * reporting — always as many entries as there are probes, whether or not any of them hit. */
   tried: string[];
 };
+
+/** What one probe found: `result` is `undefined` when it resolved no scheme. */
+type ProbeOutcome = { result?: NativeSchemeProbeResult; tried: string[] };
 
 // --- shared file-reading caps ---
 
@@ -157,7 +161,7 @@ const extractGradleScheme = (text: string): string | undefined => {
   return value !== undefined && value.length > 0 ? value : undefined;
 };
 
-const probeAndroidGradle = async (root: string): Promise<NativeSchemeDiscovery> => {
+const probeAndroidGradle = async (root: string): Promise<ProbeOutcome> => {
   const candidates = [join(root, "app", "build.gradle.kts"), join(root, "app", "build.gradle")];
   const notes: string[] = [];
 
@@ -225,7 +229,7 @@ const extractManifestScheme = (xml: string): string | undefined => {
   return undefined;
 };
 
-const probeAndroidManifest = async (root: string): Promise<NativeSchemeDiscovery> => {
+const probeAndroidManifest = async (root: string): Promise<ProbeOutcome> => {
   const manifestPath = join(root, "app", "src", "main", "AndroidManifest.xml");
   const read = await readCappedText(manifestPath);
   const description = `${manifestPath} (first <data android:scheme> in a VIEW intent-filter)`;
@@ -464,7 +468,7 @@ const walkForFilename = async (
   return hits;
 };
 
-const probeIosInfoPlist = async (root: string): Promise<NativeSchemeDiscovery> => {
+const probeIosInfoPlist = async (root: string): Promise<ProbeOutcome> => {
   const files = await walkForFilename(root, "Info.plist", MAX_PLIST_WALK_DEPTH);
 
   const describeSearch = (notes: string[]): string => {
@@ -547,7 +551,7 @@ const extractProjectYmlScheme = (text: string): string | undefined => {
   return raw !== undefined && raw.length > 0 ? raw : undefined;
 };
 
-const probeIosProjectYml = async (root: string): Promise<NativeSchemeDiscovery> => {
+const probeIosProjectYml = async (root: string): Promise<ProbeOutcome> => {
   const path = join(root, "project.yml");
   const description = `${path} ("info.properties.CFBundleURLTypes" > "CFBundleURLSchemes")`;
   const read = await readCappedText(path);
@@ -576,7 +580,7 @@ const probeIosProjectYml = async (root: string): Promise<NativeSchemeDiscovery> 
 
 /** In the order the file-level doc comment (and issue #48) describes: Android before iOS, and
  * within each platform the build config before the manifest/project file that mirrors it. */
-const PROBES: Array<["android" | "ios", (root: string) => Promise<NativeSchemeDiscovery>]> = [
+const PROBES: Array<["android" | "ios", (root: string) => Promise<ProbeOutcome>]> = [
   ["android", probeAndroidGradle],
   ["android", probeAndroidManifest],
   ["ios", probeIosInfoPlist],
@@ -592,9 +596,9 @@ export const isFlutterProject = async (root: string): Promise<boolean> => {
  * Runs every static-file probe against `root` (never walking up — same rule as `app.json`) and
  * decides the result:
  *
- * - No probe resolves a scheme: `result` is `undefined`.
- * - Every probe that resolves one agrees: that scheme wins, attributed to whichever probe ran
- *   first (the order in {@link PROBES}).
+ * - No probe resolves a scheme: `results` is empty.
+ * - Every probe that resolves one agrees: `results` holds each of them in the order of
+ *   {@link PROBES}, so a caller can see every platform the project spans, not one winner.
  * - Two probes resolve *different* schemes: throws a usage error naming both sources and their
  *   values, since guessing which one is right would silently target the wrong app on one
  *   platform.
@@ -633,10 +637,6 @@ export const discoverNativeScheme = async (root: string): Promise<NativeSchemeDi
     }
   }
 
-  if (results.length === 0) {
-    return { tried };
-  }
-
   const distinctSchemes = new Set(results.map((entry) => entry.scheme));
 
   if (distinctSchemes.size > 1) {
@@ -647,5 +647,5 @@ export const discoverNativeScheme = async (root: string): Promise<NativeSchemeDi
     );
   }
 
-  return { result: results[0], tried };
+  return { results, tried };
 };

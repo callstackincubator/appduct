@@ -293,15 +293,25 @@ const declaresReactNative = async (root: string): Promise<boolean> => {
   return false;
 };
 
+const discoveredPlatforms = (discovered: StaticProjectSchemeDiscovery): ("android" | "ios")[] => {
+  const sources = discovered.nativeResults.map((entry) => entry.source);
+
+  return [
+    ...(sources.some((source) => source.startsWith("android-")) ? (["android"] as const) : []),
+    ...(sources.some((source) => source.startsWith("ios-")) ? (["ios"] as const) : []),
+  ];
+};
+
 /**
  * The first next step: the wiring this project still needs. Issue #153: this used to be the React
  * Native import for every app, so a plain Swift or Kotlin developer got a step they could not act on.
  *
  * It is chosen from the framework, not from the reported `source`: a re-run that keeps a recorded
  * scheme reports `already-recorded` with no platform in it, and `--scheme` reports none either, so
- * this runs on what discovery *found* on disk (which `init` computes either way) plus
- * {@link declaresReactNative}. When neither identifies a platform — `--scheme` in a project whose
- * probes came up empty — both native steps are printed rather than one being guessed.
+ * this runs on the platforms discovery *found* on disk (which `init` computes either way) plus
+ * {@link declaresReactNative}. A project that spans both platforms gets both native steps, iOS
+ * first; when no platform was seen — `--scheme` in a project whose probes came up empty — both
+ * are printed rather than one being guessed.
  *
  * The React Native step is worded exactly as before: that is the path most users see, and re-running
  * `init` prints it whether or not the import is already there.
@@ -310,6 +320,7 @@ const wiringNextSteps = async (
   root: string,
   discovered: StaticProjectSchemeDiscovery,
   scheme: string,
+  platforms: readonly ("android" | "ios")[],
 ): Promise<string[]> => {
   if (discovered.source === "app-json" || (await declaresReactNative(root))) {
     return [
@@ -344,19 +355,15 @@ const wiringNextSteps = async (
     "--scheme <scheme> --force` and rebuild. Both options: " +
     "https://callstackincubator.github.io/appduct/install/android/#deep-links.";
 
-  if (discovered.source === "android-gradle") {
-    return [androidPlaceholder];
-  }
+  // Both steps when no native project was seen, otherwise one per platform that was.
+  const showIos = platforms.length === 0 || platforms.includes("ios");
+  const showAndroid = platforms.length === 0 || platforms.includes("android");
+  const gradleHit = discovered.nativeResults.some((entry) => entry.source === "android-gradle");
 
-  if (discovered.source === "android-manifest") {
-    return [androidOwnScheme];
-  }
-
-  if (discovered.source === "ios-info-plist" || discovered.source === "ios-project-yml") {
-    return [ios];
-  }
-
-  return [ios, androidOwnScheme];
+  return [
+    ...(showIos ? [ios] : []),
+    ...(showAndroid ? [gradleHit ? androidPlaceholder : androidOwnScheme] : []),
+  ];
 };
 
 /**
@@ -494,6 +501,8 @@ export const handleInitCommand = async (
         ? "app.json"
         : discovered.source;
 
+  const platforms = discoveredPlatforms(discovered);
+
   /*
    * Which scheme wins, and when that is an error, is the whole idempotency contract:
    *
@@ -598,6 +607,7 @@ export const handleInitCommand = async (
       scheme,
       source,
       ...(origin === undefined ? {} : { origin }),
+      ...(platforms.length === 0 ? {} : { platforms }),
       created: existing === undefined,
       changed: !alreadyCorrect,
       ...(iosAppId === undefined && androidAppId === undefined
@@ -616,7 +626,7 @@ export const handleInitCommand = async (
       nextSteps: [
         ...((await isFlutterProject(root))
           ? flutterNextSteps(scheme)
-          : await wiringNextSteps(root, discovered, scheme)),
+          : await wiringNextSteps(root, discovered, scheme, platforms)),
         `Add the Appduct MCP server entry to your agent's MCP config. "--scheme ${scheme}" keeps ` +
           `that entry self-contained; ${SCHEME_ENV_VAR} and this ${PROJECT_CONFIG_RELATIVE_PATH} ` +
           "work too.",

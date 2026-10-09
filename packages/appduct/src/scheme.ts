@@ -46,7 +46,11 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { usageError } from "./errors.js";
-import { discoverNativeScheme, type NativeSchemeSource } from "./native-scheme.js";
+import {
+  discoverNativeScheme,
+  type NativeSchemeProbeResult,
+  type NativeSchemeSource,
+} from "./native-scheme.js";
 
 /** The directory a project-level config lives in, relative to an app root. */
 export const PROJECT_CONFIG_DIR = ".appduct";
@@ -182,6 +186,10 @@ export type StaticProjectSchemeDiscovery = {
    * it) — distinct from `tried` below, which lists every location whether or not it hit. Only set
    * alongside `scheme`. */
   origin?: string;
+  /** Every native-project probe that resolved a scheme, in probe order — `scheme`, `source` and
+   * `origin` are the first of them. Empty when `app.json` answered (the native probes do not run)
+   * or nothing did; the platforms a project spans are read from here. */
+  nativeResults: NativeSchemeProbeResult[];
   /** Every location this step consulted, in order: `app.json` first (unchanged from pre-#48), then
    * every `native-scheme.ts` probe — always present, hit or miss, one entry each. */
   tried: string[];
@@ -201,22 +209,25 @@ export const discoverStaticProjectScheme = async (cwd: string): Promise<StaticPr
   const appJsonScheme = await discoverExpoScheme(cwd);
 
   if (appJsonScheme !== undefined) {
-    return { scheme: appJsonScheme, source: "app-json", origin: appJsonPath, tried };
+    return { scheme: appJsonScheme, source: "app-json", origin: appJsonPath, nativeResults: [], tried };
   }
 
   const native = await discoverNativeScheme(resolve(cwd));
   tried.push(...native.tried);
 
-  if (native.result !== undefined) {
+  const [first] = native.results;
+
+  if (first !== undefined) {
     return {
-      scheme: native.result.scheme,
-      source: native.result.source,
-      origin: native.result.origin,
+      scheme: first.scheme,
+      source: first.source,
+      origin: first.origin,
+      nativeResults: native.results,
       tried,
     };
   }
 
-  return { tried };
+  return { nativeResults: [], tried };
 };
 
 export type ProjectConfigLookupOptions = {
