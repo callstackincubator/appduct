@@ -116,10 +116,10 @@ A bundler that sets no `development` condition, such as plain esbuild, gives you
 
 ## Leave Appduct out permanently
 
-To make sure a project never includes Appduct on a platform, regardless of environment variables:
+To make sure a project never includes Appduct on a platform, regardless of environment variables, pick the tab that matches your app. What decides it is whether `expo` is in your `package.json` dependencies, not how you created the project.
 
 <Tabs>
-  <TabItem label="Bare React Native">
+  <TabItem label="Without expo">
     ```js title="react-native.config.js"
     module.exports = {
       dependencies: {
@@ -132,8 +132,20 @@ To make sure a project never includes Appduct on a platform, regardless of envir
       },
     };
     ```
+
+    <Aside type="caution">
+    If your app has `expo` installed, including a bare React Native app that added Expo modules, use the **With expo** tab instead. On Expo SDK 54 this file's `null` is ignored and Appduct still ships.
+    </Aside>
+
+    Check that the exclusion worked. From your app root:
+
+    ```bash
+    npx react-native config
+    ```
+
+    `@appduct/react-native` must not appear under `dependencies`.
   </TabItem>
-  <TabItem label="Expo">
+  <TabItem label="With expo">
     Add an `expo.autolinking` exclude to **`package.json`**:
 
     ```json title="package.json"
