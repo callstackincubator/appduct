@@ -13,7 +13,8 @@ final class AppductClientTests: XCTestCase {
   private func makeClient(
     timers: FakeClientTimers = FakeClientTimers(),
     defaultToolTimeoutMs: Int = 10_000,
-    foregroundObserver: any AppductForegroundObserving = NeverBackgroundedObserver()
+    foregroundObserver: any AppductForegroundObserving = NeverBackgroundedObserver(),
+    backgroundTime: FakeAppductBackgroundTime = FakeAppductBackgroundTime()
   ) -> (AppductClient, FakeTransportSession) {
     let transport = FakeTransportSession()
     let client = AppductClient(
@@ -21,7 +22,8 @@ final class AppductClientTests: XCTestCase {
       timers: timers,
       defaultToolTimeoutMs: defaultToolTimeoutMs,
       requirePrivateIp: true,
-      foregroundObserver: foregroundObserver
+      foregroundObserver: foregroundObserver,
+      backgroundTime: backgroundTime
     )
     return (client, transport)
   }
@@ -474,8 +476,10 @@ final class AppductClientTests: XCTestCase {
     return String(data: data, encoding: .utf8)!
   }
 
-  private func activeClient() async throws -> (AppductClient, FakeTransportSession) {
-    let (client, transport) = makeClient()
+  private func activeClient(
+    timers: FakeClientTimers = FakeClientTimers()
+  ) async throws -> (AppductClient, FakeTransportSession) {
+    let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
     try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
@@ -656,6 +660,21 @@ final class AppductClientTests: XCTestCase {
 
     let event = try XCTUnwrap(transport.sentMessages.first { $0.contains("\"type\":\"event\"") })
     XCTAssertTrue(event.contains("greeting"))
+  }
+
+  func testPostEventStampsTheEventWithUnixMillisecondsNotSeconds() async throws {
+    // PROTOCOL.md §4's `"ts": 1752600000000`: the same unit Kotlin sends
+    // (`System.currentTimeMillis()`), because the daemon forwards this value to agents verbatim.
+    let nowMs = 1_752_600_000_000
+    let (client, transport) = try await activeClient(timers: FakeClientTimers(startMs: Double(nowMs)))
+    try await client.postEvent("greeting")
+    try await waitUntil("the event frame reached the wire") {
+      transport.sentMessages.contains { $0.contains("\"type\":\"event\"") }
+    }
+
+    let text = try XCTUnwrap(transport.sentMessages.first { $0.contains("\"type\":\"event\"") })
+    let frame = try JSONValue.parse(text)
+    XCTAssertEqual(frame.objectValue?["ts"]?.doubleValue, Double(nowMs))
   }
 
   func testPostEventThrowsWhenNotActive() async {
@@ -886,75 +905,270 @@ final class AppductClientTests: XCTestCase {
     XCTAssertEqual(transport.lastConnectOptions?.linkPin, pin)
   }
 
-  // MARK: background close (issue #138)
+  // MARK: background time (issues #138, #139)
 
-  func testBackgroundingAnActiveSessionClosesForBackgroundKeepsTheLeaseAndSchedulesNoReconnect() async throws {
-    let timers = FakeClientTimers(random: 0)
-    let foregroundObserver = FakeForegroundObserver()
-    let (client, transport) = makeClient(timers: timers, foregroundObserver: foregroundObserver)
-    let connectTaskInput = connectInput()
-    let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
-    transport.simulateAck(sessionId: "session-1", resumeToken: "resume-1", graceS: 120)
-    try await connectTask.value
-
-    foregroundObserver.simulateForegroundChange(background: true)
-    try await waitUntil("the client closed the socket for the background") {
-      transport.closeForBackgroundCallCount == 1
-    }
-    try await waitUntil("the client moved to reconnecting") { await client.state == .reconnecting }
-
-    // `close()` would clear the resume lease; the session must stay resumable.
-    XCTAssertEqual(transport.closeCallCount, 0)
-    timers.advance(byMs: AppductBackoff.capMs)
-    XCTAssertEqual(transport.connectCallCount, 1)
+  private struct BackgroundRig {
+    let client: AppductClient
+    let transport: FakeTransportSession
+    let observer: FakeForegroundObserver
+    let backgroundTime: FakeAppductBackgroundTime
+    let timers: FakeClientTimers
   }
 
-  func testBackgroundingAnActiveSessionEmitsNoErrorEvent() async throws {
-    let foregroundObserver = FakeForegroundObserver()
-    let (client, transport) = makeClient(foregroundObserver: foregroundObserver)
-    let errors = EventCollector<AppductUnifiedErrorEvent>()
-    _ = await client.onError { errors.append($0) }
-    let connectTaskInput = connectInput()
-    let connectTask = Task { try await client.connect(connectTaskInput) }
+  private func activeBackgroundRig() async throws -> BackgroundRig {
+    let timers = FakeClientTimers(random: 0)
+    let observer = FakeForegroundObserver()
+    let backgroundTime = FakeAppductBackgroundTime()
+    let (client, transport) = makeClient(timers: timers, foregroundObserver: observer, backgroundTime: backgroundTime)
+    let input = connectInput()
+    let connectTask = Task { try await client.connect(input) }
     try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
     transport.simulateAck(sessionId: "session-1", resumeToken: "resume-1", graceS: 120)
     try await connectTask.value
+    return BackgroundRig(client: client, transport: transport, observer: observer, backgroundTime: backgroundTime, timers: timers)
+  }
 
-    foregroundObserver.simulateForegroundChange(background: true)
-    try await waitUntil("the client moved to reconnecting") { await client.state == .reconnecting }
+  func testBackgroundingAnActiveSessionHoldsBackgroundTimeAndKeepsTheSocketOpen() async throws {
+    let rig = try await activeBackgroundRig()
+
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+
+    XCTAssertEqual(rig.transport.closeForBackgroundCallCount, 0)
+    XCTAssertEqual(rig.transport.closeCallCount, 0)
+    let state = await rig.client.state
+    XCTAssertEqual(state, .active)
+  }
+
+  func testAToolCallArrivingWhileBackgroundTimeIsHeldIsAnsweredOnTheSameSocket() async throws {
+    let rig = try await activeBackgroundRig()
+    try rig.client.registerTool(ToolDescriptor(name: "echo", description: "x")) { args, _ in
+      .object(["value": args["value"] ?? .null])
+    }
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+
+    rig.transport.simulateIncoming(toolCallText(id: "call-1", name: "echo", args: ["value": "hi"]))
+
+    try await waitUntil("the tool result reached the wire") {
+      rig.transport.sentMessages.contains { $0.contains("tool_result") }
+    }
+    XCTAssertEqual(rig.transport.connectCallCount, 1)
+    XCTAssertEqual(rig.backgroundTime.held, 1)
+  }
+
+  func testACallInFlightWhenTheAppIsBackgroundedCompletesWhileBackgroundTimeIsHeld() async throws {
+    let rig = try await activeBackgroundRig()
+    let started = XCTestExpectation(description: "handler started")
+    let gate = AsyncGate()
+    try rig.client.registerTool(ToolDescriptor(name: "slow", description: "x")) { _, _ in
+      started.fulfill()
+      await gate.wait()
+      return .string("done")
+    }
+    rig.transport.simulateIncoming(toolCallText(id: "call-1", name: "slow"))
+    await fulfillment(of: [started], timeout: 2)
+
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+    await gate.open()
+
+    try await waitUntil("the tool result reached the wire") {
+      rig.transport.sentMessages.contains { $0.contains("tool_result") }
+    }
+    let response = try XCTUnwrap(rig.transport.sentMessages.first { $0.contains("tool_result") })
+    XCTAssertTrue(response.contains("done"))
+    XCTAssertEqual(rig.backgroundTime.held, 1)
+  }
+
+  func testWhenBackgroundTimeExpiresTheClientClosesForBackgroundKeepsTheLeaseAndSchedulesNoReconnect() async throws {
+    let rig = try await activeBackgroundRig()
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+
+    rig.backgroundTime.expire()
+
+    try await waitUntil("the client closed the socket for the background") {
+      rig.transport.closeForBackgroundCallCount == 1
+    }
+    try await waitUntil("the client moved to reconnecting") { await rig.client.state == .reconnecting }
+    // `close()` would clear the resume lease; the session must stay resumable.
+    XCTAssertEqual(rig.transport.closeCallCount, 0)
+    rig.timers.advance(byMs: AppductBackoff.capMs)
+    XCTAssertEqual(rig.transport.connectCallCount, 1)
+  }
+
+  func testWhenBackgroundTimeExpiresACallStillInFlightIsCancelledAsSessionSuspended() async throws {
+    let rig = try await activeBackgroundRig()
+    let started = XCTestExpectation(description: "handler started")
+    let reason = ReasonBox()
+    try rig.client.registerTool(ToolDescriptor(name: "slow", description: "x")) { _, context in
+      started.fulfill()
+      while !Task.isCancelled { try? await Task.sleep(nanoseconds: 1_000_000) }
+      reason.set(await context.cancelReason())
+      throw CancellationError()
+    }
+    rig.transport.simulateIncoming(toolCallText(id: "call-1", name: "slow"))
+    await fulfillment(of: [started], timeout: 2)
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+
+    rig.backgroundTime.expire()
+
+    try await waitUntil("the handler saw its cancellation") { reason.value != nil }
+    XCTAssertEqual(reason.value, "session_suspended")
+  }
+
+  func testBackgroundTimeEndsOnlyOnceTheCloseEventHasArrived() async throws {
+    let rig = try await activeBackgroundRig()
+    rig.transport.holdBackgroundClose = true
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+
+    rig.backgroundTime.expire()
+    try await waitUntil("the client closed the socket for the background") {
+      rig.transport.closeForBackgroundCallCount == 1
+    }
+    try await Task.sleep(nanoseconds: 50_000_000)
+    XCTAssertEqual(rig.backgroundTime.held, 1)
+
+    rig.transport.simulateClose(code: 1_001, reason: "app_backgrounded")
+
+    try await waitUntil("the background time ended") { rig.backgroundTime.held == 0 }
+  }
+
+  func testWindowEndCloseEmitsNoErrorEvent() async throws {
+    let rig = try await activeBackgroundRig()
+    let errors = EventCollector<AppductUnifiedErrorEvent>()
+    _ = await rig.client.onError { errors.append($0) }
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+
+    rig.backgroundTime.expire()
+    try await waitUntil("the client moved to reconnecting") { await rig.client.state == .reconnecting }
 
     XCTAssertEqual(errors.all.count, 0)
   }
 
-  func testForegroundingAfterABackgroundCloseResumesTheSession() async throws {
-    let timers = FakeClientTimers(random: 0)
-    let foregroundObserver = FakeForegroundObserver()
-    let (client, transport) = makeClient(timers: timers, foregroundObserver: foregroundObserver)
-    let connectTaskInput = connectInput()
-    let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
-    transport.simulateAck(sessionId: "session-1", resumeToken: "resume-1", graceS: 120)
-    try await connectTask.value
+  func testForegroundingAfterTheWindowEndsResumesTheSession() async throws {
+    let rig = try await activeBackgroundRig()
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+    rig.backgroundTime.expire()
+    try await waitUntil("the client moved to reconnecting") { await rig.client.state == .reconnecting }
 
-    foregroundObserver.simulateForegroundChange(background: true)
-    try await waitUntil("the client moved to reconnecting") { await client.state == .reconnecting }
+    rig.observer.simulateForegroundChange(background: false)
 
-    foregroundObserver.simulateForegroundChange(background: false)
-    try await waitUntil("returning to the foreground started a resume attempt") { transport.connectCallCount >= 2 }
-    XCTAssertEqual(transport.lastConnectOptions?.resumeToken, "resume-1")
-    transport.simulateAck(sessionId: "session-1", resumeToken: "resume-2", graceS: 120)
-    try await waitUntil("the session is active again") { await client.state == .active }
+    try await waitUntil("returning to the foreground started a resume attempt") { rig.transport.connectCallCount >= 2 }
+    XCTAssertEqual(rig.transport.lastConnectOptions?.resumeToken, "resume-1")
+    rig.transport.simulateAck(sessionId: "session-1", resumeToken: "resume-2", graceS: 120)
+    try await waitUntil("the session is active again") { await rig.client.state == .active }
   }
 
-  func testBackgroundingWithoutAnActiveSessionDoesNotCloseTheSocket() async throws {
-    let foregroundObserver = FakeForegroundObserver()
-    let (_, transport) = makeClient(foregroundObserver: foregroundObserver)
+  func testForegroundingBeforeTheWindowEndsEndsTheBackgroundTimeAndKeepsTheSameSocket() async throws {
+    let rig = try await activeBackgroundRig()
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+
+    rig.observer.simulateForegroundChange(background: false)
+
+    try await waitUntil("the background time ended") { rig.backgroundTime.held == 0 }
+    XCTAssertEqual(rig.transport.connectCallCount, 1)
+    XCTAssertEqual(rig.transport.closeForBackgroundCallCount, 0)
+    let state = await rig.client.state
+    XCTAssertEqual(state, .active)
+  }
+
+  func testBackgroundingWithoutAnActiveSessionAsksForNoBackgroundTime() async throws {
+    let observer = FakeForegroundObserver()
+    let backgroundTime = FakeAppductBackgroundTime()
+    let (_, transport) = makeClient(foregroundObserver: observer, backgroundTime: backgroundTime)
     try await waitUntil("the client wired its transport") { transport.isWired }
 
-    foregroundObserver.simulateForegroundChange(background: true)
+    observer.simulateForegroundChange(background: true)
     try await Task.sleep(nanoseconds: 100_000_000)
 
+    XCTAssertEqual(backgroundTime.beginCallCount, 0)
     XCTAssertEqual(transport.closeForBackgroundCallCount, 0)
   }
+
+  func testDisconnectEndsTheBackgroundTime() async throws {
+    let rig = try await activeBackgroundRig()
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+
+    await rig.client.disconnect()
+
+    XCTAssertEqual(rig.backgroundTime.held, 0)
+  }
+
+  func testDestroyEndsTheBackgroundTime() async throws {
+    let rig = try await activeBackgroundRig()
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+
+    await rig.client.destroy()
+
+    XCTAssertEqual(rig.backgroundTime.held, 0)
+  }
+
+  func testDisconnectKeepsTheBackgroundTimeUntilTheSocketIsClosed() async throws {
+    let rig = try await activeBackgroundRig()
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+    let heldWhenClosing = EventCollector<Int>()
+    let backgroundTime = rig.backgroundTime
+    rig.transport.onClose = { heldWhenClosing.append(backgroundTime.held) }
+
+    await rig.client.disconnect()
+
+    XCTAssertEqual(heldWhenClosing.all, [1])
+    XCTAssertEqual(rig.backgroundTime.held, 0)
+  }
+
+  func testDestroyKeepsTheBackgroundTimeUntilTheSessionIsInvalidated() async throws {
+    let rig = try await activeBackgroundRig()
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+    let heldWhenInvalidating = EventCollector<Int>()
+    let backgroundTime = rig.backgroundTime
+    rig.transport.onInvalidate = { heldWhenInvalidating.append(backgroundTime.held) }
+
+    await rig.client.destroy()
+
+    XCTAssertEqual(heldWhenInvalidating.all, [1])
+    XCTAssertEqual(rig.backgroundTime.held, 0)
+  }
+
+  func testALostSocketEndsTheBackgroundTime() async throws {
+    let rig = try await activeBackgroundRig()
+    rig.observer.simulateForegroundChange(background: true)
+    try await waitUntil("the client asked for background time") { rig.backgroundTime.held == 1 }
+
+    rig.transport.simulateClose(code: 1_006, reason: nil)
+
+    try await waitUntil("the background time ended") { rig.backgroundTime.held == 0 }
+  }
+}
+
+/// Lets a handler park until the test opens the gate.
+private actor AsyncGate {
+  private var isOpen = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+  func wait() async {
+    if isOpen { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+  func open() {
+    isOpen = true
+    for waiter in waiters { waiter.resume() }
+    waiters = []
+  }
+}
+
+private final class ReasonBox: @unchecked Sendable {
+  private let lock = NSLock()
+  private var _value: String?
+  var value: String? { lock.lock(); defer { lock.unlock() }; return _value }
+  func set(_ value: String?) { lock.lock(); _value = value; lock.unlock() }
 }

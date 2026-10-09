@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-A tool is a named function your app registers, with a description and a schema for its arguments. The CLI, agents, and tests can call only the tools you register. This page covers React Native; the same ideas apply to [iOS](/appduct/install/ios/#register-tools-in-swift) and [Android](/appduct/install/android/#register-tools-in-kotlin), where schemas are plain JSON Schema.
+A tool is a named function your app registers, with a description and a schema for its arguments. The CLI, agents, and tests can call only the tools you register. This page covers React Native; the same ideas apply to [iOS](/appduct/install/ios/#register-tools-in-swift), [Android](/appduct/install/android/#register-tools-in-kotlin) and [Flutter](/appduct/install/flutter/#register-tools-in-dart), where schemas are plain JSON Schema.
 
 ## Register a tool
 
@@ -196,7 +196,7 @@ seed_cart(items: int, clear?: bool = true) -> { cartId: string, itemCount: int }
   Fill the current user's cart with test items. Requires a signed-in user.
 ```
 
-That's all it decides from. Write for that reader. The same rules apply to tools registered in Swift and Kotlin.
+That's all it decides from. Write for that reader. The same rules apply to tools registered in Swift, Kotlin and Dart.
 
 - **Name by intent.** `go_to_checkout`, `set_feature_flag`; not `dispatch_action`.
 - **Annotate.** `readOnlyHint` on every observer, `destructiveHint` on anything that deletes, signs out, or pays. Policy and approval prompts key on it: a destructive tool without the annotation follows `policy.default`, so a `"prompt"` set for destructive tools never asks about it (see [above](#annotate-what-a-tool-does)).

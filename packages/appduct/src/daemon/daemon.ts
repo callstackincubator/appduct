@@ -26,6 +26,8 @@ import {
   type EventsSubscribeResult,
   type LinkCreateParams,
   type LinkCreateResult,
+  type WebAttachParams,
+  type WebAttachResult,
   type SessionsDescribeResult,
   type SessionsListResult,
   type SessionsRevokeResult,
@@ -44,6 +46,15 @@ import {
 } from "@appduct/shared";
 
 import type { Clock } from "../cli/types.js";
+import {
+  attachBrowserTab,
+  connectNodeDevtoolsBrowser,
+  openNodeDaemonSocket,
+  type ConnectDevtoolsBrowser,
+  type DevtoolsBrowser,
+  type DevtoolsPage,
+} from "../devtools-relay/index.js";
+import { composeWebLink } from "../link.js";
 import { getDaemonReportedVersion } from "../package-version.js";
 import { detectAdvertisedAddress } from "./address.js";
 import { argsSha256, createAuditLogger, type AuditLogger } from "./audit.js";
@@ -51,7 +62,7 @@ import { createCallsManager, type CallsManager } from "./calls.js";
 import { loadConfig, type AppductConfig, type ConfigWarnFn } from "./config.js";
 import { createEventBus, matchesNameGlob, projectAppEvent, type EventBus } from "./event-bus.js";
 import { createEventsLog } from "./events-log.js";
-import { startListener, type DaemonListener } from "./listener.js";
+import { startListener, startWebListener, type DaemonListener, type WebListener } from "./listener.js";
 import { evaluate as evaluatePolicy } from "./policy.js";
 import { acquirePidfile, type PidfileHandle } from "./pidfile.js";
 import { NodeAppendOnlyFile } from "./node-append-only-file.js";
@@ -95,6 +106,8 @@ export type DaemonOptions = {
    * `config.advertisedIp`. Overridable so tests can simulate a network change between two
    * `link.create` calls without mocking `os.networkInterfaces()` process-wide. */
   detectAddress?: () => ReturnType<typeof detectAdvertisedAddress>;
+  /** Reaches a debugging-port browser for `web.attach`; defaults to raw CDP over `ws`. */
+  connectDevtoolsBrowser?: ConnectDevtoolsBrowser;
 };
 
 export type RunningDaemon = {
@@ -103,6 +116,8 @@ export type RunningDaemon = {
   startedAt: Date;
   server: RpcServer;
   listener: DaemonListener;
+  /** The plain-HTTP listener web pages connect to. */
+  webListener: WebListener;
   /** The host certificate the listener serves, so an in-process client can trust it. */
   tls: TlsManager;
   eventBus: EventBus;
@@ -118,6 +133,7 @@ const buildStatusResult = async (
    * ("bind an OS-assigned port", ARCHITECTURE.md §3) — and a status that echoed the configured
    * `0` back would be worse than useless: it is precisely the number nobody can connect to. */
   boundWssPort: number,
+  boundWebPort: number,
   startedAt: Date,
   tls: TlsManager,
   sessionManager: SessionManager,
@@ -134,6 +150,7 @@ const buildStatusResult = async (
     pid: process.pid,
     startedAt: startedAt.toISOString(),
     wssPort: boundWssPort,
+    webPort: boundWebPort,
     pinnedKeys: tls.pinnedKeys(),
     sessions: sessionManager.list(),
     pendingLinks: sessionManager.pendingLinkCount(),
@@ -429,12 +446,67 @@ const asLinkCreateParams = (params: unknown): LinkCreateParams => {
     throw new RpcApplicationError("invalid_request", '"addressOverride" must be a non-empty string.');
   }
 
-  return { ttlSeconds, addressOverride: addressOverride as string | undefined };
+  const transport = record.transport;
+
+  if (transport !== undefined && transport !== "native" && transport !== "web") {
+    throw new RpcApplicationError("invalid_request", '"transport" must be "native" or "web".');
+  }
+
+  return { ttlSeconds, addressOverride: addressOverride as string | undefined, transport };
+};
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "[::1]", "localhost"]);
+
+const asWebAttachParams = (params: unknown): WebAttachParams => {
+  if (typeof params !== "object" || params === null || Array.isArray(params)) {
+    throw new RpcApplicationError("invalid_request", "Params must be an object.");
+  }
+
+  const { url, browserUrl, targetId, ttlSeconds } = params as Record<string, unknown>;
+
+  for (const [field, value] of [["url", url], ["browserUrl", browserUrl], ["targetId", targetId]] as const) {
+    if (value !== undefined && (typeof value !== "string" || value.length === 0)) {
+      throw new RpcApplicationError("invalid_request", `"${field}" must be a non-empty string.`);
+    }
+  }
+
+  if (url === undefined || browserUrl === undefined) {
+    throw new RpcApplicationError("invalid_request", '"url" and "browserUrl" are required.');
+  }
+
+  let parsedBrowserUrl: URL | undefined;
+  try {
+    parsedBrowserUrl = new URL(browserUrl as string);
+  } catch {
+    // Reported below with the other malformed shapes.
+  }
+
+  if (parsedBrowserUrl === undefined || (parsedBrowserUrl.protocol !== "http:" && parsedBrowserUrl.protocol !== "https:")) {
+    throw new RpcApplicationError("invalid_request", `"browserUrl" must be an http(s) URL such as http://127.0.0.1:9222 (got "${browserUrl as string}").`);
+  }
+
+  if (!LOOPBACK_HOSTS.has(parsedBrowserUrl.hostname)) {
+    throw new RpcApplicationError(
+      "invalid_request",
+      `"browserUrl" must be a loopback address (127.0.0.1, [::1] or localhost), because a debugging port gives full control of the browser (got "${browserUrl as string}").`,
+    );
+  }
+
+  if (ttlSeconds !== undefined && (typeof ttlSeconds !== "number" || !Number.isInteger(ttlSeconds) || ttlSeconds <= 0)) {
+    throw new RpcApplicationError("invalid_request", '"ttlSeconds" must be a positive integer.');
+  }
+
+  return { url: url as string, browserUrl: browserUrl as string, targetId: targetId as string | undefined, ttlSeconds };
 };
 
 export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon> => {
   const clock = options.clock ?? { now: () => new Date() };
   const timers = options.timers ?? systemTimers;
+  const connectDevtoolsBrowser = options.connectDevtoolsBrowser ?? connectNodeDevtoolsBrowser;
+  const devtoolsBrowsers = new Map<string, DevtoolsBrowser>();
+  // Keyed by target id, not browserUrl: one tab reached through two spellings of the endpoint must
+  // still have one relay.
+  const relayedTabs = new Map<string, DevtoolsPage>();
   const paths = getStateDirPaths(options.stateDir);
 
   await ensureStateDir(options.stateDir);
@@ -466,6 +538,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
   let pidfile: PidfileHandle | undefined;
   let server: RpcServer | undefined;
   let listener: DaemonListener | undefined;
+  let webListener: WebListener | undefined;
   let tlsManager: TlsManager | undefined;
   let sessionManager: SessionManager | undefined;
   let callsManager: CallsManager | undefined;
@@ -474,6 +547,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
   // real one the moment the listener is up; `config.wssPort: 0` means the two differ (§3). Read
   // lazily through closures (`getEndpoint`, `daemon.status`), all of which run after startup.
   let boundWssPort = config.wssPort;
+  let boundWebPort = 0;
   let shuttingDown = false;
   let resolveExited!: () => void;
   const exited = new Promise<void>((resolve) => {
@@ -497,9 +571,11 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
 
       // Reject any calls still in flight before the sockets that would have answered them go away.
       callsManager?.disposeAll();
+      devtoolsBrowsers.forEach((browser) => browser.close());
       // ARCHITECTURE.md §4: close all device sockets (1001) before tearing down the control plane.
       sessionManager?.disposeAll(1001, "daemon_shutdown");
       await listener?.close();
+      await webListener?.close();
       await server?.close();
       await pidfile?.release();
       await rm(getSocketPath(paths), { force: true });
@@ -540,7 +616,11 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
       linkTtlSeconds: config.linkTtlSeconds,
       // `boundWssPort`, not `config.wssPort`: a link minted by a daemon on an OS-assigned port
       // must advertise the port the app can actually reach, not the `0` that asked for one.
-      getEndpoint: () => toAgentEndpoint(tls.current().advertisedAddress, boundWssPort),
+      // A web link points at the loopback web listener, never the advertised LAN address.
+      getEndpoint: (transport) =>
+        transport === "web"
+          ? { family: 4, address: "127.0.0.1", port: boundWebPort }
+          : toAgentEndpoint(tls.current().advertisedAddress, boundWssPort),
       eventBus: activeEventBus,
       clock,
       onToolFrame: (message) => {
@@ -588,6 +668,9 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
     // never-taken fallback kept purely so a bound port is always a number.
     boundWssPort = activeListener.port() ?? config.wssPort;
 
+    webListener = await startWebListener({ sessionManager, origins: config.webOrigins, timers });
+    boundWebPort = webListener.port() ?? 0;
+
     // `events.subscribe` fan-out: one global listener pushes matching notifications to every RPC
     // connection currently marked as a subscriber (state stashed by the `events.subscribe` handler
     // below). `RpcServer.notify` itself guards against a slow/dead subscriber backing up the daemon.
@@ -624,6 +707,29 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
       }
     });
 
+    const mintLink = async (
+      ttlSeconds: number | undefined,
+      addressOverride: string | undefined,
+      transport: LinkCreateParams["transport"],
+    ): Promise<LinkCreateResult> => {
+      // Re-detect the advertised address on every mint (ARCHITECTURE.md §4/§8): a long-lived
+      // daemon that changed networks must not keep minting links with a stale address/SAN.
+      // `refresh` only re-mints the certificate when the address actually changed; applying the
+      // (possibly unchanged) secure context is a cheap no-op the rest of the time, but comparing
+      // material identity avoids even that when nothing changed.
+      const previousMaterial = tls.current();
+      const nextMaterial = await tls.refresh();
+
+      if (nextMaterial !== previousMaterial) {
+        activeListener.applyTls(nextMaterial);
+      }
+
+      // `tls.refresh()` just ran above, so `pinnedKeys()[0]` reflects the material this link's
+      // endpoint will actually serve (opt-in hardening dev-mode: the CLI composes this into the
+      // deep link's `pin` query param — see `LinkCreateResult.pin`).
+      return { ...activeSessionManager.createLink(ttlSeconds, addressOverride, transport), pin: tls.pinnedKeys()[0]! };
+    };
+
     server = await startRpcServer({
       socketPath: getSocketPath(paths),
       dispatch: {
@@ -631,6 +737,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           return buildStatusResult(
             config,
             boundWssPort,
+            boundWebPort,
             startedAt,
             tls,
             activeSessionManager,
@@ -646,24 +753,31 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
           return { ok: true };
         },
         [RPC_METHODS.linkCreate]: async (params): Promise<LinkCreateResult> => {
-          const { ttlSeconds, addressOverride } = asLinkCreateParams(params);
+          const { ttlSeconds, addressOverride, transport } = asLinkCreateParams(params);
 
-          // Re-detect the advertised address on every mint (ARCHITECTURE.md §4/§8): a long-lived
-          // daemon that changed networks must not keep minting links with a stale address/SAN.
-          // `refresh` only re-mints the certificate when the address actually changed; applying the
-          // (possibly unchanged) secure context is a cheap no-op the rest of the time, but comparing
-          // material identity avoids even that when nothing changed.
-          const previousMaterial = tls.current();
-          const nextMaterial = await tls.refresh();
+          return mintLink(ttlSeconds, addressOverride, transport);
+        },
+        [RPC_METHODS.webAttach]: async (params): Promise<WebAttachResult> => {
+          const { url, browserUrl, targetId, ttlSeconds } = asWebAttachParams(params);
+          let browser = devtoolsBrowsers.get(browserUrl);
 
-          if (nextMaterial !== previousMaterial) {
-            activeListener.applyTls(nextMaterial);
+          if (browser === undefined) {
+            browser = connectDevtoolsBrowser(browserUrl);
+            devtoolsBrowsers.set(browserUrl, browser);
           }
 
-          // `tls.refresh()` just ran above, so `pinnedKeys()[0]` reflects the material this link's
-          // endpoint will actually serve (opt-in hardening dev-mode: the CLI composes this into the
-          // deep link's `pin` query param — see `LinkCreateResult.pin`).
-          return { ...activeSessionManager.createLink(ttlSeconds, addressOverride), pin: tls.pinnedKeys()[0]! };
+          try {
+            return await attachBrowserTab({
+              browser,
+              relayedTabs,
+              url,
+              targetId,
+              openDaemonSocket: openNodeDaemonSocket,
+              mintLink: async () => composeWebLink(url, await mintLink(ttlSeconds, undefined, "web")),
+            });
+          } catch (error) {
+            throw new RpcApplicationError("invalid_request", error instanceof Error ? error.message : String(error));
+          }
         },
         [RPC_METHODS.sessionsList]: (): SessionsListResult => {
           return activeSessionManager.list();
@@ -949,6 +1063,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
     callsManager?.disposeAll();
     sessionManager?.disposeAll(1001, "daemon_startup_failed");
     await listener?.close();
+    await webListener?.close();
     await pidfile?.release();
     throw error;
   }
@@ -964,6 +1079,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
     startedAt,
     server,
     listener,
+    webListener,
     tls: tlsManager,
     eventBus,
     exited,

@@ -1,0 +1,47 @@
+name: appduct
+description: Call functions inside a running Flutter app from a terminal, a test runner or an agent.
+version: 0.14.0
+homepage: https://callstackincubator.github.io/appduct/install/flutter/
+repository: https://github.com/callstackincubator/appduct/tree/main/packages/flutter
+issue_tracker: https://github.com/callstackincubator/appduct/issues
+documentation: https://callstackincubator.github.io/appduct/install/flutter/
+topics:
+  - testing
+  - automation
+  - debugging
+  - mcp
+  - agents
+
+environment:
+  sdk: ^3.10.0
+  flutter: ">=3.38.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  json_schema_builder: ^0.1.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  go_router: ^18.0.2
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.appduct
+        pluginClass: AppductPlugin
+      ios:
+        pluginClass: AppductPlugin
+        sharedDarwinSource: true
+      macos:
+        pluginClass: AppductPlugin
+        sharedDarwinSource: true
+      windows:
+        dartPluginClass: AppductDesktopPlugin
+        dartFileName: src/flutter/desktop_plugin.dart
+      linux:
+        dartPluginClass: AppductDesktopPlugin
+        dartFileName: src/flutter/desktop_plugin.dart
