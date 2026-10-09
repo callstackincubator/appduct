@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **New: on iOS, tool calls keep working for about 30 seconds after the app is backgrounded, instead of failing at once.** After that a call fails with `session_suspended`; needs an app built with this release.
 - **Fix: events posted from an iOS app now report their time in milliseconds, like Android's.**
   A script reading `data.ts` from `appduct events tail` or `appduct events since` no longer needs to multiply it by 1,000.
 - **Fix: the iOS and Android SDKs no longer report a "Failed to send a tool response frame." error when the connection drops during a tool call.**
