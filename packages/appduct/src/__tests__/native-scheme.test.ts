@@ -73,12 +73,12 @@ const infoPlistXml = (scheme: string): string => `
 `;
 
 describe("discoverNativeScheme", () => {
-  test("returns no result and one tried entry per probe when nothing exists", async () => {
+  test("returns no results and one tried entry per probe when nothing exists", async () => {
     const root = await makeDir();
 
-    const { result, tried } = await discoverNativeScheme(root);
+    const { results, tried } = await discoverNativeScheme(root);
 
-    expect(result).toBeUndefined();
+    expect(results).toEqual([]);
     expect(tried).toHaveLength(4);
   });
 
@@ -90,9 +90,9 @@ describe("discoverNativeScheme", () => {
         'android { defaultConfig { manifestPlaceholders["appductScheme"] = "myapp" } }',
       );
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ source: "android-gradle", scheme: "myapp" });
+      expect(results[0]).toMatchObject({ source: "android-gradle", scheme: "myapp" });
     });
 
     test("reads the dot-property form", async () => {
@@ -102,9 +102,9 @@ describe("discoverNativeScheme", () => {
         'android { defaultConfig { manifestPlaceholders.appductScheme = "myapp" } }',
       );
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ source: "android-gradle", scheme: "myapp" });
+      expect(results[0]).toMatchObject({ source: "android-gradle", scheme: "myapp" });
     });
 
     test("falls back to build.gradle when build.gradle.kts has no placeholder", async () => {
@@ -115,9 +115,9 @@ describe("discoverNativeScheme", () => {
         'android { defaultConfig { manifestPlaceholders["appductScheme"] = "myapp" } }',
       );
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ source: "android-gradle", scheme: "myapp" });
+      expect(results[0]).toMatchObject({ source: "android-gradle", scheme: "myapp" });
     });
 
     test("throws for an invalid placeholder value", async () => {
@@ -138,9 +138,9 @@ describe("discoverNativeScheme", () => {
         'manifestPlaceholders["appductScheme"] = "myapp"\n' + "x".repeat(2 * 1024 * 1024);
       await write(path.join(root, "app", "build.gradle.kts"), oversized);
 
-      const { result, tried } = await discoverNativeScheme(root);
+      const { results, tried } = await discoverNativeScheme(root);
 
-      expect(result).toBeUndefined();
+      expect(results).toEqual([]);
       expect(tried[0]).toContain("too large, skipped");
     });
   });
@@ -153,9 +153,9 @@ describe("discoverNativeScheme", () => {
         androidManifestXml('<data android:scheme="myapp" />'),
       );
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ source: "android-manifest", scheme: "myapp" });
+      expect(results[0]).toMatchObject({ source: "android-manifest", scheme: "myapp" });
     });
 
     test("ignores a <data android:scheme> in a non-VIEW intent-filter", async () => {
@@ -165,9 +165,9 @@ describe("discoverNativeScheme", () => {
         androidManifestXml('<data android:scheme="myapp" />', "android.intent.action.SEND"),
       );
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toBeUndefined();
+      expect(results).toEqual([]);
     });
 
     test("throws for an invalid manifest scheme", async () => {
@@ -186,9 +186,9 @@ describe("discoverNativeScheme", () => {
       const root = await makeDir();
       await write(path.join(root, "Info.plist"), infoPlistXml("myapp"));
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ source: "ios-info-plist", scheme: "myapp" });
+      expect(results[0]).toMatchObject({ source: "ios-info-plist", scheme: "myapp" });
     });
 
     test("prefers the shallower of two Info.plist files", async () => {
@@ -196,9 +196,9 @@ describe("discoverNativeScheme", () => {
       await write(path.join(root, "MyApp", "Info.plist"), infoPlistXml("nested"));
       await write(path.join(root, "Info.plist"), infoPlistXml("shallow"));
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ scheme: "shallow" });
+      expect(results[0]).toMatchObject({ scheme: "shallow" });
     });
 
     test("never descends into Pods, build, node_modules or DerivedData", async () => {
@@ -208,9 +208,9 @@ describe("discoverNativeScheme", () => {
       await write(path.join(root, "build", "Info.plist"), infoPlistXml("build"));
       await write(path.join(root, "DerivedData", "Info.plist"), infoPlistXml("dd"));
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toBeUndefined();
+      expect(results).toEqual([]);
     });
 
     test("does not descend past two levels deep", async () => {
@@ -218,18 +218,18 @@ describe("discoverNativeScheme", () => {
       // Three levels below root: excluded by the depth cap.
       await write(path.join(root, "a", "b", "c", "Info.plist"), infoPlistXml("toodeep"));
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toBeUndefined();
+      expect(results).toEqual([]);
     });
 
     test("finds an Info.plist exactly two levels deep", async () => {
       const root = await makeDir();
       await write(path.join(root, "a", "b", "Info.plist"), infoPlistXml("twolevels"));
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ scheme: "twolevels" });
+      expect(results[0]).toMatchObject({ scheme: "twolevels" });
     });
 
     test("treats a binary-encoded plist as unreadable rather than a hard failure", async () => {
@@ -238,9 +238,9 @@ describe("discoverNativeScheme", () => {
       await mkdir(root, { recursive: true });
       await writeFile(path.join(root, "Info.plist"), binary);
 
-      const { result, tried } = await discoverNativeScheme(root);
+      const { results, tried } = await discoverNativeScheme(root);
 
-      expect(result).toBeUndefined();
+      expect(results).toEqual([]);
       expect(tried.join("\n")).toContain("binary plist");
       expect(tried.join("\n")).toContain("use --scheme");
     });
@@ -254,9 +254,9 @@ describe("discoverNativeScheme", () => {
       await writeFile(path.join(root, "a", "Info.plist"), binary);
       await write(path.join(root, "b", "Info.plist"), infoPlistXml("readable"));
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ scheme: "readable" });
+      expect(results[0]).toMatchObject({ scheme: "readable" });
     });
 
     test("throws for an invalid scheme in Info.plist", async () => {
@@ -290,9 +290,9 @@ describe("discoverNativeScheme", () => {
 </plist>`,
       );
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ scheme: "second" });
+      expect(results[0]).toMatchObject({ scheme: "second" });
     });
   });
 
@@ -311,9 +311,9 @@ describe("discoverNativeScheme", () => {
         ].join("\n"),
       );
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ source: "ios-project-yml", scheme: "myapp" });
+      expect(results[0]).toMatchObject({ source: "ios-project-yml", scheme: "myapp" });
     });
 
     test("reads the inline flow-sequence form", async () => {
@@ -329,9 +329,9 @@ describe("discoverNativeScheme", () => {
         ].join("\n"),
       );
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ source: "ios-project-yml", scheme: "myapp" });
+      expect(results[0]).toMatchObject({ source: "ios-project-yml", scheme: "myapp" });
     });
 
     test("throws for an invalid scheme", async () => {
@@ -352,10 +352,10 @@ describe("discoverNativeScheme", () => {
         "info:\n  properties:\n    CFBundleURLTypes:\n      - CFBundleURLSchemes: [fromplist]",
       );
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
       // Both agree, so no disagreement error; the earlier probe (ios-info-plist) is attributed.
-      expect(result).toMatchObject({ source: "ios-info-plist", scheme: "fromplist" });
+      expect(results[0]).toMatchObject({ source: "ios-info-plist", scheme: "fromplist" });
     });
   });
 
@@ -373,7 +373,7 @@ describe("discoverNativeScheme", () => {
       );
     });
 
-    test("does not throw, and attributes the earlier probe, when every hit agrees", async () => {
+    test("does not throw, and reports every probe that hit, in probe order, when every hit agrees", async () => {
       const root = await makeDir();
       await write(
         path.join(root, "app", "build.gradle.kts"),
@@ -384,9 +384,23 @@ describe("discoverNativeScheme", () => {
         androidManifestXml('<data android:scheme="myapp" />'),
       );
 
-      const { result } = await discoverNativeScheme(root);
+      const { results } = await discoverNativeScheme(root);
 
-      expect(result).toMatchObject({ source: "android-gradle", scheme: "myapp" });
+      expect(results.map((entry) => entry.source)).toEqual(["android-gradle", "android-manifest"]);
+      expect(results.every((entry) => entry.scheme === "myapp")).toBe(true);
+    });
+
+    test("reports the Android and the iOS hit when a root spans both platforms", async () => {
+      const root = await makeDir();
+      await write(
+        path.join(root, "app", "build.gradle.kts"),
+        'manifestPlaceholders["appductScheme"] = "myapp"',
+      );
+      await write(path.join(root, "ios", "App", "Info.plist"), infoPlistXml("myapp"));
+
+      const { results } = await discoverNativeScheme(root);
+
+      expect(results.map((entry) => entry.source)).toEqual(["android-gradle", "ios-info-plist"]);
     });
   });
 });

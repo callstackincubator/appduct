@@ -953,6 +953,98 @@ describe("init command (next steps match the project it found)", () => {
     expect(steps.join("\n")).not.toContain("@appduct/react-native");
   });
 
+  /** One root that is both an Android module root and an Xcode project, agreeing on `myapp`. */
+  const makeBothPlatformsRoot = async (): Promise<string> => {
+    const root = await makeAndroidAppRoot();
+    await mkdir(path.join(root, "ios", "App"), { recursive: true });
+    await writeInfoPlist(path.join(root, "ios", "App"));
+
+    return root;
+  };
+
+  const platformsOf = (result: Awaited<ReturnType<typeof handleInitCommand>>): unknown => {
+    if (!result.ok) {
+      throw new Error(`init failed: ${JSON.stringify(result)}`);
+    }
+
+    return (result.data as { platforms?: unknown }).platforms;
+  };
+
+  test("a root that spans iOS and Android prints the iOS step and then the Android placeholder step", async () => {
+    const root = await makeBothPlatformsRoot();
+
+    const result = await handleInitCommand({}, { cwd: root });
+    const steps = stepsOf(result);
+
+    expect(steps[0]).toContain("Appduct.shared.handle(url)");
+    expect(steps[1]).toContain('manifestPlaceholders["appductScheme"] = "myapp"');
+    expect(platformsOf(result)).toEqual(["android", "ios"]);
+    expect(result.ok && result.data.source).toBe("android-gradle");
+  });
+
+  test("a root whose Gradle file and Android manifest agree reports android only and prints only the placeholder step", async () => {
+    const root = await makeAndroidAppRoot();
+    await writeAndroidDeepLinkManifest(root);
+
+    const result = await handleInitCommand({}, { cwd: root });
+    const steps = stepsOf(result);
+
+    expect(platformsOf(result)).toEqual(["android"]);
+    expect(steps[0]).toContain('manifestPlaceholders["appductScheme"] = "myapp"');
+    expect(steps.join("\n")).not.toContain("Appduct.shared.handle");
+  });
+
+  test("an Android manifest next to an iOS project prints the iOS step and the own-scheme Android step", async () => {
+    const root = await makeAppRoot();
+    await writeAndroidDeepLinkManifest(root);
+    await mkdir(path.join(root, "ios", "App"), { recursive: true });
+    await writeInfoPlist(path.join(root, "ios", "App"));
+
+    const steps = stepsOf(await handleInitCommand({}, { cwd: root }));
+
+    expect(steps[0]).toContain("Appduct.shared.handle(url)");
+    expect(steps[1]).toContain('manifestPlaceholders["appductScheme"]');
+    expect(steps[1]).not.toContain('"myapp"');
+  });
+
+  test("an Android-only root reports android and an iOS-only root reports ios", async () => {
+    expect(platformsOf(await handleInitCommand({}, { cwd: await makeAndroidAppRoot() }))).toEqual([
+      "android",
+    ]);
+    expect(platformsOf(await handleInitCommand({}, { cwd: await makeIosAppRoot() }))).toEqual(["ios"]);
+  });
+
+  test("a re-run that keeps the recorded scheme still reports platforms and prints both steps", async () => {
+    const root = await makeBothPlatformsRoot();
+
+    await handleInitCommand({}, { cwd: root });
+    const result = await handleInitCommand({}, { cwd: root });
+    const steps = stepsOf(result);
+
+    expect(result.ok && result.data.source).toBe("already-recorded");
+    expect(platformsOf(result)).toEqual(["android", "ios"]);
+    expect(steps[0]).toContain("Appduct.shared.handle(url)");
+    expect(steps[1]).toContain("appductScheme");
+  });
+
+  test("--scheme in a two-platform root still reports platforms", async () => {
+    const root = await makeBothPlatformsRoot();
+
+    const result = await handleInitCommand({ scheme: "other" }, { cwd: root });
+
+    expect(platformsOf(result)).toEqual(["android", "ios"]);
+  });
+
+  test("no native project seen: platforms is absent and both steps print", async () => {
+    const root = await makeAppRoot();
+
+    const result = await handleInitCommand({ scheme: "myapp" }, { cwd: root });
+
+    expect(result.ok && "platforms" in result.data).toBe(false);
+    expect(stepsOf(result)[0]).toContain("Appduct.shared.handle(url)");
+    expect(stepsOf(result)[1]).toContain("appductScheme");
+  });
+
   test("the native steps replace the import step but leave every other step alone", async () => {
     const root = await makeAndroidAppRoot();
 
