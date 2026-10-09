@@ -49,6 +49,21 @@ Appduct.register(
 ) { _ -> JSONObject().put("cleared", store.reset()) }
 ```
 
+Flutter (`appduct` on pub.dev) takes `description`, `inputSchema` as a raw JSON Schema map,
+`timeout` and `group`; it has no `outputSchema` or `annotations`. Read numbers as `num`
+(`(args['n'] as num).toInt()`): JSON `3` arrives as an `int` and `3.0` as a `double`.
+
+```dart
+Appduct.instance.registerTool(
+  'get_cart', description: 'Return the current cart. Read-only.', group: 'cart',
+  handler: (args, context) => {'itemCount': store.cart.length},
+);
+```
+
+Dart handlers run on the main isolate: move CPU-heavy work into `Isolate.run`, and create every
+future the handler awaits inside the handler. A failing future created before the call skips the
+handler's `try`/`catch` and the call ends with `tool_timeout`.
+
 ## Schema rules
 
 | `inputSchema` / `outputSchema` form | Validated in app | What agents see |
@@ -101,11 +116,11 @@ Appduct.registerEvent(
 Declare at app start, not inside a screen that may never open, or `events ls` stays empty until it does.
 
 - In React Native, `payloadSchema` takes the same forms as `inputSchema`; a raw JSON Schema is
-  listed but never checked. In Swift and Kotlin it is a plain JSON Schema object, listed and never
-  checked. `name` can be any string, dotted names included.
+  listed but never checked. In Swift, Kotlin and Dart it is a plain JSON Schema object, listed and
+  never checked. `name` can be any string, dotted names included.
 - Declaring is advisory: an undeclared `postEvent` still arrives, and production posts as-is. Only
   the React Native SDK warns in dev, about an undeclared name and about a payload that fails a
-  declared Standard Schema. Swift and Kotlin send without any warning.
+  declared Standard Schema. Swift, Kotlin and Dart send without any warning.
 - Verify with `appduct events ls`; an empty list means nothing is declared.
 
 ## Design tools for the agent that will call them

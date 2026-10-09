@@ -2,7 +2,7 @@
 
 Use this file when the task is to add Appduct to a project that doesn't have it yet: a React
 Native app (Expo or bare), or a native iOS or Android app with no React Native
-(see [Native iOS or Android](#native-ios-or-android)).
+(see [Native iOS or Android](#native-ios-or-android)), or a Flutter app (see [Flutter](#flutter)).
 
 The development path needs **no keys, no pins and no config file**. The daemon generates
 its own host key on first start, the deep-link scheme is discovered from the project's own
@@ -80,7 +80,8 @@ If the project uses a dynamic `app.config.js` / `app.config.ts`, discovery does 
    without an `--app-id` on every call.
 5. Leave the private-LAN-only setting alone: it is on by default, so a bootstrap link must
    point at a private IPv4 address or `127.0.0.1`. Turn it off (`AppductAllowPrivateLanOnly`
-   in `Info.plist`, `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY` meta-data on Android) only
+   in `Info.plist`, `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY` meta-data on Android,
+   `--dart-define=APPDUCT_ALLOW_PRIVATE_LAN_ONLY=false` in Flutter) only
    if a device has to reach the machine at a public address.
 6. Rebuild the native app after the configuration changes.
 
@@ -104,6 +105,35 @@ A plain Swift or Kotlin app with no React Native uses Appduct's native SDKs. Ins
 Then run `appduct init --ios-app-id <bundle-id>` or `--android-app-id <applicationId>` in the
 app root; it finds the scheme in `Info.plist` or the Gradle placeholder. Release builds leave
 Appduct out by default on both platforms.
+
+## Flutter
+
+A Flutter app (Flutter 3.38+, iOS 15+, Android API 24+, also macOS, Windows and Linux; not web)
+uses the `appduct` pub package. Install `appduct` for the CLI as in step 1 above, then:
+
+1. `flutter pub add appduct`.
+2. In `main()`, call `Appduct.ensureInitialized();` after `WidgetsFlutterBinding.ensureInitialized()`
+   and before `runApp`, then register tools with `Appduct.instance.registerTool(name,
+   description:, inputSchema:, handler: (args, context) => ...)` following
+   [writing-tools.md](./writing-tools.md). Read numbers in `args` as `num`.
+3. Register a URL scheme: an `<intent-filter>` with `android.intent.action.VIEW`, the `DEFAULT`
+   and `BROWSABLE` categories and `<data android:scheme="myapp"/>` in
+   `android/app/src/main/AndroidManifest.xml`; `CFBundleURLTypes` in `ios/Runner/Info.plist` and
+   `macos/Runner/Info.plist`. Windows and Linux need none.
+4. Allow the network: `INTERNET` in the main Android manifest (Flutter adds it only to debug and
+   profile, so an opted-in release build needs it), `NSLocalNetworkUsageDescription` in the iOS
+   `Info.plist`, and `com.apple.security.network.client` set to `true` in both macOS entitlement
+   files.
+5. Run `appduct init --android-app-id <applicationId> --ios-app-id <bundle-id>` in the project
+   root; it reads the scheme from `android/app/`, `ios/Runner` and `macos/Runner`.
+6. Run the app in debug mode and connect: `appduct sessions link --open ios-sim` (or
+   `--open android`). On Windows and Linux the CLI cannot open the link: start the app with
+   `APPDUCT_LINK="$(appduct sessions link --scheme myapp --json | jq -r .data.deepLink)" flutter run -d linux`,
+   or call `await Appduct.instance.connect(link)`. `APPDUCT_LINK` is read in debug builds only.
+
+Appduct is in debug and profile builds. A release build leaves it out; build with
+`--dart-define=APPDUCT_ENABLED=true` to include it (`=false` leaves it out of debug and profile
+too). Full guide: https://callstackincubator.github.io/appduct/install/flutter/
 
 ## Web
 
@@ -148,6 +178,8 @@ For builds that leave your machine, replace link-carried trust with embedded pin
    (plural — the native clients accept a pin *set*, which is what makes future rotation
    non-breaking). Providing `cliPins` switches `trust` to `"pin"` by default.
 3. Rebuild: this is native configuration, so it is not a fast in-session action.
+   In Flutter, the equivalents are compile-time defines passed with `--dart-define-from-file`:
+   `APPDUCT_PINS` (comma-separated pins), `APPDUCT_TRUST` and `APPDUCT_ALLOW_PRIVATE_LAN_ONLY`.
 
 ## Final check
 

@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
-By default, Appduct is in your **debug** builds and not in your **release** builds. A release build doesn't contain its native code at all, rather than containing it switched off. This page covers changing that default and checking what actually shipped.
+By default, Appduct is in your **debug** builds and not in your **release** builds (in Flutter, **debug** and **profile**). A release build doesn't contain its native code at all, rather than containing it switched off. This page covers changing that default and checking what actually shipped.
 
 Which builds include Appduct and what an included build trusts are separate decisions. For trust, see [Security](/appduct/guides/security/).
 
@@ -44,6 +44,31 @@ The default applies to Xcode configurations named exactly `Debug` and `Release`,
 **A misspelled value falls back to the default.** On Expo, prebuild fails with an error. In a bare React Native project, nothing reports it. Check the built app with [`appduct doctor`](#verify-the-built-app).
 
 When Appduct is included, `pod install` and Gradle print `[appduct] native module INCLUDED in this build`. Nothing prints when it's left out. Treat the line as an early warning; `appduct doctor` is the real check.
+
+## Flutter: the `APPDUCT_ENABLED` define
+
+Flutter takes the same switch as a compile-time define instead of an environment variable:
+
+| `--dart-define=APPDUCT_ENABLED=` | Debug and profile build | Release build |
+| --- | --- | --- |
+| not set (default) | Included | Not included |
+| `true` | Included | Included |
+| `false` | Not included | Not included |
+
+To include Appduct in a release build, for example an internal build your CI or an agent drives:
+
+```bash
+flutter build apk --release --dart-define=APPDUCT_ENABLED=true
+flutter build ios --release --dart-define=APPDUCT_ENABLED=true
+```
+
+To leave it out even of debug and profile builds, pass `--dart-define=APPDUCT_ENABLED=false`.
+
+The define applies to the whole app, so the Dart code is removed or kept as one. A build that leaves Appduct out still compiles your `Appduct.ensureInitialized()` and `registerTool` calls; they do nothing and never throw, so shared code needs no `if` checks.
+
+**An included release build needs the platform settings a debug build gets for free.** Flutter adds the Android `INTERNET` permission only to the debug and profile manifests, so add it to `android/app/src/main/AndroidManifest.xml`. On iOS add `NSLocalNetworkUsageDescription` to `Info.plist`, and on macOS set `com.apple.security.network.client` to `true` in `Release.entitlements`. See [Flutter setup](/appduct/install/flutter/#set-up-the-app).
+
+Pin an included release build to your key with `APPDUCT_PINS` and `APPDUCT_TRUST`, passed with `--dart-define-from-file` so the pins live in a file rather than on a command line. See [Ship Appduct in a release build](/appduct/install/flutter/#ship-appduct-in-a-release-build).
 
 ## Strip Appduct's JavaScript too
 
@@ -149,6 +174,8 @@ Apps using Appduct without React Native get the same debug-only default through 
 - **Android:** `debugImplementation` of `core`, `releaseImplementation` of `core-noop`. Depend on `core` for a variant to include it. See [Android setup](/appduct/install/android/#ship-appduct-in-a-release-build).
 
 `APPDUCT_ENABLED` doesn't apply to these apps.
+
+A Flutter app has its own define; see [Flutter](#flutter-the-appduct_enabled-define).
 
 ## Verify the built app
 

@@ -128,6 +128,24 @@ jobs:
       - name: Test
         if: steps.affected.outputs.run == 'true'
         run: flutter test
+      - name: Check the package can be published
+        # The same dry run deploy.yaml does before a release, so pub.dev's checks fail on the PR
+        # that breaks them. Warnings fail it too.
+        if: steps.affected.outputs.run == 'true'
+        # Runs after `flutter test` on purpose: that leaves build/ behind, which a .pubignore that
+        # forgets .gitignore's entries would upload. The archive is about 75 KB; build output makes
+        # it tens of MB, so a path check and a size cap catch it.
+        run: |
+          set -o pipefail
+          dart pub publish --dry-run | tee "$RUNNER_TEMP/pub-dry-run.txt"
+          if grep -qE '^(├|└)── (build|\.dart_tool)$' "$RUNNER_TEMP/pub-dry-run.txt"; then
+            echo "::error::The pub archive lists build/ or .dart_tool/. Add them to packages/flutter/.pubignore."
+            exit 1
+          fi
+          if grep -qE 'Total compressed archive size: [0-9.]+ MB' "$RUNNER_TEMP/pub-dry-run.txt"; then
+            echo "::error::The pub archive is over 1 MB; something that should be ignored is in it."
+            exit 1
+          fi
       - name: Test the Android shim state
         if: steps.affected.outputs.run == 'true'
         run: gradle -p android/shim-test test

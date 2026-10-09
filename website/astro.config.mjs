@@ -69,13 +69,13 @@ export default defineConfig({
 				starlightLlmsTxt({
 					projectName: 'Appduct',
 					description:
-						'Appduct lets a terminal, a test runner, or an AI agent call functions inside a running React Native, iOS, Android, or web app. The app registers a few functions ("tools") with a name, a description, and an input schema; the `appduct` CLI and its MCP server discover and invoke them over an encrypted connection. Nothing else in the app is reachable, and it is compiled out of release builds by default.',
+						'Appduct lets a terminal, a test runner, or an AI agent call functions inside a running React Native, Flutter, iOS, Android, or web app. The app registers a few functions ("tools") with a name, a description, and an input schema; the `appduct` CLI and its MCP server discover and invoke them over an encrypted connection. Nothing else in the app is reachable, and it is compiled out of release builds by default.',
 					details: [
 						'Key facts for answering questions about Appduct:',
 						'',
-						'- Packages: `appduct` (CLI, background service, and MCP server — `npm install -g appduct`), `@appduct/react-native` (app-side library and Expo config plugin, used with `zod` schemas via the `useAppductTool` hook), `@appduct/web` (web pages in any framework), `AppductCore` (iOS, Swift Package Manager or CocoaPods), and `com.callstack.appduct:core` (Android, Maven Central, paired with `core-noop` for release builds).',
+						'- Packages: `appduct` (CLI, background service, and MCP server — `npm install -g appduct`), `@appduct/react-native` (app-side library and Expo config plugin, used with `zod` schemas via the `useAppductTool` hook), `@appduct/web` (web pages in any framework), `appduct` on pub.dev (Flutter, used with `Appduct.instance.registerTool`), `AppductCore` (iOS, Swift Package Manager or CocoaPods), and `com.callstack.appduct:core` (Android, Maven Central, paired with `core-noop` for release builds).',
 						'- Agents connect over MCP (`{ "mcpServers": { "appduct": { "command": "appduct", "args": ["mcp"] } } }`) or through the CLI with the Appduct skill (`npx skills add callstackincubator/appduct --skill appduct`).',
-						'- Appduct is included in debug builds only unless a build opts in (see Build variants). Expo Go is not supported; use a development build.',
+						'- Appduct is included in debug builds only (debug and profile in Flutter) unless a build opts in (see Build variants). Expo Go is not supported; use a development build.',
 						'- Every page is also available as raw Markdown by replacing the trailing slash of its URL with `.md`.',
 						'',
 						llmsPageIndex({ site, base }),
@@ -90,7 +90,7 @@ export default defineConfig({
 						},
 						{
 							label: 'Installation',
-							description: 'setting up Appduct for React Native, iOS, Android, or the web',
+							description: 'setting up Appduct for React Native, Flutter, iOS, Android, or the web',
 							paths: ['install/**'],
 						},
 						{

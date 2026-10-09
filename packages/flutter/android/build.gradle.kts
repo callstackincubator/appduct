@@ -1,5 +1,5 @@
 group = "dev.appduct"
-version = "0.0.1"
+version = "0.14.0"
 
 buildscript {
     repositories {

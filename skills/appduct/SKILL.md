@@ -1,6 +1,6 @@
 ---
 name: appduct
-description: Drive an Appduct-enabled app (React Native, iOS, Android or web) from the terminal or over MCP — connect a device, list the tools the app registers, call them — and write tools that agents can use well. Use when the user mentions Appduct, wants to pair or connect a device, invoke app-defined tools from the CLI or MCP, or asks to add Appduct to an app or write tools for it.
+description: Drive an Appduct-enabled app (React Native, Flutter, iOS, Android or web) from the terminal or over MCP — connect a device, list the tools the app registers, call them — and write tools that agents can use well. Use when the user mentions Appduct, wants to pair or connect a device, invoke app-defined tools from the CLI or MCP, or asks to add Appduct to an app or write tools for it.
 ---
 
 # Appduct
@@ -139,6 +139,6 @@ Read a reference only when its trigger applies:
   or flag not shown above (`sessions link`, `events tail`/`since`, `sessions revoke`, `init`,
   `--open`, QR, MCP `appduct_connect`), or you are writing a script or test with `appduct/client`.
 - [references/writing-tools.md](./references/writing-tools.md): the task is to add, change or
-  review tools in the app's code (`registerTool`, `useAppductTool`, Swift or Kotlin `register`).
+  review tools in the app's code (`registerTool`, `useAppductTool`, Swift or Kotlin `register`, Dart `registerTool`).
 - [references/setup.md](./references/setup.md): the task is to add Appduct to a project that
   does not have it yet.
