@@ -10,6 +10,19 @@ export const site = {
 	install: 'npm install -g appduct',
 };
 
+// The motto, shared with the social card and the README banner (og/og.html).
+export const hero = {
+	title: 'Your app is an <em>MCP server now.</em>',
+	lede: 'Register functions in your app and your agent calls them as tools. Three calls instead of a minute of tapping.',
+	// What the agent sees once the app is running: the same three tools the race below calls.
+	app: 'Shop · iPhone 17',
+	tools: [
+		{ name: 'login', args: 'user', about: 'Sign in as a test user' },
+		{ name: 'seed_cart', args: 'items', about: 'Fill the cart' },
+		{ name: 'open_screen', args: 'name', about: 'Go to any screen' },
+	],
+};
+
 export const platforms = [
 	{
 		id: 'ios',

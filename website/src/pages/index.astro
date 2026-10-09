@@ -7,16 +7,13 @@ import Hero from '../components/landing/Hero.astro';
 import Marquee from '../components/landing/Marquee.astro';
 import Nav from '../components/landing/Nav.astro';
 import Sections from '../components/landing/Sections.astro';
-import { site } from '../landing/content';
+import { hero, site } from '../landing/content';
 ---
 
 <Landing title={site.title} description={site.description}>
 	<Nav />
 	<main class="frame">
-		<Hero
-			title="Your agent stops tapping. <em>It calls your app.</em>"
-			lede="Register functions in your app and your agent calls them over MCP. Three calls instead of a minute of tapping."
-		/>
+		<Hero />
 		<Marquee />
 		<Sections />
 	</main>
