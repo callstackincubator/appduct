@@ -2,7 +2,7 @@ import { isExpiredAt, isValidPort, type SessionAckMessage } from "@appduct/share
 import type { AppductCore, AppductNativeEvents } from "@appduct/shared/sdk";
 
 import { fullJitterBackoffMs } from "./backoff.js";
-import { createConnection, type ConnectionOptions } from "./connection.js";
+import { createConnection, FrameTooLargeError, type ConnectionOptions } from "./connection.js";
 import { isResumeLeaseExpired, parseResumeLease } from "./lease.js";
 import type { TimerHandle, TransportKind, WebCorePorts } from "./ports.js";
 import { createEventRegistry, createToolRegistry } from "./registry.js";
@@ -204,8 +204,8 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
   const sendFrame = (frame: { session_id: string } & Record<string, unknown>, phase: string, failure: string) => {
     try {
       connection.send(frame);
-    } catch {
-      emitError(phase, failure);
+    } catch (error) {
+      emitError(phase, error instanceof FrameTooLargeError ? error.message : failure);
     }
   };
 

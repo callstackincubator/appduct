@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:appduct/src/core/core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/fixtures.dart';
 import '../support/harness.dart';
 
 const limitBytes = 262144;
@@ -27,46 +28,22 @@ Map<String, Object?> toolCall(String id) => {
 };
 
 void main() {
-  // The same vectors as `frame-limits.json`, which lands with #186. Wire the file in here once it
-  // is on main.
-  final vectors = [
-    (
-      name: 'ASCII frame of exactly 262144 bytes',
-      bytes: 262144,
-      filler: 'a',
-      sent: true,
-    ),
-    (
-      name: 'ASCII frame of 262145 bytes',
-      bytes: 262145,
-      filler: 'a',
-      sent: false,
-    ),
-    (
-      name: 'two-byte characters, frame of exactly 262144 bytes',
-      bytes: 262144,
-      filler: 'é',
-      sent: true,
-    ),
-    (
-      name: 'two-byte characters push the frame to 262145 bytes',
-      bytes: 262145,
-      filler: 'é',
-      sent: false,
-    ),
-    (
-      name: 'three-byte characters push the frame to 262145 bytes',
-      bytes: 262145,
-      filler: '€',
-      sent: false,
-    ),
-    (
-      name: 'four-byte characters push the frame to 262145 bytes',
-      bytes: 262145,
-      filler: '😀',
-      sent: false,
-    ),
-  ];
+  final fixture = loadFixture('frame-limits.json')! as Map<String, Object?>;
+  final vectors = (fixture['vectors']! as List)
+      .cast<Map<String, Object?>>()
+      .map(
+        (vector) => (
+          name: vector['name']! as String,
+          bytes: vector['frameBytes']! as int,
+          filler: vector['filler']! as String,
+          sent: vector['sent']! as bool,
+        ),
+      );
+
+  test('frame-limits.json has vectors at the protocol limit', () {
+    expect(fixture['limitBytes'], limitBytes);
+    expect(vectors, isNotEmpty);
+  });
 
   for (final vector in vectors) {
     group(vector.name, () {
@@ -167,6 +144,35 @@ void main() {
     expect(socket.sent.every((text) => utf8Bytes(text) <= limitBytes), isTrue);
     expect(h.core.state, ClientState.active);
   });
+
+  test(
+    'a tool failure over the limit is answered tool_serialization_error, not a timeout',
+    () async {
+      final h = Harness();
+      h.core.registerTool({'name': 'big', 'description': 'Fails hugely.'});
+      final socket = await h.claim();
+      socket.receive(toolCall('c1'));
+
+      h.core.respondToToolCall(
+        'c1',
+        error: ToolFailure('tool_execution_error', 'x' * (300 * 1024)),
+      );
+      h.clock.advance(10000);
+
+      final errors = h.sentOf(socket, 'tool_error');
+      expect(errors, hasLength(1));
+      final error = errors.single['error']! as Map;
+      expect(error['type'], 'tool_serialization_error');
+      expect(
+        error['message'],
+        matches(
+          RegExp(r'^Appduct frame is \d+ bytes, over the 262144-byte limit\.$'),
+        ),
+      );
+      expect(error.containsKey('details'), isFalse);
+      expect(h.core.state, ClientState.active);
+    },
+  );
 
   test(
     'a tool registry snapshot over the limit is reported to the error listener and leaves the session active',

@@ -6,6 +6,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -263,6 +264,30 @@ class AppductClientTest {
             val error = fake.awaitToolError()
             assertEquals("tool_execution_error", error.getJSONObject("error").getString("type"))
             assertEquals("kaboom", error.getJSONObject("error").getString("message"))
+        }
+
+    @Test
+    fun `a thrown handler error over the frame limit replies tool_serialization_error`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            client.connectAndAck(fake)
+            client.registerTool(AppductToolDescriptor(name = "boom", description = "Throws.")) { _, _ ->
+                throw RuntimeException("x".repeat(300_000))
+            }
+            fake.sentMessages.clear()
+
+            fake.simulateMessage(
+                JSONObject().put("type", "tool_call").put("session_id", "sess-1").put("id", "call-1").put("name", "boom").put(
+                    "args",
+                    JSONObject(),
+                ),
+            )
+
+            val error = fake.awaitToolError().getJSONObject("error")
+            assertEquals("tool_serialization_error", error.getString("type"))
+            assertTrue(Regex("^Appduct frame is \\d+ bytes, over the 262144-byte limit\\.$").matches(error.getString("message")))
+            assertFalse(error.has("details"))
+            assertEquals(AppductClientState.active, client.state)
         }
 
     @Test
@@ -767,5 +792,24 @@ class AppductClientTest {
             assertEquals("screen_changed", event.getString("name"))
             assertEquals("Checkout", event.getJSONObject("payload").getString("screen"))
             assertNotNull(event.opt("ts"))
+        }
+
+    @Test
+    fun `a tool registry snapshot over the frame limit goes to the error listener and keeps the session active`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            val errors = CopyOnWriteArrayList<AppductUnifiedError>()
+            client.addErrorListener { errors.add(it) }
+            for (i in 0 until 70) {
+                client.registerTool(AppductToolDescriptor(name = "tool_$i", description = "x".repeat(4096))) { _, _ -> null }
+            }
+
+            client.connectAndAck(fake)
+
+            waitUntil { errors.isNotEmpty() }
+            assertTrue(fake.sentMessages.none { JSONObject(it).optString("type") == "tool_registry_snapshot" })
+            assertEquals("tool", errors.first().phase)
+            assertTrue(Regex("^Appduct frame is \\d+ bytes, over the 262144-byte limit\\.$").matches(errors.first().message))
+            assertEquals(AppductClientState.active, client.state)
         }
 }

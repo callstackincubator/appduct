@@ -543,7 +543,13 @@ extension AppductClient {
       "session_id": .string(sessionId),
       "tools": .array(tools.map { $0.wireValue }),
     ])
-    try? await sendWire(message)
+    do {
+      try await sendWire(message)
+    } catch let tooLarge as AppductFrameTooLargeError {
+      emitError(AppductUnifiedErrorEvent(phase: "socket", message: tooLarge.message))
+    } catch {
+      // Any other failure is a lost socket, which the close handling reports.
+    }
   }
 
   /// Event frames go out only on a session whose ack said the daemon accepts them: an older
@@ -579,7 +585,7 @@ extension AppductClient {
       if case .snapshot = op { eventSnapshotSentFor = sessionId }
     } catch {
       emitError(
-        AppductUnifiedErrorEvent(phase: "socket", message: "Failed to sync the event registry.")
+        AppductUnifiedErrorEvent(phase: "socket", message: sendFailureMessage(error, fallback: "Failed to sync the event registry."))
       )
     }
   }
@@ -601,7 +607,7 @@ extension AppductClient {
       try await sendWire(.object(object))
     } catch {
       emitError(
-        AppductUnifiedErrorEvent(phase: "socket", message: "Failed to sync the tool registry.")
+        AppductUnifiedErrorEvent(phase: "socket", message: sendFailureMessage(error, fallback: "Failed to sync the tool registry."))
       )
     }
   }

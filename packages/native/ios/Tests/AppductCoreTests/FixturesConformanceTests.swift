@@ -182,4 +182,198 @@ final class FixturesConformanceTests: XCTestCase {
 
     XCTAssertEqual(pin, expectedPin)
   }
+
+  // MARK: - frame-limits.json
+
+  private final class StringBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored = ""
+    var value: String {
+      get { lock.lock(); defer { lock.unlock() }; return stored }
+      set { lock.lock(); stored = newValue; lock.unlock() }
+    }
+  }
+
+  private static func padding(frameBytes: Int, filler: String, emptyFrameBytes: Int) -> String {
+    let pad = frameBytes - emptyFrameBytes
+    let unit = filler.utf8.count
+    let count = pad / unit
+    return String(repeating: filler, count: count) + String(repeating: "a", count: pad - count * unit)
+  }
+
+  private func activeClient() async throws -> (AppductClient, FakeTransportSession) {
+    AppductProcessResumeLeaseStore.shared.resetForTests()
+    let transport = FakeTransportSession()
+    let client = AppductClient(
+      transport: transport,
+      timers: FakeClientTimers(),
+      defaultToolTimeoutMs: 10_000,
+      requirePrivateIp: true,
+      foregroundObserver: NeverBackgroundedObserver()
+    )
+    let input = AppductConnectInput(
+      ip: "192.168.1.10",
+      port: 8_443,
+      sessionId: "session-1",
+      token: "claim-token",
+      expiresAt: 9_999_999_999,
+      linkPin: nil
+    )
+    let connecting = Task { try await client.connect(input) }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+    transport.simulateAck(sessionId: "session-1")
+    try await connecting.value
+    return (client, transport)
+  }
+
+  private func frames(_ transport: FakeTransportSession, ofType type: String) -> [[String: Any]] {
+    rawFrames(transport, ofType: type).compactMap { text in
+      try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
+    }
+  }
+
+  private func rawFrames(_ transport: FakeTransportSession, ofType type: String) -> [String] {
+    transport.sentMessages.filter { text in
+      let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
+      return object?["type"] as? String == type
+    }
+  }
+
+  func testFrameLimitsFixtureDecidesWhichToolResultsAreSent() async throws {
+    let fixture = try Self.loadFixture("frame-limits.json") as! [String: Any]
+    let limitBytes = Self.intValue(fixture["limitBytes"])!
+    let vectors = fixture["vectors"] as! [[String: Any]]
+    XCTAssertEqual(limitBytes, 262_144)
+    XCTAssertGreaterThan(vectors.count, 0)
+
+    for vector in vectors {
+      let name = vector["name"] as! String
+      let frameBytes = Self.intValue(vector["frameBytes"])!
+      let (client, transport) = try await activeClient()
+      let answer = StringBox()
+      try client.registerTool(ToolDescriptor(name: "big", description: "Returns a string."), handler: { _, _ in .string(answer.value) })
+      try await waitUntil("the registry delta reached the wire") { !self.frames(transport, ofType: "tool_registry_delta").isEmpty }
+      let call = { (id: String) in
+        transport.simulateIncoming(
+          "{\"type\":\"tool_call\",\"session_id\":\"session-1\",\"id\":\"\(id)\",\"name\":\"big\",\"args\":{}}"
+        )
+      }
+
+      call("id-a")
+      try await waitUntil("the empty result reached the wire") { self.frames(transport, ofType: "tool_result").count == 1 }
+      let emptyFrameBytes = rawFrames(transport, ofType: "tool_result")[0].utf8.count
+
+      answer.value = Self.padding(frameBytes: frameBytes, filler: vector["filler"] as! String, emptyFrameBytes: emptyFrameBytes)
+      call("id-b")
+
+      if vector["sent"] as! Bool {
+        try await waitUntil("\(name): the result reached the wire") { self.frames(transport, ofType: "tool_result").count == 2 }
+        XCTAssertEqual(rawFrames(transport, ofType: "tool_result")[1].utf8.count, frameBytes, name)
+      } else {
+        try await waitUntil("\(name): a tool error reached the wire") { !self.frames(transport, ofType: "tool_error").isEmpty }
+        XCTAssertEqual(frames(transport, ofType: "tool_result").count, 1, name)
+        let error = frames(transport, ofType: "tool_error")[0]
+        XCTAssertEqual(error["id"] as? String, "id-b", name)
+        let body = error["error"] as? [String: Any]
+        XCTAssertEqual(body?["type"] as? String, "tool_serialization_error", name)
+        XCTAssertEqual(body?["message"] as? String, "Appduct frame is \(frameBytes) bytes, over the \(limitBytes)-byte limit.", name)
+      }
+      let finalState = await client.state
+      XCTAssertEqual(finalState, .active, name)
+    }
+  }
+
+  func testFrameLimitsFixtureDecidesWhichEventsAreSent() async throws {
+    let fixture = try Self.loadFixture("frame-limits.json") as! [String: Any]
+    let limitBytes = Self.intValue(fixture["limitBytes"])!
+    let vectors = fixture["vectors"] as! [[String: Any]]
+
+    for vector in vectors {
+      let name = vector["name"] as! String
+      let frameBytes = Self.intValue(vector["frameBytes"])!
+      let (client, transport) = try await activeClient()
+      let errors = EventCollector<AppductUnifiedErrorEvent>()
+      _ = await client.onError { errors.append($0) }
+
+      try await client.postEvent("big", payload: .string(""))
+      let emptyFrameBytes = transport.sentMessages.last!.utf8.count
+      let payload = Self.padding(frameBytes: frameBytes, filler: vector["filler"] as! String, emptyFrameBytes: emptyFrameBytes)
+
+      if vector["sent"] as! Bool {
+        try await client.postEvent("big", payload: .string(payload))
+        XCTAssertEqual(frames(transport, ofType: "event").count, 2, name)
+        XCTAssertEqual(transport.sentMessages.last!.utf8.count, frameBytes, name)
+        XCTAssertTrue(errors.all.isEmpty, name)
+      } else {
+        _ = try? await client.postEvent("big", payload: .string(payload))
+        XCTAssertEqual(frames(transport, ofType: "event").count, 1, name)
+        XCTAssertEqual(errors.all.map(\.message), ["Appduct frame is \(frameBytes) bytes, over the \(limitBytes)-byte limit."], name)
+        XCTAssertEqual(errors.all.first?.phase, "socket", name)
+      }
+      let finalState = await client.state
+      XCTAssertEqual(finalState, .active, name)
+    }
+  }
+
+  func testToolRegistrySnapshotOverTheFrameLimitGoesToTheErrorListener() async throws {
+    AppductProcessResumeLeaseStore.shared.resetForTests()
+    let transport = FakeTransportSession()
+    let client = AppductClient(
+      transport: transport,
+      timers: FakeClientTimers(),
+      defaultToolTimeoutMs: 10_000,
+      requirePrivateIp: true,
+      foregroundObserver: NeverBackgroundedObserver()
+    )
+    let errors = EventCollector<AppductUnifiedErrorEvent>()
+    _ = await client.onError { errors.append($0) }
+    for index in 0..<70 {
+      try client.registerTool(
+        ToolDescriptor(name: "tool_\(index)", description: String(repeating: "x", count: 4096)),
+        handler: { _, _ in .null }
+      )
+    }
+
+    let input = AppductConnectInput(
+      ip: "192.168.1.10", port: 8_443, sessionId: "session-1", token: "claim-token", expiresAt: 9_999_999_999, linkPin: nil
+    )
+    let connecting = Task { try await client.connect(input) }
+    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
+    transport.simulateAck(sessionId: "session-1")
+    try await connecting.value
+
+    try await waitUntil("the snapshot was refused") { !errors.all.isEmpty }
+    XCTAssertTrue(frames(transport, ofType: "tool_registry_snapshot").isEmpty)
+    XCTAssertTrue(errors.all[0].message.hasPrefix("Appduct frame is "))
+    XCTAssertTrue(errors.all[0].message.hasSuffix(" bytes, over the 262144-byte limit."))
+    let finalState = await client.state
+    XCTAssertEqual(finalState, .active)
+  }
+
+  func testToolErrorOverTheFrameLimitIsAnsweredWithToolSerializationError() async throws {
+    let (client, transport) = try await activeClient()
+    try client.registerTool(ToolDescriptor(name: "huge_error", description: "Throws a huge error."), handler: { _, _ in
+      throw AppductToolHandlerError(
+        type: "tool_execution_error",
+        message: String(repeating: "x", count: 300_000),
+        details: .string(String(repeating: "y", count: 300_000))
+      )
+    })
+    try await waitUntil("the registry delta reached the wire") { !self.frames(transport, ofType: "tool_registry_delta").isEmpty }
+
+    transport.simulateIncoming("{\"type\":\"tool_call\",\"session_id\":\"session-1\",\"id\":\"id-a\",\"name\":\"huge_error\",\"args\":{}}")
+
+    try await waitUntil("a tool error reached the wire") { !self.frames(transport, ofType: "tool_error").isEmpty }
+    let errors = frames(transport, ofType: "tool_error")
+    XCTAssertEqual(errors.count, 1)
+    XCTAssertEqual(errors[0]["id"] as? String, "id-a")
+    let body = errors[0]["error"] as? [String: Any]
+    XCTAssertEqual(body?["type"] as? String, "tool_serialization_error")
+    let message = body?["message"] as? String ?? ""
+    XCTAssertTrue(message.hasPrefix("Appduct frame is "), message)
+    XCTAssertTrue(message.hasSuffix(" bytes, over the 262144-byte limit."), message)
+    XCTAssertNil(body?["details"])
+    let finalState = await client.state
+    XCTAssertEqual(finalState, .active)
+  }
 }

@@ -200,6 +200,20 @@ consumes every output before the next drive step.
 Hand-written directly as JSON. Each runner also has inline scenarios that must fail, for a missing,
 an extra and an out-of-order output.
 
+### `frame-limits.json`
+
+An object: `{ limitBytes, vectors }`, with `limitBytes` the 262,144-byte cap on one frame
+(`docs/PROTOCOL.md` section 3) and each vector `{ name, frameBytes, filler, sent }`. A suite builds
+a frame of exactly `frameBytes` UTF-8 bytes through its public API: it first sends the same
+event, or answers a tool call with the same tool id length, using an empty string to measure the
+frame's size without padding, then sends a string of `filler` characters, topped up with `a`, that
+adds the missing bytes. `sent: true` means the frame goes out as built; `sent: false` means the SDK
+refuses it, answers a tool call with `tool_error` of type `tool_serialization_error` or reports an
+event to the error listener, and the message is exactly
+`Appduct frame is <frameBytes> bytes, over the 262144-byte limit.` Either way the session stays
+active. The multibyte vectors stay under the limit in characters while going over it in bytes.
+Suites also check that a tool registry snapshot over the limit is reported to the error listener,
+and that a `tool_error` over the limit is answered with a `tool_serialization_error` naming its size.
 ### `session-scenarios-background.json`
 
 The same format as `session-scenarios.json`, plus two drive steps and one wire output for the

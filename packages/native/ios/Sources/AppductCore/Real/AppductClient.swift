@@ -301,7 +301,7 @@ public actor AppductClient {
       try await sendWire(.object(message))
     } catch {
       emitError(
-        AppductUnifiedErrorEvent(phase: "socket", message: "Failed to send event \"\(name)\".")
+        AppductUnifiedErrorEvent(phase: "socket", message: sendFailureMessage(error, fallback: "Failed to send event \"\(name)\"."))
       )
       throw error
     }
@@ -355,8 +355,24 @@ public actor AppductClient {
 
   func sendWire(_ value: JSONValue) async throws {
     let text = try value.serialized()
+    let bytes = text.utf8.count
+    if bytes > appductMaxFrameBytes { throw AppductFrameTooLargeError(bytes: bytes) }
     try await transport.send(message: text)
   }
+}
+
+/// The daemon closes the socket with 1009 on a larger frame (PROTOCOL.md section 3).
+let appductMaxFrameBytes = 262_144
+
+/// An outgoing frame over `appductMaxFrameBytes`; refused before it reaches the transport.
+struct AppductFrameTooLargeError: Error, Sendable {
+  let bytes: Int
+  var message: String { "Appduct frame is \(bytes) bytes, over the \(appductMaxFrameBytes)-byte limit." }
+}
+
+/// The frame-size message when `error` is a refused oversized frame, otherwise `fallback`.
+func sendFailureMessage(_ error: Error, fallback: String) -> String {
+  (error as? AppductFrameTooLargeError)?.message ?? fallback
 }
 
 /// A disposable backed by a closure; used for listener removal handles above.
