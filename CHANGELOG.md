@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: `appduct init` in a project that spans iOS and Android now prints the wiring step for both.** It used to show only the Android step. `init --json` also gains a `platforms` field listing the native platforms it found, such as `["android", "ios"]`.
 - **Docs: the Build variants guide now tells apps with `expo` installed to exclude Appduct through `package.json`.** The `react-native.config.js` exclusion it showed before does nothing on Expo SDK 54, so Appduct still shipped; see [Leave Appduct out permanently](https://callstackincubator.github.io/appduct/guides/build-variants/#leave-appduct-out-permanently).
 - **Fix: `appduct init`'s next steps now match the project it found.** A React Native app still gets
   the `@appduct/react-native/auto` import, including when `init` runs from its `ios/` or `android/`
