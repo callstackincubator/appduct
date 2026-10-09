@@ -103,6 +103,11 @@ export type InitCommandData = {
    * tier rather than `"--scheme"`/`"already-recorded"` — `init`'s human-readable hint surfaces
    * this so a native-probe result says which file to go edit, not just which platform. */
   origin?: string;
+  /** The native platforms discovery saw in this project (`"android"` for a Gradle file or Android
+   * manifest, `"ios"` for an `Info.plist` or `project.yml`), alphabetical. Unlike `source`, which
+   * names the one input that won, this lists every platform, and it is reported on every run,
+   * including `"already-recorded"` and `"--scheme"`. Omitted when none was seen. */
+  platforms?: ("android" | "ios")[];
   /** The project config did not exist before this run. */
   created: boolean;
   /** This run wrote to the file. `false` on an idempotent re-run. */
