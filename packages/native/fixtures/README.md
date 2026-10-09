@@ -218,7 +218,8 @@ and that a `tool_error` over the limit is answered with a `tool_serialization_er
 
 The same format as `session-scenarios.json`, plus two drive steps and one wire output for the
 app leaving and returning to the foreground. The Swift, Kotlin and Dart suites load it; the web
-core has no background state.
+core has no background state. The Swift suite replays it with iOS refusing background time, so
+the core suspends as soon as the app leaves the foreground, as the other cores do.
 
 | Drive | Fields | Does |
 | --- | --- | --- |
