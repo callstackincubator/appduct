@@ -8,7 +8,7 @@
 
 import WebSocket from "ws";
 
-import type { ToolDescriptor } from "@appduct/shared";
+import type { EventDescriptor, ToolDescriptor } from "@appduct/shared";
 
 import { verifyServerPin, type DecodedLink } from "./harness.js";
 
@@ -20,6 +20,7 @@ type Ack = {
   resume_token: string;
   keepalive_interval_s: number;
   grace_s: number;
+  event_registry?: true;
 };
 
 type ToolCallFrame = { type: "tool_call"; session_id: string; id: string; name: string; args: Record<string, unknown> };
@@ -117,6 +118,14 @@ export class FakeAppClient {
         session_id: this.sessionId,
         tools: tools.map((tool) => ({ description: "A scripted test tool.", ...tool })),
       }),
+    );
+  }
+
+  /** Sends an authoritative `event_registry_snapshot` (issue #124). Like {@link registerTools}, it
+   * does not wait for the daemon: synchronize on a state read that has to reflect it. */
+  declareEvents(events: EventDescriptor[]): void {
+    this.requireSocket().send(
+      JSON.stringify({ type: "event_registry_snapshot", session_id: this.sessionId, events }),
     );
   }
 

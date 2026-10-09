@@ -56,6 +56,7 @@ export const handleDaemonStatusCommand = async (
         pid: status.pid,
         started_at: status.startedAt,
         wss_port: status.wssPort,
+        web_port: status.webPort,
         pinned_keys: status.pinnedKeys,
         session_count: sessionCount,
       },

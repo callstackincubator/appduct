@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
 import { decodeBootstrap } from "../domains/bootstrap.js";
+import { isEventDescriptor } from "../domains/event-descriptor.js";
 import { isToolDescriptor } from "../domains/tool-descriptor.js";
 
 /**
@@ -104,6 +105,24 @@ describe("fixtures-conformance: tool-descriptors.json (isToolDescriptor)", () =>
   });
 });
 
+type EventDescriptorVector = {
+  name: string;
+  descriptor: unknown;
+  valid: boolean;
+};
+
+describe("fixtures-conformance: event-descriptors.json (isEventDescriptor)", () => {
+  const vectors = loadFixture<EventDescriptorVector[]>("event-descriptors.json");
+
+  test("the fixture is non-empty", () => {
+    expect(vectors.length).toBeGreaterThan(0);
+  });
+
+  test.each(vectors.map((vector) => [vector.name, vector] as const))("%s", (_name, vector) => {
+    expect(isEventDescriptor(vector.descriptor)).toBe(vector.valid);
+  });
+});
+
 type CloseCodeVector = {
   code: number | null;
   reason: string | null;
@@ -111,13 +130,12 @@ type CloseCodeVector = {
 };
 
 /**
- * `@appduct/shared`/`@appduct/react-native` no longer implement terminal-close
- * classification themselves (it moved to native in issue #48 phase 2 — see
- * `docs/tasks/15-native-session-logic.md`'s "Deleted" section for `client/terminal-close.ts`).
- * This suite still loads and asserts the fixture, both to keep it self-consistent with
- * `docs/PROTOCOL.md` §7 and so a future JS-side consumer of this rule has a passing reference
- * implementation to copy. The Swift and Kotlin suites assert the same fixture against their own
- * production `isTerminalCloseEvent`/`isAppductTerminalCloseCode` functions.
+ * `@appduct/shared`/`@appduct/react-native` no longer implement terminal-close classification
+ * themselves (it moved to native in issue #48 phase 2, and `client/terminal-close.ts` was deleted
+ * with no JS copy kept). This suite still loads and asserts the fixture, both to keep it
+ * self-consistent with `docs/PROTOCOL.md` §7 and so a future JS-side consumer of this rule has a
+ * passing reference implementation to copy. The Swift and Kotlin suites assert the same fixture
+ * against their own production `isTerminalCloseEvent`/`isAppductTerminalCloseCode` functions.
  */
 const POLICY_VIOLATION_CLOSE_CODE = 1008;
 const isTerminalCloseCode = (code: number | null): boolean => code === POLICY_VIOLATION_CLOSE_CODE;

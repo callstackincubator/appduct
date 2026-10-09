@@ -66,6 +66,48 @@ Appduct.register(
 - `timeoutMs` (1,000–600,000; default 10,000) is the only way to give a call more time. Callers
   can shorten it, never extend it.
 
+## Declare the events the app posts
+
+Agents list events before they wait on one, so declare every event the app posts. In React Native:
+
+```ts
+registerEvent({
+  name: "checkout_completed",
+  description: "An order was paid.",
+  payloadSchema: z.object({ orderId: z.string() }),
+});
+```
+
+In Swift, `payloadSchema` is a JSON Schema dictionary:
+
+```swift
+try Appduct.shared.registerEvent(
+  name: "checkout_completed",
+  description: "An order was paid.",
+  payloadSchema: ["type": "object", "properties": ["orderId": ["type": "string"]]]
+)
+```
+
+In Kotlin, it is a `JSONObject`:
+
+```kotlin
+Appduct.registerEvent(
+  name = "checkout_completed",
+  description = "An order was paid.",
+  payloadSchema = JSONObject("""{"type":"object","properties":{"orderId":{"type":"string"}}}"""),
+)
+```
+
+Declare at app start, not inside a screen that may never open, or `events ls` stays empty until it does.
+
+- In React Native, `payloadSchema` takes the same forms as `inputSchema`; a raw JSON Schema is
+  listed but never checked. In Swift and Kotlin it is a plain JSON Schema object, listed and never
+  checked. `name` can be any string, dotted names included.
+- Declaring is advisory: an undeclared `postEvent` still arrives, and production posts as-is. Only
+  the React Native SDK warns in dev, about an undeclared name and about a payload that fails a
+  declared Standard Schema. Swift and Kotlin send without any warning.
+- Verify with `appduct events ls`; an empty list means nothing is declared.
+
 ## Design tools for the agent that will call them
 
 An agent sees `name(params) -> result` plus the first line of the description, and decides from
@@ -105,7 +147,8 @@ Before and after:
 registerTool({ name: "checkout", description: "Checkout", inputSchema: z.object({ payload: z.any() }),
   handler: async ({ payload }) => runCheckout(payload) });
 
-// After: `place_order(paymentMethod: "card" | "apple_pay" = "card") -> { orderId: string, total: number }  [destructive]`
+// After: `place_order(paymentMethod: "card" | "apple_pay" = "card") -> { orderId: string, total: number }`,
+// tagged `[prompt]` when the daemon's policy asks before running destructive tools.
 registerTool({
   name: "place_order",
   description: "Place an order for the current cart and navigate to the confirmation screen. Requires a signed-in user with a non-empty cart. Charges the test payment method.",

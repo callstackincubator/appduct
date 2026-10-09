@@ -35,13 +35,24 @@ You install the `appduct` CLI on your computer and add the Appduct library to yo
 
 For more detail, see [How it works](/appduct/reference/architecture/).
 
+## Packages
+
+| Package | What it is |
+| --- | --- |
+| [`appduct`](/appduct/guides/cli/) (npm) | The CLI, the background service, and the MCP server |
+| [`@appduct/react-native`](/appduct/install/react-native/) (npm) | The React Native library and Expo config plugin |
+| [`@appduct/web`](/appduct/install/web/) (npm) | The web library for any framework or plain JavaScript |
+| [`AppductCore`](/appduct/install/ios/) | The iOS library, through Swift Package Manager or CocoaPods |
+| [`com.callstack.appduct:core`](/appduct/install/android/) | The Android library on Maven Central, paired with `core-noop` for release builds |
+
 ## Requirements
 
 | Where | Requirement |
 | --- | --- |
-| React Native app | iOS 15.1+ and Android, New Architecture. A development build or bare React Native app; Expo Go isn't supported. Web gets a stub that does nothing. |
+| React Native app | iOS 15.1+ and Android, New Architecture. A development build or bare React Native app; Expo Go isn't supported. The web build of the same app registers the same tools once `metro.config.js` wraps your config in `withAppduct`; open the page with `appduct sessions link --open web <url>`. |
 | iOS app without React Native | iOS 15.1+. Installing with Swift Package Manager needs Xcode 16.3 or newer. |
 | Android app without React Native | Android 7.0 (API 24) or newer. |
+| Web page | Any framework or none, in a browser on the same computer as the CLI. Chrome, Firefox and Safari on `http://localhost`; see [Drive a web page](/appduct/guides/web-pages/) for `https`. |
 | CLI | Node 20 or newer, on macOS or Linux. Windows hasn't been verified. |
 
 ## Where to go next

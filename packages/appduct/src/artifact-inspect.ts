@@ -1,8 +1,8 @@
 /**
- * `appduct doctor` (docs/tasks/08-appduct-doctor.md): the artifact-level replacement for the
- * runtime `debuggable`/`#if DEBUG` gate removed elsewhere in opt-in hardening. Given a built
- * `.app`/`.ipa`/`.apk`/`.aab`, decide whether Appduct's native code actually shipped inside it —
- * not whether the config that's supposed to have produced it looks right.
+ * `appduct doctor`: the artifact-level replacement for the runtime `debuggable`/`#if DEBUG` gate
+ * removed elsewhere in opt-in hardening. Given a built `.app`/`.ipa`/`.apk`/`.aab`, decide whether
+ * Appduct's native code actually shipped inside it — not whether the config that's supposed to have
+ * produced it looks right.
  *
  * The one property everything here is built around: **never report "absent" because a tool was
  * missing or the artifact couldn't be read.** That failure mode is strictly worse than not having
@@ -14,31 +14,30 @@
  * Detection strategy, and why no single signal is authoritative on either platform:
  *
  * - iOS: `present` is decided by real-code-only symbols alone, exactly like Android below —
- *   `AppductCoreMarker` (`packages/native/ios/Sources/AppductCore/Real/AppductCoreMarker.swift`,
- *   docs/tasks/14-native-core-extraction.md), an `@objc` class compiled only into the real
- *   implementation, never into the SwiftPM package's `Stub/` branch, so its presence cannot be
- *   confused with a stub build. `RCTNativeAppduct` (`RCT_EXPORT_MODULE`, see
- *   `packages/react-native/ios/RCTNativeAppduct.mm`) is kept as a second real-code signal for
- *   artifacts built before the marker existed. Both are Objective-C runtime metadata — they live in
- *   `__objc_classname`/`__objc_data`, and `strip`/release optimization leaves them alone because
- *   removing them would break `+[NSObject class]`-based dispatch. (A build that dead-strips the whole
- *   translation unit for lack of `-ObjC`/`-force_load` could still drop them — these signals assume
- *   the module actually links into the binary, which is the thing being checked in the first
- *   place.) The plugin-authored `Info.plist` keys
- *   (`AppductCliPins`/`AppductTrust`/`AppductAllowPrivateLanOnly`, docs/tasks/00-overview.md
- *   "Native config keys the plugin writes") are reported as a corroborating signal only and can no
- *   longer flip `present` to `true` on their own — an app author can write these keys by hand (or a
- *   future stub could ship them) without the real implementation being present, exactly the reason
- *   the Android signals below aren't all treated as equally authoritative either.
+ *   `AppductCoreMarker` (`packages/native/ios/Sources/AppductCore/Real/AppductCoreMarker.swift`),
+ *   an `@objc` class compiled only into the real implementation, never into the SwiftPM package's
+ *   `Stub/` branch, so its presence cannot be confused with a stub build. `RCTNativeAppduct`
+ *   (`RCT_EXPORT_MODULE`, see `packages/react-native/ios/RCTNativeAppduct.mm`) is kept as a second
+ *   real-code signal for artifacts built before the marker existed. Both are Objective-C runtime
+ *   metadata — they live in `__objc_classname`/`__objc_data`, and `strip`/release optimization
+ *   leaves them alone because removing them would break `+[NSObject class]`-based dispatch. (A
+ *   build that dead-strips the whole translation unit for lack of `-ObjC`/`-force_load` could still
+ *   drop them — these signals assume the module actually links into the binary, which is the thing
+ *   being checked in the first place.) The plugin-authored `Info.plist` keys
+ *   (`AppductCliPins`/`AppductTrust`/`AppductAllowPrivateLanOnly`) are reported as a corroborating
+ *   signal only and can no longer flip `present` to `true` on their own — an app author can write
+ *   these keys by hand (or a future stub could ship them) without the real implementation being
+ *   present, exactly the reason the Android signals below aren't all treated as equally
+ *   authoritative either.
  * - Android: the primary signal is `AppductNativeMarker`
  *   (`packages/native/android/core/src/main/java/com/callstack/appduct/AppductNativeMarker.kt`,
  *   vendored into `@appduct/react-native` at `android/core/src/main/java/...`), a marker class with no
  *   other purpose. Its fully-qualified name is kept unminified and unremoved by a `-keep` rule in
  *   `consumer-rules.pro` (same vendoring path), shipped to every consuming app via `consumerProguardFiles`
  *   (see `../build.gradle`) — R8 applies it regardless of whether the app used the Expo config plugin or
- *   bare-RN autolinking, and regardless of whether the app authored any keep rules of its own
- *   (docs/tasks/10-android-detection-keep-rule.md). This is the only Android signal guaranteed to survive
- *   minification in every supported consumer setup.
+ *   bare-RN autolinking, and regardless of whether the app authored any keep rules of its own.
+ *   This is the only Android signal guaranteed to survive minification in every supported consumer
+ *   setup.
  *
  *   Two more signals are kept as fallbacks for artifacts built before this marker existed: the
  *   `com.callstack.appduct` package string in the dex string pool (and its pre-rename spelling,
@@ -56,26 +55,30 @@
  * a real inclusion to "absent" just because one check missed — but the Info.plist keys signal cannot
  * flip it to `true` by itself, matching Android's marker-only rule below (a stub that ships the same
  * plist keys without the real implementation is exactly the failure mode this guards against, even
- * though no such stub exists yet as of Phase 1 of docs/tasks/14-native-core-extraction.md).
+ * though no such stub exists yet).
  *
  * On Android, `present` is decided by the keep-rule marker alone, not an OR across all three
  * signals. The other two are reported in `signals` for corroboration/debugging but cannot flip
  * `present` to `true` on their own: `android/build.gradle`'s `APPDUCT_ENABLED`-gated vendored
- * source-directory swap (`core` vs `core-noop`, docs/tasks/14-native-core-extraction.md; previously a
- * `src/debug`/`src/release-stub` swap, see docs/tasks/00-overview.md's "Revisited
- * post-implementation") compiles a genuine no-op `AppductPackage` into a default release build at
- * the *same* fully-qualified name the real one uses (required so the shared, non-variant-aware
+ * source-directory swap (`core` vs `core-noop`; previously a `src/debug`/`src/release-stub` swap)
+ * compiles a genuine no-op `AppductPackage` into a default release build at the *same*
+ * fully-qualified name the real one uses (required so the shared, non-variant-aware
  * `PackageList.java` still resolves), and the config plugin writes the same manifest meta-data
  * regardless of variant (Expo mods edit the single merged manifest, not a per-variant one). Both
  * fallback signals therefore fire on that harmless stub exactly as they would on the real module, and
  * can no longer prove inclusion by themselves.
  *
- * `appduct doctor` is strictly better than the runtime check it replaces (docs/tasks/00-overview.md
- * "What we give up, deliberately"). The keep-rule marker closes the previously-documented gap where a
- * bare-RN app with no config plugin and no keep rule could evade both older Android signals under R8
- * minification (docs/tasks/10-android-detection-keep-rule.md) — that gap applied to builds produced before
- * this library shipped the marker/keep rule; an app that pins an older `@appduct/react-native` version
- * still lacks it, and doctor cannot detect inclusion on such a build at all.
+ * Flutter: the Dart core writes `appduct-dart-core/` into the AOT snapshot only when
+ * `appductEnabled` is true; that string in `libapp.so` / `App.framework/App` is a third
+ * authoritative signal on both platforms. The native shim is in every Flutter build and proves
+ * nothing, so doctor reports on the Dart core alone.
+ *
+ * `appduct doctor` is strictly better than the runtime check it replaces: it runs in CI, before
+ * distribution, against the thing actually shipped. The keep-rule marker closes the
+ * previously-documented gap where a bare-RN app with no config plugin and no keep rule could evade
+ * both older Android signals under R8 minification — that gap applied to builds produced before
+ * this library shipped the marker/keep rule; an app that pins an older `@appduct/react-native`
+ * version still lacks it, and doctor cannot detect inclusion on such a build at all.
  */
 
 import { execFile } from "node:child_process";
@@ -93,7 +96,8 @@ export type DetectionSignal =
   | "ios-info-plist-keys"
   | "android-keep-rule-marker"
   | "android-dex-package-symbol"
-  | "android-manifest-meta-data-keys";
+  | "android-manifest-meta-data-keys"
+  | "flutter-dart-core-marker";
 
 export type ArtifactInspection = {
   platform: ArtifactPlatform;
@@ -143,6 +147,12 @@ const ANDROID_DEX_PACKAGE_MARKERS = [
   "com.callstackincubator.appduct",
 ];
 const ANDROID_MANIFEST_KEY_MARKERS = ["com.callstack.appduct.", "com.callstackincubator.appduct."];
+
+// Written by `Appduct.ensureInitialized()` in packages/flutter/lib/src/flutter/enabled.dart, behind
+// `appductEnabled`, so it lands in the Dart AOT snapshot (`libapp.so`, `App.framework/App`) only
+// when the Dart core was compiled in. Strings are not renamed by `--obfuscate`. The native shim
+// ships in every Flutter build and is not evidence, so only this marker decides `present`.
+const FLUTTER_DART_CORE_MARKER = "appduct-dart-core/";
 
 const bufferIncludesAscii = (haystack: Buffer, needle: string): boolean => {
   return haystack.includes(Buffer.from(needle, "utf8"));
@@ -376,6 +386,10 @@ const detectIosSignals = (bytes: Buffer): DetectionSignal[] => {
     signals.push("ios-info-plist-keys");
   }
 
+  if (bufferIncludesAscii(bytes, FLUTTER_DART_CORE_MARKER)) {
+    signals.push("flutter-dart-core-marker");
+  }
+
   return signals;
 };
 
@@ -402,6 +416,10 @@ const detectAndroidSignals = (bytes: Buffer): DetectionSignal[] => {
     )
   ) {
     signals.push("android-manifest-meta-data-keys");
+  }
+
+  if (bufferIncludesAscii(bytes, FLUTTER_DART_CORE_MARKER)) {
+    signals.push("flutter-dart-core-marker");
   }
 
   return signals;
@@ -457,9 +475,10 @@ export const inspectArtifact = async (
   // that dropped one doesn't read as absent) -- the Info.plist keys are corroborating only and
   // can't flip `present` on their own either.
   const present =
-    platform === "android"
+    signals.includes("flutter-dart-core-marker") ||
+    (platform === "android"
       ? signals.includes("android-keep-rule-marker")
-      : signals.includes("ios-core-marker-symbol") || signals.includes("ios-objc-class-symbol");
+      : signals.includes("ios-core-marker-symbol") || signals.includes("ios-objc-class-symbol"));
 
   return {
     platform,

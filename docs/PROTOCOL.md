@@ -10,24 +10,24 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for design rationale.
 
 ## Topology in one sentence
 
-One long-lived `appduct daemon` process holds the TLS private key and a single `wss://`
-listener; any number of devices connect to it concurrently, each over its own pinned
-socket, and each gets its own session.
+One long-lived `appduct daemon` process holds the TLS private key and a `wss://` listener
+for devices, plus a plain-HTTP `ws://` listener on loopback for browser pages; any number of
+clients connect concurrently, each over its own socket, and each gets its own session.
 
 ## 1. Trust model
 
 - The app does not trust the deep link, the local network, or the IP address by itself.
 - The app trusts the daemon only because the TLS leaf certificate's SPKI hash matches an
   embedded `sha256/...` pin (or a pin in the pin *set* — plural pins let you roll keys
-  without breaking already-shipped app builds; see `docs/SECURITY.md`).
+  without breaking already-shipped app builds; see [Rotate keys](https://callstackincubator.github.io/appduct/guides/security/#rotate-keys)).
 - The deep link only carries bootstrap data for one pending session; it is a hint, not
   proof of authority. The session token inside it is short-lived and single-use.
 
 ## 2. Bootstrap payload (v2)
 
 Deep link shape: `<scheme>:///?appduct=<base64url-no-padding>&pin=<sha256/...>`. The
-`appduct` payload is unchanged from v1; `pin` is a separate, percent-encoded query param
-carrying the daemon's SPKI fingerprint (see `docs/ARCHITECTURE.md` §8), appended by both
+`appduct` payload is the binary blob described below; `pin` is a separate, percent-encoded
+query param carrying the daemon's SPKI fingerprint (see `docs/ARCHITECTURE.md` §8), appended by both
 `appduct sessions link` and `appduct_connect`. **Anything reading the payload must stop at the
 `&`** — slicing to the end of the string swallows the pin and corrupts the blob.
 
@@ -132,10 +132,14 @@ Guard: `isSessionResumeMessage`.
 ```jsonc
 { "type": "session_ack", "session_id": "XzAERP54_Goh74hZ", "status": "ok",
   "alias": "pixel-8", "resume_token": "<base64url, 32 raw bytes>",
-  "keepalive_interval_s": 15, "grace_s": 600 }
+  "keepalive_interval_s": 15, "grace_s": 600, "event_registry": true }
 ```
 
-Guard: `isSessionAckMessage`. `resume_token` is **rotated on every successful claim or
+Guard: `isSessionAckMessage`. `event_registry` is `true` when this daemon accepts the
+`event_registry_*` frames below, and omitted (never `false`) by a daemon that predates them. An
+app whose SDK is newer than the daemon's CLI must send those frames only after an ack that
+carries it, because an older daemon closes the session with `1008 unknown_message_type` on any
+type it does not know. The flag is on every ack, resume included. `resume_token` is **rotated on every successful claim or
 resume** — the previous token stops working the instant a new one is issued, so a client
 must always use the token from its most recent `session_ack`, never a cached older one.
 
@@ -171,6 +175,35 @@ merges with, whatever the daemon retained across the gap).
 Guard: `isToolRegistryDeltaMessage`. `"upsert"` requires a valid `ToolDescriptor` in
 `tool`; `"remove"` requires a non-empty `name` (≤4096 chars); any other `operation` value
 is rejected.
+
+### `event_registry_snapshot` — app → daemon, declares the events the app posts
+
+```jsonc
+{ "type": "event_registry_snapshot", "session_id": "XzAERP54_Goh74hZ", "events": [
+  { "name": "checkout_completed", "description": "Fired once an order finishes checkout.",
+    "payload_schema": { "type": "object", "properties": { "orderId": { "type": "string" } }, "required": ["orderId"] } }
+] }
+```
+
+Guard: `isEventRegistrySnapshotMessage`. Every element must pass `isEventDescriptor` (§5a); one
+invalid element closes the session with `1008 invalid_registry`. Authoritative like
+`tool_registry_snapshot`: it replaces whatever the daemon holds, so an app that declares events
+sends one after every ack that carries `event_registry`, resume included. The daemon only lists
+declared events (`events.list`); it never checks a posted `event`'s name or payload against them.
+
+### `event_registry_delta` — app → daemon, an event declared or withdrawn after the snapshot
+
+```jsonc
+{ "type": "event_registry_delta", "session_id": "XzAERP54_Goh74hZ", "operation": "upsert",
+  "event": { "name": "cart.item_added", "description": "An item went into the cart." } }
+
+{ "type": "event_registry_delta", "session_id": "XzAERP54_Goh74hZ", "operation": "remove",
+  "name": "cart.item_added" }
+```
+
+Guard: `isEventRegistryDeltaMessage`. `"upsert"` requires a valid `EventDescriptor` in `event`;
+`"remove"` requires a non-empty `name` (≤4096 chars); anything else closes with
+`1008 invalid_registry`.
 
 ### `tool_call` — daemon → app, sent when an operator/agent invokes a tool
 
@@ -226,9 +259,9 @@ connection that issued `tools.call` dropping (CLI Ctrl-C, MCP client disconnect)
 explicit `tools.cancel` RPC call. A cancel for an unknown or already-finished `id` is a
 no-op, not a protocol violation — the daemon never knows for certain which calls the app
 still considers in flight. The app is expected to abort the matching handler (its
-`AbortSignal`, §11) and reply `tool_error` with `error.type: "tool_cancelled"`; a handler
-that ignores the signal keeps running and replies normally, exactly as before this
-message existed.
+`AbortSignal`, `docs/ARCHITECTURE.md` §11) and reply `tool_error` with
+`error.type: "tool_cancelled"`; a handler that ignores the signal keeps running and replies
+normally.
 
 ### `event` — app → daemon, app-originated telemetry outside the tool-call/result cycle
 
@@ -241,6 +274,11 @@ Guard: `isEventMessage`. Emitted by `postEvent(name, payload?)` on the React Nat
 client; surfaced daemon-side as an `app_event` (`events.subscribe`, `appduct events tail`) and
 retained per-session (`events.since`, §8) so a request/response caller (an MCP client, a script)
 can ask "what happened?" after the fact instead of only listening live.
+
+`ts` is Unix milliseconds — the unit Kotlin's `System.currentTimeMillis()` and Swift's
+`timers.now()` already report, and the one the daemon forwards unchanged inside `app_event`'s
+`data`. The guard accepts any finite number, so an app that stamps seconds is not rejected: it
+reaches its callers as a timestamp 1 000× in the past, which is what iOS did until #154.
 
 ## 5. Tool descriptor shape
 
@@ -304,6 +342,21 @@ so one test — `group === null` — answers "ungrouped" in either half of a lis
 not probe for the key's presence instead, and a daemon that predates groups simply omits it from
 entries.
 
+## 5a. Event descriptor shape
+
+```ts
+type EventDescriptor = { name: string; description: string; payload_schema?: Record<string, unknown> };
+```
+
+Guard: `isEventDescriptor`; conformance vectors in `packages/native/fixtures/event-descriptors.json`.
+
+- `name`: any non-empty string up to 4096 UTF-16 code units (a JavaScript string's `length`). This is the rule for a posted `event`'s
+  `name`, not the tool-name pattern, so a name an app already posts (`cart.item_added`) can be
+  declared as is.
+- `description`: 1 to 4096 characters, like a tool's.
+- `payload_schema`: optional JSON Schema (draft 2020-12) object for the posted payload; only
+  checked to be a JSON object.
+
 ## 6. Session state machine
 
 ```
@@ -335,7 +388,12 @@ entries.
   fails fast with `session_suspended`. The session records why in `suspendReason`:
   `app_backgrounded` when the socket closed with `1001 app_backgrounded` (§7), otherwise
   `connection_lost`. Resuming clears it.
-- `SUSPENDED → ACTIVE`: a `session_resume` on a fresh pinned socket within
+- `ACTIVE → ACTIVE` (socket replacement): a valid `session_resume` that arrives while the
+  old socket is still open closes it with `1000 session_replaced` and makes the new socket
+  the session's only one. The session never suspends, so a tool call still pending on the old
+  socket fails fast with `session_suspended` when the resume lands (the app dropped it with
+  that socket), and the daemon ignores any frame the old socket still delivers.
+- `SUSPENDED → ACTIVE`: a `session_resume` on a fresh socket within
   `graceSeconds` (default 600) of suspension, with a valid (unrotated-since,
   unexpired) `resume_token`. The `resume_token` rotates again on this success, and the
   app is expected to re-send a full `tool_registry_snapshot` right after (§4) — the
@@ -344,7 +402,7 @@ entries.
 - Any state → `REVOKED`: `sessions.revoke` (CLI `appduct sessions revoke`, or the equivalent
   RPC call). Terminal states (`DISCARDED`, `EXPIRED`, `REVOKED`) free the session's alias
   for reuse by a future session.
-- There is no cap on concurrent sessions; every session shares the one `wss://` listener.
+- There is no cap on concurrent sessions; sessions share the two listeners, and each stays on the one it was claimed on.
 
 ## 7. Close-code table
 
@@ -353,7 +411,7 @@ not prose. Grouped by trigger:
 
 | Code | Reason | When |
 | --- | --- | --- |
-| 1000 | `session_replaced` | a fresh claim/resume for the same session id supersedes a still-open socket |
+| 1000 | `session_replaced` | a `session_resume` for the same session id supersedes a still-open socket |
 | 1000 | `revoked` | `sessions.revoke` closed this session's socket |
 | 1003 | `binary_frame_not_supported` | a binary WebSocket frame arrived (text frames only) |
 | 1008 | `pre_claim_timeout` | no `session_claim`/`session_resume` arrived within 10 s of connecting |
@@ -362,12 +420,13 @@ not prose. Grouped by trigger:
 | 1008 | `unknown_message_type` | a post-claim message's `type` isn't in the known set (§4) |
 | 1008 | `session_mismatch` | a post-claim message's `session_id` doesn't match this socket's session |
 | 1008 | `already_claimed` | claim attempted against a session that already has an active socket |
+| 1008 | `wrong_transport` | a claim was presented on the listener its link was not minted for, or a resume on a listener other than the one the session was claimed on (§2, §6); the link or session is untouched and stays usable on its own listener |
 | 1008 | `unknown_session` | claim/resume referenced a session id the daemon has no record of |
 | 1008 | `link_expired` | claim attempted after the pending link's TTL elapsed |
 | 1008 | `claim_attempts_exceeded` | the 5th failed claim attempt against a pending session — it is now unclaimable |
 | 1008 | `invalid_token` | claim token didn't match (compared with `crypto.timingSafeEqual`) |
 | 1008 | `invalid_resume_token` | resume token didn't match the session's current (rotated) token |
-| 1008 | `invalid_registry` | a `tool_registry_snapshot`/`tool_registry_delta` failed validation (§4) |
+| 1008 | `invalid_registry` | a `tool_registry_*` or `event_registry_*` frame failed validation (§4) |
 | 1008 | `invalid_message` | a post-claim message matched a known `type` but failed that type's field guard |
 | 1001 | `app_backgrounded` | the app sent this because it left the foreground; the daemon suspends the session with `suspendReason: "app_backgrounded"`. The app keeps its resume token and resumes on foreground. Any other close suspends with `connection_lost` |
 | 1011 | `send_failed` | the daemon could not write to the socket (treated as socket loss, same as any other transport failure) |
@@ -401,16 +460,21 @@ types also establish these details:
   optional too.
 - `events.subscribe` includes `link_expired` (a pending link's TTL elapsed with no
   claim) and `tool_call_progress` (mirroring the wire message in §4).
+- `events.list` (issue #124) returns the events the session's app declared, sorted by `name` and
+  narrowed by the optional whole-name `name` glob before `total` is counted, as
+  `{ events: EventDescriptor[], total }`; `limit`/`offset` page it. It works on a suspended session
+  and returns `{ events: [], total: 0 }` for an app that declared none. The daemon also emits
+  `events_changed` (`{ eventCount }`) after each registry change; like `tools_changed` it is not
+  retained for `events.since` and only lands in `events.log`.
 - `events.since` (issue #6) is the pull counterpart for `app_event` only: it drains a
   per-session ring buffer of the app's events that the daemon retains alongside the live
   `events.subscribe` fan-out, so a caller that only finds out it wants to know "what
   happened?" after the fact (every MCP tool call, since MCP is strictly request/response)
   doesn't need to have been subscribed in advance. Every `EventNotification` carries a
-  `seq`: a cursor that increases monotonically per session, assigned to every
-  session-scoped event as it is emitted, so the retained app events' `seq`s can have gaps
-  where unretained kinds went by. Pass the highest `seq` seen back as `since` on the next call
-  to resume without re-reading; a session-scoped event whose session hits a terminal state
+  `seq`, but only `app_event` gets a real one: a cursor that increases by one per app event
+  in a session, with no gaps, which is how `events.since` works out how many fell off the
+  ring buffer (`dropped`). Every other kind, session-scoped or not, carries `seq: 0`. Pass the
+  highest `seq` seen back as `since` on the next call to resume without re-reading; a session-scoped event whose session hits a terminal state
   (`session_expired`/`session_revoked`) discards that session's buffer, matching "terminal
   states free the alias" (ARCHITECTURE.md §6) — there is no persisted history past that
-  point. Daemon-wide events (no `sessionId`, e.g. `daemon_started`) are never buffered and
-  carry `seq: 0`.
+  point. Daemon-wide events (no `sessionId`, e.g. `daemon_started`) are never buffered.

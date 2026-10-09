@@ -1,9 +1,10 @@
 /** Route for `appduct sessions link` — loaded by `routes/sessions/index.ts`'s router only when it
  * runs (issue #96; replaces the removed `appduct link`). */
 
+import type { CliResult } from "../../result-types.js";
 import type { Route } from "../../router.js";
 
-import { handleLinkCommand } from "../../../commands/link.js";
+import { handleLinkCommand, handleWebLinkCommand } from "../../../commands/link.js";
 import { parsePositiveIntegerOption } from "../../command-options.js";
 import { commandName } from "../../router.js";
 import { executeCommand } from "../../runner.js";
@@ -14,11 +15,14 @@ export const route: Route = async (context) => {
 
   return executeCommand(
     commandName(context),
-    guarded(context)(() =>
-      handleLinkCommand(
+    guarded(context)<CliResult<unknown>>(() =>
+      (options.open === "web" ? handleWebLinkCommand : handleLinkCommand)(
         {
           ttlSeconds: parsePositiveIntegerOption(options.ttl, "--ttl"),
           scheme: typeof options.scheme === "string" ? options.scheme : undefined,
+          url: context.args[0],
+          browserUrl: typeof options.browserUrl === "string" ? options.browserUrl : undefined,
+          targetId: typeof options.targetId === "string" ? options.targetId : undefined,
           open: typeof options.open === "string" ? options.open : undefined,
           device: typeof options.device === "string" ? options.device : undefined,
           // cac camelCases `--app-id`; the dashed spelling is kept as a fallback so a

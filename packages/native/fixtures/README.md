@@ -1,19 +1,37 @@
 # Cross-language conformance fixtures
 
-Issue #48, "Parity is the risk": the TypeScript (`@appduct/shared`, `@appduct/react-native`
-where noted), Swift (`packages/native/ios`), and Kotlin (`packages/native/android/core`)
-implementations of the same wire protocol (`docs/PROTOCOL.md`) must agree byte-for-byte and
-rule-for-rule. Each file here is a language-neutral JSON vector table; each of the three test
-suites loads every file and asserts every case against its own implementation, so a change that
-makes one implementation drift from the others fails a test instead of shipping silently.
+The TypeScript (`@appduct/shared`, and `appduct` where noted), Swift (`packages/native/ios`) and
+Kotlin (`packages/native/android/core`) implementations of the same wire protocol
+(`docs/PROTOCOL.md`) must agree byte-for-byte and rule-for-rule. Each file here is a
+language-neutral JSON vector table that several test suites load and assert against their own
+implementation, so a change that makes one implementation drift from the others fails a test
+instead of shipping silently.
 
 Consumers:
 
-- `packages/shared/src/__tests__/fixtures-conformance.test.ts` (vitest)
-- `packages/appduct/src/__tests__/spki-pin.test.ts` (vitest, `spki-pin.json` only)
-- `packages/native/ios/Tests/AppductCoreTests/FixturesConformanceTests.swift` (XCTest)
+- `packages/shared/src/__tests__/fixtures-conformance.test.ts` (vitest): every file except
+  `spki-pin.json`, `event-registry-frames.json`, `session-scenarios.json` and
+  `session-scenarios-background.json`
+- `packages/appduct/src/__tests__/spki-pin.test.ts` (vitest): `spki-pin.json` only
+- `packages/native/ios/Tests/AppductCoreTests/FixturesConformanceTests.swift` (XCTest): every file
+  except `event-registry-frames.json`, `session-scenarios.json` and
+  `session-scenarios-background.json`
+- `packages/native/ios/Tests/AppductCoreTests/AppductEventRegistryTests.swift` (XCTest):
+  `event-registry-frames.json`
 - `packages/native/android/core/src/test/java/com/callstack/appduct/FixturesConformanceTest.kt`
-  (JUnit)
+  (JUnit): every file except `event-registry-frames.json`, `session-scenarios.json` and
+  `session-scenarios-background.json`
+- `packages/native/android/core/src/test/java/com/callstack/appduct/AppductEventRegistryTest.kt`
+  (JUnit): `event-registry-frames.json`
+- `packages/flutter/test/core/*_test.dart` (`flutter test`): every file except `spki-pin.json`;
+  `event-registry-frames.json` is checked against the frames the Dart codec encodes, and
+  `scenarios_test.dart` replays `session-scenarios.json` and `session-scenarios-background.json`
+- `packages/web/src/__tests__/session-scenarios.test.ts` (vitest),
+  `packages/native/ios/Tests/AppductCoreTests/SessionScenariosTests.swift` (XCTest) and
+  `packages/native/android/core/src/test/java/com/callstack/appduct/SessionScenariosTest.kt`
+  (JUnit): `session-scenarios.json`
+- The Swift, Kotlin and Dart suites also load `session-scenarios-background.json`. The web suite
+  does not, because the web core has no background state.
 
 ## The rule
 
@@ -63,6 +81,34 @@ Hand-written, not generated: these are URL strings, not binary payloads, so ther
 encode programmatically. When `bootstrap-payloads.json` is regenerated with different `base64url`
 values, update the corresponding `appduct=` values here by hand and re-check `payloadIndex`.
 
+### `event-descriptors.json`
+
+Array of `{ name, descriptor, valid }` covering `@appduct/shared`'s `isEventDescriptor`
+(`docs/PROTOCOL.md` §5a): a name is any non-empty string up to 4096 UTF-16 code units (dotted names and
+names with spaces are valid, unlike a tool name), a description is 1 to 4096 characters, and
+`payload_schema` must be a JSON object if present (rejecting a string, an array and `null`). The 4096 limit is pinned in UTF-16 code units: 2048 non-BMP characters (😀) pass, 2049 fail.
+Asserted by the TypeScript, Swift and Kotlin suites.
+
+### `event-registry-frames.json`
+
+Array of `{ name, sessionId, declaredBeforeAck, afterAck, frames }` pinning the exact
+`event_registry_snapshot` / `event_registry_delta` frames (`docs/PROTOCOL.md` §5a) an SDK sends.
+Each case is a scenario run through the SDK's public API against a fake transport: declare every
+descriptor in `declaredBeforeAck` (valid `EventDescriptor`s in wire form), connect, deliver a
+`session_ack` that carries `"event_registry": true`, then apply each `afterAck` step in order
+(`{ "op": "register", "event": <descriptor> }` or `{ "op": "remove", "name": <string> }`, where
+`remove` is the disposer of the event registered under that name). `frames` is the complete, ordered
+list of `event_registry_*` frames the SDK must have sent, compared as JSON (key order does not
+matter); other frames, such as `tool_registry_snapshot`, are ignored.
+
+Ordering contract: after a `session_ack` carrying `event_registry: true`, the SDK sends the
+snapshot of the declarations as they stood at ack time before any later delta, and deltas go out in
+the order the calls were made (a `remove` followed by a `register` of the same name sends the
+remove first). Deltas for declarations made before the ack are covered by the snapshot and are not
+sent. Every SDK, the Kotlin one included, must meet this; the fixture steps run back to back with no
+wait between them, so an SDK that sends from unordered tasks fails it intermittently. Covers the snapshot of
+several events, the empty snapshot, an upsert delta and a remove delta.
+
 ### `tool-descriptors.json`
 
 Array of `{ name, descriptor, valid }` covering every rule in `docs/PROTOCOL.md` §5
@@ -92,6 +138,88 @@ ever terminal, matched wholesale by code, never by inspecting the reason string*
 1001, 1006, or anything unrecognized) is worth a reconnect attempt inside the grace window.
 
 Hand-written directly as JSON, sourced from the table in `docs/PROTOCOL.md` §7.
+
+### `session-scenarios.json`
+
+Array of `{ name, startMs, random, steps }`. Each scenario is a script for one fresh core: `startMs`
+is the clock's starting Unix time in milliseconds, `random` is the constant the jitter source
+returns, and `steps` run in order. With `random` at 0.5, the first reconnect delay is 250 ms, and
+the second consecutive one 500 ms. The scenarios here cover the paths where session behaviour has
+broken before: resuming with the rotated token after a drop, at the jittered delay and not before;
+grace expiry reporting the session lost; a terminal `1008` that never reconnects, even after
+time passes the 30 s backoff cap; and tool calls: a call that outlasts its `timeout_ms` answering
+`tool_timeout`, a `tool_cancel` arriving before the timeout, a late result putting nothing on the wire,
+and a socket drop cancelling a call in flight with `session_suspended` and sending nothing. After a
+drop, the `state` output comes before the `cancel` output in every core.
+
+A step either drives the core, `{ "drive": <name>, ... }`, or expects an output,
+`{ "expect": <name>, ... }`.
+
+| Drive | Fields | Does |
+| --- | --- | --- |
+| `connect` | `sessionId`, `token`, `expiresAt` | calls `connect` with a claim token; `expiresAt` is Unix seconds |
+| `receive` | `frame` | the daemon sends a frame on the newest connection |
+| `close` | `code`, `reason?` | the daemon closes the newest connection |
+| `drop` | | the newest connection dies with no close code |
+| `advance` | `ms` | moves the clock forward, running every timer that falls due |
+| `registerTool` | `descriptor` | registers a tool, in wire form; a call to it is answered by `respond` |
+| `respond` | `call`, `result` or `error` | answers the call with that id; an `error` is `{ type, message }` |
+| `disconnect` | | calls `disconnect` |
+
+Outputs are on two channels. The wire channel is what the core asked of the connection:
+
+| Expect | Fields | Is |
+| --- | --- | --- |
+| `connect` | `mode` (`claim` or `resume`), `sessionId`, `resumeToken?` | a new connection whose first frame is `session_claim` or `session_resume` |
+| `send` | `frame` | any later frame the core sent |
+
+The app channel is what the core told the app:
+
+| Expect | Fields | Is |
+| --- | --- | --- |
+| `state` | `state`, `reason?` | a `stateChange` event |
+| `session` | `type`, `reason?` | a `sessionChange` event |
+| `call` | `name`, `args` | a tool call handed to the registered tool |
+| `cancel` | `call`, `reason` | that call being cancelled |
+
+Each channel is strictly ordered, and the order between the two is not asserted, because the
+actor-based cores do not fix it. An `expect` waits, with a time limit, for the next output of its
+channel and fails if that output differs; frames compare as JSON, ignoring key order. An output the
+steps never expect fails the scenario once the steps run out, which is how "does not reconnect"
+and "does not resume yet" are written: nothing is expected, and the leftover check catches it.
+Every connection that gets an ack is followed by a `tool_registry_snapshot` `send` (an empty
+`tools` array when none are registered), so a scenario expects it.
+
+Each runner maps the steps onto its core's existing fakes. The TypeScript runner opens each new
+fake socket itself and turns the first frame it sees into the `connect` output. The Swift and
+Kotlin runners read the `connect` call and the `send` calls from their fake transport, which sees
+the connect options rather than the frame. The Kotlin runner runs the core on a test dispatcher and
+clock, so an `expect` finds its output once the scheduler has run, or never. A scenario that must not depend on how a core orders its work
+consumes every output before the next drive step.
+
+Hand-written directly as JSON. Each runner also has inline scenarios that must fail, for a missing,
+an extra and an out-of-order output.
+
+### `session-scenarios-background.json`
+
+The same format as `session-scenarios.json`, plus two drive steps and one wire output for the
+app leaving and returning to the foreground. The Swift, Kotlin and Dart suites load it; the web
+core has no background state.
+
+| Drive | Fields | Does |
+| --- | --- | --- |
+| `background` | | the app leaves the foreground |
+| `foreground` | | the app returns to the foreground |
+
+| Expect | Fields | Is |
+| --- | --- | --- |
+| `suspend` | | on the wire channel: the core closing the connection because the app is backgrounded (`1001 app_backgrounded`), keeping the resume lease |
+
+Every scenario here gives the session a 120 s grace window, so the clock can pass the 30 s backoff
+cap without the session expiring. The scenarios cover: backgrounding an active session suspends it
+and no reconnect follows, even after the clock passes the backoff cap; foregrounding resumes at
+once, without waiting for backoff; backgrounding during a backoff wait cancels the wait, so no connect
+follows even after the delay passes, until the app returns; and backgrounding with a call in flight cancels the call with `session_suspended`.
 
 ### `spki-pin.json`
 

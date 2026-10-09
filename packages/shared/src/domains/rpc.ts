@@ -1,4 +1,5 @@
 import type { ErrorType } from "./errors.js";
+import type { EventDescriptor } from "./event-descriptor.js";
 import type { AgentEndpoint } from "./transport.js";
 import type { ToolDescriptor, ToolGroupSummary } from "./tool-descriptor.js";
 
@@ -7,12 +8,14 @@ export const RPC_METHODS = {
   daemonStatus: "daemon.status",
   daemonShutdown: "daemon.shutdown",
   linkCreate: "link.create",
+  webAttach: "web.attach",
   sessionsList: "sessions.list",
   sessionsDescribe: "sessions.describe",
   sessionsRevoke: "sessions.revoke",
   toolsList: "tools.list",
   toolsCall: "tools.call",
   toolsCancel: "tools.cancel",
+  eventsList: "events.list",
   eventsSubscribe: "events.subscribe",
   eventsSince: "events.since",
 } as const;
@@ -73,6 +76,8 @@ export type DaemonStatusResult = {
   /** ISO 8601. */
   startedAt: string;
   wssPort: number;
+  /** The port of the plain-HTTP listener on `127.0.0.1` that web pages connect to. */
+  webPort: number;
   pinnedKeys: string[];
   sessions: SessionSummary[];
   /**
@@ -107,8 +112,14 @@ export type DaemonShutdownResult = { ok: true };
 
 // --- link.create ---
 
+/** Which listener may claim a link: the pinned-TLS one (`native`) or the `127.0.0.1` web one. */
+export type LinkTransport = "native" | "web";
+
 export type LinkCreateParams = {
   ttlSeconds?: number;
+  /** Defaults to `native`. A `web` link encodes `127.0.0.1` and the web port, ignores
+   * `addressOverride`, and can only be claimed on the web listener. */
+  transport?: LinkTransport;
   /** Forces the advertised address encoded into the bootstrap payload (ARCHITECTURE.md §8's
    * emulator/simulator fast path: `127.0.0.1`, since the wss listener already binds all
    * interfaces). Omitted for the normal LAN/QR delivery path. */
@@ -132,6 +143,28 @@ export type LinkCreateResult = {
    * `cliPins` are configured; embedded pins always win.
    */
   pin: string;
+};
+
+// --- web.attach ---
+
+export type WebAttachParams = {
+  /** The tab's address, or the start of it. The one tab whose URL starts with this is attached. */
+  url: string;
+  /** The debugging endpoint of a Chromium launched with `--remote-debugging-port`, such as `http://127.0.0.1:9222`. */
+  browserUrl: string;
+  /** A CDP target id: picks the tab directly, for when several tabs match `url`. */
+  targetId?: string;
+  ttlSeconds?: number;
+};
+
+export type WebAttachResult = {
+  sessionId: string;
+  /** The tab's own address, as the browser lists it. It carries no link payload. */
+  url: string;
+  /** The CDP target id of the attached tab. */
+  targetId: string;
+  /** Unix seconds. */
+  expiresAt: number;
 };
 
 // --- sessions.list / sessions.describe / sessions.revoke ---
@@ -225,7 +258,7 @@ export type ToolsCallParams = SessionSelectorParams & {
    *
    * The daemon cannot itself re-verify the client-side prompt, so this is not a defense against
    * another local process (one with access to the same `daemon.sock`) sending this param directly —
-   * see `docs/SECURITY.md`'s threat model, which already treats socket access as full daemon
+   * see https://callstackincubator.github.io/appduct/guides/security/ (the threat model), which already treats socket access as full daemon
    * control. `"prompt"` fails closed by design when the client has no elicitation support.
    */
   consent?: "elicitation";
@@ -253,6 +286,29 @@ export type ToolsCancelResult = {
   cancelled: boolean;
 };
 
+// --- events.list ---
+
+export type EventsListParams = SessionSelectorParams & {
+  /** Whole-name, case-sensitive glob (issue #112's rule, reused here): `*` matches any run of
+   * characters, a pattern with no `*` is an exact name — and since a registry holds at most one
+   * event per name, an exact `name` narrows to zero or one result. */
+  name?: string;
+  /** Page size; omitted means everything from `offset` on. */
+  limit?: number;
+  /** Zero-based start index into the sorted, filtered list. */
+  offset?: number;
+};
+
+/**
+ * `events.list`'s result: the session's declared events sorted by `name` (plain code-point order),
+ * narrowed by `name`'s glob, then paged with `limit`/`offset` — `total` is the count *after* the
+ * glob but *before* paging, mirroring `ToolsListResult.total`.
+ */
+export type EventsListResult = {
+  events: EventDescriptor[];
+  total: number;
+};
+
 // --- events.subscribe ---
 
 /** The single source of truth for the `EventKind` union below — a `const` array (not just a type)
@@ -269,6 +325,7 @@ export const EVENT_KINDS = [
   "session_revoked",
   "session_expired",
   "tools_changed",
+  "events_changed",
   "app_event",
   "tool_call_started",
   "tool_call_progress",

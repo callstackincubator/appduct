@@ -17,11 +17,10 @@ import org.json.JSONTokener
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Bridges the frozen phase-2 TurboModule spec (`NativeAppduct.ts`,
- * docs/tasks/16-android-session-logic.md) onto [AppductClient]. Every structured value crosses
- * the bridge as a JSON string -- [AppductClient] already speaks `org.json` internally, so this
- * class only (de)serializes at the two edges Codegen cares about: tool descriptors/connect input in,
- * events/getters out.
+ * Bridges the frozen phase-2 TurboModule spec (`NativeAppduct.ts`) onto [AppductClient]. Every
+ * structured value crosses the bridge as a JSON string -- [AppductClient] already speaks `org.json`
+ * internally, so this class only (de)serializes at the two edges Codegen cares about: tool
+ * descriptors/connect input in, events/getters out.
  *
  * `registerTool` hands [AppductClient] a handler that: emits `onToolCall`, suspends on a
  * [CompletableDeferred] keyed by call id, and is completed by [respondToToolCall]. Cancellation
@@ -139,6 +138,16 @@ class NativeAppductModule(
 
     override fun unregisterTool(name: String) {
         client.unregisterTool(name)
+    }
+
+    override fun registerEvent(descriptorJson: String) {
+        // Throws AppductInvalidEventDescriptorException synchronously for an invalid descriptor,
+        // like registerTool above.
+        client.registerEvent(AppductEventDescriptor.fromJson(descriptorJson))
+    }
+
+    override fun unregisterEvent(name: String) {
+        client.unregisterEvent(name)
     }
 
     override fun handleUrl(url: String): Boolean = client.handleUrl(url)

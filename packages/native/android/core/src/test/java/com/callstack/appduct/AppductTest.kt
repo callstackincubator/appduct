@@ -17,9 +17,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Exercises the public [Appduct] facade (docs/tasks/19-android-entry-points.md) against a
- * scripted [FakeAppductTransport], substituted via [Appduct.attachForTest] instead of the
- * real [AppductInitProvider] path -- no real `Context`, no OkHttp. Complements
+ * Exercises the public [Appduct] facade against a scripted [FakeAppductTransport], substituted via
+ * [Appduct.attachForTest] instead of the real [AppductInitProvider] path -- no real `Context`, no
+ * OkHttp. Complements
  * [AppductClientTest], which covers the same session/reconnect behaviors one layer down; this
  * suite only checks that the facade converts to/from [AppductClient]'s types correctly.
  * Robolectric-backed (like [AppductSpkiPinTest]) because [Appduct.handle] takes real
@@ -74,6 +74,8 @@ class AppductTest {
             waitUntil { fake.connectCalls.size > before }
             fake.simulateAck(sessionId)
             job.join()
+            // The snapshot is sent after the ack; wait for it so a later clear() cannot race it.
+            waitUntil { fake.sentMessages.any { JSONObject(it).optString("type") == "tool_registry_snapshot" } }
         }
 
     // --- registration ---

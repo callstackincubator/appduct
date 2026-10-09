@@ -75,7 +75,7 @@ const truncateToUtf8Bytes = (text: string, maxBytes: number): string => {
  * Instead the pattern is split on `*`: the first piece must be a prefix, the last a suffix, and
  * each middle piece is found in order with `indexOf`. Taking the leftmost occurrence of each
  * middle piece is always safe, because it leaves the most room for the pieces after it. */
-const matchesNameGlob = (pattern: string, name: string): boolean => {
+export const matchesNameGlob = (pattern: string, name: string): boolean => {
   const pieces = pattern.split("*");
   const first = pieces[0] ?? "";
 

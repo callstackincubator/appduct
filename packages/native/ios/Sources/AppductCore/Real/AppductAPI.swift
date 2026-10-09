@@ -7,10 +7,10 @@
 
 import Foundation
 
-/// The plain-app-facing entry point for the Appduct native core (issue #48 phase 3,
-/// `docs/tasks/18-ios-entry-points.md`): a facade over `AppductClient` for an app that wants
-/// tools, deep-link handling, and connection state without touching `JSONValue`, `ToolDescriptor`'s
-/// wire shape, or the underlying actor directly. Everything at this boundary speaks
+/// The plain-app-facing entry point for the Appduct native core (issue #48 phase 3): a facade over
+//`AppductClient` for an app that wants / tools, deep-link handling, and connection state without
+//touching `JSONValue`, `ToolDescriptor`'s / wire shape, or the underlying actor directly.
+//Everything at this boundary speaks
 /// `[String: Any]`/`Any`, converted to/from the core's `JSONValue` using the same rules
 /// `JSONSerialization` uses (see `jsonValue(fromFoundation:)` below).
 ///
@@ -104,6 +104,28 @@ public final class Appduct: Sendable {
     )
   }
 
+  // MARK: Event declaration
+
+  /// Declares an event the app posts, so an agent can list it (`appduct events ls`) before waiting
+  /// on it. `name` is any string up to 4096 characters, dotted names included. `payloadSchema` is a
+  /// plain JSON Schema object; it is only listed, never checked against what `postEvent` sends. The
+  /// returned `EventRegistration.remove()` withdraws the declaration.
+  @discardableResult
+  public func registerEvent(
+    name: String,
+    description: String,
+    payloadSchema: [String: Any]? = nil
+  ) throws -> EventRegistration {
+    var schemaObject: JSONObject?
+    if let payloadSchema {
+      guard let converted = try? Appduct.jsonValue(fromFoundation: payloadSchema), let object = converted.objectValue else {
+        throw ToolDescriptorValidationError("Event \"\(name)\" payloadSchema is not a valid JSON object.")
+      }
+      schemaObject = object
+    }
+    return try client.registerEvent(EventDescriptor(name: name, description: description, payloadSchema: schemaObject))
+  }
+
   // MARK: Deep links
 
   /// Feeds a deep link to the core. Returns `true` iff `url` carried an Appduct bootstrap payload
@@ -143,7 +165,7 @@ public final class Appduct: Sendable {
     client.currentSessionIdSnapshot()
   }
 
-  /// This build's effective trust configuration -- see `docs/SECURITY.md#configuring-trust`.
+  /// This build's effective trust configuration -- see https://callstackincubator.github.io/appduct/guides/security/#pin-a-build-to-your-key.
   public var buildConfig: BuildConfig {
     let config = currentAppductBuildConfig()
     return BuildConfig(
@@ -201,7 +223,7 @@ public typealias ClientState = AppductClientState
 /// This build's effective trust configuration, mirroring the module-internal
 /// `AppductBuildConfig` (`AppductConnectionManager.swift`) under a public name a plain-app
 /// caller can read without importing anything internal. See
-/// `docs/SECURITY.md#reading-the-effective-configuration-at-runtime`.
+/// https://callstackincubator.github.io/appduct/guides/security/#pin-a-build-to-your-key.
 public struct BuildConfig: Sendable, Equatable {
   public let trust: String
   public let hasEmbeddedPins: Bool

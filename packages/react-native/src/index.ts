@@ -1,9 +1,16 @@
 import type { ToolDescriptor } from "@appduct/shared";
+import { createUseAppductTool } from "@appduct/shared/react";
+import {
+  createToolGroupFactory,
+  exportToolSchemaForKey,
+  type AppductCore,
+} from "@appduct/shared/sdk";
 
 import type {
   AppductBuildConfig,
   AppductClientState,
   AppductConnectInput,
+  AppductEventDefinition,
   AppductListenerKind,
   AppductRuntimeSchema,
   AppductToolRegistration,
@@ -16,18 +23,16 @@ import {
 import { parseBootstrapPayload, parseBootstrapUrl } from "./bootstrap";
 import { appductClient, noopIfNativeUnavailable } from "./default-client";
 import * as noop from "./noop";
-import { exportToolSchemaForKey } from "./schema";
-import { createToolGroupFactory } from "./tool-group";
-import { createUseAppductTool } from "./useAppductTool";
 
 export * from "./Appduct.types";
 export { parseBootstrapPayload, parseBootstrapUrl };
 export {
   createAppductClient,
   type AppductClient,
-  type AppductNativeModuleLike,
   type CreateAppductClientOptions,
-} from "./client";
+} from "@appduct/shared/sdk";
+/** The native TurboModule's JS-facing surface; `AppductCore` in `@appduct/shared/sdk`. */
+export type AppductNativeModuleLike = AppductCore;
 export { appductNativeModule };
 export { appductClient };
 export type {
@@ -35,7 +40,7 @@ export type {
   AppductSubscription,
   AppductToolGroupRegistrar,
 } from "./public-api";
-export type { UseAppductToolOptions } from "./useAppductTool";
+export type { UseAppductToolOptions } from "@appduct/shared/react";
 
 /**
  * Register an Appduct tool on the default client. Same as `appductClient.registerTool` —
@@ -65,6 +70,22 @@ export function registerTool<
  * makes each registration throw, exactly like passing it as `registerTool`'s own `group`.
  */
 export const createToolGroup = createToolGroupFactory(registerTool);
+
+/**
+ * Declares an event the app posts, so an agent can list it (`appduct events ls`) with its
+ * description and payload shape before waiting on it. Advisory: an undeclared `postEvent` still
+ * reaches agents. In development, `postEvent` warns about an undeclared name and about a payload
+ * that fails a declared Standard Schema; production posts as-is. The returned disposer withdraws
+ * only this declaration.
+ */
+export function registerEvent<
+  TPayloadSchema extends AppductRuntimeSchema | undefined,
+>(definition: AppductEventDefinition<TPayloadSchema>) {
+  return noopIfNativeUnavailable(
+    () => appductClient.registerEvent(definition),
+    () => noop.registerEvent(definition),
+  );
+}
 
 /** Emits an `event` frame on the default client while active; drops (dev warning) otherwise. */
 export function postEvent(name: string, payload?: unknown): Promise<void> {
@@ -146,9 +167,10 @@ export function connect(input: AppductConnectInput): Promise<void> {
 
 /**
  * Effective trust/pin config this build was compiled with — read from the TurboModule's
- * `getConstants()`, the exact same manifest/plist source `resolveTrustedPins` (task 05) uses on
- * both platforms, never a second parse. Diagnostics only: this never enables dead-code elimination
- * (bundling runs before native config is known) — see `docs/tasks/07-native-module-constants.md`.
+ * `getConstants()`, the exact same manifest/plist source `resolveTrustedPins` uses on both
+ * platforms, never a second parse. Diagnostics only: this never enables dead-code elimination
+ * (bundling runs before native config is known); stripping at bundle time is
+ * `@appduct/react-native/metro`'s job.
  * On the `./noop` entry this reports the documented "absent" shape instead of a real trust mode.
  */
 export function getAppductBuildConfig(): AppductBuildConfig {
@@ -164,8 +186,8 @@ export function getAppductBuildConfig(): AppductBuildConfig {
  * `group`, `enabled`), disposing the previous registration first (identity-safe — see `registerTool`'s doc
  * comment). Calls are routed through the latest render's handler, so `deps` is an optional
  * override rather than something every call site has to remember. `options.enabled` (default
- * `true`) gates registration without breaking the rules of hooks — see `docs/SECURITY.md`'s
- * "Gating a tool by build variant" section.
+ * `true`) gates registration without breaking the rules of hooks — see
+ * https://callstackincubator.github.io/appduct/guides/security/#keep-a-tool-out-of-some-builds.
  *
  * `exportToolSchemaForKey` is injected (rather than imported by the hook) so the inert `./noop` entry
  * below does not pull JSON Schema export into a bundle that registers nothing.

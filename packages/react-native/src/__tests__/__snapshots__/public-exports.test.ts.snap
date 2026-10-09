@@ -1,0 +1,71 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`@appduct/react-native public exports > ../auto exports exactly the documented names 1`] = `
+[
+  "APPDUCT_DEFAULT_TOOL_TIMEOUT_MS",
+  "AppductBootstrapParseError",
+  "AppductDisabledError",
+  "addAppductListener",
+  "appductClient",
+  "appductNativeModule",
+  "connect",
+  "createAppductClient",
+  "createToolGroup",
+  "getAppductBuildConfig",
+  "getAppductState",
+  "getRegisteredTools",
+  "jsonSchema",
+  "parseBootstrapPayload",
+  "parseBootstrapUrl",
+  "postEvent",
+  "registerEvent",
+  "registerTool",
+  "restoreSession",
+  "useAppductTool",
+]
+`;
+
+exports[`@appduct/react-native public exports > ../index exports exactly the documented names 1`] = `
+[
+  "APPDUCT_DEFAULT_TOOL_TIMEOUT_MS",
+  "AppductBootstrapParseError",
+  "AppductDisabledError",
+  "addAppductListener",
+  "appductClient",
+  "appductNativeModule",
+  "connect",
+  "createAppductClient",
+  "createToolGroup",
+  "getAppductBuildConfig",
+  "getAppductState",
+  "getRegisteredTools",
+  "jsonSchema",
+  "parseBootstrapPayload",
+  "parseBootstrapUrl",
+  "postEvent",
+  "registerEvent",
+  "registerTool",
+  "restoreSession",
+  "useAppductTool",
+]
+`;
+
+exports[`@appduct/react-native public exports > ../noop exports exactly the documented names 1`] = `
+[
+  "APPDUCT_DEFAULT_TOOL_TIMEOUT_MS",
+  "AppductBootstrapParseError",
+  "AppductDisabledError",
+  "addAppductListener",
+  "connect",
+  "createToolGroup",
+  "getAppductBuildConfig",
+  "getAppductState",
+  "getRegisteredTools",
+  "jsonSchema",
+  "postEvent",
+  "registerEvent",
+  "registerTool",
+  "restoreSession",
+  "useAppductTool",
+]
+`;

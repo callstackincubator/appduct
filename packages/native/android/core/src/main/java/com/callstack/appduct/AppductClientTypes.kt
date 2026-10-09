@@ -265,3 +265,52 @@ internal typealias AppductSessionChangeListener = (
 ) -> Unit
 
 internal typealias AppductErrorListener = (error: AppductUnifiedError) -> Unit
+
+/** An event descriptor per PROTOCOL.md §5a. */
+internal data class AppductEventDescriptor(
+    val name: String,
+    val description: String,
+    val payloadSchema: JSONObject? = null,
+) {
+    internal fun toWireJson(): JSONObject =
+        JSONObject().apply {
+            put("name", name)
+            put("description", description)
+            if (payloadSchema != null) put("payload_schema", payloadSchema)
+        }
+
+    companion object {
+        /** Parses a wire-shaped descriptor. Structural parsing only: a wrong-typed field throws,
+         * length rules are [validateAppductEventDescriptor]'s. A missing name or description reads
+         * as empty, so validation rejects it. */
+        fun fromJson(json: String): AppductEventDescriptor {
+            val obj =
+                try {
+                    JSONObject(json)
+                } catch (e: Exception) {
+                    throw AppductInvalidEventDescriptorException("Event descriptor must be a JSON object.")
+                }
+
+            fun stringOrEmpty(key: String): String =
+                when (val raw = obj.opt(key)) {
+                    null -> ""
+                    is String -> raw
+                    else -> throw AppductInvalidEventDescriptorException("Event descriptor \"$key\" must be a string.")
+                }
+
+            // An explicit JSON `null` is rejected, not read as absent, like `isEventDescriptor`.
+            val payloadSchema =
+                if (obj.has("payload_schema")) {
+                    obj.optJSONObject("payload_schema")
+                        ?: throw AppductInvalidEventDescriptorException("Event descriptor \"payload_schema\" must be a JSON object.")
+                } else {
+                    null
+                }
+
+            return AppductEventDescriptor(stringOrEmpty("name"), stringOrEmpty("description"), payloadSchema)
+        }
+    }
+}
+
+/** Thrown by `registerEvent` when a descriptor fails PROTOCOL.md §5a validation. */
+internal class AppductInvalidEventDescriptorException(message: String) : IllegalArgumentException(message)

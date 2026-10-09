@@ -1,8 +1,8 @@
 // Vendored into @appduct/react-native at build time by scripts/sync-native-core.mjs -- see
 // packages/native/README.md. Compiled unconditionally by the RN pod (Appduct.podspec always
 // sets -DAPPDUCT_ENABLED); the #if guard below only matters when this file is built directly
-// as part of the AppductCore SwiftPM package (see repo-root Package.swift and Decision 2 in
-// docs/tasks/14-native-core-extraction.md).
+// as part of the AppductCore SwiftPM package, which defines APPDUCT_ENABLED for Debug and for
+// the AlwaysEnabled trait (see repo-root Package.swift).
 #if APPDUCT_ENABLED
 
 import CoreFoundation

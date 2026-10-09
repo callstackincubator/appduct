@@ -17,6 +17,7 @@ import {
   type EventNotification,
   type LinkCreateResult,
   type SessionsDescribeResult,
+  type WebAttachResult,
 } from "@appduct/shared";
 
 import {
@@ -32,7 +33,7 @@ import {
   type ExecFn,
   type OpenTarget,
 } from "../cli/open-target.js";
-import { composeDeepLink } from "../link.js";
+import { assertWebPageUrl, composeDeepLink, composeWebLink, type WebLinkResult } from "../link.js";
 import { renderQrToTerminal } from "../qr-terminal.js";
 import { describeMissingAppId, describeMissingScheme, resolveAppId } from "../scheme.js";
 import {
@@ -59,7 +60,10 @@ const DEFAULT_WAIT_TIMEOUT_MS = 120_000;
  * which now means "figure it out". */
 const NO_TARGET = "none";
 
-type ConnectTarget = OpenTarget | typeof NO_TARGET;
+/** `target: "web"` — no device is involved: the result is a page URL and a script for a browser. */
+const WEB_TARGET = "web";
+
+type ConnectTarget = OpenTarget | typeof NO_TARGET | typeof WEB_TARGET;
 
 /**
  * Attached to every QR-path result. Without this an agent reliably minted a link, said nothing
@@ -91,14 +95,25 @@ export const CONNECT_TOOL_DESCRIPTOR = {
     "this machine. An \"appId\" not supplied here falls back to \"appId.<platform>\" in the " +
     "nearest .appduct/config.json (see \"appduct init\"); it is rejected outright with target " +
     "\"ios-sim\" or \"none\", which need no app id. Pass \"relaunch\": true with ios-device if the " +
-    "app is already running and the delivery does not take. Only when no device is detected (or " +
+    "app is already running and the delivery does not take. Target \"web\" is for a web page: " +
+    "pass \"url\" (the page to open) and get back { url, script } — open \"url\" in a browser, or " +
+    "run \"script\" in a page that is already open, then call appduct_wait_for_session. It needs " +
+    "no scheme and no device. To have the daemon attach a page that is already open in a Chrome " +
+    "launched with --remote-debugging-port, also pass \"browserUrl\" (its debugging endpoint on this " +
+    "machine: 127.0.0.1, [::1] or localhost, such as http://127.0.0.1:9222): the tab whose address starts with \"url\" is attached and the call returns " +
+    "{ sessionId, url, targetId, attached: true }, with no further step; \"url\" is the tab's own address. When no tab or several " +
+    "match, the error lists the open tabs with their target ids; pass one as \"targetId\" to pick it. A " +
+    "popup, or a page in a new tab, is not attached. Only when no device is detected (or " +
     "target is \"none\") does this return a QR code for a human to scan, along with an " +
     "\"instructions\" field saying what to do with it. Follow up with appduct_wait_for_session to " +
     "know when the device has connected.",
   inputSchema: {
     type: "object",
     properties: {
-      target: { type: "string", enum: ["android", "ios-sim", "ios-device", NO_TARGET] },
+      target: { type: "string", enum: ["android", "ios-sim", "ios-device", NO_TARGET, WEB_TARGET] },
+      url: { type: "string" },
+      browserUrl: { type: "string" },
+      targetId: { type: "string" },
       device: { type: "string" },
       appId: { type: "string" },
       relaunch: { type: "boolean" },
@@ -159,10 +174,10 @@ const asOptionalConnectTarget = (value: unknown): ConnectTarget | undefined => {
     return undefined;
   }
 
-  if (typeof value !== "string" || !(isOpenTarget(value) || value === NO_TARGET)) {
+  if (typeof value !== "string" || !(isOpenTarget(value) || value === NO_TARGET || value === WEB_TARGET)) {
     throw new McpBuiltinToolError(
       "invalid_request",
-      '"target" must be "android", "ios-sim", "ios-device", or "none".',
+      '"target" must be "android", "ios-sim", "ios-device", "web", or "none".',
     );
   }
 
@@ -301,7 +316,7 @@ const withResolvedAppId = async (
  * be unscannable-in-effect — the address would be wrong for the phone that scanned it.
  */
 const resolveDelivery = async (
-  requested: ConnectTarget | undefined,
+  requested: Exclude<ConnectTarget, typeof WEB_TARGET> | undefined,
   device: string | undefined,
   appId: string | undefined,
   deps: ConnectToolDeps,
@@ -354,7 +369,7 @@ const resolveDelivery = async (
 export const handleConnectTool = async (
   rawArgs: unknown,
   deps: ConnectToolDeps,
-): Promise<ConnectToolResult> => {
+): Promise<ConnectToolResult | WebLinkResult | (WebAttachResult & { attached: true })> => {
   const args = asRecord(rawArgs);
 
   const requestedTarget = asOptionalConnectTarget(args.target);
@@ -362,6 +377,51 @@ export const handleConnectTool = async (
   const appId = asOptionalNonEmptyString(args.appId, "appId");
   const relaunch = asOptionalBoolean(args.relaunch, "relaunch");
   const ttlSeconds = asOptionalPositiveNumber(args.ttlSeconds, "ttlSeconds");
+  const url = asOptionalNonEmptyString(args.url, "url");
+  const browserUrl = asOptionalNonEmptyString(args.browserUrl, "browserUrl");
+  const targetId = asOptionalNonEmptyString(args.targetId, "targetId");
+
+  if ((browserUrl !== undefined || targetId !== undefined) && requestedTarget !== WEB_TARGET) {
+    throw new McpBuiltinToolError("invalid_request", '"browserUrl" and "targetId" only apply with target "web".');
+  }
+
+  if (targetId !== undefined && browserUrl === undefined) {
+    throw new McpBuiltinToolError("invalid_request", '"targetId" needs "browserUrl": it names a tab of that browser.');
+  }
+
+  if (requestedTarget === WEB_TARGET) {
+    if (url === undefined) {
+      throw new McpBuiltinToolError("invalid_request", '"url" (the page to open) is required with target "web".');
+    }
+
+    if (device !== undefined || appId !== undefined || relaunch !== undefined) {
+      throw new McpBuiltinToolError(
+        "invalid_request",
+        '"device", "appId" and "relaunch" do not apply with target "web".',
+      );
+    }
+
+    try {
+      assertWebPageUrl(url);
+    } catch (error) {
+      throw new McpBuiltinToolError("invalid_request", (error as Error).message);
+    }
+
+    if (browserUrl !== undefined) {
+      const attached = await deps.call<WebAttachResult>(RPC_METHODS.webAttach, { url, browserUrl, targetId, ttlSeconds });
+
+      return { ...attached, attached: true };
+    }
+
+    return composeWebLink(
+      url,
+      await deps.call<LinkCreateResult>(RPC_METHODS.linkCreate, { ttlSeconds, transport: "web" }),
+    );
+  }
+
+  if (url !== undefined) {
+    throw new McpBuiltinToolError("invalid_request", '"url" only applies with target "web".');
+  }
 
   if (device !== undefined && (requestedTarget === undefined || requestedTarget === NO_TARGET)) {
     throw new McpBuiltinToolError(

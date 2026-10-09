@@ -3,6 +3,7 @@ package com.callstack.appduct
 import android.content.Context
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -11,6 +12,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -18,6 +21,16 @@ import org.json.JSONObject
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+/** Wall-clock port: the epoch-millisecond time the client stamps disconnects and events with.
+ * Tests substitute a clock that reads their test scheduler. */
+internal fun interface AppductClock {
+    fun nowMs(): Long
+}
+
+internal object AppductSystemClock : AppductClock {
+    override fun nowMs(): Long = System.currentTimeMillis()
+}
 
 /** A subscription returned by `AppductClient.addXListener`; call [remove] to unsubscribe. */
 internal class AppductSubscription internal constructor(private val onRemove: () -> Unit) {
@@ -50,6 +63,9 @@ private data class HeldSession(
      * trust again instead of the transport rejecting the connect outright (issue #136). `null`
      * for a build with embedded pins, where it is never consulted. */
     val linkPin: String?,
+    /** Whether the ack that opened this session carried `event_registry: true`; a session
+     * restored from a lease has not been acked yet. */
+    val acceptsEventRegistry: Boolean = false,
 )
 
 private data class ConnectOptionsInternal(
@@ -84,15 +100,19 @@ private data class ConnectOptionsInternal(
  * used to own, on top of [AppductConnectionManager]/[AppductTransport]: the claim/resume
  * handshake, full-jitter reconnect, the grace timer, lease restore, the tool registry and its
  * snapshot/delta sync, and per-call tool invocation (timeout/cancel/progress/error classification).
- * See `docs/tasks/16-android-session-logic.md` for the threading model and design notes.
- *
  * Every state mutation -- whether triggered by a public suspend call or by a transport callback --
  * runs on [dispatcher], a single-threaded confinement (mirroring [AppductConnectionManager]'s
  * own single-thread executor), so there is never a data race between e.g. a `connect()` call and an
- * in-flight socket callback.
+ * in-flight socket callback. Tool handlers run as children of the same scope, each in its own
+ * coroutine, so a suspending session can cancel every in-flight call at once and one stuck handler
+ * never blocks another call or this state machine. The tool registry is `synchronized` separately,
+ * because `registerTool`/`unregisterTool` are plain calls an app may make from any thread.
  */
 internal class AppductClient private constructor(
     private val defaultToolTimeoutMs: Long,
+    private val dispatcher: CoroutineDispatcher,
+    private val clock: AppductClock,
+    private val random: () -> Double,
     private val transportFactory: (
         emitStateChange: (String) -> Unit,
         emitMessageRaw: (String) -> Unit,
@@ -103,8 +123,12 @@ internal class AppductClient private constructor(
 ) {
     /** Real entry point: the transport is a real [AppductConnectionManager] over [context], and
      * foreground/background is observed via [AppductProcessLifecycleObserver]. */
+    @OptIn(ExperimentalCoroutinesApi::class)
     constructor(context: Context, defaultToolTimeoutMs: Long = APPDUCT_DEFAULT_TOOL_TIMEOUT_MS) : this(
         defaultToolTimeoutMs,
+        Dispatchers.Default.limitedParallelism(1),
+        AppductSystemClock,
+        Math::random,
         { onState: (String) -> Unit, onMessage: (String) -> Unit, onError: (AppductErrorDetails) -> Unit, onClose: (Map<String, Any?>) -> Unit ->
             AppductConnectionManager(context, onState, onMessage, onError, onClose)
         },
@@ -113,7 +137,9 @@ internal class AppductClient private constructor(
 
     /** Test-only entry point: substitutes a scripted [AppductTransport] and, by default, a
      * [AppductAppLifecycleObserver] that never reports backgrounded, so the whole client is
-     * exercisable on the plain JVM with no `Context`, no OkHttp, and no Robolectric. */
+     * exercisable on the plain JVM with no `Context`, no OkHttp, and no Robolectric. Passing a test
+     * [dispatcher], [clock] and [random] runs `delay` and `withTimeout` in virtual time. */
+    @OptIn(ExperimentalCoroutinesApi::class)
     internal constructor(
         transportFactory: (
             emitStateChange: (String) -> Unit,
@@ -124,14 +150,18 @@ internal class AppductClient private constructor(
         defaultToolTimeoutMs: Long = APPDUCT_DEFAULT_TOOL_TIMEOUT_MS,
         lifecycleObserverFactory: (onBackgroundedChanged: (Boolean) -> Unit) -> AppductAppLifecycleObserver =
             { AppductNoopLifecycleObserver() },
+        dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
+        clock: AppductClock = AppductSystemClock,
+        random: () -> Double = Math::random,
     ) : this(
         defaultToolTimeoutMs,
+        dispatcher,
+        clock,
+        random,
         transportFactory,
         lifecycleObserverFactory,
     )
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val dispatcher = Dispatchers.Default.limitedParallelism(1)
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
     private val transport: AppductTransport =
@@ -143,6 +173,13 @@ internal class AppductClient private constructor(
         )
 
     private val registry = AppductToolRegistry()
+    private val eventRegistry = AppductEventRegistry()
+    private val sendLock = Mutex()
+
+    // Dispatcher-confined. Counts acks; a declaration made while the newest ack's event snapshot
+    // has not been taken yet is covered by that snapshot, so it sends no delta of its own.
+    private var ackGeneration = 0
+    private var eventSnapshotPending = false
     private val toolInvoker =
         AppductToolInvoker(
             scope = scope,
@@ -228,6 +265,45 @@ internal class AppductClient private constructor(
     }
 
     /**
+     * Declares (or replaces, by name) an event -- validates per PROTOCOL.md §5a, throwing
+     * [AppductInvalidEventDescriptorException] on an invalid descriptor. Declared events reach the
+     * daemon only when it accepted event frames in its ack (`event_registry: true`): as a snapshot
+     * after each such ack, and as a delta for each later declaration while the session is active.
+     * Against an older daemon nothing is sent and the session is unaffected.
+     */
+    fun registerEvent(descriptor: AppductEventDescriptor) {
+        validateAppductEventDescriptor(descriptor)
+        // Mutating and sending from the one dispatcher puts every declaration, and the snapshot
+        // an ack takes, in the order the calls were made.
+        scope.launch {
+            eventRegistry.upsert(descriptor)
+            if (eventSnapshotPending) return@launch
+            sendEventDeltaIfAccepted { session ->
+                JSONObject()
+                    .put("type", "event_registry_delta")
+                    .put("session_id", session.sessionId)
+                    .put("operation", "upsert")
+                    .put("event", descriptor.toWireJson())
+            }
+        }
+    }
+
+    /** No-op for an undeclared name. */
+    fun unregisterEvent(name: String) {
+        scope.launch {
+            if (!eventRegistry.remove(name)) return@launch
+            if (eventSnapshotPending) return@launch
+            sendEventDeltaIfAccepted { session ->
+                JSONObject()
+                    .put("type", "event_registry_delta")
+                    .put("session_id", session.sessionId)
+                    .put("operation", "remove")
+                    .put("name", name)
+            }
+        }
+    }
+
+    /**
      * Feeds a deep link to the core (`deep-link-core.ts`'s `handleAppductDeepLinkUrl`). Returns
      * `true` iff the URL carried a `appduct` query param -- whatever the parse outcome; a bad
      * payload is reported on the `error` listener (phase `"bootstrap"`) asynchronously. `false` for
@@ -268,7 +344,7 @@ internal class AppductClient private constructor(
                 return@withContext false
             }
 
-            val nowMs = System.currentTimeMillis()
+            val nowMs = clock.nowMs()
             if (isAppductResumeLeaseExpired(lease, nowMs)) {
                 transport.clearResumeLease()
                 return@withContext false
@@ -346,7 +422,7 @@ internal class AppductClient private constructor(
                 // JS side rather than failing the whole event.
             }
         }
-        message.put("ts", System.currentTimeMillis())
+        message.put("ts", clock.nowMs())
 
         try {
             rawSend(message.toString())
@@ -380,7 +456,7 @@ internal class AppductClient private constructor(
         if (destroyed) throw IllegalStateException("Appduct client was destroyed.")
 
         val options = toConnectOptionsInternal(input)
-        val nowSeconds = System.currentTimeMillis() / 1000
+        val nowSeconds = clock.nowMs() / 1000
         if (!isConnectOptionsValid(options, nowSeconds)) {
             throw IllegalArgumentException("Invalid or expired Appduct bootstrap payload.")
         }
@@ -439,7 +515,7 @@ internal class AppductClient private constructor(
     }
 
     private suspend fun handleUrlInternal(url: String) {
-        val nowSeconds = System.currentTimeMillis() / 1000
+        val nowSeconds = clock.nowMs() / 1000
         val allowPrivateLanOnly =
             try {
                 transport.getBuildConfig().allowPrivateLanOnly
@@ -564,12 +640,26 @@ internal class AppductClient private constructor(
                 ip = endpointIp,
                 port = endpointPort,
                 linkPin = linkPin,
+                acceptsEventRegistry = ack.optBoolean("event_registry", false),
             )
+
+        // Set before the listeners run: a declaration they make is in the snapshot, not a delta.
+        val generation = ++ackGeneration
+        val acceptsEvents = heldSession?.acceptsEventRegistry == true
+        eventSnapshotPending = acceptsEvents
 
         setClientState(AppductClientState.active, null)
         emitSessionChange(kind, sessionId, alias)
 
-        scope.launch { sendSnapshotSafely() }
+        scope.launch {
+            // A newer ack's task takes over.
+            if (generation != ackGeneration) return@launch
+            // Read and cleared in one step on the dispatcher, ahead of every later declaration's
+            // task, which then queues its delta behind the snapshot on the lock.
+            val eventSnapshot = if (acceptsEvents) eventRegistry.snapshotWireJson() else null
+            eventSnapshotPending = false
+            sendSnapshotSafely(eventSnapshot)
+        }
     }
 
     // --- reconnect / grace / lease restore ---
@@ -578,7 +668,7 @@ internal class AppductClient private constructor(
         if (resumeInFlight || destroyed || myEpoch != epoch) return
         val session = heldSession ?: return
 
-        val nowMs = System.currentTimeMillis()
+        val nowMs = clock.nowMs()
         val disconnectedAtMs = session.disconnectedAtMs ?: nowMs
         session.disconnectedAtMs = disconnectedAtMs
         if (nowMs - disconnectedAtMs >= (session.graceS * 1000).toLong()) {
@@ -648,7 +738,7 @@ internal class AppductClient private constructor(
             return
         }
 
-        val delayMs = computeAppductFullJitterBackoffMs(reconnectAttempt)
+        val delayMs = computeAppductFullJitterBackoffMs(reconnectAttempt, random = random)
         reconnectAttempt += 1
 
         reconnectJob =
@@ -663,7 +753,7 @@ internal class AppductClient private constructor(
         if (graceJob != null) return
         val session = heldSession ?: return
 
-        val nowMs = System.currentTimeMillis()
+        val nowMs = clock.nowMs()
         val disconnectedAtMs = session.disconnectedAtMs ?: nowMs
         session.disconnectedAtMs = disconnectedAtMs
         val remainingGraceMs = (session.graceS * 1000).toLong() - (nowMs - disconnectedAtMs)
@@ -835,7 +925,7 @@ internal class AppductClient private constructor(
             return
         }
 
-        val nowMs = System.currentTimeMillis()
+        val nowMs = clock.nowMs()
         val disconnectedAtMs = session.disconnectedAtMs ?: nowMs
         session.disconnectedAtMs = disconnectedAtMs
         if (nowMs - disconnectedAtMs >= (session.graceS * 1000).toLong()) {
@@ -849,9 +939,9 @@ internal class AppductClient private constructor(
 
     // --- wire helpers ---
 
-    private suspend fun sendSnapshotSafely() {
-        if (clientState != AppductClientState.active) return
-        val session = heldSession ?: return
+    private suspend fun sendSnapshotSafely(eventSnapshot: List<JSONObject>?) = sendLock.withLock {
+        if (clientState != AppductClientState.active) return@withLock
+        val session = heldSession ?: return@withLock
 
         val tools = JSONArray()
         for (tool in registry.snapshotWireJson()) tools.put(tool)
@@ -866,6 +956,34 @@ internal class AppductClient private constructor(
             rawSend(message.toString())
         } catch (e: Throwable) {
             emitError(AppductUnifiedError(phase = "tool", message = "Failed to send the tool registry snapshot.", cause = e))
+        }
+
+        if (eventSnapshot == null) return@withLock
+        val events = JSONArray()
+        for (event in eventSnapshot) events.put(event)
+        sendEventFrame(
+            JSONObject()
+                .put("type", "event_registry_snapshot")
+                .put("session_id", session.sessionId)
+                .put("events", events),
+        )
+    }
+
+    /** Runs on the dispatcher. Holding [sendLock] keeps a delta from slipping between the frames
+     * of a snapshot that is still being written. */
+    private suspend fun sendEventDeltaIfAccepted(frame: (HeldSession) -> JSONObject) =
+        sendLock.withLock {
+            if (clientState != AppductClientState.active) return@withLock
+            val session = heldSession ?: return@withLock
+            if (!session.acceptsEventRegistry) return@withLock
+            sendEventFrame(frame(session))
+        }
+
+    private suspend fun sendEventFrame(frame: JSONObject) {
+        try {
+            rawSend(frame.toString())
+        } catch (e: Throwable) {
+            emitError(AppductUnifiedError(phase = "tool", message = "Failed to sync the event registry.", cause = e))
         }
     }
 

@@ -1,0 +1,78 @@
+{
+  "name": "@appduct/web",
+  "version": "0.14.0",
+  "description": "Web SDK for Appduct: register tools an agent, test or terminal can call in your running web app.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/bundle.mjs",
+    "clean": "rm -rf dist",
+    "lint": "eslint src",
+    "test": "vitest run --config ../../vitest.config.ts src",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "repository": "https://github.com/callstackincubator/appduct",
+  "bugs": {
+    "url": "https://github.com/callstackincubator/appduct/issues"
+  },
+  "author": "Szymon Chmal <szymon@chmal.it> (V3RON)",
+  "license": "MIT",
+  "dependencies": {
+    "@appduct/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "~5.9.2",
+    "esbuild": "^0.25.12",
+    "@types/react": "~19.1.1",
+    "react": "19.1.0"
+  },
+  "main": "./dist/inert.js",
+  "module": "./dist/inert.js",
+  "types": "./dist/index.d.ts",
+  "imports": {
+    "#appduct-web": {
+      "development": "./dist/enabled.js",
+      "default": "./dist/inert.js"
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./dist/enabled.js",
+      "default": "./dist/inert.js"
+    },
+    "./enabled": {
+      "types": "./dist/enabled.d.ts",
+      "default": "./dist/enabled.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react.js",
+      "default": "./dist/react.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "react": [
+        "dist/react/index.d.ts"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "react": "*"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "homepage": "https://github.com/callstackincubator/appduct/tree/main/packages/web#readme",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "appduct",
+    "web"
+  ]
+}

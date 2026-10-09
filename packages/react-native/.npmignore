@@ -14,6 +14,5 @@ __tests__
 
 # ios/Core/, android/core/, and android/core-noop/ are gitignored (build/publish-time output of
 # scripts/sync-native-core.mjs, see .gitignore) but deliberately NOT listed here: they must ship in
-# the npm tarball since an installed consumer has no packages/native to sync from -- see
-# docs/tasks/14-native-core-extraction.md and this package's "build"/"prepack" scripts, which
-# regenerate them before packing.
+# the npm tarball since an installed consumer has no packages/native to sync from -- see this
+# package's "build"/"prepack" scripts, which regenerate them before packing.

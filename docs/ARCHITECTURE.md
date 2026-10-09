@@ -3,7 +3,7 @@
 This is the canonical architecture reference for the current Appduct implementation.
 It describes the daemon-based v2 protocol and public surfaces. For field-level wire
 details, see [PROTOCOL.md](PROTOCOL.md); for operational security guidance, see
-[SECURITY.md](SECURITY.md).
+[Security](https://callstackincubator.github.io/appduct/guides/security/).
 
 ## 1. Goals
 
@@ -15,7 +15,7 @@ details, see [PROTOCOL.md](PROTOCOL.md); for operational security guidance, see
    human surface. Both are thin clients of the same daemon RPC.
 3. **Multi-device.** One daemon serves N concurrent device sessions on one port.
 4. **Hardened local control plane.** Unix-domain-socket RPC guarded by filesystem
-   permissions replaces the unauthenticated localhost TCP API.
+   permissions, not an unauthenticated localhost TCP API.
 5. **Dev-first, production-capable.** Same protocol everywhere; production adds policy
    (consent, audit) and a compile-out story, not a different architecture.
 
@@ -34,7 +34,7 @@ Deliberately out of scope, so the boundaries of the design are explicit:
 - Remote relay to hosts outside the operator machine.
 - Pinning an offline anchor CA that signs short-lived leaf certs. The current model pins
   the same key used for the TLS leaf; overlapping pin sets are the supported rotation
-  path — see `docs/SECURITY.md`.
+  path — see [Rotate keys](https://callstackincubator.github.io/appduct/guides/security/#rotate-keys).
 
 ## 2. Topology
 
@@ -56,10 +56,38 @@ Deliberately out of scope, so the boundaries of the design are explicit:
 └──────────────────────────────────────────────────────────┘
 ```
 
+Browsers reach the daemon on a second listener, `ws://127.0.0.1:<webPort>`, not drawn above.
+
 - One daemon per operator machine (per user). It is long-lived and never exits because
   of anything a device does.
-- Devices connect **to** the daemon over pinned `wss://` (same direction as v1 — this is
-  what works for physical phones).
+- Devices connect **to** the daemon over pinned `wss://`; that direction is what works for
+  physical phones.
+- Web pages connect to a second listener: plain `ws://` on `127.0.0.1` and `webPort`, never
+  reachable from other machines. A browser can't pin the key, so the listener refuses an upgrade
+  with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`. A page the test runner
+  drives through Playwright can skip that listener: `attachPage(page, { link })` (`appduct/client`)
+  exposes a binding on the page, and `src/devtools-relay/` passes the page's session frames to the
+  same listener over a Node socket, which sends no `Origin`. The page selects it with
+  `connect(link, { transport: "devtools" })`, so an `https` page needs no `webOrigins` entry and
+  opens no connection of its own. One binding serves a page for its lifetime; a later `attachPage`
+  re-points it at the new link, which suspends the first link's session for its grace period; until
+  it expires, `connect()` with no selector is `ambiguous_session`, so select the new session with
+  `connect({ selector: link.sessionId })` or `waitForSession`. The binding belongs to the page's target, so a popup or a navigation
+  that creates a new target is not relayed. A page in a Chrome launched with `--remote-debugging-port`
+  needs no Playwright: `web.attach` (§5) has the daemon pick the tab through the `DevtoolsBrowser`
+  port (raw CDP over `ws`, one WebSocket per relayed tab, memory fake beside it), add the binding,
+  run the connect script and run the same relay itself, so the session outlives the call. A link is claimable
+  only on the listener of its transport (`link.create`'s `transport`, §5). The page side is
+  `packages/web` (`@appduct/web`): a TypeScript port of the native session core under the same SDK
+  layer as React Native. It has three entries. `.` resolves by export condition: `development`
+  gives `./enabled`, anything else gives the inert entry, which has the same API, registers
+  nothing, opens no connection, never defines `window.__APPDUCT__`, and warns once on `connect()`.
+  `./enabled` is the real client, importable explicitly. It reads `#appduct=` on load, removes it
+  from the address bar and claims, resumes from `sessionStorage` after a reload, and publishes
+  `window.__APPDUCT__.connect` (and `receive`, which the relay calls) for the `script` that `appduct_connect` returns.
+  `@appduct/web/react` adds `useAppductTool`, built from the same `createUseAppductTool` as React
+  Native's; React Native's `browser` export condition resolves to `@appduct/web` so a web build
+  needs no web-specific code. Without a `window` (server rendering) every call does nothing.
 - The CLI and MCP server never touch sockets, keys, or state files directly; everything
   goes through the daemon RPC.
 
@@ -100,6 +128,7 @@ The daemon refuses to load a key file that is group/world-readable.
   "policy": { "default": "allow", "destructive": "allow" },
   "advertisedIp": null,
   "scheme": null,
+  "webOrigins": [],
   "restartDaemonOnVersionMismatch": false
 }
 ```
@@ -114,9 +143,7 @@ Any other value must be a port number in `1..65535`.
 `advertisedIp` overrides auto-detection of the address advertised in minted bootstrap
 payloads. `scheme` is the deep-link URI scheme composed into `appduct sessions link`'s output
 when `--scheme` is not passed (§10) — set it once here instead of on every invocation.
-Unlike `scheme`, the app id `--open android`/`--open ios-device` need (issue #63) has no
-home in this file: it lives only in a project `.appduct/config.json`'s `appId.<platform>`
-(§10), never in the state directory's `config.json` — see `resolveAppId` in `scheme.ts`.
+The app id `--open` needs is not a key here (§10).
 `eventBufferSize` caps the per-session `events.since` retention buffer of `app_event`s (§5).
 `restartDaemonOnVersionMismatch` makes version-drift restarts unconditional rather than
 only-when-no-sessions-are-live (§4, "Version drift").
@@ -246,8 +273,7 @@ only-when-no-sessions-are-live (§4, "Version drift").
     an established connection; the operator restarts the MCP server. Drift found *at* MCP startup
     that cannot be resolved fails the whole server, so the agent loses every Appduct tool rather
     than some of them — an MCP client renders that as a bare "server failed to start", so the
-    server writes one stderr line naming both versions and the remedies before it exits. (Starting
-    degraded, with the built-in management tools still answering, is a possible follow-up.)
+    server writes one stderr line naming both versions and the remedies before it exits.
 
 ## 5. Control plane RPC (UDS)
 
@@ -268,15 +294,17 @@ Methods:
 
 | Method | Params | Result |
 | --- | --- | --- |
-| `daemon.status` | — | `{ version, pid, startedAt, wssPort, pinnedKeys: [spkiPin], sessions: SessionSummary[], pendingLinks }` — `pendingLinks` counts minted-but-unclaimed links (not sessions, §6, but live state a restart destroys; §4's version drift check reads it). Absent from daemons that predate this field. |
+| `daemon.status` | — | `{ version, pid, startedAt, wssPort, webPort, pinnedKeys: [spkiPin], sessions: SessionSummary[], pendingLinks }` — `pendingLinks` counts minted-but-unclaimed links (not sessions, §6, but live state a restart destroys; §4's version drift check reads it). Absent from daemons that predate this field. |
 | `daemon.shutdown` | — | `{ ok: true }` (then exits) |
-| `link.create` | `{ ttlSeconds?, addressOverride? }` | `{ sessionId, deepLinkPayload, endpoint: { family, address, port }, expiresAt }` — `deepLinkPayload` is the base64url bootstrap blob; callers compose `<scheme>:///?appduct=<payload>`. `addressOverride` forces the advertised address (the emulator/simulator fast path uses it to force `127.0.0.1`). |
+| `link.create` | `{ ttlSeconds?, addressOverride?, transport? }` | `{ sessionId, deepLinkPayload, endpoint: { family, address, port }, expiresAt }` — `deepLinkPayload` is the base64url bootstrap blob; callers compose `<scheme>:///?appduct=<payload>`. `addressOverride` forces the advertised address (the emulator/simulator fast path uses it to force `127.0.0.1`). `transport` is `"native"` (default) or `"web"`: a web link encodes `127.0.0.1` and `daemon.status`'s `webPort`, ignores `addressOverride`, and can only be claimed on the plain-HTTP web listener (which refuses an upgrade with 403 unless `Origin` is loopback or in `config.json`'s `webOrigins`); a link presented on the other transport's listener closes `1008 wrong_transport`. |
+| `web.attach` | `{ url, browserUrl, targetId?, ttlSeconds? }` | `{ sessionId, url, targetId, expiresAt }` — picks the tab with `targetId`, else the one tab of the browser at `browserUrl` whose URL starts with `url`, and fails with `invalid_request` listing the open tabs and their target ids when none or several match. It then mints a web link, adds the binding over CDP, connects the page with `transport: "devtools"` and relays it until the tab closes. |
 | `sessions.list` | — | `SessionSummary[]` |
 | `sessions.describe` | `{ selector? }` | full session detail incl. device metadata, state timestamps, tool count |
 | `sessions.revoke` | `{ selector? }` | `{ ok: true }` — closes socket (code 1000), frees alias |
 | `tools.list` | `{ selector?, group?, filter?, limit?, offset? }` | `{ tools: ToolsListEntry[], total, groups }` — `tools` is the registry sorted by `name` (code-point order), narrowed to `group` (PROTOCOL.md §5 syntax, matched by segment: `checkout` includes `checkout/*` and never `checkoutx`; case-sensitive), `filter`ed (case-insensitive substring match against name/description) and paged with `limit`/`offset`; each entry is a `ToolDescriptor` (full schema + annotations, plus `group`, which an entry always carries — the tool's group or `null` for an ungrouped one, the same value the summary's ungrouped row uses) plus the tool's effective `policy: "allow" \| "deny" \| "prompt"` (§12), resolved daemon-side. `total` is the count matching `group` and `filter` *before* paging, so a caller can tell how much a page left out. `groups: { group: string \| null, total }[]` summarizes the **whole** registry — never narrowed by `group`, `filter` or paging: one entry per top-level group (its `total` includes its subgroups), one per subgroup, and `group: null` for ungrouped tools when there are any; sorted by group path with a parent right before its subgroups, `null` last. A malformed `group` is `invalid_request`, like a bad `limit` |
 | `tools.call` | `{ selector?, name, args, timeoutMs?, caller?: "cli" \| "mcp", consent?: "elicitation" }` | `{ result, callId }` on success — `callId` lets a caller with several in-flight calls match `tool_call_progress`/`tool_call_finished` events back to this call; JSON-RPC error with `data.type` preserving the wire error type on failure. `caller` attributes the audit record (§12); `consent` is the MCP server's evidence of a `"prompt"`-policy human gate (§12) — `"elicitation"` after the client accepted an elicitation prompt, absent otherwise (including for the CLI). |
 | `tools.cancel` | `{ selector?, callId, reason? }` | `{ cancelled: boolean }` — sends `tool_cancel` (§7) to the app for a still-pending call; `false` for an unknown/already-finished `callId` or no active socket (a no-op, not an error) |
+| `events.list` | `{ selector?, name?, limit?, offset? }` | `{ events: EventDescriptor[], total }` — the events the session's app declared (PROTOCOL.md §5a), sorted by `name` (code-point order), narrowed by the whole-name `name` glob (same rule as `events.since`), then paged; `total` is the count after the glob and before paging. Works for suspended sessions |
 | `events.subscribe` | `{ sessionSelector?, kinds?, name?, payloadMaxBytes? }` | `{ ok: true }`, then `event` notifications on this connection |
 | `events.since` | `{ selector?, since?, limit?, name?, payloadMaxBytes? }` | `{ events: EventNotification[], cursor, dropped, remaining }` — pull counterpart to `events.subscribe` for `app_event` only, draining the per-session retention buffer described below. An older client's `kinds` is ignored like any unknown param |
 
@@ -321,7 +349,7 @@ retentionDays, files, bytes } }` (§12, and §3 for the retention fields).
 Event notification payload: `{ kind, sessionId?, alias?, ts, data, seq }` where `kind` is one
 of `daemon_started`, `link_created`, `link_expired`, `session_claimed`,
 `session_suspended`, `session_resumed`, `session_revoked`, `session_expired`,
-`tools_changed`, `app_event`, `tool_call_started`, `tool_call_progress`,
+`tools_changed`, `events_changed`, `app_event`, `tool_call_started`, `tool_call_progress`,
 `tool_call_finished`. `seq` counts `app_event`s only (issue #113) — every other kind, whether
 session-scoped or daemon-wide, carries `seq: 0`.
 
@@ -405,14 +433,19 @@ Rules:
   successful resume the resume token is **rotated** (old one invalid immediately).
 - `ACTIVE → SUSPENDED` (socket close/error/heartbeat loss): the tool registry, device
   metadata, and alias are retained. Pending tool calls fail fast with `session_suspended`.
-- `SUSPENDED → ACTIVE` via `session_resume` on a fresh pinned socket within
-  `graceSeconds`. After resume the app re-sends a full `tool_registry_snapshot`
-  (authoritative; replaces the retained registry).
+- `ACTIVE → ACTIVE` via `session_resume` while the old socket is still open: the daemon closes
+  the old socket (`1000 session_replaced`), adopts the new one and emits `session_resumed`
+  without suspending. Calls pending on the old socket fail fast with `session_suspended`
+  (the app aborted them with that socket) and frames the old socket still delivers are dropped.
+- `SUSPENDED → ACTIVE` via `session_resume` on a fresh socket within
+  `graceSeconds`. A session resumes only on the listener it was claimed on; a resume on the
+  other listener closes `1008 wrong_transport` and leaves the resume token valid. After resume the app re-sends a full
+  `tool_registry_snapshot` (authoritative; replaces the retained registry).
 - Session ids and aliases never collide across live sessions. Terminal states
   (`DISCARDED`, `EXPIRED`, `REVOKED`) free the alias.
-- There is **no limit** on concurrent sessions; all share the single wss listener.
+- There is **no limit** on concurrent sessions; all share the two listeners (pinned wss and local web).
 
-## 7. Wire protocol v2 (app ↔ daemon, over pinned wss)
+## 7. Wire protocol v2 (app ↔ daemon, over pinned wss or the local web listener)
 
 **[PROTOCOL.md](PROTOCOL.md) is the normative reference** for the message catalog, frame
 rules, close codes, keepalive, and the `ToolDescriptor` shape. Don't duplicate it here; the
@@ -435,7 +468,7 @@ belong here:
   format and older builds that ignore it still work. Anything parsing the link must stop at
   the `&` — a naive "slice to end of string" swallows the pin and corrupts the payload.
 - The `pin` matters only to a build whose effective `trust` is `"link"` (§11). Embedded pins,
-  when configured, always win — see [SECURITY.md](SECURITY.md)'s "Trust modes".
+  when configured, always win — see [Choose what a build trusts](https://callstackincubator.github.io/appduct/guides/security/#choose-what-a-build-trusts).
 - **The address baked into the payload is decided by the delivery path, before the link is
   minted, and cannot be revised afterwards.** `--open android` and `--open ios-sim` force
   `127.0.0.1` because `adb reverse` and the simulator's shared network stack both make the
@@ -483,10 +516,8 @@ belong here:
   itself is single-quoted, above. The pattern is deliberately a superset of both platforms' own id
   grammars (Android forbids `-` in an `applicationId` but allows `_`; iOS is the other way
   round): it is a safety check on the argv and the device shell, not a spelling check, so a syntactically safe but
-  wrong id for its platform fails loudly at `am start`/`devicectl` instead. It is *not* validated
-  in `daemon/config.ts` — there is nothing to validate there any more: an app id has no home in
-  the state directory's `config.json`, only in a project `.appduct/config.json`'s
-  `appId.<platform>` (§10, `resolveAppId`).
+  wrong id for its platform fails loudly at `am start`/`devicectl` instead. Where the app id
+  comes from is §10 (`resolveAppId`).
 - `ios-device` also **refuses to deliver a loopback link**. `daemon/address.ts` falls back to
   `127.0.0.1` when it finds no routable interface; delivered to a phone, that link points the
   phone at itself, and the failure is silent — `wait_for_session` simply blocks for its whole
@@ -545,6 +576,10 @@ proxies daemon RPC (auto-spawning the daemon like any client):
   "ios-device"` extends the same path to a paired physical iPhone/iPad (§8), but only when the
   agent names it and supplies `appId`; the "nothing detected" note says so, so an agent that
   finds no simulator knows the option exists rather than defaulting to a QR nobody scans.
+- `appduct_list_events` (issue #125; `appduct events ls`) is a thin proxy over `events.list`: the
+  session is resolved first and the call routed by its id, `limit` defaults to 50, and each event
+  comes back as `{ name, signature, description }` with `renderEventSignature`'s line. An exact
+  `name` (no `*`) also adds `payload_schema`.
 - Two more built-in tools, `appduct_events` and `appduct_wait_for_event` (issue #6),
   give an agent a pull surface over `postEvent()`-pushed `app_event`s: `appduct_events`
   is a thin proxy over `events.since` — flattening its `EventNotification[]` to
@@ -577,12 +612,11 @@ server can't drift in behavior: they are the same calls.
 
 The per-command reference lives in the [`appduct` package README](../packages/appduct/README.md),
 which is where it stays current. Every command is `appduct <noun> <verb> [selector] [args]`
-(issue #96): `sessions ls|revoke|link`, `tools ls|describe|call`, `events tail|since`, with
-`daemon run|start|stop|status` as the model this was generalized from — `init`, `keygen`, `doctor`
-and `mcp` stay one-verb nouns. This is a clean break with no aliases (pre-1.0): a removed
-top-level word (`ls`, `revoke`, `link`, `invoke`) is a usage error naming its replacement
-(`dispatch.ts`'s `REMOVED_COMMANDS`), and a bare noun or an unrecognized verb is a usage error
-naming that noun's verbs, exactly like a bare `daemon` already does. `cac` matches only a
+(issue #96): `sessions ls|revoke|link`, `tools ls|describe|call`, `events ls|tail|since`,
+`daemon run|start|stop|status`; `init`, `keygen`, `doctor` and `mcp` are one-verb nouns. A
+top-level word from the pre-noun CLI (`ls`, `revoke`, `link`, `invoke`) is a usage error naming
+its replacement (`REMOVED_COMMANDS`), and a bare noun or an unrecognized verb is a usage error
+naming that noun's verbs. `cac` matches only a
 command's first word and builds its boolean/string flag table from that command's own declared
 options, so each noun in `create-cli.ts` declares every option any of its verbs uses — otherwise a
 boolean flag ahead of a positional (`tools ls --full <selector>`) would swallow it as that flag's
@@ -632,7 +666,7 @@ they cannot drift. First match wins:
    schemes — it throws a usage error naming both sources instead.
 6. otherwise an error naming every location above
 
-The project `.appduct/config.json` carries a second key alongside `scheme` since issue #63:
+The project `.appduct/config.json` carries a second key alongside `scheme`:
 `appId`, an object with `ios`/`android` string entries. `scheme.ts`'s `resolveAppId` resolves it
 per delivery target (`android` → `appId.android`, `ios-device` → `appId.ios`; `ios-sim` needs
 none — see §8), in a shorter order than `scheme`'s, first match wins:
@@ -660,14 +694,18 @@ developer's private key.
 code to read one string is a far larger blast radius than this warrants. Dynamic-config projects
 use `--scheme`, `APPDUCT_SCHEME`, or `appduct init --scheme <s>`.
 
+In a Flutter project (`pubspec.yaml` at the root) the Android probes in b run against `android/`
+instead of the root, and `appduct init` prints the Flutter setup steps in place of the React
+Native reminder.
+
 `appduct init`, run in an app root, writes that project `.appduct/config.json` (`scheme`, and
-now `appId.ios`/`appId.android` via `--ios-app-id <id>`/`--android-app-id <id>`) and prints the
+`appId.ios`/`appId.android` via `--ios-app-id <id>`/`--android-app-id <id>`) and prints the
 MCP server entry to paste plus the `import "@appduct/react-native/auto"` reminder. It never
 generates keys (the daemon auto-generates `key.pem` — §3), and writes the file `0600` inside a
 `0700` directory, matching §3's conventions. The two app-id flags are independent — there is no
 single `--app-id` on `init` — because the platforms' ids usually match but not always, and `init`
 never guesses one from a discovered value the way it never guesses `scheme` from an ambiguous
-native probe (§10's discussion of `discoverNativeScheme`).
+native probe (`discoverStaticProjectScheme`, above).
 
 Re-running it is always safe: it keeps the scheme (and any recorded app id) already recorded and
 only *notes* a scheme divergence when discovery (`app.json` or a native project file) has come to
@@ -754,13 +792,11 @@ trust-mode resolution, the private-LAN check, claim/resume, reconnect with full-
 backoff, the tool registry and its wire deltas, per-call timeout/cancel/progress, v2
 bootstrap deep-link handling, and the process-memory resume lease — is not native to this
 package: it is vendored at build time from `packages/native`, a framework-free core with no
-React Native dependency (`docs/tasks/14-native-core-extraction.md`,
-`docs/tasks/15-native-session-logic.md`,
-[BUILD-VARIANTS.md § Native core](BUILD-VARIANTS.md#native-core)). The same core is also
-consumed directly — no React Native, no Expo — by a plain iOS app (`Appduct.shared`,
+React Native dependency ([internal/native-core.md](internal/native-core.md)). The same core is
+also consumed directly — no React Native, no Expo — by a plain iOS app (`Appduct.shared`,
 [`packages/native/ios/README.md`](../packages/native/ios/README.md)) and a plain Android app
 (the `Appduct` object, [`packages/native/android/README.md`](../packages/native/android/README.md)),
-issue #48 phase 3 (`docs/tasks/18-ios-entry-points.md`, `docs/tasks/19-android-entry-points.md`).
+issue #48 phase 3.
 **The RN bridge and the plain-app facade never coexist in one app.** Each owns its own
 `AppductClient` instance and the one process-memory resume lease that comes with it, so an
 RN app that also imported the facade and called `Appduct.shared`/the `Appduct` object
@@ -795,7 +831,7 @@ own no session state themselves. Entry points:
   a new entry point can't be silently missed.
 
 **Inclusion and trust are two independent, explicit config decisions — neither is derived
-from build type** (`docs/SECURITY.md` has the full threat-model writeup; this is the
+from build type** ([Security](https://callstackincubator.github.io/appduct/guides/security/) has the user-facing threat model; this is the
 config-surface summary):
 
 - **Inclusion** is decided entirely by autolinking, outside this package — there is no
@@ -804,6 +840,17 @@ config-surface summary):
   separately and additively: `noopIfNativeUnavailable` degrades the public API to exact
   `/noop` behavior whenever the native module isn't found, for any reason (excluded, or an
   environment like Expo Go that has none).
+  `APPDUCT_ENABLED` is read in three places: the package's own `react-native.config.js` sets
+  autolinking's `ios.configurations` (CocoaPods links only into a configuration literally named
+  `Debug` by default), `android/build.gradle` picks the `release` no-op source set for a build
+  type literally named `release`, and `@appduct/react-native/metro` decides whether to redirect
+  imports to `/noop`. Only the Expo config plugin validates the value; `react-native.config.js`
+  swallows a parse error and `build.gradle` treats anything but `1`/`true` as unset, so a
+  malformed value falls back to the dev-only default in bare React Native. The podspec and
+  `build.gradle` print `[appduct] native module INCLUDED in this build` when linked.
+  Excluding the package from iOS autolinking also stops `expo-modules-autolinking` generating
+  its codegen output (`AppductSpec`), so an app that excludes it but adds the pod by hand
+  fails to build.
 - **Trust** is decided by the explicit `trust` value — `"pin"` (embedded `cliPins` only) or
   `"link"` (the bootstrap link's `pin`, for that session). Defaults to `"pin"` when `cliPins`
   is non-empty, `"link"` otherwise. Two invariants matter more than the config surface:
@@ -812,15 +859,14 @@ config-surface summary):
   resolution, so a typo can't silently downgrade `"pin"` into permissive link TOFU.
 
 The full config surface (option names, native keys, trust recipes) lives in
-[SECURITY.md](SECURITY.md#configuring-trust); the inclusion/compile-out recipes live in
-[BUILD-VARIANTS.md](BUILD-VARIANTS.md); the threat model lives in
-[SECURITY.md](SECURITY.md). The [package README](../packages/react-native/README.md) is the
+[Security](https://callstackincubator.github.io/appduct/guides/security/#pin-a-build-to-your-key); the inclusion/compile-out recipes live in
+[Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/); the threat model lives in
+[Security](https://callstackincubator.github.io/appduct/guides/security/). The [package README](../packages/react-native/README.md) is the
 getting-started path and API reference.
 
-Client behavior (issue #48 phase 2 moved everything in this list except schema handling
-and cancellation's `AbortSignal` translation into the native core —
-`docs/tasks/15-native-session-logic.md` has the full core API, bridge protocol, and
-deviations):
+Client behavior. Everything in this list except schema handling and cancellation's
+`AbortSignal` translation lives in the native core;
+[internal/native-core.md](internal/native-core.md) has the bridge protocol and design decisions:
 
 - On every successful claim/resume, native commits the latest `resume_token` lease before
   emitting the `session_ack`. The lease is synchronous, native **process-memory
@@ -846,8 +892,8 @@ deviations):
   listener that needs the departing session's id/alias keeps the most recent non-null event.
 - Native's own `handleUrl(url)` decodes the v2 bootstrap payload, checks expiry and the
   private-IP policy (`allowPrivateLanOnly`, read once from the same manifest/plist key
-  `resolveTrustedPins` uses), and decides whether the link outranks a session already held
-  — the JS-side `deep-link-core.ts` this used to be is gone. `@appduct/react-native/auto`
+  `resolveTrustedPins` uses), and decides whether the link outranks a session already held.
+  `@appduct/react-native/auto`
   installs a `Linking` `url` listener that forwards straight into `handleUrl`, then calls
   `restoreSession()` once before considering the initial launch URL (recovery goes first so
   the link is judged against a settled session, not so it wins) — a successful restore does
@@ -920,7 +966,7 @@ deviations):
   The raw test is structural rather than keyword-based on purpose. A keyword probe using `in`
   walks the prototype chain, and validator instances from libraries predating Standard Schema
   (yup, joi, superstruct, valibot 0.x) carry a prototype `type` — they would be taken as raw
-  JSON Schema and published as the tool's shape, having previously been rejected outright.
+  JSON Schema and published as the tool's shape.
   Many also hold circular references, so `JSON.stringify` on `tool_registry_snapshot` would
   throw and lose the whole snapshot, not just that tool.
 
@@ -950,9 +996,8 @@ deviations):
   emits `onToolCancel(id, "timeout")` (so JS aborts the matching `AbortSignal`), replies
   `tool_timeout` itself, and ignores whatever the handler later resolves or throws. The
   hint is the tool's own `timeoutMs`, falling back to native's built-in default
-  (`APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`, 10 s — the frozen TurboModule spec has no channel
-  for JS to override this client-wide default the way the old `defaultToolTimeoutMs` client
-  option once did; see `docs/tasks/15-native-session-logic.md`'s deviations). This timer is
+  (`APPDUCT_DEFAULT_TOOL_TIMEOUT_MS`, 10 s; the TurboModule spec has no channel for JS to
+  override it). This timer is
   the real ceiling on a call: a caller's `tools.call` `timeoutMs` can shorten the deadline
   but never extend it past this point. Only the *explicit* per-tool value travels on the
   descriptor (`docs/PROTOCOL.md` §5), where it becomes the daemon's default deadline for
@@ -963,7 +1008,7 @@ deviations):
   timeout, or session suspension (transport lost — there is no socket left to deliver
   `tool_cancel` over, so native aborts every in-flight call directly and JS mirrors that by
   aborting every signal it is holding). A handler that ignores the signal keeps running and
-  replies normally, exactly as it did before cancellation existed; one that observes it and
+  replies normally; one that observes it and
   throws/rejects gets its `tool_error` sent as `tool_cancelled` by native (only for an
   explicit `tool_cancel` — a handler that throws after its own timeout still reports
   `tool_timeout`, not `tool_cancelled`, since native already answered by the time the throw
@@ -985,10 +1030,10 @@ it.
 
 - Policy applies at the daemon on every `tools.call` (CLI and MCP alike), keyed on the
   descriptor's `annotations`: `policy.default`/`policy.destructive`/per-tool overrides
-  `policy.tools["<alias>/<name>"]`, each `"allow" | "deny" | "prompt"`. `allow`/`deny`
-  behave as before; denied calls return `policy_denied` and are audited.
+  `policy.tools["<alias>/<name>"]`, each `"allow" | "deny" | "prompt"`. `allow` runs the
+  call; `deny` returns `policy_denied`. Denied calls are audited.
 - `"prompt"` means "a human gate is required; if one cannot be guaranteed, deny" — it
-  fails closed rather than silently behaving like `allow`. One gate is implemented today, and
+  fails closed rather than silently behaving like `allow`. One gate is implemented, and
   it is MCP-only:
   - **Elicitation** (issue #10): whenever the connected client declared the `elicitation`
      capability at `initialize` (checked via the SDK Server's `getClientCapabilities()`), a
@@ -1005,10 +1050,7 @@ it.
      on the same `policy_denied`/`no_consent_channel` path as any other ungated caller.
 
   Every other caller (the CLI, an MCP client that doesn't declare elicitation) is denied with
-  `policy_denied`, reason `no_consent_channel`. An earlier Claude Code-specific fallback that
-  emitted `_meta["anthropic/requiresUserInteraction"]` on `tools/list` and sent
-  `consent: "client"` was removed: it was evidence only that a client armed itself to ask, not
-  an observed decision, and it tied consent to one client's self-reported `clientInfo`.
+  `policy_denied`, reason `no_consent_channel`.
   - Elicitation carries an *observed decision* (the client's reply to a specific request), but
     the daemon never sees the client's own prompt UI. A client's declared capabilities are
     self-reported, and `consent` is an ordinary RPC param on
@@ -1016,11 +1058,10 @@ it.
     shell access, which is the typical Claude Code setup this feature targets) can set it
     directly, same as it could send any other RPC call. `"prompt"` guards against a compliant
     client silently auto-approving on the caller's behalf; it is not a defense against a
-    hostile process on the operator's own machine — see `docs/SECURITY.md`'s threat model,
+    hostile process on the operator's own machine — see the [security guide](https://callstackincubator.github.io/appduct/guides/security/)'s threat model,
     which already treats socket access as full daemon control.
   - Known limitation: a client can declare the `elicitation` capability and then always reply
-    `"decline"` or `"cancel"` without ever really surfacing the prompt to a human (older Codex
-    behavior at the time of writing). This fails closed — the tool is simply never callable
+    `"decline"` or `"cancel"` without ever really surfacing the prompt to a human. This fails closed — the tool is simply never callable
     through that client — which is the acceptable failure mode; it is not distinguishable from
     a human genuinely saying no. Non-interactive Claude Code (`claude -p`) behaves this way: it
     declares elicitation and answers every request with `"cancel"`.
@@ -1036,9 +1077,8 @@ it.
   errorType?, durationMs, caller: "cli"|"mcp"|"client", consent?: "elicitation" }`.
   `consent` is set only when a `"prompt"` call proceeded after an elicitation accept, kept
   distinct from a plain `"ok"` since the daemon never observes the client-side prompt itself,
-  only that the call arrived carrying this marker. Audit files written before the flag-based
-  fallback was removed may also contain `consent: "client"`. Raw
-  args are never logged. Day files are pruned on the `auditRetentionDays` schedule described in
+  only that the call arrived carrying this marker (older audit files may also hold
+  `consent: "client"`). Raw args are never logged. Day files are pruned on the `auditRetentionDays` schedule described in
   §3, and `daemon status` surfaces the directory's file count, size, and failure counters.
 
 ## 13. Package layout
@@ -1047,11 +1087,19 @@ it.
 packages/
   shared/          @appduct/shared — wire protocol v2 (messages, bootstrap codec,
                    tool descriptors, error types), RPC method/param/result types,
-                   Standard Schema helpers. No runtime deps.
+                   Standard Schema helpers. No runtime deps. Also the TypeScript SDK
+                   layer every JS binding builds on, as three separate entries so the CLI
+                   (root entry only) never loads it: `/sdk` (`createAppduct(core)`, the
+                   `AppductCore` interface a platform binding implements, schema
+                   conversion, tool groups; never imports react), `/react`
+                   (`createUseAppductTool`; `react` is an optional peer dependency) and
+                   `/inert` (the few runtime values a noop entry needs, no client code).
+                   A noop entry may import from `/inert` only: importing `/sdk` would ship
+                   the whole client in release builds.
   appduct/      CLI + daemon + MCP:
     src/daemon/    lifecycle (pidfile, UDS server, auto-spawn helpers), session engine,
-                   link minter, tls (cert minting — reuse host-certificate.ts),
-                   event bus, policy, audit
+                   link minter, tls (key loading and leaf-cert minting on top of
+                   host-certificate.ts), event bus, policy, audit
     src/rpc/       RPC client library (connect-or-spawn), shared by cli/ and mcp/
     src/commands/  one handler per command (daemon/<action>.ts per daemon action):
                    typed options in, CliResult out, no argv parsing — what tests call
@@ -1059,36 +1107,51 @@ packages/
                    multi-level router (router.ts) and one route per command under
                    routes/ (routes/daemon/ is a nested router) — §10 "Startup cost"
     src/mcp/       stdio MCP server
-  react-native/    @appduct/react-native (entries: ., /auto, /noop). Depends only on
+    src/events/    waitForAppEvent, the drain-then-live event wait shared by mcp/ and client/
+    src/client/    appduct/client, the programmatic client for test runners
+    src/devtools-relay/  relays a page's session frames between a Playwright binding and the
+                   daemon's web listener (`attachPage` and `web.attach` wire it); ports with memory fakes beside them
+  react-native/    @appduct/react-native (entries: ., /auto, /noop, /metro, app.plugin.js). Implements
+                   `AppductCore` with its TurboModule and keeps the public API; depends only on
                    @appduct/shared — no third-party runtime deps, which is why no
                    JSON Schema validator ships with it (§11's raw schema form). Vendors
                    packages/native at build time (see below) rather than depending on it.
   native/          Framework-free Swift (SwiftPM, packages/native/ios) and Kotlin
                    (standalone Gradle project, packages/native/android) core. Not an
-                   npm/pnpm workspace package -- no package.json. §11, BUILD-VARIANTS.md
-                   § Native core, docs/tasks/14-native-core-extraction.md.
+                   npm/pnpm workspace package -- no package.json. §11,
+                   docs/internal/native-core.md.
+  flutter/         Flutter plugin `appduct`, not published yet. Not an npm/pnpm workspace
+                   package -- no package.json, so turbo and pnpm never see it. `lib/src/core/`
+                   is pure Dart (only dart:async, dart:convert, dart:typed_data, dart:math;
+                   a test enforces it): bootstrap link and payload decoding, frame
+                   encode/decode, descriptor validation, close-code classification, all
+                   checked against packages/native/fixtures, and the session core
+                   (`createDartCore`: claim and resume, reconnect, keepalive via the socket,
+                   backgrounding, registries, tool calls), a port of packages/web/src/core
+                   over the ports in `ports.dart`, each with a memory fake beside it, and
+                   replaying the session scenarios. `lib/src/io/` holds the dart:io
+                   adapters (no Flutter import): the pinned `wss` transport (empty
+                   SecurityContext, every leaf checked against the SPKI pin), trust
+                   resolution from the `APPDUCT_PINS` / `APPDUCT_TRUST` build defines, and a
+                   file lease store. `lib/src/flutter/composition.dart` wires them into the
+                   binding (the lease file on Windows and Linux, the shim elsewhere) and reads
+                   `APPDUCT_ALLOW_PRIVATE_LAN_ONLY` (default true). Test it with
+                   `cd packages/flutter && flutter test` after `pnpm build`: two tests run
+                   against the built daemon (CI job `flutter` in test.yaml).
 playground/        reference app (Expo dev build)
+playground-native/ plain iOS and Android apps on packages/native, no React Native
 ```
 
 The repo-root `Package.swift` (SwiftPM manifests must live at the repository root for URL
 dependencies) is the SwiftPM manifest for `packages/native/ios`.
 
-Tooling stays: pnpm workspaces, turbo, Vitest, tsc for declarations (`appduct` and
-`@appduct/shared` emit their JS with esbuild — §10 "Startup cost"). Node ≥ 20 for the daemon
-(UDS + `AF_UNIX` on Windows). Windows support is best-effort; the control plane uses the
-named-pipe path `\\.\pipe\appduct-<user>` behind the same client API.
+Tooling: pnpm workspaces, turbo, Vitest, tsc for declarations (`appduct` and
+`@appduct/shared` emit their JS with esbuild — §10 "Startup cost"). Node ≥ 20 for the daemon.
+The control plane is always a Unix domain socket (`getSocketPath` in `daemon/state-dir.ts`).
 
 ## 14. Current limitations
 
-- A general-purpose interactive consent UI. `policy: "prompt"` (§12) has one implemented
-  MCP-only gate (elicitation, issue #10) — the CLI, and an MCP client that doesn't declare
-  elicitation, still fail closed with no prompt of their own.
-- Remote relay / hosts outside the operator machine.
-- Pinning an offline anchor CA that signs short-lived leaves (rotation uses overlapping
-  pin sets; the anchor-CA design is a future option).
 - Web/browser client (safe no-op stub only).
 - Multiple endpoint candidates in the bootstrap payload.
 - A tool whose `input_schema` root `type` rules out an object (`"string"`, `"array"`, ...) is
-  listed but not callable, because `tools.call`'s `args` are always a JSON object (§5). Wrapping
-  such arguments so the tool stays callable is tracked in
-  [issue #34](https://github.com/callstackincubator/appduct/issues/34).
+  listed but not callable, because `tools.call`'s `args` are always a JSON object (§5).

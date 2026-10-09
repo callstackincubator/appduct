@@ -1,8 +1,8 @@
 /**
  * `@appduct/react-native/noop` — inert entry (ARCHITECTURE.md §11): identical public API to the
  * root (`.`) entry, but every operation is a no-op. Intended for release-build compile-out via Metro
- * `resolveRequest` or a conditional `require` (see `docs/BUILD-VARIANTS.md`'s "Compiling
- * Appduct out of production builds" section) — swap `@appduct/react-native` (and `/auto`)
+ * `resolveRequest` or a conditional `require` (see
+ * https://callstackincubator.github.io/appduct/guides/build-variants/#strip-appducts-javascript-too) — swap `@appduct/react-native` (and `/auto`)
  * for this entry so no Appduct code, native or JS, ships in that build.
  *
  * Typed against the same `CordierePublicApi` interface as `./index.ts` (see
@@ -14,6 +14,7 @@ import type {
   AppductBuildConfig,
   AppductClientState,
   AppductConnectInput,
+  AppductEventDefinition,
   AppductListenerKind,
   AppductRuntimeSchema,
   AppductToolRegistration,
@@ -21,8 +22,8 @@ import type {
 } from "./Appduct.types";
 import { AppductDisabledError } from "./Appduct.types";
 import type { AppductSubscription } from "./public-api";
-import { createToolGroupFactory } from "./tool-group";
-import { createUseAppductTool } from "./useAppductTool";
+import { createUseAppductTool } from "@appduct/shared/react";
+import { createToolGroupFactory } from "@appduct/shared/inert";
 
 export * from "./Appduct.types";
 export type {
@@ -30,7 +31,7 @@ export type {
   AppductSubscription,
   AppductToolGroupRegistrar,
 } from "./public-api";
-export type { UseAppductToolOptions } from "./useAppductTool";
+export type { UseAppductToolOptions } from "@appduct/shared/react";
 
 const noopSubscription: AppductSubscription = { remove() {} };
 
@@ -54,6 +55,13 @@ export const useAppductTool = createUseAppductTool(registerTool);
 /** Same signature as the real entry's; the bound registrar is the inert `registerTool` above, and
  * no group is validated since nothing is ever registered. */
 export const createToolGroup = createToolGroupFactory(registerTool);
+
+/** Accepts any declaration and returns a disposer; the event is never declared anywhere. */
+export function registerEvent<
+  TPayloadSchema extends AppductRuntimeSchema | undefined,
+>(_definition: AppductEventDefinition<TPayloadSchema>): AppductSubscription {
+  return noopSubscription;
+}
 
 /** No-op: never sends anything. */
 export async function postEvent(

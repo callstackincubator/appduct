@@ -1,14 +1,14 @@
 ---
 title: CLI reference
-description: Every appduct command, flag, environment variable, config file key, exit code, MCP tool, and the appduct/client API.
+description: Every appduct command, flag, environment variable, config file key, exit code, error type, MCP tool, and the appduct/client API.
 sidebar:
   order: 1
 ---
 
 For task-based instructions, see [Use the CLI](/appduct/guides/cli/). Run `appduct <command> --help` for a command's flags on your installed version.
 
-Every command is `appduct <noun> <verb> [selector] [args]` — `sessions`, `tools`, and `events`
-each work like `appduct daemon run|start|stop|status` already does. Commands that target a device
+Most commands are `appduct <noun> <verb> [selector] [args]`: a noun (`sessions`, `tools`, `events`,
+`daemon`) followed by what to do with it, such as `ls`, `call`, or `tail`. Commands that target a device
 take an optional `[selector]`: a session alias or id from `appduct sessions ls`. Leave it out when
 exactly one device is connected.
 
@@ -37,7 +37,9 @@ Creates a one-time connection link and prints it.
 
 | Flag | Description |
 | --- | --- |
-| `--open <target>` | Open the link on a device: `android`, `ios-sim`, or `ios-device` (experimental). |
+| `--open <target>` | Open the link on a device: `android`, `ios-sim`, or `ios-device` (experimental). `--open web <url>` is for a web page; see [Web pages](#web-pages). |
+| `--browser-url <url>` | With `--open web`: attach a tab of a Chrome launched with `--remote-debugging-port`; see [Attach a Chrome tab](#attach-a-chrome-tab). |
+| `--target-id <id>` | With `--browser-url`: the tab to attach when several tabs match `<url>`. |
 | `--device <id>` | adb serial, simulator UDID, or device UDID, when more than one is available. |
 | `--app-id <id>` | Installed app id for `android` and `ios-device`. Defaults to `appId.<platform>` in `.appduct/config.json`. Not allowed with `ios-sim`. |
 | `--relaunch` | With `ios-device`: stop a running instance of the app first. |
@@ -56,6 +58,24 @@ How each `--open` target delivers the link:
 Without `--device`, each target requires exactly one candidate and lists them otherwise. `ios-device` requires iOS 17+, Xcode 15+, a connected, trusted device with Developer Mode on, and your app installed. App ids may contain letters, digits, `.`, `_`, and `-`, and must start with a letter or digit.
 
 The link has the form `<scheme>:///?appduct=<payload>&pin=<sha256/...>`. Pass it on whole.
+
+#### Web pages
+
+`appduct sessions link --open web <url>` creates a link for a page served at `<url>`. It needs no device, scheme, or app id, and prints `url` (the page URL with `#appduct=<payload>` added, replacing any fragment) and `script`. Open `url` in a browser, or run `script` in a page that's already open: `window.__APPDUCT__.connect("<payload>")`. The `--ttl` flag applies; `--device`, `--app-id`, and `--relaunch` don't.
+
+##### Attach a Chrome tab
+
+If the page is open in a Chrome you launched with `--remote-debugging-port` and its own `--user-data-dir`, the daemon can attach it for you:
+
+```bash
+appduct sessions link --open web https://staging.example.com/shop --browser-url http://127.0.0.1:9222
+```
+
+The daemon attaches the one tab whose address starts with `<url>`, connects the page through the debugging port, and prints `sessionId`, `url` (the tab's own address) and `targetId`. The page opens no connection of its own, so this works on `https` pages with no permission prompt. `<browser-url>` must be on this machine: `127.0.0.1`, `[::1]` or `localhost`. The page must already load `@appduct/web`. Reloading the page resumes the session.
+
+If no tab matches, or several do, the command fails and lists the open tabs with their target ids. Pass one with `--target-id <id>`; it wins even when several tabs match. A popup, or a page that opens in a new tab, isn't attached: run the command again for it.
+
+A web link points at `127.0.0.1` and the web port, which `appduct daemon status --json` reports as `data.daemon.web_port`. It only works on that port, and a link for a device only works for devices. See [Web pages](/appduct/guides/security/#web-pages) for what the web port accepts.
 
 ### `appduct sessions revoke [selector]`
 
@@ -93,6 +113,18 @@ Calls a tool.
 
 Ctrl-C cancels the call in the app.
 
+### `appduct events ls [selector]`
+
+Lists the events your app declares, each as a signature line (name and payload shape) with its description indented on the next line. With `--json`, prints `{ "events": [...], "total": n }` with each event's full payload schema.
+
+| Flag | Description |
+| --- | --- |
+| `--name <glob>` | Only events whose name matches this glob (`*` matches any run of characters), e.g. `"cart.*"`. An exact name prints that event's full payload schema. |
+| `--limit <n>` | Show at most `n` events. |
+| `--offset <n>` | Skip the first `n` events of the name-sorted list. |
+
+A listing that leaves events out ends with a `Showing n of total events (offset o).` line so you know there are more. With `--json`, `total` counts matches before `--limit` and `--offset`. An app that declares no events lists none, even if it posts some.
+
 ### `appduct events tail [selector]`
 
 Streams the events your app posts with `postEvent` until you stop it. With `--json`, prints one JSON object per line, each with `kind: "app_event"`.
@@ -102,6 +134,8 @@ Streams the events your app posts with `postEvent` until you stop it. With `--js
 | `--follow` | Accepted for readability; streaming is the default. |
 | `--name <glob>` | Only events whose name matches this glob (`*` matches any run of characters; a pattern without `*` is an exact name), e.g. `"cart.*"`. Matches the whole name, case-sensitively. |
 | `--payload-max-bytes <n>` | Cap each event's payload to this many UTF-8 bytes of its JSON. Over the cap, the line's `data` carries `payloadPreview`/`payloadBytes`/`truncated: true` instead of `payload`. No default — payloads print whole unless you set this. |
+
+In each line, `data` carries what your app sent: `name`, `payload`, and the `ts` your app stamped it with, in Unix milliseconds. The timestamp leading the line is when the daemon received the event — a separate value, not a rounded version of `data.ts`.
 
 Device connections and tool calls are not printed. To see when a device connects, use `appduct sessions ls`.
 
@@ -178,7 +212,35 @@ Manages the background service. It starts on its own, so you rarely need these.
 | `72` | Tool error | `tool_not_found`, `tool_execution_error`, `tool_timeout` |
 | `77` | Call denied | `policy_denied` |
 
-With `--json`, the error's `type` field names the exact error. See [Error types](/appduct/reference/protocol/#error-types).
+With `--json`, the error's `type` field names the exact error. See [Error types](#error-types).
+
+## Error types
+
+A failed tool call or session lookup reports one of these as its `type`, the same in a CLI `--json` error, an `AppductError` in `appduct/client`, and an MCP tool error.
+
+**From the app:**
+
+| Type | Meaning |
+| --- | --- |
+| `tool_not_found` | No tool with that name is registered |
+| `tool_input_validation_error` | Arguments didn't match the input schema |
+| `tool_output_validation_error` | The result didn't match the output schema |
+| `tool_execution_error` | The handler threw |
+| `tool_serialization_error` | The result couldn't be converted to JSON |
+| `tool_timeout` | The call ran past its time limit |
+| `tool_cancelled` | The caller cancelled the call |
+
+**From the background service:**
+
+| Type | Meaning |
+| --- | --- |
+| `no_session` | No device is connected, and no selector was given |
+| `ambiguous_session` | More than one device is connected; pass a selector |
+| `unknown_session` | No session matches the selector |
+| `session_not_active` | The session isn't active |
+| `session_suspended` | The device disconnected during the call, or the app is in the background. The message says which; bring the app to the foreground to resume |
+| `policy_denied` | [Policy](/appduct/guides/security/#limit-what-callers-can-run) refused the call. Changing config, not retrying, fixes it. |
+| `invalid_request` | The request itself was malformed |
 
 ## Environment variables
 
@@ -206,6 +268,8 @@ With `--json`, the error's `type` field names the exact error. See [Error types]
 All of these paths are relative to the current directory. From a React Native root, the Android files sit under `android/`, so only `app.json` and the iOS files are read there.
 
 If nothing is found, the error lists every location. If two of these files declare different schemes, the command fails and names both. Dynamic config (`app.config.js`, Gradle scripts) is never run.
+
+In a Flutter project (a directory with a `pubspec.yaml`), step 2 reads `android/app/` instead of `app/`, step 3 finds `ios/Runner/Info.plist` and `macos/Runner/Info.plist`, and `init` prints the Flutter setup steps.
 
 ## Config files
 
@@ -236,6 +300,7 @@ Default location `~/.appduct/config.json`. Every key is optional. Read when the 
 | `daemonLogMaxBytes` | `10485760` | Size at which `daemon.log` is rotated. |
 | `eventsLogMaxBytes` | `10485760` | Size at which `events.log` is rotated. |
 | `policy` | `{ "default": "allow", "destructive": "allow" }` | See [Limit what callers can run](/appduct/guides/security/#limit-what-callers-can-run). |
+| `webOrigins` | `[]` | Extra origins, such as `"https://app.example.test"`, that may connect from a web page. `localhost`, `127.0.0.1`, and `[::1]` on any port always may. See [Web pages](/appduct/guides/security/#web-pages). |
 | `advertisedIp` | detected | Address put in links for physical devices. |
 | `scheme` | none | Fallback scheme. |
 | `restartDaemonOnVersionMismatch` | `false` | Always replace an outdated background service, even with devices connected. |
@@ -253,10 +318,11 @@ Default location `~/.appduct/config.json`. Every key is optional. Read when the 
 | `appduct_list_tools` | `selector?`, `group?`, `filter?`, `limit?` (default 50), `offset?` | Tool signatures with group and policy, `total`, and the app's `groups` |
 | `appduct_describe_tool` | `selector?`, `name` | One tool's full descriptor and policy |
 | `appduct_call_tool` | `selector?`, `name`, `args?`, `timeoutMs?` (1,000–600,000; can only shorten) | The tool's result |
-| `appduct_connect` | `target?` (`android`, `ios-sim`, `ios-device`, `none`), `device?`, `appId?`, `relaunch?`, `ttlSeconds?` | `{ sessionId, delivered: true }`, or a `qr`, `deepLink`, and `instructions` for a person |
+| `appduct_connect` | `target?` (`android`, `ios-sim`, `ios-device`, `web`, `none`), `url?` (required with `web`), `browserUrl?` and `targetId?` (with `web`), `device?`, `appId?`, `relaunch?`, `ttlSeconds?` | `{ sessionId, delivered: true }`, or a `qr`, `deepLink`, and `instructions` for a person; with `web`, `{ sessionId, url, script, expiresAt }`, or with `web` and `browserUrl`, `{ sessionId, url, targetId, attached: true, expiresAt }` once the tab is attached |
 | `appduct_wait_for_session` | `sessionId`, `timeoutMs?` | Resolves when the device connects |
+| `appduct_list_events` | `selector?`, `name?` (glob, e.g. `"cart.*"`), `limit?` (default 50), `offset?` | `{ session, total, limit, events }`, each event `{ name, signature, description }`, plus `payload_schema` when `name` is an exact name |
 | `appduct_events` | `selector?`, `since?`, `limit?` (default 50), `name?` (glob, e.g. `"cart.*"`), `payloadMaxBytes?` (default 4096) | `{ events, cursor, dropped, remaining }`, each event `{ name, payload, ts, seq, sessionId, alias }`, or, once truncated, `{ name, payloadPreview, truncated: true, payloadBytes, ts, seq, sessionId, alias }` |
-| `appduct_wait_for_event` | `selector?`, `name`, `match?`, `since?`, `timeoutMs?` (default 120,000; max 1,500,000) | The matching event |
+| `appduct_wait_for_event` | `selector?`, `name` (glob, e.g. `"cart.*"`; `"*"` for any event), `since?`, `timeoutMs?` (default 120,000; max 1,500,000), `payloadMaxBytes?` (default 4096) | The first matching event, `{ sessionId, alias, name, payload, ts, seq, dropped }`, with `payloadPreview`, `truncated: true`, and `payloadBytes` in place of `payload` when it's over the cap |
 
 Unknown arguments are rejected. A tool with policy `"prompt"` asks for approval through MCP elicitation.
 
@@ -270,7 +336,7 @@ import { connect, link, waitForSession, AppductError } from "appduct/client";
 
 | Function | Description |
 | --- | --- |
-| `link(options?)` | Creates a link, and opens it when `target` is set. Options: `target`, `device`, `appId`, `relaunch`, `scheme`, `ttlSeconds`, `cwd`, `stateDir`. Returns `{ sessionId, deepLink, endpoint, expiresAt, pin, delivered? }`. |
+| `link(options?)` | Creates a link, and opens it when `target` is set. Options: `target`, `device`, `appId`, `relaunch`, `scheme`, `ttlSeconds`, `cwd`, `stateDir`. Returns `{ sessionId, deepLink, endpoint, expiresAt, pin, delivered? }`. With `target: "web"` and the page's `url`, returns `{ sessionId, url, script, expiresAt }` instead. |
 | `waitForSession(sessionId, options?)` | Resolves with an `AppClient` once the device connects. Option: `timeoutMs`. |
 | `connect<Tools>(options?)` | Returns an `AppClient` for a connected device. Options: `selector`, `stateDir`. |
 
@@ -283,7 +349,7 @@ import { connect, link, waitForSession, AppductError } from "appduct/client";
 | `call(name, args, { timeoutMs? })` | Calls a tool and returns its result. |
 | `events({ since?, limit? })` | App events retained since a cursor: `{ events, cursor, dropped, remaining }`. |
 | `events({ since?, limit?, payloadMaxBytes })` | Same, but a payload over `payloadMaxBytes` bytes comes back as `payloadPreview`/`payloadBytes` instead of `payload` — check `truncated` before reading it. |
-| `waitForEvent(name, { timeoutMs?, match?, since? })` | Waits for an app event. Checks retained events first. `timeoutMs` defaults to 30,000. |
+| `waitForEvent(name, { timeoutMs?, since?, payloadMaxBytes? })` | Waits for an app event whose name matches `name`, a glob like `"cart.*"`. Checks retained events first; pass `since` to wait only for events after a cursor. `timeoutMs` defaults to 30,000. With `payloadMaxBytes`, a larger payload comes back as `payloadPreview`/`payloadBytes` — check `truncated` before reading it. |
 | `close()` | Closes the connection. |
 
-Failures reject with `AppductError`, whose `type` is the [error type](/appduct/reference/protocol/#error-types).
+Failures reject with `AppductError`, whose `type` is the [error type](#error-types).

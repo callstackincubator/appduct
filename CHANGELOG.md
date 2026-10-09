@@ -11,7 +11,30 @@ section into a versioned heading.
 
 ## Unreleased
 
-- **New: a call to a backgrounded app fails at once with `session_suspended`, and the message says the app is in the background.** On iOS that happens once iOS stops letting the app run, about 30 seconds after backgrounding, and on Android as soon as it is backgrounded; needs an app built with this release.
+- **New: on iOS, tool calls keep working for about 30 seconds after the app is backgrounded, instead of failing at once.** After that a call fails with `session_suspended`; needs an app built with this release.
+- **Fix: events posted from an iOS app now report their time in milliseconds, like Android's.**
+  A script reading `data.ts` from `appduct events tail` or `appduct events since` no longer needs to multiply it by 1,000.
+- **Fix: the iOS and Android SDKs no longer report a "Failed to send a tool response frame." error when the connection drops during a tool call.**
+- **New: `appduct init` and scheme discovery understand Flutter projects.** Run from a directory with a `pubspec.yaml`, they read the URL scheme from `android/app/`, `ios/Runner` and `macos/Runner`, and `init` prints the Flutter setup steps.
+- **Fix: a tool call no longer hangs until its timeout when the app reconnects while its old connection is still open.** The call now fails at once with `session_suspended` and can be retried.
+- **Docs: the website has a Web setup page and lists web on the home page.** See [Web setup](https://callstackincubator.github.io/appduct/install/web/).
+- **Docs: which browsers and launch setups connect a web page without a permission prompt, and how to choose between DevTools and WebSocket.** See [Drive a web page](https://callstackincubator.github.io/appduct/guides/web-pages/) and [Security](https://callstackincubator.github.io/appduct/guides/security/#devtools-access).
+- **New: `appduct_connect({ target: "web", url, browserUrl })` and `appduct sessions link --open web <url> --browser-url <u>` attach a tab of a Chrome launched with `--remote-debugging-port`, with no permission prompt on `https` pages.** When several tabs match, the error lists their target ids; pass one as `targetId` or `--target-id`.
+- **New: `attachPage(page, { link })` in `appduct/client` runs a web page's session through a Playwright page, so an `https` page connects with no network connection of its own.** A reload resumes the session; a popup or a page in a new target is not relayed.
+- **New: a React Native app's web build registers its tools with the same `@appduct/react-native` calls, including `useAppductTool`, and they are callable once the page is opened with `appduct sessions link --open web <url>`; a production web build leaves Appduct out.** In `expo start --web` this needs `withAppduct` in `metro.config.js`. Web used to throw; see [Security](https://callstackincubator.github.io/appduct/guides/security/#web-pages).
+- **New: `@appduct/web` lets any web page register tools that `appduct`, MCP clients and `appduct/client` call, and production bundles leave it out.** Vite, webpack and other bundlers use the real code only under the `development` condition; import `@appduct/web/enabled` to opt in elsewhere. See the [package README](https://github.com/callstackincubator/appduct/tree/main/packages/web) and [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/#web-production-builds).
+- **New: the background service listens for web pages on `127.0.0.1`, and `appduct sessions link --open web <url>` returns the page URL and a connect script.** `appduct_connect` takes `target: "web"`, and `webOrigins` in `config.json` allows origins beyond localhost; see [Security](https://callstackincubator.github.io/appduct/guides/security/#web-pages).
+- **Docs: the README is a short overview of Appduct on iOS, Android and React Native, and the guides for registering tools, security and build variants live only on the [docs site](https://callstackincubator.github.io/appduct/).** The `docs/TOOLS.md`, `docs/SECURITY.md` and `docs/BUILD-VARIANTS.md` files are gone.
+- **Docs: the shipped `appduct` skill covers native iOS and Android setup, and no longer tells you to set `APPDUCT_ENABLED=0` for production.** Release builds leave Appduct out by default.
+
+## 0.14.0 (2026-10-02)
+
+- **New: `appduct_list_events` MCP tool lists the events an app declares, with descriptions.** `name` takes a glob like `"cart.*"`, and an exact name also returns the payload schema.
+- **New: `appduct events ls` lists the events an app declares, with their descriptions and payload shapes.** `--name <glob>` narrows the list, `--limit <n>`/`--offset <n>` page through it, and an exact name prints the full payload schema.
+- **New: the iOS SDK declares events with `Appduct.shared.registerEvent(name:description:payloadSchema:)`.** `appduct events ls` then lists them; against an older CLI the app keeps its session and tools but has no event list.
+- **New: Kotlin apps declare events with `Appduct.registerEvent(name, description, payloadSchema)`, so `appduct events ls` lists them.** An older CLI ignores the declaration and the session keeps working.
+- **New: React Native apps declare events with `registerEvent({ name, description, payloadSchema })`, so `appduct events ls` lists them.** In development, `postEvent` warns about an undeclared name and about a payload that fails a declared Standard Schema; see [Write tools](https://callstackincubator.github.io/appduct/guides/writing-tools/#tell-callers-something-happened).
+- **New: a call to a backgrounded app fails at once with `session_suspended`, and the message says the app is in the background.** Needs an app built with this release; on Android, calls to a backgrounded app now fail instead of running until Android freezes the app.
 - **Fix: a session backgrounded or disconnected in a build with `trust: link` (the zero-config
   default) resumes automatically once the app comes back, instead of staying "Reconnecting"
   until the 10-minute grace window expires and a new link is needed.**
@@ -97,7 +120,7 @@ section into a versioned heading.
 
 ## 0.11.0 (2026-09-22)
 
-- **Docs: designing tools for agents.** `docs/TOOLS.md` gains a "Designing tools for agents"
+- **Docs: designing tools for agents.** [Write tools](https://callstackincubator.github.io/appduct/guides/writing-tools/#design-tools-for-the-agent-that-calls-them) gains a "Designing tools for agents"
   section (name by intent, annotate, pair mutations with observers, declare `outputSchema`,
   describe parameters, coarse over fine, `timeoutMs`, no tools that wait on a person), linked from
   the React Native, iOS and Android READMEs and the website. The Appduct skill is split into a short
@@ -331,7 +354,7 @@ section into a versioned heading.
   `_meta["anthropic/requiresUserInteraction"]` on `tools/list` for a `"prompt"` tool and echoes
   consent back on `tools/call`; every other caller (CLI, an older/non-compliant MCP client, CI) is
   denied with `policy_denied` — `"prompt"` fails closed rather than behaving like `allow`. See
-  `docs/SECURITY.md` for what this does and doesn't guarantee.
+  [Security](https://callstackincubator.github.io/appduct/guides/security/) for what this does and doesn't guarantee.
 - **New: `appduct/client` programmatic API for test runners.** A typed wrapper over the same
   daemon RPC the CLI and MCP server use, for a Jest/Vitest/Detox spec that wants to drive a
   running app without shelling out to `appduct invoke --json`: `connect()`, `link()` +

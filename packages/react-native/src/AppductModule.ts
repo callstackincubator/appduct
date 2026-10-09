@@ -1,8 +1,6 @@
 import type { AppductBuildConfig } from "./Appduct.types";
-import type {
-  AppductNativeEvents,
-  AppductNativeModuleLike,
-} from "./client-types";
+import type { AppductCore, AppductNativeEvents } from "@appduct/shared/sdk";
+
 import { logger } from "./logger";
 
 // Metro/Node's CommonJS `require` is available at runtime in every environment this file actually
@@ -68,11 +66,11 @@ const resolveNativeModule = (): NativeAppductModule["NativeAppduct"] => {
 };
 
 /**
- * Probes whether the native module can be resolved, without throwing. Powers the root (`.`)
- * entry's automatic degrade-to-noop: whether Appduct's native module exists at all is decided
- * entirely by autolinking (see `docs/tasks/00-overview.md`), so a build that excluded it never
- * registers the module, and `resolveNativeModule()` throws exactly like it already does for
- * Expo Go / a JS-only bundle — this reuses that same signal rather than adding a second one.
+ * Probes whether the native module can be resolved, without throwing. Powers the root (`.`) entry's
+ * automatic degrade-to-noop: whether Appduct's native module exists at all is decided entirely by
+ * autolinking, so a build that excluded it never registers the module, and `resolveNativeModule()`
+ * throws exactly like it already does for Expo Go / a JS-only bundle — this reuses that same signal
+ * rather than adding a second one.
  */
 export const isAppductNativeModuleAvailable = (): boolean => {
   if (nativeModuleAvailable !== null) {
@@ -158,10 +156,13 @@ const bridgeListeners: {
 
 const noopSubscription: EventSubscription = { remove() {} };
 
-export const appductNativeModule: AppductNativeModuleLike = {
+export const appductNativeModule: AppductCore = {
   registerTool: (descriptorJson) =>
     resolveNativeModule().registerTool(descriptorJson),
   unregisterTool: (name) => resolveNativeModule().unregisterTool(name),
+  registerEvent: (descriptorJson) =>
+    resolveNativeModule().registerEvent(descriptorJson),
+  unregisterEvent: (name) => resolveNativeModule().unregisterEvent(name),
   handleUrl: (url) => resolveNativeModule().handleUrl(url),
   connect: (inputJson, supersede) =>
     resolveNativeModule().connect(inputJson, supersede),
@@ -252,10 +253,10 @@ export const appductNativeModule: AppductNativeModuleLike = {
 
 /**
  * Reads the effective trust/pin build config via the TurboModule's `getConstants()` — the exact
- * same manifest/plist keys `resolveTrustedPins` (task 05) reads on both platforms, never a second
- * parse. Callers reach this only through `noopIfNativeUnavailable` (see `index.ts`'s
- * `getAppductBuildConfig`), which already gates on `isAppductNativeModuleAvailable()`, so
- * this deliberately does not catch: a resolution failure here would mean the availability probe
+ * same manifest/plist keys `resolveTrustedPins` reads on both platforms, never a second parse.
+ * Callers reach this only through `noopIfNativeUnavailable` (see `index.ts`'s
+ * `getAppductBuildConfig`), which already gates on `isAppductNativeModuleAvailable()`, so this
+ * deliberately does not catch: a resolution failure here would mean the availability probe
  * and this call disagreed, which should surface loudly rather than be swallowed into a fake
  * "absent" result.
  */

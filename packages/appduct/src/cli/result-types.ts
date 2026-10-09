@@ -9,6 +9,7 @@ import type {
   AgentEndpoint,
   EffectivePolicyDecision,
   EventNotification,
+  EventsListResult,
   SessionSummary,
   ToolGroupSummary,
   ToolsListEntry,
@@ -146,6 +147,28 @@ export type LinkCommandData = {
   target?: OpenTarget;
 };
 
+/** `appduct sessions link --open web <url>`: the page URL carrying the link, and the script that
+ * connects an already-open page instead. */
+export type WebLinkCommandData = {
+  sessionId: string;
+  url: string;
+  script: string;
+  /** Unix seconds. */
+  expiresAt: number;
+};
+
+/** `appduct sessions link --open web <url> --browser-url <u>`: the tab the daemon attached and the
+ * session it will claim. */
+export type WebAttachCommandData = {
+  attached: true;
+  sessionId: string;
+  url: string;
+  /** The CDP target id of the attached tab. */
+  targetId: string;
+  /** Unix seconds. */
+  expiresAt: number;
+};
+
 /** `appduct sessions ls`: `sessions.list` passthrough, verbatim (ARCHITECTURE.md §10: "--json
  * passthrough"). */
 export type LsCommandData = SessionSummary[];
@@ -173,6 +196,10 @@ export type ToolGroupsListing = {
  * listing entry, picked out of `tools.list` — not a registration, so its `group` is `null` for an
  * ungrouped tool. */
 export type ToolsCommandData = ToolsListing | ToolGroupsListing | ToolsListEntry;
+
+/** `appduct events ls`: the daemon's `events.list` result, plus the `--name`/`--limit`/`--offset`
+ * inputs that produced it (only the ones actually given). */
+export type EventsListing = EventsListResult & { name?: string; limit?: number; offset?: number };
 
 /** `appduct tools call`: the tool's raw result payload, printed as-is. */
 export type InvokeCommandData = unknown;
@@ -209,7 +236,7 @@ export type DaemonStopCommandData = {
   };
 };
 
-/** `appduct doctor <artifact>`: artifact-level Appduct inclusion report (docs/tasks/08). */
+/** `appduct doctor <artifact>`: artifact-level Appduct inclusion report. */
 export type DoctorCommandData = {
   artifact: string;
   platform: "ios" | "android";
@@ -233,6 +260,7 @@ export type DaemonStatusCommandData = {
     pid: number;
     started_at: string;
     wss_port: number;
+    web_port: number;
     pinned_keys: string[];
     session_count: number;
   };

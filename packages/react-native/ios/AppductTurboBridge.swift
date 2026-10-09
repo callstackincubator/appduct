@@ -1,9 +1,9 @@
 import Foundation
 
-/// Bridges the phase-2 TurboModule spec (`NativeAppduct.ts`, `docs/tasks/15-native-session-logic.md`)
-/// to Objective-C++ (`RCTNativeAppduct`). Every structured value crosses as a JSON string; the
-/// core (`AppductClient`) owns session lifecycle, the tool registry, and per-call timeout/cancel/
-/// progress. This file's only job is translation: JS tool calls become `onToolCall` events answered
+/// Bridges the phase-2 TurboModule spec (`NativeAppduct.ts`) / to Objective-C++
+//(`RCTNativeAppduct`). Every structured value crosses as a JSON string; the / core
+//(`AppductClient`) owns session lifecycle, the tool registry, and per-call timeout/cancel/ /
+//progress. This file's only job is translation: JS tool calls become `onToolCall` events answered
 /// by `respondToToolCall`, via a continuation-per-call (`PendingToolCallStore`).
 ///
 /// `@unchecked Sendable`: `client` is an actor reference (`Sendable` by construction); the emitter
@@ -75,6 +75,29 @@ public final class AppductTurboBridge: NSObject, @unchecked Sendable {
 
   @objc public func unregisterTool(name: NSString) {
     client.unregisterTool(name as String)
+  }
+
+  // MARK: registerEvent / unregisterEvent (sync, throwing, like the tool pair)
+
+  private let eventRegistrationsLock = NSLock()
+  /// The live registration per declared name, so `unregisterEvent(name)` can withdraw it.
+  private var eventRegistrations: [String: EventRegistration] = [:]
+
+  @objc public func registerEvent(descriptorJson: NSString) throws {
+    let descriptor = try parseEventDescriptor(try JSONValue.parse(descriptorJson as String))
+    let registration = try client.registerEvent(descriptor)
+
+    eventRegistrationsLock.lock()
+    eventRegistrations[descriptor.name] = registration
+    eventRegistrationsLock.unlock()
+  }
+
+  @objc public func unregisterEvent(name: NSString) {
+    eventRegistrationsLock.lock()
+    let registration = eventRegistrations.removeValue(forKey: name as String)
+    eventRegistrationsLock.unlock()
+
+    registration?.remove()
   }
 
   /// The handler every JS-registered tool runs: emit `onToolCall`, then await the JS answer

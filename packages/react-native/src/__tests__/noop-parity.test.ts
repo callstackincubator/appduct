@@ -29,6 +29,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
   test("both entries structurally satisfy CordierePublicApi", async () => {
     const realModule = await import("../index");
     const noopModule = await import("../noop");
+    const webModule = await import("../index.web");
 
     // The meaningful check here is `tsc` (`pnpm run build`) accepting these two assignments —
     // Vitest strips types at runtime, so this is a signpost for the reader, not the enforcement,
@@ -36,6 +37,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
     // `connect-options-parity.test.ts`'s pattern.
     const realSatisfiesPublicApi: CordierePublicApi = realModule;
     const noopSatisfiesPublicApi: CordierePublicApi = noopModule;
+    const webSatisfiesPublicApi: CordierePublicApi = webModule;
 
     const names: (keyof CordierePublicApi)[] = [
       "registerTool",
@@ -43,6 +45,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
       "useAppductTool",
       "jsonSchema",
       "postEvent",
+      "registerEvent",
       "getRegisteredTools",
       "addAppductListener",
       "restoreSession",
@@ -53,6 +56,7 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
     for (const name of names) {
       expect(typeof realSatisfiesPublicApi[name]).toBe("function");
       expect(typeof noopSatisfiesPublicApi[name]).toBe("function");
+      expect(typeof webSatisfiesPublicApi[name]).toBe("function");
     }
   });
 
@@ -251,5 +255,16 @@ describe("noop entry: runtime no-op behavior", () => {
         "appduct_disabled",
       );
     }
+  });
+});
+
+describe("noop parity: registerEvent", () => {
+  test("registerEvent returns a disposer that does nothing", async () => {
+    const noopModule = await import("../noop");
+    const registration = noopModule.registerEvent({
+      name: "checkout_completed",
+      description: "An order was paid.",
+    });
+    expect(() => registration.remove()).not.toThrow();
   });
 });

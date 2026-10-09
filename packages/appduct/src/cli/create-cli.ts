@@ -58,8 +58,13 @@ export const createCli = () => {
     )
     .option(
       "--open <target>",
-      "link: deliver the link automatically via adb/simctl/devicectl (android|ios-sim|ios-device; ios-device is experimental).",
+      "link: deliver the link automatically via adb/simctl/devicectl (android|ios-sim|ios-device; ios-device is experimental), or with `web <url>` return the page URL and a connect script for a web page.",
     )
+    .option(
+      "--browser-url <url>",
+      "link: with --open web, attach the tab of a Chrome launched with --remote-debugging-port (such as http://127.0.0.1:9222) and claim a session on it.",
+    )
+    .option("--target-id <id>", "link: with --browser-url, the CDP target id of the tab to attach when several tabs match <url>.")
     .option("--device <id>", "link: adb serial, simulator udid or paired-device udid to target when --open is ambiguous.")
     .option(
       "--app-id <id>",
@@ -87,13 +92,16 @@ export const createCli = () => {
     );
 
   cli
-    .command("events [...args]", "Stream the app's events, or replay them since a cursor: tail or since.")
-    .usage("events <tail|since> [selector] [args]")
+    .command("events [...args]", "List the events an app declares, stream them, or replay them since a cursor: ls, tail, or since.")
+    .usage("events <ls|tail|since> [selector] [args]")
     .option("--follow", "tail: accepted for script readability; the default behavior already follows.")
     .option(
       "--name <glob>",
-      "Only events whose name matches this whole-name, case-sensitive glob (\"*\" matches any run of characters).",
+      "Only events whose name matches this whole-name, case-sensitive glob (\"*\" matches any run of characters). " +
+        "ls: an exact name prints that event's full payload schema.",
     )
+    .option("--limit <n>", "ls: show at most n events.")
+    .option("--offset <n>", "ls: skip the first n events of the name-sorted list.")
     .option(
       "--payload-max-bytes <n>",
       "Cap each event's payload at this many UTF-8 bytes of its JSON; over the cap, the event carries " +

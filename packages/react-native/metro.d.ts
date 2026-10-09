@@ -23,7 +23,7 @@ export interface WithAppductOptions {
  * `@appduct/react-native` (and any other entry point this package exports) resolve to the
  * inert `/noop` entry instead. Chains to `config.resolver.resolveRequest` if already set, rather
  * than replacing it -- call this last, after anything else that sets `resolveRequest`. See
- * `docs/BUILD-VARIANTS.md`'s "Compiling Appduct out of production builds" section.
+ * https://callstackincubator.github.io/appduct/guides/build-variants/#strip-appducts-javascript-too.
  */
 export function withAppduct<TConfig extends Record<string, unknown>>(
   config: TConfig,

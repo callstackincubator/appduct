@@ -11,7 +11,7 @@
  * still run against a real daemon in `mcp-server.integration.test.ts`.
  *
  * This fake answers the methods the server actually calls — `sessions.list`, `sessions.describe`,
- * `tools.list`, `tools.call`, `events.subscribe` — resolving selectors by alias or session id with
+ * `tools.list`, `events.list`, `tools.call`, `events.subscribe` — resolving selectors by alias or session id with
  * the daemon's own rules, and can push `event` notifications. It does not validate params the way
  * the daemon does. Anything else throws, loudly, rather than returning a plausible nothing: a
  * silently-answered method the server did not expect would make a test pass for the wrong reason.
@@ -22,6 +22,7 @@ import {
   summarizeToolGroups,
   toolGroupMatches,
   type ErrorType,
+  type EventDescriptor,
   type EventNotification,
   type SessionSummary,
   type ToolDescriptor,
@@ -30,6 +31,8 @@ import {
 
 import { DaemonRpcError } from "../rpc/client.js";
 import type { DaemonStream } from "../rpc/client.js";
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** What a fake tool does when called. Return a value for `tool_result`; throw
  * {@link toolError} for a `tool_error` the daemon would have forwarded verbatim. */
@@ -52,6 +55,8 @@ export type FakeSession = {
   setTools: (tools: Array<Partial<ToolDescriptor> & { name: string; policy?: FakeToolEntry["policy"] }>) => void;
   /** Registers what a tool returns (or throws) when called. */
   onCall: (name: string, handler: FakeToolHandler) => void;
+  /** Replaces this session's declared events, exactly as an `event_registry_snapshot` frame would. */
+  setEvents: (events: EventDescriptor[]) => void;
 };
 
 export type FakeDaemon = {
@@ -73,6 +78,7 @@ export const toolError = (type: ErrorType, message: string, details?: unknown): 
 export const createFakeDaemon = (): FakeDaemon => {
   const sessions: SessionSummary[] = [];
   const toolsByAlias = new Map<string, FakeToolEntry[]>();
+  const eventsByAlias = new Map<string, EventDescriptor[]>();
   const handlersByAlias = new Map<string, Map<string, FakeToolHandler>>();
   const calls: Array<{ method: string; params: unknown }> = [];
   // Every open stream that has subscribed, so a pushed event fans out the way the daemon's own
@@ -128,6 +134,7 @@ export const createFakeDaemon = (): FakeDaemon => {
 
     sessions.push(summary);
     toolsByAlias.set(options.alias, []);
+    eventsByAlias.set(options.alias, []);
     handlersByAlias.set(options.alias, new Map());
     emit({ kind: "session_claimed", sessionId, alias: options.alias, data: null });
 
@@ -149,6 +156,9 @@ export const createFakeDaemon = (): FakeDaemon => {
         summary.toolCount = entries.length;
         emit({ kind: "tools_changed", sessionId, alias: options.alias, data: null });
       },
+      setEvents: (events) => {
+        eventsByAlias.set(options.alias, events.map((event) => ({ ...event })));
+      },
       onCall: (name, handler) => {
         handlersByAlias.get(options.alias)!.set(name, handler);
       },
@@ -164,6 +174,7 @@ export const createFakeDaemon = (): FakeDaemon => {
 
     const [removed] = sessions.splice(index, 1);
     toolsByAlias.delete(alias);
+    eventsByAlias.delete(alias);
     handlersByAlias.delete(alias);
     emit({ kind: "session_revoked", sessionId: removed!.sessionId, alias, data: null });
   };
@@ -213,6 +224,30 @@ export const createFakeDaemon = (): FakeDaemon => {
         const tools = matching.slice(start, limit === undefined ? undefined : start + limit);
 
         return { tools, total: matching.length, groups: summarizeToolGroups(entries) } as TResult;
+      }
+
+      if (method === RPC_METHODS.eventsList) {
+        const { selector, name, limit, offset } = (params ?? {}) as {
+          selector?: string;
+          name?: string;
+          limit?: number;
+          offset?: number;
+        };
+        const declared = eventsByAlias.get(resolveSession(selector).alias)!;
+
+        // The daemon's `{ events, total }` shape: sorted by name, narrowed to the whole-name glob
+        // `name` (`*` matches any run of characters), `total` counted before paging.
+        const pattern = name === undefined ? undefined : new RegExp(`^${name.split("*").map(escapeRegExp).join(".*")}$`);
+        const matching = declared
+          .map((event) => ({ ...event }))
+          .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+          .filter((event) => pattern === undefined || pattern.test(event.name));
+        const start = offset ?? 0;
+
+        return {
+          events: matching.slice(start, limit === undefined ? undefined : start + limit),
+          total: matching.length,
+        } as TResult;
       }
 
       if (method === RPC_METHODS.toolsCall) {

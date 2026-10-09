@@ -1,0 +1,238 @@
+[
+  {
+    "name": "resumes with the rotated token after a drop",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}},
+      {"drive":"drop"},
+      {"expect":"state","state":"reconnecting"},
+      {"drive":"advance","ms":250},
+      {"expect":"connect","mode":"resume","sessionId":"session-1","resumeToken":"resume-1"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-2","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"resumed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}},
+      {"drive":"drop"},
+      {"expect":"state","state":"reconnecting"},
+      {"drive":"advance","ms":250},
+      {"expect":"connect","mode":"resume","sessionId":"session-1","resumeToken":"resume-2"}
+    ]
+  },
+  {
+    "name": "does not resume before the jittered backoff delay",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}},
+      {"drive":"drop"},
+      {"expect":"state","state":"reconnecting"},
+      {"drive":"advance","ms":249},
+      {"drive":"disconnect"},
+      {"expect":"state","state":"closed","reason":"closed_by_app"},
+      {"expect":"session","type":"lost","reason":"closed_by_app"}
+    ]
+  },
+  {
+    "name": "reports the session lost when the grace window runs out",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}},
+      {"drive":"drop"},
+      {"expect":"state","state":"reconnecting"},
+      {"drive":"advance","ms":250},
+      {"expect":"connect","mode":"resume","sessionId":"session-1","resumeToken":"resume-1"},
+      {"drive":"advance","ms":9750},
+      {"expect":"state","state":"closed","reason":"grace_expired"},
+      {"expect":"session","type":"lost","reason":"grace_expired"}
+    ]
+  },
+  {
+    "name": "never reconnects after a terminal 1008 close, even past the backoff cap",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}},
+      {"drive":"close","code":1008,"reason":"policy_violation"},
+      {"expect":"state","state":"closed","reason":"policy_violation"},
+      {"expect":"session","type":"lost","reason":"policy_violation"},
+      {"drive":"advance","ms":31000}
+    ]
+  },
+  {
+    "name": "never retries a resume the daemon refuses with 1008",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}},
+      {"drive":"drop"},
+      {"expect":"state","state":"reconnecting"},
+      {"drive":"advance","ms":250},
+      {"expect":"connect","mode":"resume","sessionId":"session-1","resumeToken":"resume-1"},
+      {"drive":"close","code":1008,"reason":"invalid_resume_token"},
+      {"expect":"state","state":"closed","reason":"invalid_resume_token"},
+      {"expect":"session","type":"lost","reason":"invalid_resume_token"},
+      {"drive":"advance","ms":31000}
+    ]
+  },
+  {
+    "name": "reports rejected_by_daemon when a refused resume gives no reason",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}},
+      {"drive":"drop"},
+      {"expect":"state","state":"reconnecting"},
+      {"drive":"advance","ms":250},
+      {"expect":"connect","mode":"resume","sessionId":"session-1","resumeToken":"resume-1"},
+      {"drive":"close","code":1008},
+      {"expect":"state","state":"closed","reason":"rejected_by_daemon"},
+      {"expect":"session","type":"lost","reason":"rejected_by_daemon"},
+      {"drive":"advance","ms":31000}
+    ]
+  },
+  {
+    "name": "answers tool_timeout and cancels the call when it outlasts its timeout_ms",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"registerTool","descriptor":{"name":"slow","description":"Waits for the app.","timeout_ms":5000}},
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[{"name":"slow","description":"Waits for the app.","timeout_ms":5000}]}},
+      {"drive":"receive","frame":{"type":"tool_call","session_id":"session-1","id":"call-1","name":"slow","args":{}}},
+      {"expect":"call","name":"slow","args":{}},
+      {"drive":"advance","ms":5000},
+      {"expect":"send","frame":{"type":"tool_error","session_id":"session-1","id":"call-1","error":{"type":"tool_timeout","message":"Tool \"slow\" did not respond within 5000ms."}}},
+      {"expect":"cancel","call":"call-1","reason":"timeout"}
+    ]
+  },
+  {
+    "name": "cancels a call on tool_cancel and sends no tool_timeout after",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"registerTool","descriptor":{"name":"slow","description":"Waits for the app.","timeout_ms":5000}},
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[{"name":"slow","description":"Waits for the app.","timeout_ms":5000}]}},
+      {"drive":"receive","frame":{"type":"tool_call","session_id":"session-1","id":"call-1","name":"slow","args":{}}},
+      {"expect":"call","name":"slow","args":{}},
+      {"drive":"advance","ms":2000},
+      {"drive":"receive","frame":{"type":"tool_cancel","session_id":"session-1","id":"call-1","reason":"client_cancelled"}},
+      {"expect":"send","frame":{"type":"tool_error","session_id":"session-1","id":"call-1","error":{"type":"tool_cancelled","message":"Tool \"slow\" was cancelled."}}},
+      {"expect":"cancel","call":"call-1","reason":"client_cancelled"},
+      {"drive":"advance","ms":10000}
+    ]
+  },
+  {
+    "name": "puts nothing on the wire for a result that arrives after the call timed out",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"registerTool","descriptor":{"name":"slow","description":"Waits for the app.","timeout_ms":5000}},
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[{"name":"slow","description":"Waits for the app.","timeout_ms":5000}]}},
+      {"drive":"receive","frame":{"type":"tool_call","session_id":"session-1","id":"call-1","name":"slow","args":{}}},
+      {"expect":"call","name":"slow","args":{}},
+      {"drive":"advance","ms":5000},
+      {"expect":"send","frame":{"type":"tool_error","session_id":"session-1","id":"call-1","error":{"type":"tool_timeout","message":"Tool \"slow\" did not respond within 5000ms."}}},
+      {"expect":"cancel","call":"call-1","reason":"timeout"},
+      {"drive":"respond","call":"call-1","result":{"ok":true}},
+      {"drive":"advance","ms":1000}
+    ]
+  },
+  {
+    "name": "puts nothing on the wire for a result that arrives after the call was cancelled",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"registerTool","descriptor":{"name":"slow","description":"Waits for the app.","timeout_ms":5000}},
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[{"name":"slow","description":"Waits for the app.","timeout_ms":5000}]}},
+      {"drive":"receive","frame":{"type":"tool_call","session_id":"session-1","id":"call-1","name":"slow","args":{}}},
+      {"expect":"call","name":"slow","args":{}},
+      {"drive":"receive","frame":{"type":"tool_cancel","session_id":"session-1","id":"call-1","reason":"client_cancelled"}},
+      {"expect":"send","frame":{"type":"tool_error","session_id":"session-1","id":"call-1","error":{"type":"tool_cancelled","message":"Tool \"slow\" was cancelled."}}},
+      {"expect":"cancel","call":"call-1","reason":"client_cancelled"},
+      {"drive":"respond","call":"call-1","result":{"ok":true}},
+      {"drive":"advance","ms":1000}
+    ]
+  },
+  {
+    "name": "cancels a call in flight with session_suspended when the socket drops, sending nothing",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"registerTool","descriptor":{"name":"slow","description":"Waits for the app.","timeout_ms":5000}},
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[{"name":"slow","description":"Waits for the app.","timeout_ms":5000}]}},
+      {"drive":"receive","frame":{"type":"tool_call","session_id":"session-1","id":"call-1","name":"slow","args":{}}},
+      {"expect":"call","name":"slow","args":{}},
+      {"drive":"drop"},
+      {"expect":"state","state":"reconnecting"},
+      {"expect":"cancel","call":"call-1","reason":"session_suspended"},
+      {"drive":"respond","call":"call-1","result":{"ok":true}}
+    ]
+  }
+]

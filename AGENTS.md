@@ -9,13 +9,14 @@ the daemon, CLI, MCP server and SDKs fit together.
 | Path | What it is |
 | --- | --- |
 | `packages/appduct` | CLI, daemon, MCP server, `appduct/client` (TypeScript) |
-| `packages/shared` | Wire protocol and domain types shared by CLI and SDK |
+| `packages/shared` | Wire protocol and domain types shared by CLI and SDK, plus the TypeScript SDK layer (`/sdk`: client, schema conversion, tool groups; `/react`: the hook; `/inert`: the only entry a noop entry may import, no client code) |
 | `packages/react-native` | React Native SDK, Expo config plugin, Metro helper |
 | `packages/native` | Framework-free iOS (Swift) and Android (Kotlin) core |
-| `playground`, `playground-native` | Expo app and native apps registering the same five demo tools |
+| `packages/flutter` | Flutter plugin `appduct`, outside the pnpm workspace (no `package.json`); `lib/src/core/` is a pure-Dart wire codec checked against `packages/native/fixtures` |
+| `playground`, `playground-native`, `playground-flutter` | Expo app, native apps and a Flutter app (outside the pnpm workspace) registering the same five demo tools |
 | `skills/appduct` | The skill shipped to Appduct users; not for working on this repo |
 | `.agents/` | Agent resources: `memory/` (curated `LESSONS.md` read by section, raw `INBOX.md` write-only), `scripts/` (worktree create and remove, also wired as Claude Code hooks) |
-| `docs/` | Architecture, protocol, security, tools; `docs/tasks` is a historical design record |
+| `docs/` | Contributor docs: architecture, protocol, `internal/`. User docs live in `website/` |
 
 ## Commands
 
@@ -24,10 +25,13 @@ Run from the repo root. Node 24, pnpm 11 via corepack.
 ```bash
 pnpm install --frozen-lockfile   # once
 pnpm build                       # turbo; tests depend on it
+pnpm --filter appduct exec playwright-core install chromium   # once, for the web e2e
 pnpm test                        # vitest, all packages
 pnpm lint && pnpm typecheck
 pnpm --filter appduct test -- src/__tests__/<file>   # one file
+(cd packages/flutter && flutter test)                 # Flutter 3.47 on PATH; CI also runs dart format --set-exit-if-changed . and dart analyze --fatal-infos
 pnpm playground:appduct -- <cli args>                # this repo's CLI, from the playground
+pnpm playground-flutter:appduct -- <cli args>        # the same, from playground-flutter
 .agents/scripts/worktree.sh <branch>                 # worktree with node_modules cloned copy-on-write, ~10 s;
                                                      # Claude Code's worktree hooks call it and worktree-remove.sh
 ```
@@ -82,7 +86,7 @@ effort however it is started, and sees only the arguments it was invoked with.
 | Designing a feature too big for one PR, or sizing one | `design-feature` | opus | high | yes |
 | Turning a request or a found bug into an issue (interviews first) | `file-issue` | sonnet | medium | no |
 | Running the app on a simulator and driving it through the CLI | `e2e-device` | sonnet | low | yes |
-| Writing or editing anything an Appduct user reads: READMEs, `docs/`, website, the shipped skill, CLI help, error messages | `writing-user-docs` | none | none | no |
+| Writing or editing anything an Appduct user reads: READMEs, the website, the shipped skill, CLI help, error messages | `writing-user-docs` | none | none | no |
 | Adding, amending or reviewing an entry in `CHANGELOG.md` | `writing-changelog` | none | none | no |
 | Cutting a release | `cut-release` | sonnet | low | no |
 | Curating agent memory (weekly, or when the inbox has notes) | `review-memory` | opus | high | yes |

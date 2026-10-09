@@ -1,6 +1,5 @@
 /**
- * Static-file scheme discovery for plain iOS (Xcode) and Android (Gradle) apps
- * (docs/tasks/20-cli-native-scheme-discovery.md, phase 3 of issue #48).
+ * Static-file scheme discovery for plain iOS (Xcode) and Android (Gradle) apps.
  *
  * `scheme.ts`'s `resolveScheme` treats this module as one more thing to try after `<cwd>/app.json`
  * — it never walks up (an app root is where these commands run, same rule as `app.json`), and,
@@ -8,6 +7,8 @@
  * `xcodebuild`, no Gradle evaluation. Every probe is a plain read of a well-known project file,
  * parsed defensively:
  *
+ * - Flutter (a root with a `pubspec.yaml`): the Android probes below read `android/app/…` instead
+ *   of `app/…`; the iOS walk already reaches `ios/Runner` and `macos/Runner`.
  * - Android: `app/build.gradle.kts` / `app/build.gradle` for a `manifestPlaceholders["appductScheme"]`
  *   (or `.appductScheme =`) assignment, then `app/src/main/AndroidManifest.xml` for the first
  *   `<data android:scheme>` inside an intent filter that also declares
@@ -575,12 +576,17 @@ const probeIosProjectYml = async (root: string): Promise<NativeSchemeDiscovery> 
 
 /** In the order the file-level doc comment (and issue #48) describes: Android before iOS, and
  * within each platform the build config before the manifest/project file that mirrors it. */
-const PROBES: Array<(root: string) => Promise<NativeSchemeDiscovery>> = [
-  probeAndroidGradle,
-  probeAndroidManifest,
-  probeIosInfoPlist,
-  probeIosProjectYml,
+const PROBES: Array<["android" | "ios", (root: string) => Promise<NativeSchemeDiscovery>]> = [
+  ["android", probeAndroidGradle],
+  ["android", probeAndroidManifest],
+  ["ios", probeIosInfoPlist],
+  ["ios", probeIosProjectYml],
 ];
+
+/** Whether `root` is a Flutter project root: it has a `pubspec.yaml`. */
+export const isFlutterProject = async (root: string): Promise<boolean> => {
+  return (await readCappedText(join(root, "pubspec.yaml"))).ok;
+};
 
 /**
  * Runs every static-file probe against `root` (never walking up — same rule as `app.json`) and
@@ -599,13 +605,31 @@ const PROBES: Array<(root: string) => Promise<NativeSchemeDiscovery>> = [
 export const discoverNativeScheme = async (root: string): Promise<NativeSchemeDiscovery> => {
   const tried: string[] = [];
   const results: NativeSchemeProbeResult[] = [];
+  // A Flutter project keeps its Android app in `android/app/`, so the Android probes treat
+  // `android/` as their root, and the iOS plist probe runs once under `ios/` and once under `macos/`.
+  const flutter = await isFlutterProject(root);
+  const androidRoot = flutter ? join(root, "android") : root;
 
-  for (const probe of PROBES) {
-    const outcome = await probe(root);
-    tried.push(...outcome.tried);
+  // The iOS walk stops at the first plist with a scheme, so a Flutter project's two apps are
+  // probed as separate sources and the conflict check below sees both.
+  const iosRoots = flutter ? [join(root, "ios"), join(root, "macos")] : [root];
 
-    if (outcome.result !== undefined) {
-      results.push(outcome.result);
+  for (const [platform, probe] of PROBES) {
+    let roots = [root];
+
+    if (platform === "android") {
+      roots = [androidRoot];
+    } else if (probe === probeIosInfoPlist) {
+      roots = iosRoots;
+    }
+
+    for (const probeRoot of roots) {
+      const outcome = await probe(probeRoot);
+      tried.push(...outcome.tried);
+
+      if (outcome.result !== undefined) {
+        results.push(outcome.result);
+      }
     }
   }
 

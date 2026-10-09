@@ -1,19 +1,21 @@
 {
   "name": "@appduct/react-native",
-  "version": "0.13.0",
-  "description": "Expo native client for Appduct sessions",
+  "version": "0.14.0",
+  "description": "React Native SDK for Appduct: register tools an agent, test or terminal can call in your running app.",
   "main": "build/index.js",
   "module": "build/index.js",
   "types": "build/index.d.ts",
   "exports": {
     ".": {
       "types": "./build/index.d.ts",
+      "browser": "./build/index.web.js",
       "react-native": "./build/index.js",
       "import": "./build/index.js",
       "default": "./build/index.js"
     },
     "./auto": {
       "types": "./build/auto.d.ts",
+      "browser": "./build/index.web.js",
       "react-native": "./build/auto.js",
       "import": "./build/auto.js",
       "default": "./build/auto.js"
@@ -69,7 +71,8 @@
     }
   },
   "dependencies": {
-    "@appduct/shared": "workspace:*"
+    "@appduct/shared": "workspace:*",
+    "@appduct/web": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

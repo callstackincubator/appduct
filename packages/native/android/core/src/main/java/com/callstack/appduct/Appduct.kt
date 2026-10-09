@@ -10,9 +10,8 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
- * Public entry point for a plain Android app that wants Appduct without React Native
- * (docs/tasks/19-android-entry-points.md, issue #48 phase 3). A thin facade over the internal
- * [AppductClient] this module already ships (docs/tasks/16-android-session-logic.md) -- every
+ * Public entry point for a plain Android app that wants Appduct without React Native (issue #48
+ * phase 3). A thin facade over the internal [AppductClient] this module already ships -- every
  * method here just converts to/from that class's own types, so session logic (reconnect, grace,
  * lease restore, registry sync, per-call timeout/cancel/progress) is never duplicated.
  *
@@ -25,10 +24,9 @@ import org.json.JSONObject
  * application [Context] and constructed the real client -- see that class's own doc comment for
  * why that ordering is guaranteed by the platform.
  *
- * `core-noop` mirrors every declaration below as an inert no-op with no [AppductInitProvider]
- * and no `kotlinx.coroutines` import (docs/tasks/19-android-entry-points.md) -- a release build
- * that resolves `core-noop` instead of `core` never captures a `Context` and never touches the
- * network, matching issue #48 decision 2.
+ * `core-noop` mirrors every declaration below as an inert no-op with no [AppductInitProvider] and
+ * no `kotlinx.coroutines` import -- a release build that resolves `core-noop` instead of `core`
+ * never captures a `Context` and never touches the network, matching issue #48 decision 2.
  */
 object Appduct {
     @Volatile
@@ -122,6 +120,24 @@ object Appduct {
     ): ToolRegistration =
         register(name, description, inputSchema, outputSchema, annotations, timeoutMs, group) { args, _ -> handler(args) }
 
+    /**
+     * Declares (or replaces, by [name]) an event the app posts with [postEvent], so an agent can
+     * list it with its [description] and [payloadSchema] (a JSON Schema object) before waiting on
+     * it. [name] is any string up to 4096 UTF-16 characters, like a posted name: `cart.item_added`
+     * is fine. Throws `IllegalArgumentException` synchronously for an invalid [name] or
+     * [description] (PROTOCOL.md §5a). Nothing is validated against [payloadSchema] and no
+     * warning is logged for a posted event that was never declared. Against an older CLI that
+     * does not accept declarations, this is a silent no-op on the wire.
+     */
+    fun registerEvent(
+        name: String,
+        description: String,
+        payloadSchema: JSONObject? = null,
+    ): EventRegistration {
+        client().registerEvent(AppductEventDescriptor(name, description, payloadSchema))
+        return EventRegistration(name) { client().unregisterEvent(name) }
+    }
+
     // --- deep links ---
 
     /** Reads [intent]'s `data` URI and forwards to [handle]. Returns `false` for a `null` data URI
@@ -159,7 +175,7 @@ object Appduct {
         get() = client().sessionId
 
     /** This build's effective trust/pin configuration, read from the same manifest meta-data a
-     * real `connect()` uses (`docs/SECURITY.md`'s trust modes). */
+     * real `connect()` uses (see https://callstackincubator.github.io/appduct/guides/security/#choose-what-a-build-trusts). */
     val buildConfig: BuildConfig
         get() = client().buildConfig.let { BuildConfig(it.trust, it.hasEmbeddedPins, it.allowPrivateLanOnly) }
 
@@ -226,6 +242,15 @@ class ToolRegistration internal constructor(
     fun remove() = onRemove()
 }
 
+/** A live event declaration returned by [Appduct.registerEvent]. [remove] withdraws the event
+ * declaration; a no-op if it is already gone. */
+class EventRegistration internal constructor(
+    val name: String,
+    private val onRemove: () -> Unit,
+) {
+    fun remove() = onRemove()
+}
+
 /** A live [Appduct.addListener] subscription. [remove] unsubscribes only this listener. */
 class Subscription internal constructor(private val onRemove: () -> Unit) {
     fun remove() = onRemove()
@@ -246,10 +271,9 @@ data class ToolAnnotations(
 }
 
 /** Passed to a [Appduct.register] handler. Cancellation is coroutine-native -- see
- * `AppductToolCallContext`'s doc comment (docs/tasks/16-android-session-logic.md): a handler
- * that calls further suspend functions observes a `tool_cancel` frame or session suspension as an
- * ordinary `CancellationException`; one that does no further suspending work just runs to
- * completion. */
+ * `AppductToolCallContext`'s doc comment: a handler that calls further suspend functions observes
+ * a `tool_cancel` frame or session suspension as an ordinary `CancellationException`; one that does
+ * no further suspending work just runs to completion. */
 class ToolCallContext internal constructor(private val inner: AppductToolCallContext) {
     val callId: String get() = inner.callId
     val toolName: String get() = inner.toolName

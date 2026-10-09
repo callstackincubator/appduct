@@ -3,9 +3,9 @@ package com.callstack.appduct
 import android.content.Context
 
 /**
- * No-op mirror of `core`'s `AppductClient` (docs/tasks/16-android-session-logic.md, issue #48
- * decision 2): same public surface a consumer or the RN bridge calls, but `state` is always
- * `"closed"`, `registerTool`/`unregisterTool` store nothing and never touch the wire,
+ * No-op mirror of `core`'s `AppductClient` (issue #48 decision 2): same public surface a consumer
+ * or the RN bridge calls, but `state` is always `"closed"`, `registerTool`/`unregisterTool` store
+ * nothing and never touch the wire,
  * `handleUrl` always returns `false`, and no listener is ever invoked. No okhttp3, no
  * kotlinx.coroutines -- the real dependency graph is never on a release classpath that resolved
  * this module instead of `core`.
@@ -54,6 +54,12 @@ internal class AppductClient(
     }
 
     fun unregisterTool(name: String) {}
+
+    fun registerEvent(descriptor: AppductEventDescriptor) {
+        // Stores nothing: a release build resolving this module never sends an event registry.
+    }
+
+    fun unregisterEvent(name: String) {}
 
     fun handleUrl(url: String): Boolean = false
 

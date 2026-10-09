@@ -156,6 +156,31 @@ class FixturesConformanceTest {
         }
     }
 
+    // --- event-descriptors.json ---
+
+    @Test
+    fun `event-descriptors fixture matches validateAppductEventDescriptor`() {
+        val vectors = loadJsonArray("event-descriptors.json")
+        assertTrue(vectors.length() > 0)
+
+        for (i in 0 until vectors.length()) {
+            val vector = vectors.getJSONObject(i)
+            val name = vector.getString("name")
+            val descriptorRaw = if (vector.isNull("descriptor")) null else vector.get("descriptor")
+
+            val isValid =
+                try {
+                    if (descriptorRaw !is JSONObject) throw AppductInvalidEventDescriptorException("not an object")
+                    validateAppductEventDescriptor(AppductEventDescriptor.fromJson(descriptorRaw.toString()))
+                    true
+                } catch (_: AppductInvalidEventDescriptorException) {
+                    false
+                }
+
+            assertEquals(name, vector.getBoolean("valid"), isValid)
+        }
+    }
+
     // --- close-codes.json ---
 
     @Test

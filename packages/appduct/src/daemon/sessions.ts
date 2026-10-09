@@ -17,21 +17,26 @@ import {
   isEventMessage,
   isToolCallProgressMessage,
   isToolErrorMessage,
+  isEventRegistryDeltaMessage,
+  isEventRegistrySnapshotMessage,
   isToolRegistryDeltaMessage,
   isToolRegistrySnapshotMessage,
   isToolResultMessage,
   parseSessionClaimDeviceFields,
+  type EventDescriptor,
   type EventKind,
   type EventMessage,
   type SessionAckMessage,
   type SessionClaimMessage,
   type SessionDeviceMetadata,
   type SessionResumeMessage,
+  type LinkTransport,
   type SessionSummary,
   type SessionSuspendReason,
   type ToolCallMessage,
   type ToolCallProgressMessage,
   type ToolCancelMessage,
+  type ToolDescriptor,
   type ToolErrorMessage,
   type ToolResultMessage,
 } from "@appduct/shared";
@@ -41,7 +46,7 @@ import type { Clock } from "../cli/types.js";
 import type { EventBus } from "./event-bus.js";
 import { createPendingLinkRegistry, type CreatedLink, type PendingLinkRegistry } from "./links.js";
 import { RpcApplicationError } from "./rpc-errors.js";
-import { createToolRegistry, type ToolRegistry } from "./registry.js";
+import { createRegistry, type EventRegistry, type ToolRegistry } from "./registry.js";
 import { systemTimers, type TimerFns, type TimerHandle } from "./timers.js";
 
 const RESUME_TOKEN_BYTES = 32;
@@ -50,6 +55,8 @@ const RESUME_TOKEN_BYTES = 32;
 export const POST_CLAIM_MESSAGE_TYPES = new Set<string>([
   "tool_registry_snapshot",
   "tool_registry_delta",
+  "event_registry_snapshot",
+  "event_registry_delta",
   "tool_result",
   "tool_error",
   "tool_call_progress",
@@ -94,12 +101,15 @@ type LiveSession = {
   device: SessionDeviceMetadata;
   createdAt: Date;
   claimedAt: Date;
+  /** The listener the session was claimed on; resume is only accepted there. */
+  transport: LinkTransport;
   suspendedAt?: Date;
   suspendReason?: SessionSuspendReason;
   resumeToken: Buffer;
   socket?: WebSocket;
   missedPongs: number;
   registry: ToolRegistry;
+  eventRegistry: EventRegistry;
   graceTimer?: TimerHandle;
 };
 
@@ -139,7 +149,7 @@ export type SessionManagerOptions = {
   graceSeconds: number;
   keepaliveIntervalSeconds: number;
   linkTtlSeconds: number;
-  getEndpoint: () => CreatedLink["endpoint"];
+  getEndpoint: (transport: LinkTransport) => CreatedLink["endpoint"];
   eventBus: EventBus;
   clock?: Clock;
   timers?: TimerFns;
@@ -163,11 +173,19 @@ export type SessionManager = {
    * 07's emulator/simulator fast path); see `links.ts`'s `PendingLinkRegistry.create`. Omits
    * `LinkCreateResult.pin` — the session manager has no `TlsManager` handle, so the RPC handler
    * (`daemon.ts`) attaches the current SPKI pin itself before returning to the caller. */
-  createLink: (ttlSeconds?: number, addressOverride?: string) => Omit<LinkCreateResult, "pin">;
-  /** First message on a fresh socket. Returns the claimed sessionId, or `null` after closing the socket. */
-  handleClaim: (socket: WebSocket, message: SessionClaimMessage) => string | null;
-  /** First message on a resume socket. Returns the resumed sessionId, or `null` after closing the socket. */
-  handleResume: (socket: WebSocket, message: SessionResumeMessage) => string | null;
+  createLink: (
+    ttlSeconds?: number,
+    addressOverride?: string,
+    transport?: LinkTransport,
+  ) => Omit<LinkCreateResult, "pin">;
+  /** First message on a fresh socket accepted on `transport`'s listener. Returns the claimed
+   * sessionId, or `null` after closing the socket. A link minted for the other transport is
+   * refused with `wrong_transport` and stays claimable on its own listener. */
+  handleClaim: (socket: WebSocket, message: SessionClaimMessage, transport: LinkTransport) => string | null;
+  /** First message on a resume socket accepted on `transport`'s listener. Returns the resumed
+   * sessionId, or `null` after closing the socket. A session claimed on the other listener is
+   * refused with `wrong_transport` before its token is checked, so its token is not rotated. */
+  handleResume: (socket: WebSocket, message: SessionResumeMessage, transport: LinkTransport) => string | null;
   /** Dispatches an already-type-checked post-claim message; closes the socket on invalid content. */
   handlePostClaimMessage: (sessionId: string, socket: WebSocket, message: Record<string, unknown>) => void;
   list: () => SessionSummary[];
@@ -186,6 +204,7 @@ export type SessionManager = {
     state: "active" | "suspended";
     suspendReason?: SessionSuspendReason;
     registry: ToolRegistry;
+    eventRegistry: EventRegistry;
   };
   /** Sends a `tool_call` frame to the session's active socket; `false` if the session has no
    * active socket right now (caller has typically already checked ACTIVE state via
@@ -271,6 +290,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       resume_token: session.resumeToken.toString("base64url"),
       keepalive_interval_s: options.keepaliveIntervalSeconds,
       grace_s: options.graceSeconds,
+      event_registry: true,
     };
 
     socket.send(JSON.stringify(ack), (error) => {
@@ -357,10 +377,15 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
     }
   }, options.keepaliveIntervalSeconds * 1000);
 
-  const createLink = (ttlSeconds?: number, addressOverride?: string): Omit<LinkCreateResult, "pin"> => {
+  const createLink = (
+    ttlSeconds?: number,
+    addressOverride?: string,
+    transport?: LinkTransport,
+  ): Omit<LinkCreateResult, "pin"> => {
     const { link, deepLinkPayload, endpoint } = pendingLinks.create(
       ttlSeconds ?? options.linkTtlSeconds,
       addressOverride,
+      transport,
     );
 
     return {
@@ -371,7 +396,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
     };
   };
 
-  const handleClaim = (socket: WebSocket, message: SessionClaimMessage): string | null => {
+  const handleClaim = (socket: WebSocket, message: SessionClaimMessage, transport: LinkTransport): string | null => {
     const pending = pendingLinks.get(message.session_id);
 
     if (!pending) {
@@ -381,6 +406,11 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
         closeSocket(socket, 1008, "unknown_session");
       }
 
+      return null;
+    }
+
+    if (pending.transport !== transport) {
+      closeSocket(socket, 1008, "wrong_transport");
       return null;
     }
 
@@ -424,11 +454,15 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       device,
       createdAt: pending.createdAt,
       claimedAt: clock.now(),
+      transport,
       resumeToken: randomBytes(RESUME_TOKEN_BYTES),
       socket,
       missedPongs: 0,
-      registry: createToolRegistry(() => {
+      registry: createRegistry<ToolDescriptor>(() => {
         emit("tools_changed", sessionId, alias, { toolCount: session.registry.count() });
+      }),
+      eventRegistry: createRegistry<EventDescriptor>(() => {
+        emit("events_changed", sessionId, alias, { eventCount: session.eventRegistry.count() });
       }),
     };
 
@@ -440,11 +474,16 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
     return sessionId;
   };
 
-  const handleResume = (socket: WebSocket, message: SessionResumeMessage): string | null => {
+  const handleResume = (socket: WebSocket, message: SessionResumeMessage, transport: LinkTransport): string | null => {
     const session = sessions.get(message.session_id);
 
     if (!session) {
       closeSocket(socket, 1008, "unknown_session");
+      return null;
+    }
+
+    if (session.transport !== transport) {
+      closeSocket(socket, 1008, "wrong_transport");
       return null;
     }
 
@@ -494,6 +533,12 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       return;
     }
 
+    // A socket that was replaced by a resume may still deliver frames while it closes; the
+    // session now belongs to the new socket, so those frames are dropped.
+    if (socket !== session.socket) {
+      return;
+    }
+
     switch (message.type) {
       case "tool_registry_snapshot": {
         if (!isToolRegistrySnapshotMessage(message)) {
@@ -515,6 +560,31 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
           session.registry.upsert(message.tool);
         } else {
           session.registry.remove(message.name);
+        }
+
+        return;
+      }
+
+      case "event_registry_snapshot": {
+        if (!isEventRegistrySnapshotMessage(message)) {
+          closeSocket(socket, 1008, "invalid_registry");
+          return;
+        }
+
+        session.eventRegistry.snapshot(message.events);
+        return;
+      }
+
+      case "event_registry_delta": {
+        if (!isEventRegistryDeltaMessage(message)) {
+          closeSocket(socket, 1008, "invalid_registry");
+          return;
+        }
+
+        if (message.operation === "upsert") {
+          session.eventRegistry.upsert(message.event);
+        } else {
+          session.eventRegistry.remove(message.name);
         }
 
         return;
@@ -614,6 +684,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
     state: "active" | "suspended";
     suspendReason?: SessionSuspendReason;
     registry: ToolRegistry;
+    eventRegistry: EventRegistry;
   } => {
     const session = resolveSession(selector);
     return {
@@ -622,6 +693,7 @@ export const createSessionManager = (options: SessionManagerOptions): SessionMan
       state: session.state,
       suspendReason: session.suspendReason,
       registry: session.registry,
+      eventRegistry: session.eventRegistry,
     };
   };
 

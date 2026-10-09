@@ -5,9 +5,9 @@ import android.net.Uri
 import org.json.JSONObject
 
 /**
- * No-op mirror of `core`'s [Appduct] facade (docs/tasks/19-android-entry-points.md, issue #48
- * decision 2): same public surface, but every method does nothing and [state] is always
- * [ClientState.closed]. No `AppductInitProvider` in this module at all -- there is no `Context`
+ * No-op mirror of `core`'s [Appduct] facade (issue #48 decision 2): same public surface, but every
+ * method does nothing and [state] is always [ClientState.closed]. No `AppductInitProvider` in this
+ * module at all -- there is no `Context`
  * to capture and nothing to restore, so this build never touches the network and never needs a
  * manifest entry either (matching `core-noop`'s already-empty `AndroidManifest.xml`). No
  * `kotlinx.coroutines` import: `suspend` is a Kotlin-language/stdlib feature, not a
@@ -39,6 +39,12 @@ object Appduct {
         handler: suspend (args: JSONObject) -> Any?,
     ): ToolRegistration = ToolRegistration(name) {}
 
+    fun registerEvent(
+        name: String,
+        description: String,
+        payloadSchema: JSONObject? = null,
+    ): EventRegistration = EventRegistration(name) {}
+
     fun handle(intent: Intent): Boolean = false
 
     fun handle(uri: Uri): Boolean = false
@@ -60,6 +66,14 @@ object Appduct {
     suspend fun disconnect() {}
 
     fun addListener(listener: (AppductEvent) -> Unit): Subscription = Subscription {}
+}
+
+/** No-op mirror of `core`'s `EventRegistration` -- [remove] does nothing. */
+class EventRegistration internal constructor(
+    val name: String,
+    private val onRemove: () -> Unit,
+) {
+    fun remove() = onRemove()
 }
 
 /** No-op mirror of `core`'s `ToolRegistration` -- same shape, [remove] just does nothing. */

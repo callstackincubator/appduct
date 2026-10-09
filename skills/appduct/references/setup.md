@@ -1,6 +1,8 @@
 # Appduct setup
 
-Use this file when the task is to add Appduct to a new React Native project.
+Use this file when the task is to add Appduct to a project that doesn't have it yet: a React
+Native app (Expo or bare), or a native iOS or Android app with no React Native
+(see [Native iOS or Android](#native-ios-or-android)).
 
 The development path needs **no keys, no pins and no config file**. The daemon generates
 its own host key on first start, the deep-link scheme is discovered from the project's own
@@ -9,7 +11,7 @@ embedded pins trusts the pin carried in the link itself — in every build type,
 debug one. Everything under **Hardening** below is for builds that leave your machine — do
 not do it as part of a first-time setup.
 
-## Shared requirements
+## React Native: every project
 
 1. Install `appduct` where the operator or agent will run the CLI (or configure it as
    an MCP server — see [cli.md](./cli.md)). Its daemon auto-spawns on first use; there
@@ -24,27 +26,13 @@ not do it as part of a first-time setup.
    custom deep-link handling, QR scanning, tests — skip that entry, use the
    side-effect-free root entry, and call `restoreSession()` at startup before your own
    bootstrap handling so a Metro reload still recovers the session.)
-5. Optional, for pinned trust: generate a TLS private key for the daemon with
-   `appduct keygen` (non-interactive with `--out <path>`; writes `~/.appduct/key.pem`
-   by default). Skipping this is fine — the daemon generates its own key on first start and
-   `appduct sessions link` carries the fingerprint on the deep link.
-6. If you generated a key in step 5, add its `sha256/...` SPKI pin to the app
-   configuration, in a `cliPins` array (plural — the native clients accept a pin *set*,
-   which is what makes future rotation non-breaking). Configuring `cliPins` switches the
-   build to `trust: "pin"`, so the link-carried pin is ignored from then on
-   (`docs/SECURITY.md`, "Trust modes").
-7. Optional: use `addAppductListener("error", ...)` to observe bootstrap parse
-   failures, connect failures, or socket errors — one unified channel for all of them.
-8. Advanced: use `getAppductState()` / `addAppductListener("stateChange", ...)` for
-   manual connection-state UI.
-9. Production builds that shouldn't ship Appduct at all should be built with
-   `APPDUCT_ENABLED=0` rather than gated by a runtime flag. That variable drops the
-   native module on its own.
-10. To strip Appduct's JS as well, wrap the app's Metro config in the
-   `withAppduct` helper from `@appduct/react-native/metro` (call it last, after
-   anything else that sets `resolver.resolveRequest`). Without that wiring the real JS
-   entry is still bundled; it just finds no native module and goes inert. See
-   `docs/BUILD-VARIANTS.md`.
+5. Release builds need nothing: they leave out Appduct's native module by default, and the
+   JS that is still bundled goes inert. Do not set `APPDUCT_ENABLED=0` for a dev setup — it
+   removes Appduct from debug builds too. Only if the project wants Appduct's JS stripped
+   from release bundles as well, wrap the Metro config in `withAppduct` from
+   `@appduct/react-native/metro` (call it last, after anything else that sets
+   `resolver.resolveRequest`) and build releases with `APPDUCT_ENABLED=0`. See
+   https://callstackincubator.github.io/appduct/guides/build-variants/.
 
 ## Expo
 
@@ -53,7 +41,7 @@ not do it as part of a first-time setup.
    required only when `trust: "pin"` is set or implied; `trust` and `allowPrivateLanOnly`
    (defaults to `true`, fail-closed) are optional, and `deepLinkScheme` is only
    *validated* against `expo.scheme` — it is not what the CLI reads. A zero-config app can
-   skip the plugin entry entirely (`docs/SECURITY.md`, "Configuring trust").
+   skip the plugin entry entirely (https://callstackincubator.github.io/appduct/guides/security/#pin-a-build-to-your-key).
 3. Make sure `expo.scheme` is set — it is both what registers the app for deep links and
    what `appduct sessions link` discovers automatically from `app.json`.
 4. Run `appduct init` in the app root. It records the scheme in
@@ -85,12 +73,70 @@ If the project uses a dynamic `app.config.js` / `app.config.ts`, discovery does 
    entry, then xcodegen's `project.yml`. From a bare React Native root the iOS plist probe
    reaches `ios/<App>/Info.plist`, but the Android ones expect an Android project root
    (`android/`), so pass `appduct init --scheme <scheme>` with the scheme you configured in
-   step 3 whenever discovery comes up empty. It also refuses to guess when two probes
+   step 3 whenever discovery comes up empty. In a Flutter project (a `pubspec.yaml` in the
+   directory) the Android probes read `android/app/` and `init` prints Flutter steps. It also refuses to guess when two probes
    resolve different schemes — `--scheme` is the answer there too. Add
    `--android-app-id <applicationId> --ios-app-id <bundle-id>` so device delivery works
    without an `--app-id` on every call.
-5. Add the optional private-LAN-only setting only if the project wants that restriction.
+5. Leave the private-LAN-only setting alone: it is on by default, so a bootstrap link must
+   point at a private IPv4 address or `127.0.0.1`. Turn it off (`AppductAllowPrivateLanOnly`
+   in `Info.plist`, `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY` meta-data on Android) only
+   if a device has to reach the machine at a public address.
 6. Rebuild the native app after the configuration changes.
+
+## Native iOS or Android
+
+A plain Swift or Kotlin app with no React Native uses Appduct's native SDKs. Install
+`appduct` for the CLI as in step 1 above, then:
+
+- **iOS** (iOS 15.1+): add the `AppductCore` Swift package (Xcode 16.3+) or the
+  `AppductCore` pod restricted to `Debug`, declare the URL scheme in `Info.plist`, forward
+  opened URLs to `Appduct.shared.handle(url)`, and register tools with
+  `Appduct.shared.register(...)`. Full guide:
+  https://github.com/callstackincubator/appduct/blob/main/packages/native/ios/README.md
+- **Android** (`minSdkVersion` 24+): add `debugImplementation("com.callstack.appduct:core:<version>")`
+  and `releaseImplementation("com.callstack.appduct:core-noop:<version>")`, set
+  `manifestPlaceholders["appductScheme"]`, make sure the app's manifest has the `INTERNET`
+  permission, and register tools with `Appduct.register(...)` in `Application.onCreate()`.
+  Deep links reach Appduct with no code of your own. Full guide:
+  https://github.com/callstackincubator/appduct/blob/main/packages/native/android/README.md
+
+Then run `appduct init --ios-app-id <bundle-id>` or `--android-app-id <applicationId>` in the
+app root; it finds the scheme in `Info.plist` or the Gradle placeholder. Release builds leave
+Appduct out by default on both platforms.
+
+## Web
+
+1. Install `appduct` where you run the CLI, and `@appduct/web` in the page's app.
+2. Register tools with `registerTool` from `@appduct/web`, following
+   [writing-tools.md](./writing-tools.md). The API is the same as React Native's, without the
+   hook.
+3. Connect the page you are driving: `appduct_connect` with `target: "web"` and the page's
+   `url` returns `{ url, script }`. Open `url` (reloads the page), or run `script` in the page
+   (keeps its state). CLI: `appduct sessions link --open web <url>`. A link works once and
+   expires after 5 minutes. Reloading the page resumes the session; a new tab does not.
+   If the page is open in a Chrome launched with `--remote-debugging-port` and its own
+   `--user-data-dir`, add `browserUrl` (CLI: `--browser-url`, such as `http://127.0.0.1:9222`) and
+   the daemon attaches the tab itself: no `script`, no `https` permission prompt, and the session
+   is claimed when the call returns. When no tab or several tabs start with `url`, the error lists
+   the open tabs with their target ids; pass one as `targetId` (CLI: `--target-id`). A popup or a
+   page in a new tab isn't attached; the session stays on the page it was attached to.
+   Playwright: `attachPage(page, { link })` from `appduct/client`. Pipe-launched
+   chrome-devtools-mcp, `--autoConnect`, Claude in Chrome, Firefox and Safari use the WebSocket
+   path: `appduct sessions link --open web <url>`.
+4. Production builds need nothing: the root entry is inert unless the bundler sets the
+   `development` export condition. To include Appduct in another build, import
+   `@appduct/web/enabled`. A React Native app's web build in `expo start --web` needs the Metro
+   config wrapped in `withAppduct` (`@appduct/react-native/metro`) to connect in development,
+   because Metro sets no `development` condition; without it the page stays inert. In a bundler
+   with no `development` condition (plain esbuild), `connect()` warns once and does nothing. Running the `script` then throws a `TypeError`
+   because `window.__APPDUCT__` is undefined, and opening the `url` silently connects nothing.
+   Fix it with `--conditions=development` (esbuild), or import `@appduct/web/enabled`.
+5. If the connection is refused: the page's origin must be `localhost`, `127.0.0.1` or `[::1]`,
+   or listed in `webOrigins` in `~/.appduct/config.json` (then `appduct daemon stop`). An
+   `https` page needs Chrome's local network access permission, granted in Playwright with
+   `context.grantPermissions(["local-network-access"], { origin })`; Safari can't connect from
+   `https`. The browser must run on the same computer as the daemon.
 
 ## Hardening (not needed for a dev loop)
 

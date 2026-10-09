@@ -476,8 +476,10 @@ final class AppductClientTests: XCTestCase {
     return String(data: data, encoding: .utf8)!
   }
 
-  private func activeClient() async throws -> (AppductClient, FakeTransportSession) {
-    let (client, transport) = makeClient()
+  private func activeClient(
+    timers: FakeClientTimers = FakeClientTimers()
+  ) async throws -> (AppductClient, FakeTransportSession) {
+    let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
     let connectTask = Task { try await client.connect(connectTaskInput) }
     try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
@@ -658,6 +660,21 @@ final class AppductClientTests: XCTestCase {
 
     let event = try XCTUnwrap(transport.sentMessages.first { $0.contains("\"type\":\"event\"") })
     XCTAssertTrue(event.contains("greeting"))
+  }
+
+  func testPostEventStampsTheEventWithUnixMillisecondsNotSeconds() async throws {
+    // PROTOCOL.md §4's `"ts": 1752600000000`: the same unit Kotlin sends
+    // (`System.currentTimeMillis()`), because the daemon forwards this value to agents verbatim.
+    let nowMs = 1_752_600_000_000
+    let (client, transport) = try await activeClient(timers: FakeClientTimers(startMs: Double(nowMs)))
+    try await client.postEvent("greeting")
+    try await waitUntil("the event frame reached the wire") {
+      transport.sentMessages.contains { $0.contains("\"type\":\"event\"") }
+    }
+
+    let text = try XCTUnwrap(transport.sentMessages.first { $0.contains("\"type\":\"event\"") })
+    let frame = try JSONValue.parse(text)
+    XCTAssertEqual(frame.objectValue?["ts"]?.doubleValue, Double(nowMs))
   }
 
   func testPostEventThrowsWhenNotActive() async {

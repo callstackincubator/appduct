@@ -116,6 +116,29 @@ final class FixturesConformanceTests: XCTestCase {
     }
   }
 
+  // MARK: - event-descriptors.json
+
+  func testEventDescriptorsFixture() throws {
+    let vectors = try Self.loadFixture("event-descriptors.json") as! [[String: Any]]
+    XCTAssertGreaterThan(vectors.count, 0)
+
+    for vector in vectors {
+      let name = vector["name"] as! String
+      let descriptorRaw = vector["descriptor"] ?? NSNull()
+      let expectedValid = vector["valid"] as! Bool
+
+      let isValid: Bool
+      do {
+        _ = try parseEventDescriptor(JSONValue.from(foundation: descriptorRaw))
+        isValid = true
+      } catch {
+        isValid = false
+      }
+
+      XCTAssertEqual(isValid, expectedValid, name)
+    }
+  }
+
   // MARK: - close-codes.json
 
   func testCloseCodesFixture() throws {
