@@ -11,6 +11,11 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: `appduct init`'s next steps now match the project it found.** A React Native app still gets
+  the `@appduct/react-native/auto` import, including when `init` runs from its `ios/` or `android/`
+  directory; a plain iOS or Android app gets the wiring that app needs. An Android app that already
+  handles its own deep links is told to give Appduct a scheme of its own — see
+  [Android setup](https://callstackincubator.github.io/appduct/install/android/#deep-links).
 - **Fix: `APPDUCT_ENABLED=1` now carries Appduct into an iOS configuration whatever you call it**, rather than only into ones named `Debug` or `Release`; see [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/).
 - **Docs: an Android app with a custom build type needs one `matchingFallbacks` line before Appduct applies to it.** Without it, any build that includes Appduct fails at dependency resolution rather than building without it.
 - **Changed: `@appduct/react-native` names its shared API type `AppductPublicApi`.** The old name

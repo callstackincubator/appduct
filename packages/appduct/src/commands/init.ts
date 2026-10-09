@@ -6,8 +6,9 @@
  * #63, the installed app's id per platform (`appId.ios`/`appId.android` — needed to deliver a
  * link with `--open ios-device`/`--open android` without an "Open with" chooser silently eating
  * it), and returns the two things that are not discoverable from the filesystem: the MCP server
- * entry to paste into an agent's config, and the `import "@appduct/react-native/auto"` reminder
- * the app needs.
+ * entry to paste into an agent's config, and the wiring step this project still needs — the
+ * `import "@appduct/react-native/auto"` reminder for a React Native app, the equivalent native
+ * wiring for a plain iOS or Android one (issue #153).
  *
  * Unlike `scheme`, an app id has no discovery tier: `--ios-app-id`/`--android-app-id` (or an
  * already-recorded value) is the whole story, and the two are independent flags rather than one
@@ -41,6 +42,11 @@
  * step via {@link discoverStaticProjectScheme} specifically so the two can never disagree about
  * what "discovery" means. `InitCommandData.source` names every origin this command itself can
  * produce.
+ *
+ * One read does go above the root, and it is not an exception to the rule above:
+ * {@link declaresReactNative} walks up a bounded number of directories for a `package.json`, which
+ * chooses which wiring *hint* to print and writes nothing. Nothing that lands in the file `init`
+ * writes is inherited from a parent directory.
  */
 
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -58,6 +64,7 @@ import {
   PROJECT_CONFIG_FILENAME,
   PROJECT_CONFIG_RELATIVE_PATH,
   SCHEME_ENV_VAR,
+  type StaticProjectSchemeDiscovery,
 } from "../scheme.js";
 
 export type InitCommandOptions = {
@@ -216,6 +223,140 @@ const readExistingAppId = (
   }
 
   return value;
+};
+
+/** How far above the app root {@link declaresReactNative} looks for a `package.json`: two
+ * directories, which is exactly how far below a project root `native-scheme.ts` is willing to look
+ * for the native files it resolves — an `Info.plist` up to two levels down, an
+ * `app/build.gradle(.kts)` one. So for every project shape discovery can identify, this walk
+ * reaches the app's own manifest, and for nothing else: one level further is a monorepo's `apps/`
+ * directory, a workspace root, or a home directory, none of which says what framework the app
+ * being initialized is written in. */
+const MAX_MANIFEST_WALK_UP = 2;
+
+/**
+ * Whether the project at `root` (or an app directory directly inside it) is built with React
+ * Native (issue #153).
+ *
+ * The manifest is the only file in a project that says what framework it is built with, which is
+ * what `init` needs to pick a wiring step: a scheme read out of `ios/<App>/Info.plist` looks the
+ * same for a bare React Native app as for a plain SwiftUI one. `expo` counts as well — an Expo app
+ * without a `react-native` entry is still not a native app in the sense that matters here — and
+ * either name in `dependencies` or `devDependencies` is enough, since the cost of missing one is
+ * printing another platform's step.
+ *
+ * It starts at `root` and walks up, because the natural place to run this is the directory the
+ * native toolchain wants you in: `ios/` for `pod install`, `android/` for Gradle. The bound is
+ * {@link MAX_MANIFEST_WALK_UP}, and the first directory holding a manifest decides, so a nested
+ * app's own manifest wins over a workspace root's. This is the one place `init` looks above its
+ * root, and it does not contradict the no-walk-up rule in this file's header: that rule keeps a
+ * parent's *scheme* out of a file `init` writes, while this chooses which of two printed hints is
+ * true and writes nothing.
+ *
+ * A missing, unreadable or unparseable manifest is "nothing learned", not an error, and does not
+ * stop the walk: unlike `app.json`, which discovery was pointed at, this file is one `init` only
+ * consults to sharpen a hint, and failing a Kotlin app over it would be a new way to break a
+ * command documented as safe to run anywhere.
+ */
+const declaresReactNative = async (root: string): Promise<boolean> => {
+  let directory = root;
+
+  for (let levelsUp = 0; levelsUp <= MAX_MANIFEST_WALK_UP; levelsUp += 1) {
+    let manifest: unknown;
+
+    try {
+      manifest = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as unknown;
+    } catch {
+      manifest = undefined;
+    }
+
+    if (typeof manifest === "object" && manifest !== null) {
+      const declared = manifest as Record<string, unknown>;
+      const dependencies = [declared.dependencies, declared.devDependencies].flatMap((field) =>
+        typeof field === "object" && field !== null
+          ? Object.keys(field as Record<string, unknown>)
+          : [],
+      );
+
+      return dependencies.includes("react-native") || dependencies.includes("expo");
+    }
+
+    const parent = dirname(directory);
+
+    if (parent === directory) {
+      break;
+    }
+
+    directory = parent;
+  }
+
+  return false;
+};
+
+/**
+ * The first next step: the wiring this project still needs. Issue #153: this used to be the React
+ * Native import for every app, so a plain Swift or Kotlin developer got a step they could not act on.
+ *
+ * It is chosen from the framework, not from the reported `source`: a re-run that keeps a recorded
+ * scheme reports `already-recorded` with no platform in it, and `--scheme` reports none either, so
+ * this runs on what discovery *found* on disk (which `init` computes either way) plus
+ * {@link declaresReactNative}. When neither identifies a platform — `--scheme` in a project whose
+ * probes came up empty — both native steps are printed rather than one being guessed.
+ *
+ * The React Native step is worded exactly as before: that is the path most users see, and re-running
+ * `init` prints it whether or not the import is already there.
+ */
+const wiringNextSteps = async (
+  root: string,
+  discovered: StaticProjectSchemeDiscovery,
+  scheme: string,
+): Promise<string[]> => {
+  if (discovered.source === "app-json" || (await declaresReactNative(root))) {
+    return [
+      'Add `import "@appduct/react-native/auto";` to your app entry (index.js / App.tsx) — it ' +
+        "is what starts the in-app agent endpoint.",
+    ];
+  }
+
+  const ios =
+    "Forward every opened URL to Appduct: `_ = Appduct.shared.handle(url)` in SwiftUI's " +
+    "`.onOpenURL` (UIKit: `scene(_:openURLContexts:)`). It is what receives the connection link.";
+  // Names the scheme rather than commanding the assignment, because a scheme the `android-gradle`
+  // probe resolved *is* this placeholder: ordering the user to set it again would be wrong exactly
+  // when it is already right.
+  const androidPlaceholder =
+    "Check that `app/build.gradle(.kts)` sets " +
+    `\`manifestPlaceholders["appductScheme"] = "${scheme}"\` — Appduct's own activity receives the ` +
+    "connection link on that scheme. Placeholders are fixed at build time, so rebuild and " +
+    "reinstall after changing one.";
+  // No scheme named, because the scheme `android-manifest` resolves is the app's *own* deep link:
+  // that probe reads `app/src/main/AndroidManifest.xml`, and Appduct's `${appductScheme}` filter
+  // lives in `core`'s library manifest and is never written into an app's. Filling this value in
+  // would advise the collision the Android guide warns about — Appduct's activity takes every link
+  // on its scheme and forwards nothing that carries no Appduct payload, so the app's own links stop
+  // reaching the app. The unknown-platform case takes this one too: its scheme came from `--scheme`,
+  // which is usually the app's own deep link for the same reason, and no probe saw a placeholder.
+  const androidOwnScheme =
+    'Appduct receives links on the scheme in `manifestPlaceholders["appductScheme"]` in ' +
+    "`app/build.gradle(.kts)`. Give it a scheme of your own, not one your app already handles: " +
+    "on a shared scheme Appduct's activity can't tell your links from its own and yours stop " +
+    "reaching your app. That scheme is what the CLI opens too, so record it with `appduct init " +
+    "--scheme <scheme> --force` and rebuild. Both options: " +
+    "https://callstackincubator.github.io/appduct/install/android/#deep-links.";
+
+  if (discovered.source === "android-gradle") {
+    return [androidPlaceholder];
+  }
+
+  if (discovered.source === "android-manifest") {
+    return [androidOwnScheme];
+  }
+
+  if (discovered.source === "ios-info-plist" || discovered.source === "ios-project-yml") {
+    return [ios];
+  }
+
+  return [ios, androidOwnScheme];
 };
 
 /**
@@ -475,10 +616,7 @@ export const handleInitCommand = async (
       nextSteps: [
         ...((await isFlutterProject(root))
           ? flutterNextSteps(scheme)
-          : [
-              'Add `import "@appduct/react-native/auto";` to your app entry (index.js / App.tsx) — it ' +
-                "is what starts the in-app agent endpoint.",
-            ]),
+          : await wiringNextSteps(root, discovered, scheme)),
         `Add the Appduct MCP server entry to your agent's MCP config. "--scheme ${scheme}" keeps ` +
           `that entry self-contained; ${SCHEME_ENV_VAR} and this ${PROJECT_CONFIG_RELATIVE_PATH} ` +
           "work too.",
