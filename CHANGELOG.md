@@ -11,6 +11,8 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: `APPDUCT_ENABLED=1` now carries Appduct into an iOS configuration whatever you call it**, rather than only into ones named `Debug` or `Release`; see [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/).
+- **Docs: an Android app with a custom build type needs one `matchingFallbacks` line before Appduct applies to it.** Without it, any build that includes Appduct fails at dependency resolution rather than building without it.
 - **Changed: `@appduct/react-native` names its shared API type `AppductPublicApi`.** The old name
   `CordierePublicApi` still imports, with a deprecation warning, until 0.16.0 removes it.
 - **New: Flutter apps use Appduct through the `appduct` package on pub.dev, on Android, iOS, macOS, Windows and Linux.** Appduct is included in debug and profile builds, and a release build leaves it out unless you opt in with `--dart-define=APPDUCT_ENABLED=true` (`=false` opts out of debug and profile); see [Flutter setup](https://callstackincubator.github.io/appduct/install/flutter/).
