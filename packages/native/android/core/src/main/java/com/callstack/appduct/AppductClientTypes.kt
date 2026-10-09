@@ -314,3 +314,14 @@ internal data class AppductEventDescriptor(
 
 /** Thrown by `registerEvent` when a descriptor fails PROTOCOL.md §5a validation. */
 internal class AppductInvalidEventDescriptorException(message: String) : IllegalArgumentException(message)
+
+/** The daemon closes the socket with 1009 on a larger frame (PROTOCOL.md section 3). */
+internal const val APPDUCT_MAX_FRAME_BYTES = 262_144
+
+/** An outgoing frame over [APPDUCT_MAX_FRAME_BYTES]; refused before it reaches the transport. */
+internal class AppductFrameTooLargeError(
+    bytes: Int,
+) : Exception("Appduct frame is $bytes bytes, over the $APPDUCT_MAX_FRAME_BYTES-byte limit.")
+
+/** The frame-size message when this is a refused oversized frame, otherwise [fallback]. */
+internal fun Throwable.sendFailureMessage(fallback: String): String = if (this is AppductFrameTooLargeError) message!! else fallback

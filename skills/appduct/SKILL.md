@@ -1,6 +1,6 @@
 ---
 name: appduct
-description: Drive an Appduct-enabled app (React Native, iOS or Android) from the terminal or over MCP — connect a device, list the tools the app registers, call them — and write tools that agents can use well. Use when the user mentions Appduct, wants to pair or connect a device, invoke app-defined tools from the CLI or MCP, or asks to add Appduct to an app or write tools for it.
+description: Drive an Appduct-enabled app (React Native, Flutter, iOS, Android or web) from the terminal or over MCP — connect a device, list the tools the app registers, call them — and write tools that agents can use well. Use when the user mentions Appduct, wants to pair or connect a device, invoke app-defined tools from the CLI or MCP, or asks to add Appduct to an app or write tools for it.
 ---
 
 # Appduct
@@ -78,7 +78,8 @@ whole sequence, then pick the smallest form that fits:
   `--timeout <ms>` can only shorten that; the fix is in the app's registration. From a wait
   (`appduct_wait_for_event`), the same error means no matching event arrived within `timeoutMs` —
   there is no registration to fix; see "Wait" under Over MCP.
-- `session_suspended`: if the message says the app is in the background, ask the user to bring it
+- `session_suspended`: if the message says the app is in the background (on iOS that happens
+  about 30 s after backgrounding; calls made sooner still work), ask the user to bring it
   to the foreground (or bring it up yourself if you can); the session resumes on its own. Do not
   raise the timeout or pair again. Otherwise the connection was lost; retry once the session is
   `active` in `appduct sessions ls`.
@@ -88,7 +89,7 @@ whole sequence, then pick the smallest form that fits:
 ## Over MCP
 
 Same loop, through built-in tools whose descriptions say how to use them: `appduct_connect`
-then `appduct_wait_for_session` to connect a device; `appduct_list_tools`,
+then `appduct_wait_for_session` to connect a device (for a web page, `target: "web"` with the page `url`; see [references/setup.md](./references/setup.md#web)); `appduct_list_tools`,
 `appduct_describe_tool` and `appduct_call_tool` for the app's tools (the app's tools are not
 MCP tools of their own); `appduct_list_events` for the events the app declares. With several
 devices connected, pass `selector`. A tool with policy `"prompt"` asks the user to approve each
@@ -138,6 +139,6 @@ Read a reference only when its trigger applies:
   or flag not shown above (`sessions link`, `events tail`/`since`, `sessions revoke`, `init`,
   `--open`, QR, MCP `appduct_connect`), or you are writing a script or test with `appduct/client`.
 - [references/writing-tools.md](./references/writing-tools.md): the task is to add, change or
-  review tools in the app's code (`registerTool`, `useAppductTool`, Swift or Kotlin `register`).
+  review tools in the app's code (`registerTool`, `useAppductTool`, Swift or Kotlin `register`, Dart `registerTool`).
 - [references/setup.md](./references/setup.md): the task is to add Appduct to a project that
   does not have it yet.

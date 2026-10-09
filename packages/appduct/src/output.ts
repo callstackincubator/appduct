@@ -26,6 +26,8 @@ import type {
   InvokeCommandData,
   KeygenCommandData,
   LinkCommandData,
+  WebAttachCommandData,
+  WebLinkCommandData,
   LsCommandData,
   RevokeCommandData,
   ToolGroupsListing,
@@ -493,10 +495,42 @@ const renderInvokeData = (colors: ColorPalette, data: InvokeCommandData, flags: 
 
 const renderLinkData = (
   colors: ColorPalette,
-  data: LinkCommandData,
+  data: LinkCommandData | WebLinkCommandData | WebAttachCommandData,
   flags: GlobalFlags,
   qr?: boolean,
 ): string[] => {
+  if ("attached" in data) {
+    return [
+      colors.green("Page Attached"),
+      ...renderFields(
+        "Page",
+        [
+          ["Session", data.sessionId],
+          ["Tab", data.targetId],
+          ["URL", data.url],
+          ["Expires", new Date(data.expiresAt * 1000).toISOString()],
+        ],
+        flags,
+      ),
+    ];
+  }
+
+  if ("script" in data) {
+    return [
+      colors.green("Link Created"),
+      ...renderFields(
+        "Link",
+        [
+          ["Session", data.sessionId],
+          ["URL", data.url],
+          ["Script", data.script],
+          ["Expires", new Date(data.expiresAt * 1000).toISOString()],
+        ],
+        flags,
+      ),
+    ];
+  }
+
   const lines = [
     colors.green("Link Created"),
     ...renderFields(
@@ -651,6 +685,7 @@ const renderDaemonStatusData = (
         ["PID", data.daemon.pid],
         ["Started at", data.daemon.started_at],
         ["WSS port", data.daemon.wss_port],
+        ["Web port", data.daemon.web_port],
         ["Pinned keys", data.daemon.pinned_keys.length],
         ["Sessions", data.daemon.session_count],
       ],
@@ -714,7 +749,7 @@ const renderSuccessData = (colors: ColorPalette, command: string, data: unknown,
     case "keygen":
       return renderKeygenData(colors, data as KeygenCommandData, flags);
     case "sessions link":
-      return renderLinkData(colors, data as LinkCommandData, flags, options.qr);
+      return renderLinkData(colors, data as LinkCommandData | WebLinkCommandData | WebAttachCommandData, flags, options.qr);
     case "sessions ls":
       return renderLsData(colors, data as LsCommandData, options.now ?? new Date());
     case "tools ls":

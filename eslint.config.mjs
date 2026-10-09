@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import tseslint from "typescript-eslint";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const PACKAGES = ["packages/appduct/src", "packages/shared/src"];
+const PACKAGES = ["packages/appduct/src", "packages/shared/src", "packages/web/src"];
 const SOURCE = PACKAGES.map((p) => `${p}/**/*.ts`);
 const TESTS = PACKAGES.map((p) => `${p}/__tests__/**/*.ts`);
 

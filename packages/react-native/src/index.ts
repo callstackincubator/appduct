@@ -1,4 +1,10 @@
 import type { ToolDescriptor } from "@appduct/shared";
+import { createUseAppductTool } from "@appduct/shared/react";
+import {
+  createToolGroupFactory,
+  exportToolSchemaForKey,
+  type AppductCore,
+} from "@appduct/shared/sdk";
 
 import type {
   AppductBuildConfig,
@@ -17,18 +23,16 @@ import {
 import { parseBootstrapPayload, parseBootstrapUrl } from "./bootstrap";
 import { appductClient, noopIfNativeUnavailable } from "./default-client";
 import * as noop from "./noop";
-import { exportToolSchemaForKey } from "./schema";
-import { createToolGroupFactory } from "./tool-group";
-import { createUseAppductTool } from "./useAppductTool";
 
 export * from "./Appduct.types";
 export { parseBootstrapPayload, parseBootstrapUrl };
 export {
   createAppductClient,
   type AppductClient,
-  type AppductNativeModuleLike,
   type CreateAppductClientOptions,
-} from "./client";
+} from "@appduct/shared/sdk";
+/** The native TurboModule's JS-facing surface; `AppductCore` in `@appduct/shared/sdk`. */
+export type AppductNativeModuleLike = AppductCore;
 export { appductNativeModule };
 export { appductClient };
 export type {
@@ -37,7 +41,7 @@ export type {
   AppductSubscription,
   AppductToolGroupRegistrar,
 } from "./public-api";
-export type { UseAppductToolOptions } from "./useAppductTool";
+export type { UseAppductToolOptions } from "@appduct/shared/react";
 
 /**
  * Register an Appduct tool on the default client. Same as `appductClient.registerTool` —

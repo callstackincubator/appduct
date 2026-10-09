@@ -1,7 +1,7 @@
 /**
  * The name React Native users see for the type shared by the `.` (real) and `./noop` (inert)
  * entries (issue #155). It shipped as `CordierePublicApi`, the product's old name, misspelled; it
- * is now `AppductPublicApi`, with the old name kept as a deprecated alias until 0.15.0 removes it
+ * is now `AppductPublicApi`, with the old name kept as a deprecated alias until 0.16.0 removes it
  * (#161) so an existing import warns instead of breaking. When #161 runs, the three tests below that
  * name `CordierePublicApi` go: delete them with the alias.
  *
@@ -26,11 +26,11 @@ type Equals<A, B> =
     ? true
     : false;
 
-/** The three entries an app can import the package by, i.e. everything that must name the type. */
-const ENTRIES = ["index", "noop", "auto"] as const;
+/** The entries an app can import the package by, i.e. everything that must name the type. */
+const ENTRIES = ["index", "index.web", "noop", "auto"] as const;
 
 /** The release that removes the alias (#161), as the `@deprecated` tag and `CHANGELOG.md` name it. */
-const REMOVED_IN = "0.15.0";
+const REMOVED_IN = "0.16.0";
 
 const entryPath = (entry: string): string =>
   fileURLToPath(new URL(`../${entry}.ts`, import.meta.url));
@@ -100,7 +100,7 @@ describe("public API type name (issue #155)", () => {
   });
 
   test("the old name stays available as an alias, not a copy that can drift", () => {
-    // Grace until 0.15.0 (#161): `CordierePublicApi` keeps resolving, on every entry, to exactly the
+    // Grace until 0.16.0 (#161): `CordierePublicApi` keeps resolving, on every entry, to exactly the
     // renamed type rather than a second declaration someone can update on its own.
     const aliasIsTheRenamedType: Equals<
       RealEntry.CordierePublicApi,

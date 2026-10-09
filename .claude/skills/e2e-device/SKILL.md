@@ -22,6 +22,9 @@ Pick from the paths the PR changes. Run every row that matches.
 | `packages/react-native/android/**`, `packages/native/android/**`, `playground/android/**` | Expo playground on Android emulator |
 | `packages/native/ios/**` | `playground-native/ios` on iOS simulator |
 | `packages/native/android/**` | `playground-native/android` on Android emulator |
+| `packages/flutter/ios/**`, `packages/flutter/darwin/**`, `packages/flutter/lib/**`, `playground-flutter/**` | `playground-flutter` on iOS simulator |
+| `packages/flutter/android/**`, `packages/flutter/lib/**`, `playground-flutter/android/**` | `playground-flutter` on Android emulator |
+| `packages/flutter/**` and the PR names L5 or C5 | the device checks in "Flutter device checks"; L5 and C5 on iOS need a physical iPhone |
 | `packages/appduct/**`, `packages/shared/**` only | iOS row only |
 
 ## Three traps
@@ -93,6 +96,172 @@ Follow `playground-native/ios/README.md` (xcodegen, xcodebuild, `simctl install`
 the smoke pass below is identical. Run the CLI from that playground's directory so the scheme
 is discovered, or pass `--scheme`.
 
+## Flutter playground
+
+`playground-flutter` is a Flutter app (Android, iOS, macOS) that depends on `packages/flutter` by
+path and registers the same five tools and the `playground_ping` event. Its scheme is
+`appduct-flutter`; the ids are `com.callstack.appduct.playgroundFlutter` (iOS) and
+`com.callstack.appduct.playground_flutter` (Android), recorded in `playground-flutter/.appduct/config.json`.
+Drive it with `pnpm playground-flutter:appduct -- <cli args>`; the smoke pass below works the same
+with `a="pnpm playground-flutter:appduct --"`.
+
+`flutter run` stays in the foreground like Metro, so build, install and launch in separate steps
+and start `flutter run` only where a check needs a hot restart.
+
+```bash
+cd playground-flutter && flutter pub get && cd ..
+```
+
+iOS simulator (boot `$udid` as in the Expo section):
+
+```bash
+cd playground-flutter
+timeout 900 flutter build ios --simulator --debug
+timeout 120 xcrun simctl install "$udid" build/ios/iphonesimulator/Runner.app
+xcrun simctl launch "$udid" com.callstack.appduct.playgroundFlutter
+cd ..
+pnpm playground-flutter:appduct -- sessions link --open ios-sim --device "$udid"
+until pnpm playground-flutter:appduct -- sessions ls --json | jq -e '.data[] | select(.state=="active")' >/dev/null; do sleep 2; done
+```
+
+Android emulator (start it as in the Expo section):
+
+```bash
+cd playground-flutter
+timeout 900 flutter build apk --debug
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+adb shell am start -n com.callstack.appduct.playground_flutter/.MainActivity
+cd ..
+pnpm playground-flutter:appduct -- sessions link --open android
+```
+
+The app registers its tools before the first frame, so `tools ls` lists all five as soon as the
+session is active.
+
+## Flutter device checks
+
+Run the ones the PR names. Every command uses `a="pnpm playground-flutter:appduct --"`, your state
+dir exported, and the app built and connected as above. Record each as command and output.
+
+**T6, device names.** `$a sessions ls --json | jq -r '.data[0] | .alias, .device.manufacturer, .device.model'`
+prints a manufacturer and model that match the device (for example `Google` and `sdk_gphone64_arm64`
+on an emulator, `Apple` and an `iPhone17,1` style model on an iOS simulator), and the alias names
+them rather than saying `Unknown`.
+
+**L1, a link leaves the route alone.** Open the Status tab, deliver a fresh link
+(`$a sessions link --open ios-sim` or `--open android`) and take a screenshot
+(`xcrun simctl io "$udid" screenshot /tmp/after.png` or `adb exec-out screencap -p > /tmp/after.png`).
+The session is active and the Status tab is still showing, with no route error.
+
+**R2 and R3, hot restart.** Start the app under `flutter run` with a pid file, in the background,
+then deliver a link as above:
+
+```bash
+cd playground-flutter
+(sleep 86400 | flutter run -d "$udid" --debug --pid-file /tmp/flutter-run.pid > /tmp/flutter-run.log 2>&1 &)
+until grep -q "Flutter run key commands" /tmp/flutter-run.log; do sleep 2; done
+cd ..
+# deliver a link and wait for an active session, then:
+```
+
+A replaced or reinstalled session stays in `sessions ls` as `suspended` for 600 s, so never take
+`.data[0]` and never call a tool without a selector (it fails with `ambiguous_session`). Pick the
+active session and pass its id as the selector in every call below:
+
+```bash
+active() { $a sessions ls --json | jq -r '[.data[] | select(.state=="active")][0].sessionId // empty'; }
+until id=$(active) && [ -n "$id" ]; do sleep 2; done
+restart() { # hot restart, then wait for the new "Restarted application" line
+  n=$(grep -c "Restarted application" /tmp/flutter-run.log)
+  kill -USR2 $(cat /tmp/flutter-run.pid)
+  until [ "$(grep -c "Restarted application" /tmp/flutter-run.log)" -gt "$n" ]; do sleep 1; done
+}
+```
+
+R2, resume with no new link. Count a call first, restart, and deliver nothing:
+
+```bash
+$a tools call "$id" sum --input '{"a":1,"b":2}' --json | jq -e '.data.total == 3'
+$a tools call "$id" call_count --input '{}' --json | jq -e '.data.count == 1'
+restart
+until [ "$(active)" = "$id" ]; do sleep 1; done
+$a tools call "$id" call_count --input '{}' --json | jq -e '.data.count == 0'
+```
+
+The same session is active again, and the count is back to 0, which only the restarted isolate
+can say. 
+R3, a call in flight fails at once. The playground's `slow_task` prints `slow_task started` to the
+run log when the handler begins, so the restart goes out only once the call is running:
+
+```bash
+n=$(grep -c "slow_task started" /tmp/flutter-run.log)
+( time $a tools call "$id" slow_task --input '{}' --json ) > /tmp/slow.out 2>&1 &
+until [ "$(grep -c "slow_task started" /tmp/flutter-run.log)" -gt "$n" ]; do sleep 0.1; done
+restart
+wait; cat /tmp/slow.out
+```
+
+The call fails with `session_suspended` well before the 5 s tool timeout, and its message contains
+`while the call was pending`. A message that says `is not active` means the call arrived while the
+session was already suspended: the run proves nothing, repeat it. Then repeat the R2 resume check
+(`until [ "$(active)" = "$id" ]` and a `call_count` of 0). Stop `flutter run` with
+`kill $(cat /tmp/flutter-run.pid)` when done.
+
+**L3, links through the shim with Flutter deep linking off (Android).** In
+`playground-flutter/android/app/src/main/AndroidManifest.xml` add
+`<meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>` inside `<activity>`,
+rebuild and install, then:
+
+- Cold start: `adb shell am force-stop com.callstack.appduct.playground_flutter`, then
+  `$a sessions link --open android`. The app launches and the session becomes active.
+- Warm start: with the app in the foreground, run `$a sessions link --open android` again. A new
+  active session replaces the first.
+
+Restore the manifest afterwards with `git checkout -- playground-flutter/android`.
+
+**L4, iOS links under UIScene and the app delegate, cold and warm.** Run all four combinations.
+
+- UIScene (the template as checked in). Cold: `xcrun simctl terminate "$udid" com.callstack.appduct.playgroundFlutter`,
+  then `$a sessions link --open ios-sim --device "$udid"`; the app launches and a session becomes
+  active. Warm: with the app running, deliver another link; the session is replaced and active.
+- App delegate only. Remove the scene manifest and rebuild:
+  `/usr/libexec/PlistBuddy -c "Delete :UIApplicationSceneManifest" playground-flutter/ios/Runner/Info.plist`,
+  then build and install as above and repeat the cold and warm deliveries. Restore with
+  `git checkout -- playground-flutter/ios`.
+- A URL that is not an Appduct link reaches the router in both setups:
+  `xcrun simctl openurl "$udid" "appduct-flutter:///status"` shows the Status tab (screenshot) and
+  the existing session stays active.
+
+**L5, profile build on a physical iPhone with no debugger.** Needs a paired iPhone `$dev`
+(`xcrun devicectl list devices`), a signing team set once in
+`playground-flutter/ios/Runner.xcworkspace`, and the iPhone on the same network as the daemon.
+
+```bash
+cd playground-flutter
+timeout 1200 flutter build ios --profile
+xcrun devicectl device install app --device "$dev" build/ios/iphoneos/Runner.app
+cd ..
+$a sessions link --open ios-device --device "$dev" --app-id com.callstack.appduct.playgroundFlutter --relaunch
+```
+
+Do not run `flutter run`, `flutter attach` or open Xcode's debugger: the app must be launched by
+the link alone. An active session and a passing smoke pass is the pass. The first launch asks for
+the local network permission; allow it.
+
+**C5, an opted-in release build connects with the permissions `appduct init` prints.** Build with
+`--dart-define=APPDUCT_ENABLED=true`:
+
+- Android: `flutter build apk --release --dart-define=APPDUCT_ENABLED=true`, install
+  `build/app/outputs/flutter-apk/app-release.apk` on the emulator, launch, `$a sessions link --open android`.
+- iOS (physical iPhone only, Flutter has no release simulator build):
+  `flutter build ios --release --dart-define=APPDUCT_ENABLED=true`, install and link as in L5.
+- macOS: `flutter build macos --release --dart-define=APPDUCT_ENABLED=true`, then
+  `open -n build/macos/Build/Products/Release/playground_flutter.app` and
+  `open "$($a sessions link --json | jq -r '.data.deepLink')"`.
+
+Each connects and passes the smoke pass. Without the define, the same release build must not
+connect (`node packages/appduct/bin.js doctor <artifact> --assert-absent`, from the repo root).
+
 ## Smoke pass
 
 All five tools, one chain. Expected values are on the right.
@@ -107,6 +276,10 @@ $a tools call reset_counter --input '{}' --json | jq -e '.data.count == 0' \
 && echo SMOKE_OK
 $a tools call throwing_tool --input '{}' --json; echo "exit=$? (non-zero expected, type tool_execution_error)"
 ```
+
+Against the Flutter playground (after a reinstall or a second link), stale `suspended` sessions
+make a selector-less call fail with `ambiguous_session`: set `a="pnpm playground-flutter:appduct --"`,
+`id=$(active)` as in the hot-restart section, and write each call as `$a tools call "$id" <tool> ...`.
 
 A checked-in script for this pass is planned; until it exists, this chain is the suite.
 
