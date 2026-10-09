@@ -78,7 +78,8 @@ whole sequence, then pick the smallest form that fits:
   `--timeout <ms>` can only shorten that; the fix is in the app's registration. From a wait
   (`appduct_wait_for_event`), the same error means no matching event arrived within `timeoutMs` —
   there is no registration to fix; see "Wait" under Over MCP.
-- `session_suspended`: if the message says the app is in the background, ask the user to bring it
+- `session_suspended`: if the message says the app is in the background (on iOS that happens
+  about 30 s after backgrounding; calls made sooner still work), ask the user to bring it
   to the foreground (or bring it up yourself if you can); the session resumes on its own. Do not
   raise the timeout or pair again. Otherwise the connection was lost; retry once the session is
   `active` in `appduct sessions ls`.

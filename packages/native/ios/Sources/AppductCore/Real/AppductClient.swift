@@ -19,6 +19,7 @@ public actor AppductClient {
   let defaultToolTimeoutMs: Int
   let requirePrivateIp: Bool
   let foregroundObserver: any AppductForegroundObserving
+  let backgroundTime: any AppductBackgroundTime
 
   // MARK: Unified session state
 
@@ -70,6 +71,8 @@ public actor AppductClient {
   var destroyed = false
   var lastErrorDetails: AppductErrorDetails?
   var foregroundSubscription: (any AppductDisposable)?
+  /// The OS background time held while the app is backgrounded with an active session.
+  var backgroundHold: (any AppductDisposable)?
 
   // MARK: Tool registry (registration order preserved)
 
@@ -113,8 +116,14 @@ public actor AppductClient {
     timers: any AppductClientTimers = SystemAppductClientTimers(),
     defaultToolTimeoutMs: Int = APPDUCT_DEFAULT_TOOL_TIMEOUT_MS,
     requirePrivateIp: Bool? = nil,
-    foregroundObserver: (any AppductForegroundObserving)? = nil
+    foregroundObserver: (any AppductForegroundObserving)? = nil,
+    backgroundTime: (any AppductBackgroundTime)? = nil
   ) {
+    #if canImport(UIKit)
+      self.backgroundTime = backgroundTime ?? UIKitAppductBackgroundTime()
+    #else
+      self.backgroundTime = backgroundTime ?? NoBackgroundTime()
+    #endif
     self.transport = transport
     self.timers = timers
     self.defaultToolTimeoutMs = defaultToolTimeoutMs
@@ -272,7 +281,9 @@ public actor AppductClient {
 
   public struct AppductNotActiveError: Error, Sendable {}
 
-  /// Emits an `event` frame while active (PROTOCOL.md §7); rejects otherwise.
+  /// Emits an `event` frame while active (PROTOCOL.md §4); rejects otherwise. `ts` is Unix
+  /// milliseconds, the same unit `timers.now()` reports and Kotlin's `System.currentTimeMillis()`
+  /// sends.
   public func postEvent(_ name: String, payload: JSONValue? = nil) async throws {
     guard clientState == .active, let sessionId = heldSession?.sessionId else {
       throw AppductNotActiveError()
@@ -282,7 +293,7 @@ public actor AppductClient {
       "type": .string("event"),
       "session_id": .string(sessionId),
       "name": .string(name),
-      "ts": .number(timers.now() / 1_000),
+      "ts": .number(timers.now()),
     ]
     if let payload { message["payload"] = payload }
 
@@ -290,7 +301,7 @@ public actor AppductClient {
       try await sendWire(.object(message))
     } catch {
       emitError(
-        AppductUnifiedErrorEvent(phase: "socket", message: "Failed to send event \"\(name)\".")
+        AppductUnifiedErrorEvent(phase: "socket", message: sendFailureMessage(error, fallback: "Failed to send event \"\(name)\"."))
       )
       throw error
     }
@@ -322,6 +333,9 @@ public actor AppductClient {
     }
 
     await transport.close()
+    // Only now: once the last background task ends iOS may suspend the app, and the close frame
+    // has to have left first.
+    releaseBackgroundTime()
   }
 
   public struct AppductClientClosedError: Error, Sendable {}
@@ -336,12 +350,29 @@ public actor AppductClient {
     abortAllInFlight()
     foregroundSubscription?.dispose()
     await transport.invalidate()
+    releaseBackgroundTime()
   }
 
   func sendWire(_ value: JSONValue) async throws {
     let text = try value.serialized()
+    let bytes = text.utf8.count
+    if bytes > appductMaxFrameBytes { throw AppductFrameTooLargeError(bytes: bytes) }
     try await transport.send(message: text)
   }
+}
+
+/// The daemon closes the socket with 1009 on a larger frame (PROTOCOL.md section 3).
+let appductMaxFrameBytes = 262_144
+
+/// An outgoing frame over `appductMaxFrameBytes`; refused before it reaches the transport.
+struct AppductFrameTooLargeError: Error, Sendable {
+  let bytes: Int
+  var message: String { "Appduct frame is \(bytes) bytes, over the \(appductMaxFrameBytes)-byte limit." }
+}
+
+/// The frame-size message when `error` is a refused oversized frame, otherwise `fallback`.
+func sendFailureMessage(_ error: Error, fallback: String) -> String {
+  (error as? AppductFrameTooLargeError)?.message ?? fallback
 }
 
 /// A disposable backed by a closure; used for listener removal handles above.

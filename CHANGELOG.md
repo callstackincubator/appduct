@@ -12,6 +12,10 @@ section into a versioned heading.
 ## Unreleased
 
 - **New: Flutter apps use Appduct through the `appduct` package on pub.dev, on Android, iOS, macOS, Windows and Linux.** Appduct is included in debug and profile builds, and a release build leaves it out unless you opt in with `--dart-define=APPDUCT_ENABLED=true` (`=false` opts out of debug and profile); see [Flutter setup](https://callstackincubator.github.io/appduct/install/flutter/).
+- **Fix: a tool result over 256 KiB no longer drops the session.** The call fails with `tool_serialization_error` and a message naming the size and the limit; an oversized event is reported to the app's error listener instead.
+- **New: on iOS, tool calls keep working for about 30 seconds after the app is backgrounded, instead of failing at once.** After that a call fails with `session_suspended`; needs an app built with this release.
+- **Fix: events posted from an iOS app now report their time in milliseconds, like Android's.**
+  A script reading `data.ts` from `appduct events tail` or `appduct events since` no longer needs to multiply it by 1,000.
 - **Fix: the iOS and Android SDKs no longer report a "Failed to send a tool response frame." error when the connection drops during a tool call.**
 - **New: `appduct init` and scheme discovery understand Flutter projects.** Run from a directory with a `pubspec.yaml`, they read the URL scheme from `android/app/`, `ios/Runner` and `macos/Runner`, and `init` prints the Flutter setup steps.
 - **Fix: a tool call no longer hangs until its timeout when the app reconnects while its old connection is still open.** The call now fails at once with `session_suspended` and can be retried.

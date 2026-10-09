@@ -1,5 +1,8 @@
 package com.callstack.appduct
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -13,6 +16,7 @@ import java.io.File
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.util.Base64
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Cross-language conformance fixtures (issue #48, "Parity is the risk"): every vector loaded here
@@ -221,5 +225,143 @@ class FixturesConformanceTest {
                 .generateCertificate(der.inputStream()) as X509Certificate
 
         assertEquals(fixture.getString("expectedPin"), computeSpkiPin(certificate))
+    }
+
+    // --- frame-limits.json ---
+
+    private fun utf8Bytes(text: String): Int = text.toByteArray(Charsets.UTF_8).size
+
+    /** A string that makes a frame carrying it exactly `frameBytes` long, given the frame's size with `""`. */
+    private fun padding(
+        frameBytes: Int,
+        filler: String,
+        emptyFrameBytes: Int,
+    ): String {
+        val pad = frameBytes - emptyFrameBytes
+        val unit = utf8Bytes(filler)
+        val count = pad / unit
+        return filler.repeat(count) + "a".repeat(pad - count * unit)
+    }
+
+    private fun newActiveClient(
+        errors: MutableList<AppductUnifiedError>,
+    ): Pair<AppductClient, FakeAppductTransport> {
+        lateinit var fake: FakeAppductTransport
+        val client =
+            AppductClient(
+                transportFactory = { _, onMessage, onError, onClose ->
+                    FakeAppductTransport(onMessage, onError, onClose).also { fake = it }
+                },
+                lifecycleObserverFactory = { AppductNoopLifecycleObserver() },
+            )
+        client.addErrorListener { errors.add(it) }
+        runBlocking {
+            val job =
+                launch(Dispatchers.Default) {
+                    client.connect(
+                        AppductConnectInput.Explicit(
+                            ip = "127.0.0.1",
+                            port = 8443,
+                            sessionId = "sess-1",
+                            token = "claim-token",
+                            resumeToken = null,
+                            expiresAt = Long.MAX_VALUE / 2,
+                            linkPin = null,
+                        ),
+                    )
+                }
+            waitUntil { fake.connectCalls.isNotEmpty() }
+            fake.simulateAck("sess-1")
+            job.join()
+        }
+        return client to fake
+    }
+
+    private fun framesOfType(
+        fake: FakeAppductTransport,
+        type: String,
+    ): List<JSONObject> = fake.sentMessages.map { JSONObject(it) }.filter { it.getString("type") == type }
+
+    @Test
+    fun `frame-limits fixture decides which tool results are sent and which become tool_serialization_error`() {
+        val fixture = loadJsonObject("frame-limits.json")
+        val limitBytes = fixture.getInt("limitBytes")
+        val vectors = fixture.getJSONArray("vectors")
+        assertEquals(262_144, limitBytes)
+        assertTrue(vectors.length() > 0)
+
+        for (i in 0 until vectors.length()) {
+            val vector = vectors.getJSONObject(i)
+            val name = vector.getString("name")
+            val frameBytes = vector.getInt("frameBytes")
+            val errors = CopyOnWriteArrayList<AppductUnifiedError>()
+            val (client, fake) = newActiveClient(errors)
+            var answer = ""
+            client.registerTool(AppductToolDescriptor(name = "big", description = "Returns a string.")) { _, _ -> answer }
+            waitUntil { framesOfType(fake, "tool_registry_delta").isNotEmpty() }
+
+            fun call(id: String) =
+                fake.simulateMessage(
+                    JSONObject().put("type", "tool_call").put("session_id", "sess-1").put("id", id).put("name", "big").put("args", JSONObject()),
+                )
+
+            call("id-a")
+            waitUntil { framesOfType(fake, "tool_result").size == 1 }
+            val emptyFrameBytes = utf8Bytes(framesOfType(fake, "tool_result").first().toString())
+
+            answer = padding(frameBytes, vector.getString("filler"), emptyFrameBytes)
+            call("id-b")
+
+            if (vector.getBoolean("sent")) {
+                waitUntil { framesOfType(fake, "tool_result").size == 2 }
+                assertEquals(name, frameBytes, utf8Bytes(fake.sentMessages.last()))
+            } else {
+                waitUntil { framesOfType(fake, "tool_error").isNotEmpty() }
+                assertEquals(name, 1, framesOfType(fake, "tool_result").size)
+                val error = framesOfType(fake, "tool_error").single()
+                assertEquals(name, "id-b", error.getString("id"))
+                assertEquals(name, "tool_serialization_error", error.getJSONObject("error").getString("type"))
+                assertEquals(
+                    name,
+                    "Appduct frame is $frameBytes bytes, over the $limitBytes-byte limit.",
+                    error.getJSONObject("error").getString("message"),
+                )
+            }
+            assertEquals(name, AppductClientState.active, client.state)
+        }
+    }
+
+    @Test
+    fun `frame-limits fixture decides which events are sent and which go to the error listener`() {
+        val fixture = loadJsonObject("frame-limits.json")
+        val limitBytes = fixture.getInt("limitBytes")
+        val vectors = fixture.getJSONArray("vectors")
+
+        for (i in 0 until vectors.length()) {
+            val vector = vectors.getJSONObject(i)
+            val name = vector.getString("name")
+            val frameBytes = vector.getInt("frameBytes")
+            val errors = CopyOnWriteArrayList<AppductUnifiedError>()
+            val (client, fake) = newActiveClient(errors)
+            waitUntil { framesOfType(fake, "tool_registry_snapshot").isNotEmpty() }
+
+            runBlocking {
+                client.postEvent("big", "")
+                val emptyFrameBytes = utf8Bytes(fake.sentMessages.last())
+                client.postEvent("big", padding(frameBytes, vector.getString("filler"), emptyFrameBytes))
+            }
+
+            if (vector.getBoolean("sent")) {
+                assertEquals(name, 2, framesOfType(fake, "event").size)
+                assertEquals(name, frameBytes, utf8Bytes(fake.sentMessages.last()))
+                assertTrue(name, errors.isEmpty())
+            } else {
+                assertEquals(name, 1, framesOfType(fake, "event").size)
+                assertEquals(name, 1, errors.size)
+                assertEquals(name, "socket", errors.single().phase)
+                assertEquals(name, "Appduct frame is $frameBytes bytes, over the $limitBytes-byte limit.", errors.single().message)
+            }
+            assertEquals(name, AppductClientState.active, client.state)
+        }
     }
 }

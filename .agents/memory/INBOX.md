@@ -92,3 +92,7 @@ One note per PR that hit friction, four lines:
   What went wrong: a slice that depended on a sibling slice's core fix was stacked on the wrong base, so its scenario failed until the sibling branch was merged in.
   Would have prevented it: before stacking a slice, check whether its scenarios need behaviour fixed in an open sibling PR and stack on that PR's branch.
   Cost: review round
+- 2026-10-01 (#142) implement-issue: second review round
+  Happened: round 1 found UIKit background time ended after a 2 s delay in the expiry handler and before the close frame on disconnect()/destroy(), plus README quoting `sessions ls` output that the CLI does not print.
+  Rule: when wrapping an OS lifetime grant, end it inside the OS callback and only after any pending close frame is sent; quote CLI output from the label table, not from the wire value.
+  Evidence: 4 should-fix findings on #142 round 1, all fixed in round 2.

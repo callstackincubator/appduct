@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { ack, connectInput, settle, setup } from "./harness.js";
+import { SESSION_ID, ack, connectInput, settle, setup } from "./harness.js";
 
 /**
  * The shared vectors in `packages/native/fixtures`, asserted through the web core's public
@@ -144,4 +144,91 @@ describe("close-codes.json", () => {
       expect(h.transport.connections).toHaveLength(2);
     },
   );
+});
+
+type FrameLimits = {
+  limitBytes: number;
+  vectors: { name: string; frameBytes: number; filler: string; sent: boolean }[];
+};
+
+const utf8Bytes = (text: string) => new TextEncoder().encode(text).length;
+
+/** A string that makes a frame carrying it exactly `frameBytes` long, given the frame's size with `""`. */
+const padding = (vector: FrameLimits["vectors"][number], emptyFrameBytes: number) => {
+  const pad = vector.frameBytes - emptyFrameBytes;
+  const unit = utf8Bytes(vector.filler);
+  const count = Math.floor(pad / unit);
+  return vector.filler.repeat(count) + "a".repeat(pad - count * unit);
+};
+
+describe("frame-limits.json", () => {
+  const { limitBytes, vectors } = load<FrameLimits>("frame-limits.json");
+
+  it("has vectors", () => {
+    expect(limitBytes).toBe(262_144);
+    expect(vectors.length).toBeGreaterThan(0);
+  });
+
+  describe.each(vectors.map((vector) => [vector.name, vector] as const))("%s", (_name, vector) => {
+    it("answers a tool result as sent or as tool_serialization_error naming the size, and keeps the session active", async () => {
+      const h = setup();
+      h.core.registerTool(JSON.stringify({ name: "big", description: "Returns a string." }));
+      const socket = await h.claim();
+      const call = (id: string) => socket.receive({ type: "tool_call", session_id: SESSION_ID, id, name: "big", args: {} });
+      const frames = (type: string) => socket.frames().filter((frame) => frame.type === type);
+
+      call("id-a");
+      h.core.respondToToolCall("id-a", '""', null);
+      const emptyFrameBytes = utf8Bytes(socket.sent.at(-1) as string);
+
+      call("id-b");
+      h.core.respondToToolCall("id-b", JSON.stringify(padding(vector, emptyFrameBytes)), null);
+
+      if (vector.sent) {
+        expect(frames("tool_result").map((frame) => frame.id)).toEqual(["id-a", "id-b"]);
+        expect(utf8Bytes(socket.sent.at(-1) as string)).toBe(vector.frameBytes);
+      } else {
+        expect(frames("tool_result").map((frame) => frame.id)).toEqual(["id-a"]);
+        expect(frames("tool_error")).toEqual([
+          {
+            type: "tool_error",
+            session_id: SESSION_ID,
+            id: "id-b",
+            error: {
+              type: "tool_serialization_error",
+              message: `Appduct frame is ${vector.frameBytes} bytes, over the ${limitBytes}-byte limit.`,
+            },
+          },
+        ]);
+      }
+      expect(h.core.getState()).toBe("active");
+      expect(socket.closedByCore).toBeUndefined();
+    });
+
+    it("sends an event as is or reports it to the error listener naming the size, and keeps the session active", async () => {
+      const h = setup();
+      const socket = await h.claim();
+      const events = () => socket.frames().filter((frame) => frame.type === "event");
+
+      await h.core.postEvent("big", '""');
+      const emptyFrameBytes = utf8Bytes(socket.sent.at(-1) as string);
+      await h.core.postEvent("big", JSON.stringify(padding(vector, emptyFrameBytes)));
+
+      if (vector.sent) {
+        expect(events()).toHaveLength(2);
+        expect(utf8Bytes(socket.sent.at(-1) as string)).toBe(vector.frameBytes);
+        expect(h.recorded.errors).toEqual([]);
+      } else {
+        expect(events()).toHaveLength(1);
+        expect(h.recorded.errors).toEqual([
+          {
+            phase: "socket",
+            message: `Appduct frame is ${vector.frameBytes} bytes, over the ${limitBytes}-byte limit.`,
+          },
+        ]);
+      }
+      expect(h.core.getState()).toBe("active");
+      expect(socket.closedByCore).toBeUndefined();
+    });
+  });
 });

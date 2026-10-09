@@ -1,5 +1,6 @@
 import { DEFAULT_TOOL_TIMEOUT_MS } from "@appduct/shared";
 
+import { FrameTooLargeError } from "./connection.js";
 import type { Clock, TimerHandle } from "./ports.js";
 import type { ToolRegistry } from "./registry.js";
 
@@ -52,13 +53,26 @@ export const createToolInvoker = (deps: ToolInvokerDeps): ToolInvoker => {
   const send = (frame: { session_id: string } & Record<string, unknown>) => {
     try {
       deps.send(frame);
-    } catch {
-      deps.onSendError("Failed to send a tool response frame.");
+    } catch (error) {
+      deps.onSendError(error instanceof FrameTooLargeError ? error.message : "Failed to send a tool response frame.");
+    }
+  };
+
+  /** Sends the call's answer; one over the frame limit becomes a `tool_serialization_error` naming its size. */
+  const reply = (sessionId: string, id: string, frame: { type: string } & Record<string, unknown>) => {
+    try {
+      deps.send({ ...frame, session_id: sessionId, id });
+    } catch (error) {
+      if (error instanceof FrameTooLargeError) {
+        send({ type: "tool_error", session_id: sessionId, id, error: { type: "tool_serialization_error", message: error.message } });
+      } else {
+        deps.onSendError("Failed to send a tool response frame.");
+      }
     }
   };
 
   const sendError = (sessionId: string, id: string, error: Record<string, unknown>) =>
-    send({ type: "tool_error", session_id: sessionId, id, error });
+    reply(sessionId, id, { type: "tool_error", error });
 
   /** Takes `id` out of flight, or returns undefined when it is not (or no longer) in flight. */
   const finish = (id: string): InFlight | undefined => {
@@ -121,7 +135,7 @@ export const createToolInvoker = (deps: ToolInvokerDeps): ToolInvoker => {
         });
         return;
       }
-      send({ type: "tool_result", session_id: sessionId, id, result });
+      reply(sessionId, id, { type: "tool_result", result });
     },
 
     progress(id, progress, message) {
