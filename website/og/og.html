@@ -140,16 +140,21 @@
 				width: 1300px;
 				height: 400px;
 			}
+			/* No frame hairlines: on GitHub they read as a stray border. */
+			[data-format='banner'] .card {
+				inset: 0;
+				border-inline: 0;
+			}
 			[data-format='banner'] .top {
-				padding: 44px 48px 0;
+				padding: 44px 96px 0;
 			}
 			[data-format='banner'] h1 {
-				margin: 30px 48px 0;
+				margin: 30px 96px 0;
 				max-width: 520px;
 				font-size: 54px;
 			}
 			[data-format='banner'] .band {
-				inset: 0 0 0 600px;
+				inset: 0 0 0 648px;
 				height: auto;
 				border-top: 0;
 				border-left: 1px solid rgb(255 255 255 / 0.1);
@@ -164,6 +169,7 @@
 			}
 			[data-format='banner'] .platforms {
 				left: -552px;
+				/* Lines up with the copy above, 96px from the left edge. */
 				right: auto;
 				bottom: 40px;
 				padding: 0;
