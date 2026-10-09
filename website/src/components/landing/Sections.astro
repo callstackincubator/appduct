@@ -1,0 +1,427 @@
+---
+// Everything below the hero. Shared by every variant so the comparison is only about the hero.
+import { agents, callers, faq, platforms, safety, why } from '../../landing/content';
+import CodeBlock from './CodeBlock.astro';
+import CopyCommand from './CopyCommand.astro';
+import Dither from './Dither.astro';
+import Pipeline from './Pipeline.astro';
+import PixelIcon from './PixelIcon.astro';
+import Window from './Window.astro';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const docs = (slug: string) => `${base}/${slug}/`;
+---
+
+<!-- [01] How it works -->
+<section id="how" aria-labelledby="how-title">
+	<p class="section-head label"><b>[01]</b> How it works</p>
+	<div class="intro">
+		<h2 class="h2" id="how-title">Register a function in your app. <span class="accent">Your agent can call it.</span></h2>
+	</div>
+
+	<div class="tabs" data-tabs>
+		<div class="tab-bar" role="tablist" aria-label="Platform">
+			{
+				platforms.map((p, i) => (
+					<button
+						class="tab label"
+						role="tab"
+						id={`tab-${p.id}`}
+						aria-controls={`panel-${p.id}`}
+						aria-selected={i === 0 ? 'true' : 'false'}
+						tabindex={i === 0 ? 0 : -1}
+					>
+						{p.name}
+					</button>
+				))
+			}
+		</div>
+		<div class="stage">
+			<Dither scene="flow" />
+			{
+				platforms.map((p, i) => (
+					<div class="panel" role="tabpanel" id={`panel-${p.id}`} aria-labelledby={`tab-${p.id}`} hidden={i !== 0}>
+						<Window title={p.file} class="stage-window">
+							<CodeBlock code={p.code} lang={p.lang} minLines={13} />
+						</Window>
+						<div class="panel-foot">
+							<code class="label pkg">{p.pkg}</code>
+							<span class="body">{p.note}</span>
+							<a class="label more" href={docs(p.docs)}>
+								Set up {p.name} <span aria-hidden="true">→</span>
+							</a>
+						</div>
+					</div>
+				))
+			}
+		</div>
+	</div>
+
+	<Pipeline />
+</section>
+
+<!-- [02] Agents -->
+<section id="agents" aria-labelledby="agents-title">
+	<p class="section-head label"><b>[02]</b> Agents</p>
+	<div class="split">
+		<div class="split-copy">
+			<h2 class="h2" id="agents-title">Plug it into your agent.</h2>
+			<p class="lede">Add one MCP entry. Your agent lists your app's tools and calls them. Risky tools can ask you first.</p>
+			<p class="clients label">
+				{agents.clients.map((c) => <span>{c}</span>)}
+			</p>
+			<a class="label more" href={docs('guides/agents')}>Agents guide <span aria-hidden="true">→</span></a>
+		</div>
+		<Window title=".mcp.json" class="split-window">
+			<CodeBlock code={callers[0].code} lang="json" minLines={6} />
+		</Window>
+	</div>
+	<div class="band">
+		<Dither scene="flow" />
+		<CopyCommand command={agents.skill} />
+	</div>
+</section>
+
+<!-- [03] Why -->
+<section aria-labelledby="why-title">
+	<p class="section-head label"><b>[03]</b> Why use it</p>
+	<h2 class="sr-only" id="why-title">Why use Appduct</h2>
+	<div class="cells cells--3">
+		{
+			why.map(({ icon, title, body }) => (
+				<article class="cell">
+					<PixelIcon name={icon} size={27} class="accent" />
+					<h3 class="h3">{title}</h3>
+					<p class="body">{body}</p>
+				</article>
+			))
+		}
+	</div>
+</section>
+
+<!-- [04] Platforms -->
+<section id="platforms" aria-labelledby="platforms-title">
+	<p class="section-head label"><b>[04]</b> Platforms</p>
+	<div class="intro">
+		<h2 class="h2" id="platforms-title">Works where your app runs.</h2>
+	</div>
+	<div class="cells cells--5">
+		{
+			platforms.map((p) => (
+				<a class="cell cell--link" href={docs(p.docs)}>
+					<h3 class="h3">{p.name}</h3>
+					<code class="label pkg">{p.pkg}</code>
+					<p class="body">{p.note}</p>
+					<span class="label more">
+						Set up <span aria-hidden="true">→</span>
+					</span>
+				</a>
+			))
+		}
+	</div>
+</section>
+
+<!-- [05] Safety -->
+<section aria-labelledby="safety-title">
+	<p class="section-head label"><b>[05]</b> Safe by default</p>
+	<div class="intro">
+		<h2 class="h2" id="safety-title">Nothing ships to your users.</h2>
+	</div>
+	<div class="cells cells--4">
+		{
+			safety.map(({ title, body }) => (
+				<article class="cell">
+					<h3 class="h3">{title}</h3>
+					<p class="body">{body}</p>
+				</article>
+			))
+		}
+	</div>
+	<p class="foot-link">
+		<a class="label more" href={docs('guides/security')}>Security model <span aria-hidden="true">→</span></a>
+		<a class="label more" href={docs('guides/build-variants')}>Build variants <span aria-hidden="true">→</span></a>
+	</p>
+</section>
+
+<!-- [06] FAQ -->
+<section aria-labelledby="faq-title">
+	<p class="section-head label"><b>[06]</b> FAQ</p>
+	<h2 class="sr-only" id="faq-title">Frequently asked questions</h2>
+	<dl class="cells cells--3 faq">
+		{
+			faq.map(({ q, a }) => (
+				<div class="cell">
+					<dt class="h3">{q}</dt>
+					<dd class="body">{a}</dd>
+				</div>
+			))
+		}
+	</dl>
+</section>
+
+<!-- Finale -->
+<section class="finale" aria-label="Get started">
+	<a class="cta-bar" href={docs('start/quick-start')}>Get started <span aria-hidden="true">→</span></a>
+	<p class="giant" aria-hidden="true" translate="no">APPDUCT</p>
+</section>
+
+<script>
+	// Tabs: click, or arrow keys along the tab bar (WAI-ARIA tabs pattern).
+	for (const root of document.querySelectorAll<HTMLElement>('[data-tabs]')) {
+		const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role=tab]')];
+		const select = (tab: HTMLButtonElement) => {
+			for (const t of tabs) {
+				const on = t === tab;
+				t.setAttribute('aria-selected', String(on));
+				t.tabIndex = on ? 0 : -1;
+				document.getElementById(t.getAttribute('aria-controls')!)!.hidden = !on;
+			}
+		};
+		tabs.forEach((tab, i) => {
+			tab.addEventListener('click', () => select(tab));
+			tab.addEventListener('keydown', (e) => {
+				const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+				if (!step) return;
+				const next = tabs[(i + step + tabs.length) % tabs.length]!;
+				select(next);
+				next.focus();
+			});
+		});
+	}
+</script>
+
+<style>
+	section {
+		position: relative;
+	}
+	.intro {
+		padding: clamp(2.5rem, 6vw, 5rem) var(--pad) clamp(2rem, 4vw, 3rem);
+	}
+	.intro .h2 {
+		max-width: 24ch;
+	}
+	.more {
+		color: var(--text);
+		text-decoration: none;
+		white-space: nowrap;
+		transition: color 120ms;
+	}
+	.more:hover,
+	.cell--link:hover .more {
+		color: var(--accent);
+	}
+	.pkg {
+		color: var(--accent);
+		text-transform: none;
+		letter-spacing: 0.01em;
+		overflow-wrap: anywhere;
+	}
+
+	/* Tabs over a dithered stage, the window centred on it. */
+	.tab-bar {
+		display: grid;
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		border-top: 1px solid var(--line);
+	}
+	.tab {
+		min-height: 3rem;
+		padding: 0 0.5rem;
+		border: 0;
+		border-bottom: 2px solid transparent;
+		background: transparent;
+		color: var(--faint);
+		cursor: pointer;
+		transition:
+			color 120ms,
+			border-color 120ms;
+	}
+	.tab + .tab {
+		border-left: 1px solid var(--line);
+	}
+	.tab:hover {
+		color: var(--text);
+	}
+	.tab[aria-selected='true'] {
+		color: var(--text);
+		border-bottom-color: var(--accent);
+	}
+	.stage {
+		position: relative;
+		padding: clamp(2.5rem, 7vw, 5.5rem) var(--pad) 0;
+		border-top: 1px solid var(--line);
+		overflow: hidden;
+	}
+	.panel {
+		position: relative;
+	}
+	.stage-window {
+		max-width: 44rem;
+		margin-inline: auto;
+	}
+	.stage-window {
+		margin-bottom: clamp(2.5rem, 7vw, 5.5rem);
+	}
+	/* A solid strip under the stage: package, one line about it, the setup link. */
+	.panel-foot {
+		position: relative;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 1.5rem;
+		align-items: center;
+		margin-inline: calc(-1 * var(--pad));
+		padding: 1rem var(--pad);
+		background: var(--bg);
+		border-top: 1px solid var(--line);
+	}
+	.panel-foot .body {
+		flex: 1;
+		min-width: 14rem;
+	}
+
+	/* Hairline cells. */
+	.cells {
+		display: grid;
+		margin: 0;
+	}
+	.cells--3 {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+	.cells--4 {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+	.cells--5 {
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		border-top: 1px solid var(--line);
+	}
+	.cells--4 {
+		border-top: 1px solid var(--line);
+	}
+	.cell {
+		display: flex;
+		flex-direction: column;
+		gap: 0.875rem;
+		padding: var(--pad);
+		min-width: 0;
+		border-bottom: 1px solid var(--line);
+	}
+	.cell:not(:last-child) {
+		border-right: 1px solid var(--line);
+	}
+	.cell .body {
+		flex: 1;
+	}
+	.cell--link {
+		text-decoration: none;
+		transition: background-color 120ms;
+	}
+	.cell--link:hover {
+		background: var(--surface);
+	}
+	.cells--3 .cell svg {
+		margin-bottom: 2rem;
+	}
+	.faq dd {
+		margin: 0;
+	}
+	.faq .cell {
+		border-right: 1px solid var(--line);
+	}
+	.faq .cell:nth-child(3n) {
+		border-right: 0;
+	}
+
+	/* Agents: copy beside the config, then the skill command on a dithered band. */
+	.split {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: var(--pad);
+		align-items: center;
+		padding: clamp(2.5rem, 6vw, 5rem) var(--pad);
+	}
+	.split-copy {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1.25rem;
+	}
+	.clients {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin: 0;
+	}
+	.clients span {
+		padding: 0.375rem 0.625rem;
+		border: 1px solid var(--line-strong);
+		color: var(--muted);
+	}
+	.band {
+		position: relative;
+		display: grid;
+		place-items: center;
+		min-height: clamp(9rem, 18vw, 13rem);
+		padding: 2rem var(--pad);
+		border-top: 1px solid var(--line);
+		overflow: hidden;
+	}
+
+	.foot-link {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 2rem;
+		margin: 0;
+		padding: 1.25rem var(--pad);
+		border-bottom: 1px solid var(--line);
+	}
+
+	/* The close: Apex's accent bar, the install line, and the wordmark set as big as the frame. */
+	.finale {
+		margin-top: clamp(3rem, 8vw, 6rem);
+		container-type: inline-size;
+	}
+	.giant {
+		margin: 0;
+		padding: 7cqi 0 5cqi;
+		font-family: var(--font-display);
+		font-weight: 500;
+		font-size: 21.6cqi;
+		line-height: 0.8;
+		letter-spacing: -0.045em;
+		text-align: center;
+		color: var(--accent);
+		user-select: none;
+	}
+
+	@media (max-width: 64rem) {
+		.cells--5 {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+		.cells--4 {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.cells--5 .cell:nth-child(3n),
+		.cells--4 .cell:nth-child(2n) {
+			border-right: 0;
+		}
+	}
+	@media (max-width: 48rem) {
+		.tab-bar {
+			display: flex;
+			overflow-x: auto;
+		}
+		.tab {
+			flex: 0 0 auto;
+			padding: 0 1rem;
+		}
+		.cells--3,
+		.cells--4,
+		.cells--5,
+		.split {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.cell,
+		.faq .cell {
+			border-right: 0 !important;
+		}
+	}
+</style>

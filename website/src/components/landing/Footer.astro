@@ -1,0 +1,47 @@
+---
+// One line, Apex-style: the copyright on the left, mono links on the right.
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const links = [
+	{ text: 'Docs', href: `${base}/start/introduction/` },
+	{ text: 'llms.txt', href: `${base}/llms.txt` },
+	{ text: 'GitHub', href: 'https://github.com/callstackincubator/appduct' },
+	{ text: 'MIT license', href: 'https://github.com/callstackincubator/appduct/blob/main/LICENSE' },
+	{ text: 'Callstack', href: 'https://callstack.com/?utm_source=appduct&utm_medium=referral' },
+];
+---
+
+<footer class="frame footer">
+	<p class="label">© {new Date().getFullYear()} Appduct by Callstack</p>
+	<nav class="links" aria-label="Footer">
+		{links.map(({ text, href }) => <a class="label" href={href}>{text}</a>)}
+	</nav>
+</footer>
+
+<style>
+	.footer {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 1.25rem;
+		align-items: center;
+		justify-content: space-between;
+		min-height: 4rem;
+		padding: 0.75rem var(--pad);
+		border-top: 1px solid var(--line);
+		color: var(--muted);
+	}
+	.footer p {
+		margin: 0;
+	}
+	.links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 1.25rem;
+	}
+	.links a {
+		text-decoration: none;
+		transition: color 120ms;
+	}
+	.links a:hover {
+		color: var(--text);
+	}
+</style>

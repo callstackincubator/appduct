@@ -2,7 +2,8 @@
 
 Appduct lets a terminal, a test runner or an agent call functions inside a running app. Read
 [README.md](README.md) for what it does and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how
-the daemon, CLI, MCP server and SDKs fit together.
+the daemon, CLI, MCP server and SDKs fit together. For anything visual (the website, social
+cards, slides, diagrams, videos), follow [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Map
 
@@ -16,7 +17,7 @@ the daemon, CLI, MCP server and SDKs fit together.
 | `playground`, `playground-native`, `playground-flutter` | Expo app, native apps and a Flutter app (outside the pnpm workspace) registering the same five demo tools |
 | `skills/appduct` | The skill shipped to Appduct users; not for working on this repo |
 | `.agents/` | Agent resources: `memory/` (curated `LESSONS.md` read by section, raw `INBOX.md` write-only), `scripts/` (worktree create and remove, also wired as Claude Code hooks) |
-| `docs/` | Contributor docs: architecture, protocol, `internal/`. User docs live in `website/` |
+| `docs/` | Contributor docs: architecture, protocol, design, `internal/`. User docs live in `website/` |
 
 ## Commands
 

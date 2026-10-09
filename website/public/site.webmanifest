@@ -1,0 +1,14 @@
+{
+  "name": "Appduct",
+  "short_name": "Appduct",
+  "description": "Call functions inside your running app from a terminal, a test, or an AI agent.",
+  "start_url": "/appduct/",
+  "display": "browser",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    { "src": "/appduct/favicon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/appduct/apple-touch-icon.png", "type": "image/png", "sizes": "180x180" },
+    { "src": "/appduct/icon-512.png", "type": "image/png", "sizes": "512x512" }
+  ]
+}

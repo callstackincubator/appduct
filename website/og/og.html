@@ -1,0 +1,213 @@
+<!doctype html>
+<!--
+	The Open Graph card (1200x630) and, with ?format=banner, the README banner (1300x400).
+	scripts/og.mjs serves the website folder, opens this page in Chromium and saves screenshots.
+	Edit here, then run `pnpm og`.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<style>
+			@font-face {
+				font-family: 'Switzer';
+				src: url('/src/fonts/Switzer-Medium.woff2') format('woff2');
+				font-weight: 500;
+			}
+			@font-face {
+				font-family: 'Geist Mono';
+				src: url('/node_modules/@fontsource/geist-mono/files/geist-mono-latin-400-normal.woff2') format('woff2');
+				font-weight: 400;
+			}
+			:root {
+				--accent: #3ddcff;
+				--accent-rgb: 61 220 255;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				width: 1200px;
+				height: 630px;
+				overflow: hidden;
+				background: #0a0a0a;
+				color: #fff;
+				font-family: 'Switzer', sans-serif;
+			}
+			.card {
+				position: absolute;
+				inset: 0 48px;
+				border-inline: 1px solid rgb(255 255 255 / 0.1);
+			}
+			.top {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				padding: 52px 56px 0;
+			}
+			.wordmark {
+				padding: 2px 9px;
+				background: var(--accent);
+				color: #0a0a0a;
+				font-weight: 500;
+				font-size: 34px;
+				line-height: 1.2;
+				text-transform: uppercase;
+			}
+			.mono {
+				font-family: 'Geist Mono', monospace;
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+			}
+			.by {
+				padding: 6px 10px;
+				background: #1a1a1a;
+				color: rgb(255 255 255 / 0.45);
+				font-size: 15px;
+			}
+			h1 {
+				margin: 34px 56px 0;
+				max-width: 900px;
+				font-weight: 500;
+				font-size: 70px;
+				line-height: 1.04;
+				letter-spacing: -0.035em;
+			}
+			h1 em {
+				font-style: normal;
+				color: var(--accent);
+			}
+			.band {
+				position: absolute;
+				inset: auto 0 0;
+				height: 262px;
+				border-top: 1px solid rgb(255 255 255 / 0.1);
+			}
+			canvas {
+				image-rendering: pixelated;
+				position: absolute;
+				inset: 0;
+				width: 100%;
+				height: 100%;
+			}
+			.window {
+				position: absolute;
+				left: 56px;
+				top: 40px;
+				width: 560px;
+				background: #0a0a0a;
+				border: 1px solid rgb(255 255 255 / 0.2);
+				font-family: 'Geist Mono', monospace;
+			}
+			.bar {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				padding: 9px 14px;
+				border-bottom: 1px solid rgb(255 255 255 / 0.1);
+				font-size: 13px;
+				color: rgb(255 255 255 / 0.4);
+			}
+			.tag {
+				padding: 0 4px;
+				background: var(--accent);
+				color: #0a0a0a;
+				font-family: 'Switzer', sans-serif;
+				font-size: 12px;
+				text-transform: uppercase;
+			}
+			.code {
+				padding: 16px 18px 18px;
+				font-size: 18px;
+				white-space: nowrap;
+				line-height: 1.7;
+				color: #e9e9e9;
+			}
+			.accent {
+				color: var(--accent);
+			}
+			.platforms {
+				position: absolute;
+				right: 56px;
+				bottom: 26px;
+				padding: 6px 10px;
+				background: #0a0a0a;
+				font-size: 14px;
+				color: rgb(255 255 255 / 0.6);
+			}
+			/* The README banner: copy on the left, the ducts and the agent's call on the right. */
+			body[data-format='banner'] {
+				width: 1300px;
+				height: 400px;
+			}
+			/* No frame hairlines: on GitHub they read as a stray border. */
+			[data-format='banner'] .card {
+				inset: 0;
+				border-inline: 0;
+			}
+			[data-format='banner'] .top {
+				padding: 44px 96px 0;
+			}
+			[data-format='banner'] h1 {
+				margin: 30px 96px 0;
+				max-width: 520px;
+				font-size: 54px;
+			}
+			[data-format='banner'] .band {
+				inset: 0 0 0 648px;
+				height: auto;
+				border-top: 0;
+				border-left: 1px solid rgb(255 255 255 / 0.1);
+			}
+			[data-format='banner'] .window {
+				left: 50%;
+				top: 50%;
+				width: 520px;
+				translate: -50% -50%;
+			}
+			[data-format='banner'] .code {
+				font-size: 17px;
+			}
+			[data-format='banner'] .platforms {
+				left: -552px;
+				/* Lines up with the copy above, 96px from the left edge. */
+				right: auto;
+				bottom: 40px;
+				padding: 0;
+				background: none;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="card">
+			<div class="top">
+				<span class="wordmark">Appduct</span>
+				<span class="by mono">by Callstack</span>
+			</div>
+			<h1>Your app is an<br /><em>MCP server now.</em></h1>
+			<div class="band">
+				<canvas id="dither"></canvas>
+				<div class="window">
+					<div class="bar"><span class="tag">Appduct</span>agent</div>
+					<div class="code">
+						<div><span class="accent">●</span> appduct · seed_cart { "items": 3 }</div>
+						<div class="accent">✓ { "added": 3 }</div>
+					</div>
+				</div>
+				<span class="platforms mono">iOS · Android · React Native · Flutter · Web</span>
+			</div>
+		</div>
+		<script type="module">
+			import { drawDither } from '/og/dither.js';
+
+			const banner = new URLSearchParams(location.search).get('format') === 'banner';
+			if (banner) document.body.dataset.format = 'banner';
+			await document.fonts.ready;
+			const canvas = document.getElementById('dither');
+			const cols = Math.round(canvas.clientWidth / 2);
+			const rows = Math.round(canvas.clientHeight / 2);
+			drawDither(canvas, 'ducts', 6, [61, 220, 255], cols, rows, banner ? 0.92 : 0.86);
+			window.ogReady = true;
+		</script>
+	</body>
+</html>

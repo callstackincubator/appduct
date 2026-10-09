@@ -1,8 +1,8 @@
-<a href="https://callstackincubator.github.io/appduct/"><img src=".github/assets/readme-banner.png" alt="Appduct by Callstack: let agents and tests reach into your running iOS, Android, Flutter or React Native app" width="100%" /></a>
+<a href="https://callstackincubator.github.io/appduct/"><img src=".github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
 
 [![MIT license][license-badge]][license] [![npm downloads][npm-downloads-badge]][npm-downloads] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-Appduct lets a terminal, a test runner, or an AI agent call functions inside your running iOS, Android, Flutter, React Native or web app. Appduct calls these functions tools. Only the tools you register are reachable.
+Appduct lets a terminal, a test runner, or an AI agent call functions inside your running iOS, Android, React Native, Flutter or web app. Appduct calls these functions tools. Only the tools you register are reachable.
 
 ## Why you'd want this
 

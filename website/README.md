@@ -12,7 +12,10 @@ pnpm --filter @appduct/website dev        # http://localhost:4321/appduct/
 pnpm --filter @appduct/website build      # static site in website/dist
 pnpm --filter @appduct/website preview    # serve the built site
 pnpm --filter @appduct/website typecheck  # astro check
+pnpm --filter @appduct/website og         # re-render public/og.png and the PNG icons
 ```
+
+`og` needs Chromium for Playwright: `pnpm --filter appduct exec playwright-core install chromium`.
 
 The build fails on a broken internal link between docs pages (checked by `starlight-links-validator`).
 
@@ -21,10 +24,13 @@ The build fails on a broken internal link between docs pages (checked by `starli
 | Path | What it is |
 | --- | --- |
 | `src/content/docs/` | Docs pages, one `.md`/`.mdx` file per page. The folder decides the sidebar group (`start`, `install`, `guides`, `reference`); `sidebar.order` in the frontmatter decides the position. Link between pages with site URLs such as `/appduct/start/quick-start/`. |
-| `src/pages/index.astro` | The landing page. |
+| `src/pages/index.astro` | The landing page, outside Starlight. Its copy is in `src/landing/content.ts`, which also feeds `src/pages/index.md.ts` (the page as Markdown for agents). |
+| `src/components/landing/` | Landing page sections and animations. `dither.ts` draws the dithered pixel backgrounds. |
+| `src/layouts/Landing.astro` | The landing page's `<head>`: SEO and social tags, structured data, links for agents. |
+| `og/og.html`, `scripts/og.mjs` | The link-preview card. `pnpm og` renders it to `public/og.png`, plus the PNG icons from `public/favicon.svg`. |
 | `src/pages/[...slug].md.ts` | Serves every docs page as raw Markdown at `<page>.md`. |
-| `src/components/` | Starlight component overrides: header title and links, hero, footer, default dark theme. |
-| `src/styles/` | The Callstack theme (`theme.css`) and docs styling (`docs.css`). |
+| `src/components/` | Starlight component overrides: header title and links, footer, default dark theme. |
+| `src/styles/` | The landing page look (`landing.css`), the docs theme (`theme.css`) and docs styling (`docs.css`). |
 | `ec.config.mjs` | Code block themes. |
 | `astro.config.mjs` | Site config, sidebar, and the `llms.txt` setup. |
 

@@ -1,0 +1,151 @@
+---
+// "How it works", animated: a caller on the left, the app on the right, a pixel duct between
+// them. Three beats loop: an agent signs in on an iPhone, a test fills the cart on an Android
+// phone, a terminal opens checkout in a browser. No captions: the code and the screens tell it.
+import Dither from './Dither.astro';
+import MiniApp from './MiniApp.astro';
+import Window from './Window.astro';
+---
+
+<div
+	class="pipeline"
+	data-pipeline
+	role="img"
+	aria-label="An AI agent, a test and a terminal each call a function in a running app, and the app reacts."
+>
+	<Dither scene="ducts" focus={0.74} />
+	<div class="pipeline-inner">
+		<Window title="agent" titleId="pl-title" class="pl-window">
+			<div class="term" data-term></div>
+		</Window>
+		<div class="duct" data-duct>
+			<span class="pkt" data-pkt></span>
+			<span class="pkt pkt--back" data-pkt-back></span>
+		</div>
+		<div class="pl-slot">
+			<MiniApp kind="ios" />
+		</div>
+	</div>
+</div>
+
+<script>
+	// The animation code loads only when the animation first comes near the viewport.
+	import { whenNear } from './lazy';
+
+	const root = document.querySelector<HTMLElement>('[data-pipeline]');
+	if (root) whenNear(root, () => void import('./pipeline').then((m) => m.default(root)));
+</script>
+
+<style>
+	.pipeline {
+		position: relative;
+		border-top: 1px solid var(--line);
+		overflow: hidden;
+	}
+	.pipeline-inner {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: clamp(30rem, 48vw, 38rem);
+		padding: clamp(2rem, 5vw, 3.5rem) var(--pad);
+	}
+	.pl-window {
+		width: min(100%, 27rem);
+		height: 16rem;
+		flex-shrink: 1;
+	}
+	.term {
+		padding: 1rem;
+		font-family: var(--font-mono);
+		font-size: 0.8125rem;
+		line-height: 1.75;
+		color: var(--code-fg);
+		white-space: pre-wrap;
+		word-break: break-all;
+	}
+	.term :global(.ln) {
+		min-height: 1.75em;
+	}
+	.term :global(.p) {
+		color: var(--accent);
+	}
+	.term :global(.user) {
+		color: var(--text);
+	}
+	.term :global(.tool) {
+		color: var(--muted);
+	}
+	.term :global(.dim) {
+		color: var(--faint);
+	}
+	.term :global(.ok) {
+		margin-top: 0.5rem;
+		color: var(--accent);
+	}
+
+	/* The duct: a dotted track over the dithered ducts; packets step along it in pixels. */
+	.duct {
+		--track: rgb(255 255 255 / 0.5);
+		position: relative;
+		flex: 1 1 4rem;
+		max-width: 12rem;
+		min-width: 3rem;
+		height: 2.25rem;
+		background: repeating-linear-gradient(90deg, var(--track) 0 4px, transparent 4px 8px) center / 100% 2px no-repeat;
+	}
+	.duct.is-live {
+		--track: var(--accent);
+	}
+	.pkt {
+		position: absolute;
+		top: 50%;
+		left: 0;
+		width: 10px;
+		height: 10px;
+		margin: -5px 0 0 -5px;
+		background: var(--accent);
+		box-shadow:
+			-12px 0 0 rgb(var(--accent-rgb) / 0.5),
+			-24px 0 0 rgb(var(--accent-rgb) / 0.22);
+		opacity: 0;
+	}
+	.pkt--back {
+		background: var(--text);
+		box-shadow:
+			12px 0 0 rgb(255 255 255 / 0.45),
+			24px 0 0 rgb(255 255 255 / 0.2);
+	}
+	/* Sized for the largest frame (the browser), so switching devices never moves anything. */
+	.pl-slot {
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		width: 20rem;
+		height: 28rem;
+	}
+
+	@media (max-width: 48rem) {
+		.pipeline-inner {
+			flex-direction: column;
+		}
+		.pl-window {
+			height: 12rem;
+		}
+		.pl-slot {
+			width: 100%;
+		}
+		.duct {
+			flex: 0 0 3.5rem;
+			width: 2.25rem;
+			min-width: 0;
+			height: 3.5rem;
+			background: repeating-linear-gradient(180deg, var(--track) 0 4px, transparent 4px 8px) center / 2px 100% no-repeat;
+		}
+		.pkt {
+			top: 0;
+			left: 50%;
+			box-shadow: none;
+		}
+	}
+</style>

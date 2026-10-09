@@ -1,15 +1,14 @@
 ---
-// Docs pages keep Starlight's footer (edit link, last updated, pagination); every page, the
-// landing included, ends with the brand strip.
+// Docs pages keep Starlight's footer (edit link, last updated, pagination) and end with the
+// brand strip.
 import Default from '@astrojs/starlight/components/Footer.astro';
 import CallstackLogo from './CallstackLogo.astro';
 
-const isSplash = Astro.locals.starlightRoute.entry.data.template === 'splash';
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
-{!isSplash && <Default />}
-<div class:list={['cs-footer', { 'cs-footer--splash': isSplash }]}>
+<Default />
+<div class="cs-footer">
 	<a class="made-at" href="https://callstack.com/?utm_source=appduct-docs&utm_medium=referral">
 		<span>Made at</span>
 		<CallstackLogo class="logo" />
@@ -36,9 +35,6 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 		letter-spacing: 0.055em;
 		text-transform: uppercase;
 		color: var(--cs-muted);
-	}
-	.cs-footer--splash {
-		margin-top: 0;
 	}
 	.cs-footer a {
 		color: inherit;
