@@ -46,16 +46,18 @@ export const relayPage = (page: PageChannel, link: RelayLink, openDaemonSocket: 
   };
 
   page.onBindingCall((json) => {
-    const message = JSON.parse(json) as { kind: string; text?: string; code?: number; reason?: string };
+    const message = JSON.parse(json) as { kind: string; socket?: number; text?: string; code?: number; reason?: string };
     if (message.kind === "open") {
       closeCurrent(GOING_AWAY, "superseded");
+      // Echoed back, so the page can drop what was sent for a socket it has replaced since.
+      const tag = { socket: message.socket };
       const socket: DaemonSocket = openDaemonSocket(url, {
-        open: () => current === socket && tellPage({ kind: "open" }),
-        message: (text) => current === socket && tellPage({ kind: "message", text }),
+        open: () => current === socket && tellPage({ kind: "open", ...tag }),
+        message: (text) => current === socket && tellPage({ kind: "message", ...tag, text }),
         close: (code, reason) => {
           if (current !== socket) return;
           current = undefined;
-          tellPage({ kind: "close", code, reason });
+          tellPage({ kind: "close", ...tag, code, reason });
         },
       });
       current = socket;

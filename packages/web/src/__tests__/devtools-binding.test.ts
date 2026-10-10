@@ -24,7 +24,7 @@ describe("the devtools binding transport", () => {
 
   it("tags each daemon socket it asks for, so the relay can say which one it means", () => {
     const { devtools, socket, sent } = setup();
-    socket.close(1001, "superseded");
+    socket.close(1000, "superseded");
 
     devtools.transport.open("ws://127.0.0.1:49152", { open() {}, message() {}, close() {}, error() {} });
 
@@ -36,7 +36,7 @@ describe("the devtools binding transport", () => {
 
   it("ignores what the relay says about a socket the page has since replaced", () => {
     const { devtools, socket } = setup();
-    socket.close(1001, "superseded");
+    socket.close(1000, "superseded");
     const events: string[] = [];
     devtools.transport.open("ws://127.0.0.1:49152", {
       open: () => events.push("open"),
