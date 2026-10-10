@@ -35,6 +35,20 @@ internal class FakeAppductTransport(
 
     @Volatile var nextConnectError: Throwable? = null
 
+    /** When `true`, the next [connect] stays pending until [failHeldConnect] ends it, like a real
+     * connect whose socket has not opened yet. */
+    @Volatile var holdNextConnect = false
+
+    @Volatile private var heldConnect: ((Throwable?) -> Unit)? = null
+
+    val hasHeldConnect: Boolean get() = heldConnect != null
+
+    fun failHeldConnect(error: Throwable) {
+        val held = heldConnect
+        heldConnect = null
+        held?.invoke(error)
+    }
+
     @Volatile var nextSendError: Throwable? = null
 
     /** When `true`, [send] hands its `completion` to a fresh background thread (after a short real
@@ -69,6 +83,11 @@ internal class FakeAppductTransport(
             return
         }
         rawState = "connecting"
+        if (holdNextConnect) {
+            holdNextConnect = false
+            heldConnect = completion
+            return
+        }
         completion(null)
     }
 
