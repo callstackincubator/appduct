@@ -103,3 +103,7 @@ One note per PR that hit friction, four lines:
   What went wrong: making a native claim retryable surfaced three successive iOS/Android races (connect error vs close event, stale close settling the retry, an await in connect() after socketTask is set), one per review round, and hit the loop limit.
   Would have prevented it: when changing when a socket failure settles a handshake, first list every await and every callback that can fire between creating the socket and the ack, and give each attempt its own identity (task or epoch) checked after every await.
   Cost: two review rounds, loop limit
+- 2026-10-10 #246 skill: implement-issue
+  What went wrong: a round reported the web e2e "a page on a foreign origin is refused" timing out as unrelated ("this change does not touch that package"), though the PR had changed the web core's claim handling; it was a real regression caught a round later.
+  Would have prevented it: before calling a failing test unrelated, check whether the PR's diff touches any code that test runs, and run it on main if unsure.
+  Cost: extra fix round
