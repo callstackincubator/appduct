@@ -172,10 +172,10 @@ void main() {
       final counter = PlaygroundCounter();
       registerPlaygroundTools(appduct, counter);
 
-      socket.receive(_call('c1', 'sum', {'a': 1, 'b': 2}));
+      socket.receive(_call('c1', 'sum', {'a': 1.5, 'b': 2}));
       await _flush();
 
-      expect(_sent(socket, 'tool_result').single['result'], {'total': 3});
+      expect(_sent(socket, 'tool_result').single['result'], {'total': 3.5});
       expect(counter.count, 1);
     });
 
@@ -226,10 +226,24 @@ void main() {
       socket.receive(_call('c1', 'throwing_tool'));
       await _flush();
 
+      final error = _sent(socket, 'tool_error').single['error']! as Map;
+      expect(error['type'], 'tool_execution_error');
+      expect(error['message'], 'throwing_tool always fails on purpose.');
+    });
+
+    test('declares playground_ping with the contract description', () async {
+      final (appduct, socket) = await _connected();
+      registerPlaygroundTools(appduct, PlaygroundCounter());
+      await _flush();
+
+      final delta = _sent(socket, 'event_registry_delta').single;
+      final event = delta['event']! as Map;
+      expect(event['name'], 'playground_ping');
       expect(
-        (_sent(socket, 'tool_error').single['error']! as Map)['type'],
-        'tool_execution_error',
+        event['description'],
+        'The Send playground_ping button on the Status screen was pressed.',
       );
+      expect((event['payload_schema']! as Map)['required'], ['at']);
     });
 
     test('the returned function unregisters every tool', () async {
@@ -244,38 +258,124 @@ void main() {
   });
 
   group('PlaygroundApp', () {
-    testWidgets('sends playground_ping from the Status tab', (tester) async {
-      final (appduct, socket) = await _connected();
+    /// What a test runner reads through accessibility for the element carrying [id].
+    String valueOf(WidgetTester tester, String id) =>
+        tester.getSemantics(find.bySemanticsIdentifier(id)).label;
 
+    Future<Appduct> launch(WidgetTester tester) async {
+      final (appduct, _) = await _connected();
       await tester.pumpWidget(PlaygroundApp(appduct: appduct));
-      await tester.tap(find.text('Status'));
+      await tester.pump();
+      return appduct;
+    }
+
+    testWidgets('shows call-count as the bare integer, 0 at launch', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await launch(tester);
+
+      expect(valueOf(tester, 'call-count'), '0');
+      handle.dispose();
+    });
+
+    testWidgets('switches screens with tab-tools and tab-status', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await launch(tester);
+
+      await tester.tap(find.bySemanticsIdentifier('tab-status'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Send playground_ping'));
+      expect(find.bySemanticsIdentifier('connection-state'), findsOneWidget);
+
+      await tester.tap(find.bySemanticsIdentifier('tab-tools'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsIdentifier('call-count'), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('shows connection-state as the lowercase state name', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await launch(tester);
+      await tester.tap(find.bySemanticsIdentifier('tab-status'));
+      await tester.pumpAndSettle();
+
+      expect(valueOf(tester, 'connection-state'), 'active');
+      handle.dispose();
+    });
+
+    testWidgets('shows none for last-session-event and last-ping at launch', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await launch(tester);
+      await tester.tap(find.bySemanticsIdentifier('tab-status'));
+      await tester.pumpAndSettle();
+
+      expect(valueOf(tester, 'last-session-event'), 'none');
+      expect(valueOf(tester, 'last-ping'), 'none');
+      handle.dispose();
+    });
+
+    testWidgets('ping-button posts playground_ping, last-ping shows its at', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final (appduct, socket) = await _connected();
+      await tester.pumpWidget(PlaygroundApp(appduct: appduct));
+      await tester.tap(find.bySemanticsIdentifier('tab-status'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsIdentifier('ping-button'));
       await tester.pump();
       await _flush();
 
       final event = _sent(socket, 'event').single;
       expect(event['name'], 'playground_ping');
-      expect((event['payload']! as Map)['at'], isA<int>());
+      final at = (event['payload']! as Map)['at'];
+      expect(at, isA<int>());
+      expect(valueOf(tester, 'last-ping'), '$at');
+      handle.dispose();
     });
 
-    testWidgets('lists the tools it registered on the Tools tab', (
-      tester,
-    ) async {
-      final (appduct, _) = await _connected();
-
+    testWidgets('counts a sum call on call-count', (tester) async {
+      final handle = tester.ensureSemantics();
+      final (appduct, socket) = await _connected();
       await tester.pumpWidget(PlaygroundApp(appduct: appduct));
       await tester.pump();
 
-      for (final name in [
-        'sum',
-        'call_count',
-        'reset_counter',
-        'slow_task',
-        'throwing_tool',
-      ]) {
-        expect(find.text(name), findsOneWidget);
-      }
+      socket.receive(_call('c1', 'sum', {'a': 1, 'b': 2}));
+      await tester.runAsync(_flush);
+      await tester.pump();
+
+      expect(valueOf(tester, 'call-count'), '1');
+      handle.dispose();
+    });
+
+    testWidgets('a scheme:///status link opens Status, session stays active', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final appduct = await launch(tester);
+
+      await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+        'flutter/navigation',
+        const JSONMethodCodec().encodeMethodCall(
+          const MethodCall('pushRouteInformation', {
+            'location': 'appduct-flutter:///status',
+          }),
+        ),
+        (_) {},
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsIdentifier('connection-state'), findsOneWidget);
+      expect(valueOf(tester, 'connection-state'), 'active');
+      expect(appduct.state.value, AppductState.active);
+      handle.dispose();
     });
   });
 }
