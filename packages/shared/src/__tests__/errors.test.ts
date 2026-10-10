@@ -1,9 +1,32 @@
 import { describe, expect, test } from "vitest";
 
-import { ERROR_TYPES, isKnownErrorType, isToolErrorType, TOOL_ERROR_TYPES } from "../domains/errors.js";
+import { isKnownErrorType, isToolErrorType } from "../domains/errors.js";
+
+// Written out by hand, not read from ERROR_TYPES / TOOL_ERROR_TYPES, so dropping a type from the
+// source fails here instead of silently shrinking the list under test.
+const TOOL_ERROR_TYPE_NAMES = [
+  "tool_not_found",
+  "tool_input_validation_error",
+  "tool_output_validation_error",
+  "tool_execution_error",
+  "tool_serialization_error",
+  "tool_timeout",
+  "tool_cancelled",
+];
+
+const ERROR_TYPE_NAMES = [
+  "no_session",
+  "ambiguous_session",
+  "unknown_session",
+  "session_not_active",
+  ...TOOL_ERROR_TYPE_NAMES,
+  "session_suspended",
+  "policy_denied",
+  "invalid_request",
+];
 
 describe("isKnownErrorType", () => {
-  test.each(ERROR_TYPES.map((type) => [type] as const))("accepts %s", (type) => {
+  test.each(ERROR_TYPE_NAMES.map((type) => [type] as const))("accepts %s", (type) => {
     expect(isKnownErrorType(type)).toBe(true);
   });
 
@@ -19,7 +42,7 @@ describe("isKnownErrorType", () => {
 });
 
 describe("isToolErrorType", () => {
-  test.each(TOOL_ERROR_TYPES.map((type) => [type] as const))("accepts %s", (type) => {
+  test.each(TOOL_ERROR_TYPE_NAMES.map((type) => [type] as const))("accepts %s", (type) => {
     expect(isToolErrorType(type)).toBe(true);
   });
 
