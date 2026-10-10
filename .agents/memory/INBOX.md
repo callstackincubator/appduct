@@ -96,3 +96,6 @@ One note per PR that hit friction, four lines:
   Happened: round 1 found UIKit background time ended after a 2 s delay in the expiry handler and before the close frame on disconnect()/destroy(), plus README quoting `sessions ls` output that the CLI does not print.
   Rule: when wrapping an OS lifetime grant, end it inside the OS callback and only after any pending close frame is sent; quote CLI output from the label table, not from the wire value.
   Evidence: 4 should-fix findings on #142 round 1, all fixed in round 2.
+- 2026-10-10 #232 skill: implement-issue
+  What went wrong: Issue #227 required Flutter to show the session alias and last event on screen and also banned SDK changes, but the Flutter SDK exposes only the connection state, so implementation got blocked.
+  Would have prevented it: file-issue should check that every on-screen value a playground criterion asks for is exposed by each SDK before marking the issue ready.
