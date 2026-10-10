@@ -1,10 +1,10 @@
 ---
 // A dithered pixel scene in the accent colour, drawn on a canvas: the Apex "pixel photo" look,
 // generated instead of shipped as an image. It fills its positioned parent. The scenes live in
-// dither.ts: `ducts` (tubes bundling into the app, pulses running along them) and `flow` (soft
-// bands of light).
+// dither.ts: `ducts` (tubes bundling into the app, pulses running along them), `broken` (the
+// same with the front tube broken off, for the 404 page) and `flow` (soft bands of light).
 interface Props {
-	scene?: 'ducts' | 'flow';
+	scene?: 'ducts' | 'broken' | 'flow';
 	/** Where the ducts bundle, 0..1 across: put it behind the app. */
 	focus?: number;
 	/** Size of one dither cell in CSS pixels. */
