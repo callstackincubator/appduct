@@ -124,12 +124,11 @@ extension AppductClient {
   }
 
   /// The socket failed: it closed before the ack, or never opened (refused, reset during TLS, timed
-  /// out). Anything else the transport throws is a refusal of the connect itself.
+  /// out), and its close event says so. Anything else the transport throws is a refusal of the
+  /// connect itself.
   private func isRetryableClaimFailure(_ error: Error) -> Bool {
-    if let closed = error as? AppductHandshakeClosedError {
-      return !isTerminalHandshakeRejection(closed) && !closed.pinRejected
-    }
-    return error is AppductSocketConnectError
+    guard let closed = error as? AppductHandshakeClosedError else { return false }
+    return !isTerminalHandshakeRejection(closed) && !closed.pinRejected
   }
 
   private func waitBeforeClaimRetry(afterMs delay: Double) async {
@@ -275,6 +274,10 @@ extension AppductClient {
         do {
           try await self.transport.connect(options: options)
         } catch {
+          // A socket that failed is reported twice: the connect throws, then the transport emits the
+          // socket's close. Only the close settles the attempt, so it cannot land on the retry, and
+          // the transport has torn the socket down by the time a retry connects.
+          if error is AppductSocketConnectError { return }
           // A connect that fails after a newer one replaced it must not settle that newer attempt.
           if self.pendingAttempt === attempt {
             self.settlePendingAttempt(.failure(error))
@@ -697,9 +700,6 @@ extension AppductClient {
   /// last-resort dump of the error for anything else.
   private func describeResumeError(_ error: Error) -> String {
     if let handshakeError = error as? AppductHandshakeClosedError { return handshakeError.message }
-    if let socketError = error as? AppductSocketConnectError {
-      return (socketError.underlying as NSError).localizedDescription
-    }
     if let jsonError = error as? AppductJSONError { return jsonError.message }
     if let localizedError = error as? LocalizedError, let description = localizedError.errorDescription {
       return description
