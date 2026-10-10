@@ -24,12 +24,12 @@ type DriveStep = { drive: string; [field: string]: Json };
 type ExpectStep = { expect: string; [field: string]: Json };
 type Step = DriveStep | ExpectStep;
 const isDrive = (step: Step): step is DriveStep => "drive" in step;
-type Scenario = { name: string; startMs: number; random: number; steps: Step[] };
+type Scenario = { name: string; startMs: number; random: number; steps: Step[]; notOnWeb?: boolean };
 /** One thing the core did, in the shape an `expect` step spells out: `{ kind, ...fields }`. */
 type Output = { kind: string; [field: string]: Json };
 
 const SCENARIOS_FILE = fileURLToPath(new URL("../../../native/fixtures/session-scenarios.json", import.meta.url));
-const scenarios = JSON.parse(readFileSync(SCENARIOS_FILE, "utf8")) as Scenario[];
+const scenarios = (JSON.parse(readFileSync(SCENARIOS_FILE, "utf8")) as Scenario[]).filter((scenario) => !scenario.notOnWeb);
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -63,9 +63,17 @@ const replay = async (scenario: Scenario, expectTimeoutMs = 1000): Promise<void>
   // Opens each socket the core made since the last look, which makes the core send its first frame,
   // and turns that frame into the `connect` output. Every later frame is a `send` output.
   const framesSeen = new Map<MemoryConnection, number>();
+  let failNextConnect = false;
   const collectWire = () => {
     for (const connection of transport.connections) {
       let seen = framesSeen.get(connection);
+      if (seen === undefined && failNextConnect) {
+        // The socket never opens: nothing reaches the wire, so there is no `connect` output.
+        failNextConnect = false;
+        framesSeen.set(connection, 0);
+        connection.drop("Could not connect");
+        continue;
+      }
       if (seen === undefined) {
         connection.open();
         const first = connection.frames()[0];
@@ -75,6 +83,7 @@ const replay = async (scenario: Scenario, expectTimeoutMs = 1000): Promise<void>
           mode: first.type === "session_resume" ? "resume" : "claim",
           sessionId: first.session_id,
           ...(typeof first.resume_token === "string" ? { resumeToken: first.resume_token } : {}),
+          ...(typeof first.token === "string" ? { token: first.token } : {}),
         });
         seen = 1;
       }
@@ -114,6 +123,9 @@ const replay = async (scenario: Scenario, expectTimeoutMs = 1000): Promise<void>
         break;
       case "drop":
         latest().drop();
+        break;
+      case "failNextConnect":
+        failNextConnect = true;
         break;
       case "advance":
         clock.advance(step.ms as number);
@@ -197,7 +209,7 @@ describe("the scenario runner", () => {
   };
   const claimThenActive: Step[] = [
     { drive: "connect", sessionId: SESSION_ID, token: "claim-token", expiresAt: 1700000300 },
-    { expect: "connect", mode: "claim", sessionId: SESSION_ID },
+    { expect: "connect", mode: "claim", sessionId: SESSION_ID, token: "claim-token" },
     { expect: "state", state: "connecting" },
     { drive: "receive", frame: ack },
     { expect: "state", state: "active" },

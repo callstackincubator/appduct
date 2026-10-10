@@ -69,6 +69,10 @@ public actor AppductClient {
   var pendingAttempt: PendingAttempt?
   var reconnectAttempt: Int = 0
   var reconnectTimerHandle: (any AppductTimerHandle)?
+  /// The `connect()` that is waiting out the backoff before it retries its claim, and its timer.
+  /// Only `connect`, `disconnect` and `destroy` end the wait early; going to the background does not.
+  var claimRetryWait: CheckedContinuation<Void, Never>?
+  var claimRetryTimerHandle: (any AppductTimerHandle)?
   var graceTimerHandle: (any AppductTimerHandle)?
   var resumeInFlight = false
   var backgrounded: Bool
@@ -317,6 +321,7 @@ public actor AppductClient {
   public func disconnect() async {
     epoch += 1
     clearReconnectTimer()
+    endClaimRetryWait()
     clearGraceTimer()
 
     let hadSession = heldSession != nil
@@ -351,6 +356,7 @@ public actor AppductClient {
   public func destroy() async {
     destroyed = true
     clearReconnectTimer()
+    endClaimRetryWait()
     clearGraceTimer()
     settlePendingAttempt(.failure(AppductClientClosedError()))
     abortAllInFlight()

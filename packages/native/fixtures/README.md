@@ -142,7 +142,7 @@ Hand-written directly as JSON, sourced from the table in `docs/PROTOCOL.md` §7.
 
 ### `session-scenarios.json`
 
-Array of `{ name, startMs, random, steps }`. Each scenario is a script for one fresh core: `startMs`
+Array of `{ name, startMs, random, steps, notOnWeb? }`. Each scenario is a script for one fresh core: `startMs`
 is the clock's starting Unix time in milliseconds, `random` is the constant the jitter source
 returns, and `steps` run in order. With `random` at 0.5, the first reconnect delay is 250 ms, and
 the second consecutive one 500 ms. The scenarios here cover the paths where session behaviour has
@@ -153,6 +153,11 @@ time passes the 30 s backoff cap; and tool calls: a call that outlasts its `time
 and a socket drop cancelling a call in flight with `session_suspended` and sending nothing. After a
 drop, the `state` output comes before the `cancel` output in every core.
 
+A scenario with `"notOnWeb": true` is skipped by the web runner, because a browser cannot tell a
+refused connection from a daemon's 403 on the upgrade (a foreign origin), so the web core retries a
+claim only when its socket opened and then dropped, and ends one that closed before opening
+(`failNextConnect`). The native runners replay every scenario.
+
 A step either drives the core, `{ "drive": <name>, ... }`, or expects an output,
 `{ "expect": <name>, ... }`.
 
@@ -162,6 +167,7 @@ A step either drives the core, `{ "drive": <name>, ... }`, or expects an output,
 | `receive` | `frame` | the daemon sends a frame on the newest connection |
 | `close` | `code`, `reason?` | the daemon closes the newest connection |
 | `drop` | | the newest connection dies with no close code |
+| `failNextConnect` | | the next connection attempt fails before its socket opens (refused, reset during TLS, timed out). Nothing reaches the wire, so that attempt has no `connect` output. A runner whose transport reports the failure and the socket's close as two signals delivers both, the close right after the failure |
 | `advance` | `ms` | moves the clock forward, running every timer that falls due |
 | `registerTool` | `descriptor` | registers a tool, in wire form; a call to it is answered by `respond` |
 | `respond` | `call`, `result` or `error` | answers the call with that id; an `error` is `{ type, message }` |
@@ -171,7 +177,7 @@ Outputs are on two channels. The wire channel is what the core asked of the conn
 
 | Expect | Fields | Is |
 | --- | --- | --- |
-| `connect` | `mode` (`claim` or `resume`), `sessionId`, `resumeToken?` | a new connection whose first frame is `session_claim` or `session_resume` |
+| `connect` | `mode` (`claim` or `resume`), `sessionId`, `token?` (a claim), `resumeToken?` (a resume) | a new connection whose first frame is `session_claim` or `session_resume` |
 | `send` | `frame` | any later frame the core sent |
 
 The app channel is what the core told the app:
@@ -235,7 +241,7 @@ Every scenario here gives the session a 120 s grace window, so the clock can pas
 cap without the session expiring. The scenarios cover: backgrounding an active session suspends it
 and no reconnect follows, even after the clock passes the backoff cap; foregrounding resumes at
 once, without waiting for backoff; backgrounding during a backoff wait cancels the wait, so no connect
-follows even after the delay passes, until the app returns; and backgrounding with a call in flight cancels the call with `session_suspended`.
+follows even after the delay passes, until the app returns; backgrounding with a call in flight cancels the call with `session_suspended`; and backgrounding while a claim waits out its backoff leaves that wait alone, so the retry comes at the delay and not at once.
 
 ### `spki-pin.json`
 

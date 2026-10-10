@@ -35,7 +35,13 @@ export type ConnectionHandlers = {
   /** A frame after the ack, for the session this connection holds. */
   onMessage(message: Record<string, unknown>): void;
   /** The socket closed on its own. Not called for a close this side asked for. */
-  onClose(info: { code: number | undefined; reason: string | undefined; error: string | undefined }): void;
+  onClose(info: {
+    code: number | undefined;
+    reason: string | undefined;
+    error: string | undefined;
+    /** Whether the socket reached open before it closed. */
+    opened: boolean;
+  }): void;
 };
 
 export type Connection = {
@@ -58,6 +64,7 @@ type Current = {
   options: ConnectionOptions;
   socket: Socket | undefined;
   phase: "connecting" | "active" | "failed";
+  opened: boolean;
   lastError: string | undefined;
   /** Why this side closed the socket, reported from `onClose` in place of the echoed wire code. */
   closedByCore: { code: 1008 | 1011; reason: string } | undefined;
@@ -160,12 +167,13 @@ export const createConnection = (ports: WebCorePorts, handlers: ConnectionHandle
 
   return {
     open(options) {
-      const entry: Current = { options, socket: undefined, phase: "connecting", lastError: undefined, closedByCore: undefined };
+      const entry: Current = { options, socket: undefined, phase: "connecting", opened: false, lastError: undefined, closedByCore: undefined };
       current = entry;
       try {
         entry.socket = (options.transport === "devtools" ? ports.devtoolsTransport : ports.transport).open(formatUrl(options.ip, options.port), {
           open() {
             if (current !== entry || !entry.socket) return;
+            entry.opened = true;
             try {
               entry.socket.send(JSON.stringify(firstFrame(options)));
             } catch {
@@ -184,7 +192,7 @@ export const createConnection = (ports: WebCorePorts, handlers: ConnectionHandle
             if (entry.closedByCore) ({ code, reason } = entry.closedByCore);
             if (code === 1000) sessionStore.clear();
             else markDisconnected(options.sessionId);
-            handlers.onClose({ code, reason: reason || undefined, error: entry.lastError });
+            handlers.onClose({ code, reason: reason || undefined, error: entry.lastError, opened: entry.opened });
           },
         });
       } catch (error) {

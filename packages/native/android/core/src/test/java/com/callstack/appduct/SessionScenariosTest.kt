@@ -60,7 +60,7 @@ class SessionScenariosTest {
     private val claimThenActive =
         listOf(
             """{"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300}""",
-            """{"expect":"connect","mode":"claim","sessionId":"session-1"}""",
+            """{"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"}""",
             """{"expect":"state","state":"connecting"}""",
             """{"drive":"receive","frame":$ack}""",
             """{"expect":"state","state":"active"}""",
@@ -273,6 +273,11 @@ private class ScenarioReplay(private val scenario: JSONObject) {
 
             "drop" -> fake.simulateClose(null, null)
 
+            "failNextConnect" -> {
+                fake.failNextConnectOnce = java.io.IOException("Failed to connect to /127.0.0.1:8443")
+                fake.closeAfterFailedConnect = true
+            }
+
             "advance" -> {
                 // Let the client arm its timers before time moves.
                 scheduler.runCurrent()
@@ -353,7 +358,10 @@ private class ScenarioReplay(private val scenario: JSONObject) {
                     .put("kind", "connect")
                     .put("mode", if (event.options["resumeToken"] == null) "claim" else "resume")
                     .put("sessionId", event.options["sessionId"])
-                    .also { output -> event.options["resumeToken"]?.let { output.put("resumeToken", it) } }
+                    .also { output ->
+                        event.options["resumeToken"]?.let { output.put("resumeToken", it) }
+                        event.options["token"]?.let { output.put("token", it) }
+                    }
 
             is FakeWireEvent.Send -> JSONObject().put("kind", "send").put("frame", JSONObject(event.text))
 

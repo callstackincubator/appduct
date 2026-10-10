@@ -71,6 +71,14 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   /// Set by a test to make the next `connect(options:)` throw instead of succeeding.
   var connectError: (@Sendable () -> Error)?
 
+  /// Set by a test to make the next `connect(options:)`, and only that one, throw as a socket that
+  /// never opened does: nothing reaches the wire.
+  var failNextConnectOnce: (@Sendable () -> Error)?
+
+  /// With `failNextConnectOnce`: the socket's close event follows the failed connect, as a real
+  /// socket reports both. Without it a test delivers the close itself, and when it likes.
+  var closeAfterFailedConnect = false
+
   /// Set by a test to keep the next `connect(options:)` pending until `failHeldConnect` ends it,
   /// like a real connect whose first frame is still being sent.
   var holdNextConnect = false
@@ -127,10 +135,20 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   }
 
   func connect(options: AppductConnectOptions) async throws {
-    withLock {
+    let failOnce = withLock { () -> (@Sendable () -> Error)? in
       _connectCallCount += 1
       _lastConnectOptions = options
-      _wireEvents.append(.connect(options))
+      let failOnce = failNextConnectOnce
+      failNextConnectOnce = nil
+      if failOnce == nil { _wireEvents.append(.connect(options)) }
+      return failOnce
+    }
+    if let failOnce {
+      if closeAfterFailedConnect {
+        closeAfterFailedConnect = false
+        Task { self.simulateClose(code: nil, reason: nil) }
+      }
+      throw failOnce()
     }
 
     if let connectError {

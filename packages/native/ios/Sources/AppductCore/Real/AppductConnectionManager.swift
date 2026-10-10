@@ -504,9 +504,24 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
         "device_model": device.model,
         "device_os": device.os,
       ]
+
+      // The device read above suspends this call. If the socket failed meanwhile (its close event
+      // is already out) and the client retried, `socketTask` is the retry's socket, which this
+      // claim must not be sent on.
+      guard socketTask === task else {
+        throw AppductSocketConnectError(underlying: AppductModuleError(message: "Appduct socket closed before the claim was sent."))
+      }
     }
 
-    try await sendRawObject(firstFrame, requireActiveSession: false)
+    do {
+      try await sendRawObject(firstFrame, requireActiveSession: false)
+    } catch let error as AppductModuleError {
+      throw error
+    } catch {
+      // The socket failed before it opened, and its close event follows. The client settles on that
+      // event, with the error details published before it saying whether a pin check failed.
+      throw AppductSocketConnectError(underlying: error)
+    }
   }
 
   public func send(message: String) async throws {
@@ -991,7 +1006,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
             hint: "Verify cliPins matches the fingerprint from appduct keygen and rebuild the native app."
           )
         )
-        completionHandler(.cancelAuthenticationChallenge, nil)
+          completionHandler(.cancelAuthenticationChallenge, nil)
         return
       }
 
