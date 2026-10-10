@@ -1,7 +1,8 @@
 import { defineConfig } from "vitest/config";
 
 // Unit and integration files run in parallel. The e2e files (real daemons, browsers and bundlers,
-// wall-clock timeouts) flake under that CPU contention, so they run one at a time, after the rest.
+// wall-clock timeouts) run after them, two at a time, so they never compete with the unit files
+// for CPU and only lightly with each other.
 const E2E = ["src/__tests__/e2e/**/*.test.ts", "src/__tests__/**/*.e2e.test.ts"];
 
 export default defineConfig({
@@ -13,7 +14,7 @@ export default defineConfig({
       },
       {
         extends: true,
-        test: { name: "e2e", include: E2E, fileParallelism: false, sequence: { groupOrder: 1 } },
+        test: { name: "e2e", include: E2E, maxWorkers: 2, sequence: { groupOrder: 1 } },
       },
     ],
   },
