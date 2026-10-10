@@ -10,6 +10,7 @@ context: fork
 
 Output is one issue comment under 300 words and a label change. You do not fix anything,
 build apps or run simulators. Load the `architecture` skill; the fix you propose must fit it.
+Load `cite-evidence`; a root cause in a dependency is cited from its source.
 If told not to post, print the comment and the label commands instead.
 
 Read the `triage-issue` section of `.agents/memory/LESSONS.md` before starting, plus General.
