@@ -141,7 +141,7 @@ Hand-written directly as JSON, sourced from the table in `docs/PROTOCOL.md` §7.
 
 ### `session-scenarios.json`
 
-Array of `{ name, startMs, random, steps }`. Each scenario is a script for one fresh core: `startMs`
+Array of `{ name, startMs, random, steps, notOnWeb? }`. Each scenario is a script for one fresh core: `startMs`
 is the clock's starting Unix time in milliseconds, `random` is the constant the jitter source
 returns, and `steps` run in order. With `random` at 0.5, the first reconnect delay is 250 ms, and
 the second consecutive one 500 ms. The scenarios here cover the paths where session behaviour has
@@ -151,6 +151,11 @@ time passes the 30 s backoff cap; and tool calls: a call that outlasts its `time
 `tool_timeout`, a `tool_cancel` arriving before the timeout, a late result putting nothing on the wire,
 and a socket drop cancelling a call in flight with `session_suspended` and sending nothing. After a
 drop, the `state` output comes before the `cancel` output in every core.
+
+A scenario with `"notOnWeb": true` is skipped by the web runner, because a browser cannot tell a
+refused connection from a daemon's 403 on the upgrade (a foreign origin), so the web core retries a
+claim only when its socket opened and then dropped, and ends one that closed before opening
+(`failNextConnect`). The native runners replay every scenario.
 
 A step either drives the core, `{ "drive": <name>, ... }`, or expects an output,
 `{ "expect": <name>, ... }`.

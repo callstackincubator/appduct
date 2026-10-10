@@ -30,6 +30,8 @@ class HandshakeClosedError extends Error {
     message: string,
     readonly code: number | undefined,
     readonly reason: string | undefined,
+    /** Whether the socket opened before it closed. */
+    readonly opened: boolean,
   ) {
     super(message);
   }
@@ -199,8 +201,10 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
       }
     },
 
-    onClose({ code, reason, error }) {
-      const settled = settlePending(new HandshakeClosedError(reason ?? error ?? "Appduct connection closed.", code, reason));
+    onClose({ code, reason, error, opened }) {
+      const settled = settlePending(
+        new HandshakeClosedError(reason ?? error ?? "Appduct connection closed.", code, reason, opened),
+      );
       if (settled) return;
       onSocketLost(code, reason, error);
     },
@@ -435,14 +439,18 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
 
     try {
       setState("connecting");
-      // A claim whose socket fails before the ack is tried again with the resume backoff until the
-      // link expires. A 1008 is final, so `already_claimed` on a retry ends it.
+      // A claim whose socket opened and then dropped before the ack is tried again with the resume
+      // backoff until the link expires. A 1008 is final, so `already_claimed` on a retry ends it.
+      // A socket that closed before it ever opened is final too: a browser reports a daemon's 403
+      // on the upgrade (a foreign origin) as exactly that, and retrying could never change it.
       for (;;) {
         try {
           await handshake(options, (ack) => onAckReceived(ack, "claimed", options));
           break;
         } catch (error) {
-          if (myEpoch !== epoch || !(error instanceof HandshakeClosedError) || isTerminalCloseCode(error.code)) throw error;
+          if (myEpoch !== epoch || !(error instanceof HandshakeClosedError) || !error.opened || isTerminalCloseCode(error.code)) {
+            throw error;
+          }
           emitError("connect", `Appduct claim attempt failed: ${error.message.replace(/\.+$/, "")}.`);
           const delayMs = fullJitterBackoffMs(reconnectAttempt, ports.random);
           reconnectAttempt += 1;

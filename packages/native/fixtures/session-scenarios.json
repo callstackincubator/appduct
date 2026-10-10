@@ -317,6 +317,7 @@
   },
   {
     "name": "retries a claim whose connection failed before its socket opened, with the same token",
+    "notOnWeb": true,
     "startMs": 1700000000000,
     "random": 0.5,
     "steps": [
@@ -334,6 +335,7 @@
   },
   {
     "name": "retries a claim once, with no backoff, when the failed socket's close event arrives after the retry began",
+    "notOnWeb": true,
     "startMs": 1700000000000,
     "random": 0,
     "steps": [

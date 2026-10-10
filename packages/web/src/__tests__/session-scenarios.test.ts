@@ -24,12 +24,12 @@ type DriveStep = { drive: string; [field: string]: Json };
 type ExpectStep = { expect: string; [field: string]: Json };
 type Step = DriveStep | ExpectStep;
 const isDrive = (step: Step): step is DriveStep => "drive" in step;
-type Scenario = { name: string; startMs: number; random: number; steps: Step[] };
+type Scenario = { name: string; startMs: number; random: number; steps: Step[]; notOnWeb?: boolean };
 /** One thing the core did, in the shape an `expect` step spells out: `{ kind, ...fields }`. */
 type Output = { kind: string; [field: string]: Json };
 
 const SCENARIOS_FILE = fileURLToPath(new URL("../../../native/fixtures/session-scenarios.json", import.meta.url));
-const scenarios = JSON.parse(readFileSync(SCENARIOS_FILE, "utf8")) as Scenario[];
+const scenarios = (JSON.parse(readFileSync(SCENARIOS_FILE, "utf8")) as Scenario[]).filter((scenario) => !scenario.notOnWeb);
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
