@@ -144,17 +144,6 @@ private final class ResponseBox: @unchecked Sendable {
   }
 }
 
-/// iOS refusing any background time, reported the way `UIKitAppductBackgroundTime` reports it:
-/// `onExpire` runs before `begin` returns. The fixtures describe a core that suspends as soon as the
-/// app is backgrounded, as the Kotlin and Dart cores do; with no grant the iOS core does the same.
-/// Holding the socket open while a grant lasts is iOS-only and covered by `AppductClientTests`.
-private struct RefusedBackgroundTime: AppductBackgroundTime {
-  func begin(onExpire: @escaping @Sendable () -> Void) -> any AppductDisposable {
-    onExpire()
-    return NoopDisposable()
-  }
-}
-
 /// Plays one scenario against a fresh `AppductClient` over `FakeTransportSession` and
 /// `FakeClientTimers`. Throws, instead of failing the test, so a test can assert that a scenario
 /// is rejected.
@@ -182,8 +171,7 @@ private final class ScenarioReplay {
       timers: timers,
       defaultToolTimeoutMs: 10_000,
       requirePrivateIp: true,
-      foregroundObserver: foreground,
-      backgroundTime: RefusedBackgroundTime()
+      foregroundObserver: foreground
     )
   }
 
