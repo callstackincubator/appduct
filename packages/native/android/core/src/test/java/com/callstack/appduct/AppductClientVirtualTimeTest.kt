@@ -98,9 +98,11 @@ class AppductClientVirtualTimeTest {
     private fun kotlinx.coroutines.test.TestScope.claiming(
         random: () -> Double,
         firstConnectFails: Throwable,
+        closeToo: Boolean = false,
     ): Harness {
         val harness = Harness(testScheduler, random)
         harness.fake.failNextConnectOnce = firstConnectFails
+        harness.fake.closeAfterFailedConnect = closeToo
         launch {
             runCatching {
                 harness.client.connect(
@@ -139,13 +141,44 @@ class AppductClientVirtualTimeTest {
         }
 
     @Test
+    fun `a claim whose connect failed waits for its socket's close event before it retries`() =
+        runTest {
+            val harness = claiming(random = { 0.5 }, firstConnectFails = java.io.IOException("Failed to connect to /127.0.0.1:8443"))
+
+            advanceTimeBy(60_000)
+            runCurrent()
+            assertEquals(1, harness.fake.connectCalls.size)
+
+            harness.fake.simulateClose(null, null)
+            runCurrent()
+            advanceTimeBy(250)
+            runCurrent()
+            assertEquals(2, harness.fake.connectCalls.size)
+            harness.fake.simulateAck("sess-1")
+            runCurrent()
+            assertEquals(AppductClientState.active, harness.client.state)
+        }
+
+    @Test
+    fun `a claim with no backoff is not settled by the late close event of the socket that failed`() =
+        runTest {
+            val harness = claiming(random = { 0.0 }, firstConnectFails = java.io.IOException("Failed to connect to /127.0.0.1:8443"), closeToo = true)
+
+            runCurrent()
+            assertEquals(2, harness.fake.connectCalls.size)
+            harness.fake.simulateAck("sess-1")
+            runCurrent()
+            assertEquals(AppductClientState.active, harness.client.state)
+        }
+
+    @Test
     fun `a claim does not retry a connect that failed on a pin mismatch`() =
         runTest {
             val mismatch =
                 javax.net.ssl.SSLHandshakeException("Chain validation failed").apply {
                     initCause(java.security.cert.CertificateException("Server certificate pin mismatch."))
                 }
-            val harness = claiming(random = { 0.5 }, firstConnectFails = mismatch)
+            val harness = claiming(random = { 0.5 }, firstConnectFails = mismatch, closeToo = true)
 
             advanceTimeBy(60_000)
             runCurrent()

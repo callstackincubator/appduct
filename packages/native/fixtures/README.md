@@ -161,7 +161,7 @@ A step either drives the core, `{ "drive": <name>, ... }`, or expects an output,
 | `receive` | `frame` | the daemon sends a frame on the newest connection |
 | `close` | `code`, `reason?` | the daemon closes the newest connection |
 | `drop` | | the newest connection dies with no close code |
-| `failNextConnect` | | the next connection attempt fails before its socket opens (refused, reset during TLS, timed out). Nothing reaches the wire, so that attempt has no `connect` output |
+| `failNextConnect` | | the next connection attempt fails before its socket opens (refused, reset during TLS, timed out). Nothing reaches the wire, so that attempt has no `connect` output. A runner whose transport reports the failure and the socket's close as two signals delivers both, the close right after the failure |
 | `advance` | `ms` | moves the clock forward, running every timer that falls due |
 | `registerTool` | `descriptor` | registers a tool, in wire form; a call to it is answered by `respond` |
 | `respond` | `call`, `result` or `error` | answers the call with that id; an `error` is `{ type, message }` |

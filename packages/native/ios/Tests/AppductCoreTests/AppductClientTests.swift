@@ -226,6 +226,45 @@ final class AppductClientTests: XCTestCase {
     try await connect.value
   }
 
+  func testAClaimWhoseSocketFailedIsNotRetriedBeforeTheCloseEventArrives() async throws {
+    let (client, transport, timers, connect) = try await claimingClient(firstConnectFails: Self.refusedSocket)
+
+    timers.advance(byMs: 60_000)
+    await allowQueuedWorkToRun()
+    guard transport.connectCallCount == 1 else {
+      XCTFail("the claim was tried again before the failed socket's close event: \(transport.connectCallCount) attempts")
+      await client.disconnect()
+      _ = await connect.result
+      return
+    }
+
+    transport.simulateClose(code: nil, reason: nil)
+    await allowQueuedWorkToRun()
+    timers.advance(byMs: 250)
+    try await waitUntil("the claim was tried again") { transport.connectCallCount >= 2 }
+    transport.simulateAck(sessionId: "session-1")
+    try await connect.value
+    let state = await client.state
+    XCTAssertEqual(state, .active)
+    XCTAssertEqual(transport.connectCallCount, 2)
+  }
+
+  func testAClaimWhoseConnectFailedOnAPinMismatchIsNotRetried() async throws {
+    let (client, transport, timers, connect) = try await claimingClient(firstConnectFails: Self.refusedSocket)
+    transport.emitError?(pinMismatchDetails())
+    transport.simulateClose(code: nil, reason: nil)
+    await allowQueuedWorkToRun()
+    timers.advance(byMs: 60_000)
+    await allowQueuedWorkToRun()
+
+    let state = await client.state
+    let attempts = transport.connectCallCount
+    await client.disconnect()
+    _ = await connect.result
+    XCTAssertEqual(state, .closed)
+    XCTAssertEqual(attempts, 1)
+  }
+
   func testAClaimThatFailsOnAPinMismatchIsNotRetried() async throws {
     let (client, transport, timers, connect) = try await claimingClient()
     // A pin failure cancels the TLS challenge; the daemon never sees a claim.

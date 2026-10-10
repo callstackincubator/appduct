@@ -257,6 +257,7 @@ private final class ScenarioReplay {
       transport.failNextConnectOnce = {
         AppductSocketConnectError(underlying: NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotConnectToHost))
       }
+      transport.closeAfterFailedConnect = true
 
     case "advance":
       // Timers hand their work to the client's actor on a `Task`; give it a chance to arm any
