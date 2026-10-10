@@ -35,6 +35,9 @@ internal class FakeAppductTransport(
 
     @Volatile var nextConnectError: Throwable? = null
 
+    /** Fails the next [connect] once, as a socket that never opened does: nothing reaches the wire. */
+    @Volatile var failNextConnectOnce: Throwable? = null
+
     /** When `true`, the next [connect] stays pending until [failHeldConnect] ends it, like a real
      * connect whose socket has not opened yet. */
     @Volatile var holdNextConnect = false
@@ -75,6 +78,13 @@ internal class FakeAppductTransport(
         completion: (Throwable?) -> Unit,
     ) {
         connectCalls.add(rawOptions)
+        val failOnce = failNextConnectOnce
+        if (failOnce != null) {
+            failNextConnectOnce = null
+            rawState = "error"
+            completion(failOnce)
+            return
+        }
         wireEvents.add(FakeWireEvent.Connect(rawOptions))
         val error = nextConnectError
         if (error != null) {

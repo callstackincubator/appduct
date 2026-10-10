@@ -88,10 +88,18 @@ Future<void> replay(Scenario scenario) async {
   // frame, and turns that frame into the `connect` output. Every later frame is a `send` output,
   // and a close the core asked for with 1001 app_backgrounded is a `suspend`.
   final seen = <MemorySocket, int>{};
+  var failNextConnect = false;
   final suspended = <MemorySocket>{};
   void collectWire() {
     for (final socket in transport.sockets) {
       var count = seen[socket];
+      if (count == null && failNextConnect) {
+        // The socket never opens: nothing reaches the wire, so there is no `connect` output.
+        failNextConnect = false;
+        seen[socket] = 0;
+        socket.drop('Could not connect');
+        continue;
+      }
       if (count == null) {
         socket.open();
         final first = socket.frames().first;
@@ -147,6 +155,8 @@ Future<void> replay(Scenario scenario) async {
         );
       case 'drop':
         latest().drop();
+      case 'failNextConnect':
+        failNextConnect = true;
       case 'advance':
         clock.advance(step['ms']! as int);
       case 'background':

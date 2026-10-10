@@ -273,6 +273,8 @@ private class ScenarioReplay(private val scenario: JSONObject) {
 
             "drop" -> fake.simulateClose(null, null)
 
+            "failNextConnect" -> fake.failNextConnectOnce = java.io.IOException("Failed to connect to /127.0.0.1:8443")
+
             "advance" -> {
                 // Let the client arm its timers before time moves.
                 scheduler.runCurrent()

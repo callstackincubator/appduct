@@ -33,6 +33,21 @@ final class AppductConnectionManagerTests: XCTestCase {
     XCTAssertEqual(RecordingURLProtocol.canInitCallCount, 0)
   }
 
+  /// The client retries a claim only when the socket failed, and tells that from a refusal by this
+  /// error type.
+  func testConnectReportsASocketThatNeverOpenedAsASocketConnectError() async throws {
+    let manager = AppductConnectionManager()
+    let options = try connectOptions(ip: "127.0.0.1", port: 65530, token: "claim-token", linkPin: "sha256/link-pin")
+
+    do {
+      try await manager.connect(options: options)
+      XCTFail("connecting to a closed port should fail")
+    } catch {
+      XCTAssertTrue(error is AppductSocketConnectError, "got \(error)")
+    }
+    await manager.invalidate()
+  }
+
   // MARK: - formatAppductWebSocketUrl (IPv6 bracketing, matches transport.ts's formatAgentWebSocketUrl)
 
   func testFormatWebSocketUrlLeavesIpv4Unbracketed() {

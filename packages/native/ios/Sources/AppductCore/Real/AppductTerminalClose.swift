@@ -40,6 +40,16 @@ public struct AppductHandshakeClosedError: Error, Sendable {
   }
 }
 
+/// A connect that failed because the socket did, before it opened (refused, reset during TLS, timed
+/// out). The transport throws this from `connect(options:)` so the client can tell it from a
+/// refusal it must not retry, such as a bad build setting.
+public struct AppductSocketConnectError: Error, Sendable {
+  public let underlying: any Error
+  public init(underlying: any Error) {
+    self.underlying = underlying
+  }
+}
+
 public func isTerminalHandshakeRejection(_ error: Error) -> Bool {
   guard let handshakeError = error as? AppductHandshakeClosedError else { return false }
   return isTerminalCloseEvent(handshakeError.closeEvent)

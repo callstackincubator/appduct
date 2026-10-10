@@ -228,6 +228,7 @@ class Connection {
           onMessage: (text) {
             if (_current == entry) _handleMessage(entry, text);
           },
+          onPinMismatch: () {},
           onError: (message) {
             if (_current == entry) entry.lastError = message;
           },

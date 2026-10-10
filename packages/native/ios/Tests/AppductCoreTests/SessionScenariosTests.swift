@@ -253,6 +253,11 @@ private final class ScenarioReplay {
       try await wait("the client to wire its transport, for \(label)") { self.transport.isWired }
       transport.simulateClose(code: nil, reason: nil)
 
+    case "failNextConnect":
+      transport.failNextConnectOnce = {
+        AppductSocketConnectError(underlying: NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotConnectToHost))
+      }
+
     case "advance":
       // Timers hand their work to the client's actor on a `Task`; give it a chance to arm any
       // timer before time moves, and to act on the one that fired before the next step.

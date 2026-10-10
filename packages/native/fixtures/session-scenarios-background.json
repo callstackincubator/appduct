@@ -102,5 +102,40 @@
       {"expect":"state","state":"reconnecting"},
       {"expect":"cancel","call":"call-1","reason":"session_suspended"}
     ]
+  },
+  {
+    "name": "does not skip a claim's backoff when the app goes to the background during it",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"drop"},
+      {"drive":"advance","ms":100},
+      {"drive":"background"},
+      {"drive":"advance","ms":149},
+      {"drive":"disconnect"},
+      {"expect":"state","state":"closed","reason":"closed_by_app"}
+    ]
+  },
+  {
+    "name": "retries a claim at the backoff delay even when the app went to the background during it",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"drop"},
+      {"drive":"advance","ms":100},
+      {"drive":"background"},
+      {"drive":"advance","ms":150},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}}
+    ]
   }
 ]

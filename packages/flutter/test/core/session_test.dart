@@ -138,6 +138,62 @@ void main() {
     );
   });
 
+  group('claiming a session over a socket that fails', () {
+    Future<Harness> failingClaim(
+      void Function(MemorySocket socket) fail,
+    ) async {
+      final h = Harness();
+      unawaited(
+        h.core
+            .connect(connectInput())
+            .then<void>((_) {}, onError: (Object _) {}),
+      );
+      fail(h.last);
+      await settle();
+      return h;
+    }
+
+    test('retries a claim whose TLS handshake was reset', () async {
+      final h = await failingClaim((socket) => socket.drop('Connection reset'));
+
+      h.clock.advance(250);
+      await settle();
+
+      expect(h.transport.sockets, hasLength(2));
+      expect(h.core.state, ClientState.connecting);
+    });
+
+    test(
+      'does not retry a claim whose daemon key does not match the pin',
+      () async {
+        final h = await failingClaim((socket) => socket.rejectPin());
+
+        h.clock.advance(1000);
+        await settle();
+
+        expect(h.transport.sockets, hasLength(1));
+        expect(h.core.state, ClientState.closed);
+      },
+    );
+
+    test(
+      'keeps retrying a resume whose daemon key does not match the pin',
+      () async {
+        final h = Harness();
+        (await h.claim()).drop();
+        await settle();
+        h.clock.advance(250);
+        h.last.rejectPin();
+        await settle();
+        h.clock.advance(500);
+        await settle();
+
+        expect(h.transport.sockets, hasLength(3));
+        expect(h.core.state, ClientState.reconnecting);
+      },
+    );
+  });
+
   group('the tool registry', () {
     test(
       'sends registered tools in the snapshot, dropping stray keys',
@@ -392,7 +448,7 @@ void main() {
         expect(h.sessions.last.reason, 'invalid_resume_token');
         expect(h.store.value, isNull);
 
-        h.clock.advance(60000);
+        h.clock.advance(1000);
         expect(h.transport.sockets, hasLength(2));
       },
     );
@@ -531,7 +587,7 @@ void main() {
       await settle();
 
       await h.core.disconnect();
-      h.clock.advance(60000);
+      h.clock.advance(1000);
 
       expect(h.transport.sockets, hasLength(1));
     });

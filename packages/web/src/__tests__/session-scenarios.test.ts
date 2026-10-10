@@ -63,9 +63,17 @@ const replay = async (scenario: Scenario, expectTimeoutMs = 1000): Promise<void>
   // Opens each socket the core made since the last look, which makes the core send its first frame,
   // and turns that frame into the `connect` output. Every later frame is a `send` output.
   const framesSeen = new Map<MemoryConnection, number>();
+  let failNextConnect = false;
   const collectWire = () => {
     for (const connection of transport.connections) {
       let seen = framesSeen.get(connection);
+      if (seen === undefined && failNextConnect) {
+        // The socket never opens: nothing reaches the wire, so there is no `connect` output.
+        failNextConnect = false;
+        framesSeen.set(connection, 0);
+        connection.drop("Could not connect");
+        continue;
+      }
       if (seen === undefined) {
         connection.open();
         const first = connection.frames()[0];
@@ -115,6 +123,9 @@ const replay = async (scenario: Scenario, expectTimeoutMs = 1000): Promise<void>
         break;
       case "drop":
         latest().drop();
+        break;
+      case "failNextConnect":
+        failNextConnect = true;
         break;
       case "advance":
         clock.advance(step.ms as number);

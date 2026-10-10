@@ -314,5 +314,22 @@
       {"expect":"cancel","call":"call-1","reason":"session_suspended"},
       {"drive":"respond","call":"call-1","result":{"ok":true}}
     ]
+  },
+  {
+    "name": "retries a claim whose connection failed before its socket opened, with the same token",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"failNextConnect"},
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"state","state":"connecting"},
+      {"drive":"advance","ms":249},
+      {"drive":"advance","ms":1},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}}
+    ]
   }
 ]

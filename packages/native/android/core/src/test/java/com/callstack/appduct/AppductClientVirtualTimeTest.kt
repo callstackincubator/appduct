@@ -95,6 +95,75 @@ class AppductClientVirtualTimeTest {
             assertTrue(harness.sessionEvents.contains("lost" to "grace_expired"))
         }
 
+    private fun kotlinx.coroutines.test.TestScope.claiming(
+        random: () -> Double,
+        firstConnectFails: Throwable,
+    ): Harness {
+        val harness = Harness(testScheduler, random)
+        harness.fake.failNextConnectOnce = firstConnectFails
+        launch {
+            runCatching {
+                harness.client.connect(
+                    AppductConnectInput.Explicit(
+                        ip = "127.0.0.1",
+                        port = 8443,
+                        sessionId = "sess-1",
+                        token = "claim-token",
+                        resumeToken = null,
+                        expiresAt = (START_MS / 1000) + 3600,
+                        linkPin = null,
+                    ),
+                )
+            }
+        }
+        runCurrent()
+        return harness
+    }
+
+    @Test
+    fun `a claim whose connect failed keeps waiting out its backoff when the socket's close event arrives late`() =
+        runTest {
+            val harness = claiming(random = { 0.5 }, firstConnectFails = java.io.IOException("Failed to connect to /127.0.0.1:8443"))
+            assertEquals(AppductClientState.connecting, harness.client.state)
+
+            harness.fake.simulateClose(null, null)
+            runCurrent()
+            assertEquals(AppductClientState.connecting, harness.client.state)
+
+            advanceTimeBy(250)
+            runCurrent()
+            assertEquals(2, harness.fake.connectCalls.size)
+            harness.fake.simulateAck("sess-1")
+            runCurrent()
+            assertEquals(AppductClientState.active, harness.client.state)
+        }
+
+    @Test
+    fun `a claim does not retry a connect that failed on a pin mismatch`() =
+        runTest {
+            val mismatch =
+                javax.net.ssl.SSLHandshakeException("Chain validation failed").apply {
+                    initCause(java.security.cert.CertificateException("Server certificate pin mismatch."))
+                }
+            val harness = claiming(random = { 0.5 }, firstConnectFails = mismatch)
+
+            advanceTimeBy(60_000)
+            runCurrent()
+            assertEquals(1, harness.fake.connectCalls.size)
+            assertEquals(AppductClientState.closed, harness.client.state)
+        }
+
+    @Test
+    fun `a claim does not retry a connect that was refused as misconfigured`() =
+        runTest {
+            val harness = claiming(random = { 0.5 }, firstConnectFails = IllegalArgumentException("Appduct only allows local IPv4 addresses."))
+
+            advanceTimeBy(60_000)
+            runCurrent()
+            assertEquals(1, harness.fake.connectCalls.size)
+            assertEquals(AppductClientState.closed, harness.client.state)
+        }
+
     private companion object {
         const val START_MS = 1_800_000_000_000L
     }

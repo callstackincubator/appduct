@@ -161,6 +161,7 @@ A step either drives the core, `{ "drive": <name>, ... }`, or expects an output,
 | `receive` | `frame` | the daemon sends a frame on the newest connection |
 | `close` | `code`, `reason?` | the daemon closes the newest connection |
 | `drop` | | the newest connection dies with no close code |
+| `failNextConnect` | | the next connection attempt fails before its socket opens (refused, reset during TLS, timed out). Nothing reaches the wire, so that attempt has no `connect` output |
 | `advance` | `ms` | moves the clock forward, running every timer that falls due |
 | `registerTool` | `descriptor` | registers a tool, in wire form; a call to it is answered by `respond` |
 | `respond` | `call`, `result` or `error` | answers the call with that id; an `error` is `{ type, message }` |
@@ -234,7 +235,7 @@ Every scenario here gives the session a 120 s grace window, so the clock can pas
 cap without the session expiring. The scenarios cover: backgrounding an active session suspends it
 and no reconnect follows, even after the clock passes the backoff cap; foregrounding resumes at
 once, without waiting for backoff; backgrounding during a backoff wait cancels the wait, so no connect
-follows even after the delay passes, until the app returns; and backgrounding with a call in flight cancels the call with `session_suspended`.
+follows even after the delay passes, until the app returns; backgrounding with a call in flight cancels the call with `session_suspended`; and backgrounding while a claim waits out its backoff leaves that wait alone, so the retry comes at the delay and not at once.
 
 ### `spki-pin.json`
 
