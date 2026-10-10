@@ -48,6 +48,34 @@ final class AppductConnectionManagerTests: XCTestCase {
     await manager.invalidate()
   }
 
+  /// While the claim waits for the main actor (device fields), the socket can fail and the client
+  /// can retry onto a new socket. The waiting call must not send its claim on that new socket, and
+  /// must report the socket failure, not a plain error the client would read as a refusal.
+  @MainActor
+  func testConnectWhoseSocketFailedWhileItWaitedForTheMainActorReportsASocketConnectError() async throws {
+    let manager = AppductConnectionManager()
+    let options = try connectOptions(ip: "127.0.0.1", port: 65530, token: "claim-token", linkPin: "sha256/link-pin")
+    let closed = DispatchSemaphore(value: 0)
+    manager.emitClose = { _ in closed.signal() }
+
+    let connecting = Task.detached { () -> Error? in
+      do {
+        try await manager.connect(options: options)
+        return nil
+      } catch {
+        return error
+      }
+    }
+
+    // This test holds the main actor, so connect() is parked waiting for it. Block (without
+    // suspending) until the refused socket's close event has been emitted.
+    XCTAssertEqual(closed.wait(timeout: .now() + 10), .success)
+
+    let error = await connecting.value
+    XCTAssertTrue(error is AppductSocketConnectError, "got \(String(describing: error))")
+    await manager.invalidate()
+  }
+
   // MARK: - formatAppductWebSocketUrl (IPv6 bracketing, matches transport.ts's formatAgentWebSocketUrl)
 
   func testFormatWebSocketUrlLeavesIpv4Unbracketed() {
