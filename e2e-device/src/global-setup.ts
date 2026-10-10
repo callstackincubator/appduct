@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createWriteStream, existsSync } from "node:fs";
 import path from "node:path";
 
+import { createAgentDeviceClient } from "agent-device";
 import type { TestProject } from "vitest/node";
 
 import { install } from "./device.js";
@@ -24,6 +25,9 @@ export default async function setup(project: TestProject): Promise<() => Promise
     throw new Error(`APPDUCT_E2E_SKIP_BUILD is set but ${artifact} doesn't exist. Run once without it.`);
   }
   await install(target, deviceId, artifact);
+  if (target.platform === "ios") {
+    await goHome(deviceId);
+  }
   const stopMetro = target.metro ? await startMetro(target, deviceId) : undefined;
 
   project.provide("target", target.name);
@@ -53,6 +57,26 @@ const bootSimulator = async (): Promise<string> => {
   });
   await run("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeoutMs: 180_000 });
   return udid;
+};
+
+/** Leaves the simulator on its home screen with no system alert showing. iOS asks "Open in …?"
+ * before a link switches from one app to another, so a link sent while another app (say, the last
+ * target's playground) is in front waits on that prompt, and so does every link after it. Binding
+ * an agent-device session to SpringBoard brings the home screen to the front. */
+const goHome = async (udid: string): Promise<void> => {
+  const agent = createAgentDeviceClient({ session: `appduct-e2e-setup-${process.pid}` });
+  try {
+    await agent.apps.open({ platform: "ios", udid, app: "com.apple.springboard" });
+    const alert = await agent.command.alert({ platform: "ios", udid, action: "get" }).then(
+      (result) => (result as { message?: string }).message,
+      () => undefined,
+    );
+    if (alert) {
+      throw new Error(`The simulator is showing a system alert ("${alert}"), which would block every link. Dismiss it and run again.`);
+    }
+  } finally {
+    await agent.sessions.close();
+  }
 };
 
 /** APPDUCT_E2E_DEVICE, or the one running emulator. */

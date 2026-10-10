@@ -1,0 +1,4 @@
+module AppductCore {
+header "AppductCore-Swift.h"
+export *
+}

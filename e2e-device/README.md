@@ -18,8 +18,9 @@ APPDUCT_E2E_TARGET=expo-ios pnpm e2e:device -- cases/app-killed.device.test.ts  
 | `APPDUCT_E2E_SKIP_BUILD=1` | Install the last build instead of building again. |
 | `APPDUCT_E2E_RELEASE=1` | Also run `release-opt-in`, which builds the opted-in release variant (`expo-android`, `flutter-android`). |
 
-Needs agent-device's prerequisites (Xcode, or the Android SDK with an emulator already running),
-`flutter` on `PATH` for the Flutter targets, and `xcodegen` for `native-ios`. An Expo target starts
+Needs agent-device's prerequisites (Xcode, or the Android SDK with `ANDROID_HOME` set and an
+emulator already running), `flutter` on `PATH` for the Flutter targets, and `xcodegen` for
+`native-ios`. An Expo target starts
 its own Metro on port 8081 and refuses to run when something already listens there.
 
 Each case file gets its own daemon in a fresh state dir. Build, Metro and `flutter run` output lands
@@ -36,7 +37,7 @@ in `e2e-device/.artifacts/`.
 | `status-deep-link` | `<scheme>:///status` opens Status and leaves the session active | all but `native-android` |
 | `background-resume` | home suspends as `app_backgrounded`, and reopening resumes the same session | all |
 | `js-reload` | a Metro reload or hot restart resumes the same session with fresh state | Expo, Flutter |
-| `reload-in-flight` | a call running during the reload fails at once with `session_suspended` | Expo, Flutter |
+| `reload-in-flight` | a call running during the reload fails at once with `session_suspended` | Expo |
 | `app-killed` | a killed app relaunched without a link stays idle; a new link connects | all |
 | `release-opt-in` | an opted-in release build connects | `expo-android`, `flutter-android` |
 

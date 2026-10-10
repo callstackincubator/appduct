@@ -42,10 +42,11 @@ const expo = path.join(repoRoot, "playground");
 const native = path.join(repoRoot, "playground-native");
 const flutter = path.join(repoRoot, "playground-flutter");
 
-// `expo prebuild` writes ios/ and android/, which are not checked in; run it only when they are
-// missing, since it reruns `pod install` every time.
+// `expo prebuild` writes ios/ and android/, which are not checked in; run it only when its output
+// is missing, since it reruns `pod install` every time. A build can leave a bare android/app/build
+// behind, so look for a file prebuild writes rather than the directory.
 const prebuild = (platform: Platform, env?: Record<string, string>): Step[] =>
-  existsSync(path.join(expo, platform)) && !env
+  existsSync(path.join(expo, platform === "ios" ? "ios/Podfile" : "android/gradlew")) && !env
     ? []
     : [{ cmd: "pnpm", args: ["exec", "expo", "prebuild", "--platform", platform, "--no-install"], env }];
 

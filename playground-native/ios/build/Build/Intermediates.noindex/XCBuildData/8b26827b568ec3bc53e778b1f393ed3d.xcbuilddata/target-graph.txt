@@ -1,0 +1,6 @@
+Target dependency graph (3 targets)
+Target 'AppductPlayground' in project 'AppductPlayground'
+➜ Explicit dependency on target 'AppductCore-product' in project 'AppductCore'
+Target 'AppductCore-product' in project 'AppductCore'
+➜ Explicit dependency on target 'AppductCore' in project 'AppductCore'
+Target 'AppductCore' in project 'AppductCore' (no dependencies)

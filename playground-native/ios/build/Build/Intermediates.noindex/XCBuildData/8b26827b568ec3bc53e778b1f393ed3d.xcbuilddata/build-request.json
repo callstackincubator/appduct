@@ -1,0 +1,72 @@
+{
+  "buildCommand" : {
+    "command" : "build",
+    "skipDependencies" : false,
+    "style" : "buildOnly"
+  },
+  "configuredTargets" : [
+    {
+      "guid" : "efa9475533a79ba67f02ab3c469c749fedd089d326fd9cc7fe8585ca2e2b3803"
+    }
+  ],
+  "containerPath" : "/Users/szymon.chmal/Projects/cordierite/.worktrees/issue-229-add-a-device-e2e-suite-driven-by-agent-d/playground-native/ios/AppductPlayground.xcodeproj",
+  "continueBuildingAfterErrors" : false,
+  "dependencyScope" : "workspace",
+  "enableIndexBuildArena" : false,
+  "hideShellScriptEnvironment" : false,
+  "parameters" : {
+    "action" : "build",
+    "activeArchitecture" : "arm64",
+    "activeRunDestination" : {
+      "disableOnlyActiveArch" : false,
+      "hostTargetedPlatform" : null,
+      "platform" : "iphonesimulator",
+      "sdk" : "iphonesimulator27.0",
+      "sdkVariant" : "iphonesimulator",
+      "supportedArchitectures" : [
+        "arm64"
+      ],
+      "targetArchitecture" : "arm64"
+    },
+    "arenaInfo" : {
+      "buildIntermediatesPath" : "/Users/szymon.chmal/Projects/cordierite/.worktrees/issue-229-add-a-device-e2e-suite-driven-by-agent-d/playground-native/ios/build/Build/Intermediates.noindex",
+      "buildProductsPath" : "/Users/szymon.chmal/Projects/cordierite/.worktrees/issue-229-add-a-device-e2e-suite-driven-by-agent-d/playground-native/ios/build/Build/Products",
+      "derivedDataPath" : "/Users/szymon.chmal/Projects/cordierite/.worktrees/issue-229-add-a-device-e2e-suite-driven-by-agent-d/playground-native/ios/build",
+      "indexDataStoreFolderPath" : "/Users/szymon.chmal/Projects/cordierite/.worktrees/issue-229-add-a-device-e2e-suite-driven-by-agent-d/playground-native/ios/build/Index.noindex/DataStore",
+      "indexEnableDataStore" : true,
+      "indexPCHPath" : "/Users/szymon.chmal/Projects/cordierite/.worktrees/issue-229-add-a-device-e2e-suite-driven-by-agent-d/playground-native/ios/build/Index.noindex/PrecompiledHeaders",
+      "pchPath" : "/Users/szymon.chmal/Projects/cordierite/.worktrees/issue-229-add-a-device-e2e-suite-driven-by-agent-d/playground-native/ios/build/Build/Intermediates.noindex/PrecompiledHeaders"
+    },
+    "configurationName" : "Debug",
+    "overrides" : {
+      "commandLine" : {
+        "table" : {
+          "CODE_SIGNING_ALLOWED" : "NO",
+          "SDKROOT" : "iphonesimulator27.0"
+        }
+      },
+      "synthesized" : {
+        "table" : {
+          "ACTION" : "build",
+          "ASSETCATALOG_FILTER_FOR_DEVICE_MODEL" : "iPhone18,1",
+          "ASSETCATALOG_FILTER_FOR_DEVICE_OS_VERSION" : "26.4.1",
+          "ASSETCATALOG_FILTER_FOR_THINNING_DEVICE_CONFIGURATION" : "iPhone18,1",
+          "BUILD_ACTIVE_RESOURCES_ONLY" : "YES",
+          "ENABLE_PREVIEWS" : "NO",
+          "ENABLE_XOJIT_PREVIEWS" : "YES",
+          "ONLY_ACTIVE_ARCH" : "YES",
+          "TARGET_DEVICE_IDENTIFIER" : "6D08D3AF-2C60-4CAD-8324-A3D2FB5D0C7D",
+          "TARGET_DEVICE_MODEL" : "iPhone18,1",
+          "TARGET_DEVICE_OS_VERSION" : "26.4.1",
+          "TARGET_DEVICE_PLATFORM_NAME" : "iphonesimulator"
+        }
+      }
+    }
+  },
+  "schemeCommand" : "launch",
+  "showNonLoggedProgress" : true,
+  "useDryRun" : false,
+  "useImplicitDependencies" : true,
+  "useLegacyBuildLocations" : false,
+  "useParallelTargets" : true
+}
