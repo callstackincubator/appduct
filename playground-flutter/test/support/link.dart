@@ -26,4 +26,5 @@ Map<String, Object?> ack({String sessionId = 'session-1'}) => {
   'resume_token': 'resume-1',
   'keepalive_interval_s': 15,
   'grace_s': 600,
+  'event_registry': true,
 };

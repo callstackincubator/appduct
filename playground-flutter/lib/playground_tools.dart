@@ -10,6 +10,15 @@ const playgroundToolNames = [
   'throwing_tool',
 ];
 
+/// The error `throwing_tool` fails with. The SDK reports an exception by its `toString()`, and the
+/// contract wants the bare message, which `StateError` would prefix with `Bad state: `.
+class _AlwaysFails implements Exception {
+  const _AlwaysFails();
+
+  @override
+  String toString() => 'throwing_tool always fails on purpose.';
+}
+
 /// How many times the counted tools (`sum`, `slow_task`) have run. The Expo playground keeps this in
 /// React state and the native ones in a view model; this is the Flutter equivalent.
 class PlaygroundCounter extends ChangeNotifier {
@@ -28,8 +37,9 @@ class PlaygroundCounter extends ChangeNotifier {
   }
 }
 
-/// Registers the same tools and event as `playground` and `playground-native`: same names,
-/// descriptions and schemas, so `appduct tools ls` reports an equivalent surface whichever
+/// Registers the tools and event of the playground contract
+/// (`docs/internal/playground-contract.md`): same names,
+/// descriptions and schemas on every playground, so `appduct tools ls` reports an equivalent surface whichever
 /// playground answered the link. The returned function unregisters them all.
 void Function() registerPlaygroundTools(
   Appduct appduct,
@@ -123,13 +133,12 @@ void Function() registerPlaygroundTools(
       description: 'Always fails with tool_execution_error. Changes nothing.',
       readOnlyHint: true,
       group: 'diagnostics',
-      handler: (_, _) =>
-          throw StateError('throwing_tool always fails on purpose.'),
+      handler: (_, _) => throw const _AlwaysFails(),
     ),
     appduct.registerEvent(
       'playground_ping',
       description:
-          'The Send playground_ping button on the Status tab was pressed.',
+          'The Send playground_ping button on the Status screen was pressed.',
       payloadSchema: {
         'type': 'object',
         'properties': {
