@@ -99,3 +99,7 @@ One note per PR that hit friction, four lines:
 - 2026-10-10 #232 skill: implement-issue
   What went wrong: Issue #227 required Flutter to show the session alias and last event on screen and also banned SDK changes, but the Flutter SDK exposes only the connection state, so implementation got blocked.
   Would have prevented it: file-issue should check that every on-screen value a playground criterion asks for is exposed by each SDK before marking the issue ready.
+- 2026-10-10 #246 skill: implement-issue
+  What went wrong: making a native claim retryable surfaced three successive iOS/Android races (connect error vs close event, stale close settling the retry, an await in connect() after socketTask is set), one per review round, and hit the loop limit.
+  Would have prevented it: when changing when a socket failure settles a handshake, first list every await and every callback that can fire between creating the socket and the ack, and give each attempt its own identity (task or epoch) checked after every await.
+  Cost: two review rounds, loop limit
