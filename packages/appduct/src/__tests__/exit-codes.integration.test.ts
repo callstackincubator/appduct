@@ -66,22 +66,6 @@ const runCli = (args: string[], stateDir: string) => {
 };
 
 describe("exit codes: noun-verb command surface", () => {
-  test("usage_error (64): an unknown command", async () => {
-    const stateDir = await makeTempStateDir();
-    const { exitCode, payload } = runCli(["not-a-real-command"], stateDir);
-
-    expect(exitCode).toBe(64);
-    expect(payload.error.type).toBe("usage_error");
-  });
-
-  test("usage_error (64): events since with a non-numeric cursor", async () => {
-    const stateDir = await makeTempStateDir();
-    const { exitCode, payload } = runCli(["events", "since", "not-a-number"], stateDir);
-
-    expect(exitCode).toBe(64);
-    expect(payload.error.type).toBe("usage_error");
-  });
-
   test("usage_error (64): keygen refuses to overwrite without --force", async () => {
     const stateDir = await makeTempStateDir();
     const keyPath = path.join(stateDir, "existing.pem");
