@@ -11,7 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
-- **Fix: an app whose first connection to the daemon fails now keeps trying instead of staying unconnected.** It retries until the link expires, which fixes Android apps that sometimes never claimed a freshly opened link; a link the daemon refuses is still not retried. In a browser, a connection that closes before it opens is not retried either.
+- **Fix: an app whose first connection to the daemon fails now keeps trying instead of staying unconnected.** It retries until the link expires, which fixes Android apps that sometimes never claimed a freshly opened link; a link the daemon refuses is still not retried, and neither, in a browser, is a daemon it cannot reach.
 - **New: Flutter apps can listen to `Appduct.instance.sessionChanges` and `Appduct.instance.errors` and read `Appduct.instance.sessionId`.** They report when a session is claimed, resumed or lost, and why a connection failed; see [Flutter setup](https://callstackincubator.github.io/appduct/install/flutter/#watch-the-connection-and-send-events).
 - **Fix: opening a second Appduct link in an app that is already connected now switches to the new session on iOS and Android.** Before, on iOS, the app dropped the old session and never connected to the new one.
 - **Fix: `appduct init` in a project that spans iOS and Android now prints the wiring step for both.** `init --json` also gains a `platforms` field listing the native platforms it found, such as `["android", "ios"]`.
