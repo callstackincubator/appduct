@@ -199,57 +199,6 @@ const portInUseError = (port: number): Error => {
   );
 };
 
-/**
- * Binds `httpsServer` on the wildcard address and, with `bindLoopback`, a plain TCP server on
- * `127.0.0.1` at the same port that hands each connection to `httpsServer`. Both addresses then
- * share one TLS context, one `WebSocketServer` and one frame gate. Returns the loopback server.
- *
- * A configured port taken on either address fails startup. An OS-assigned port taken on
- * `127.0.0.1` is given back and another one tried, up to {@link MAX_PORT_ATTEMPTS} times.
- */
-const listenOnBothAddresses = async (
-  httpsServer: HttpsServer,
-  options: Pick<ListenerOptions, "port" | "bindLoopback">,
-): Promise<NetServer | undefined> => {
-  for (let attempt = 1; ; attempt += 1) {
-    try {
-      await listen(httpsServer, options.port);
-    } catch (error) {
-      throw isAddressInUse(error) ? portInUseError(options.port) : error;
-    }
-
-    if (!options.bindLoopback) {
-      return undefined;
-    }
-
-    const port = boundPort(httpsServer)!;
-    const loopbackServer = createNetServer((socket) => httpsServer.emit("connection", socket));
-
-    loopbackServer.on("error", () => {
-      // Same contract as the https server: never let a listener-level error take the daemon down.
-    });
-
-    try {
-      await listen(loopbackServer, port, "127.0.0.1");
-      return loopbackServer;
-    } catch (error) {
-      await new Promise<void>((resolve) => httpsServer.close(() => resolve()));
-
-      if (!isAddressInUse(error)) {
-        throw error;
-      }
-
-      if (options.port !== 0) {
-        throw portInUseError(port);
-      }
-
-      if (attempt === MAX_PORT_ATTEMPTS) {
-        throw new Error(`Could not find a free port: ${MAX_PORT_ATTEMPTS} ports in a row were in use on 127.0.0.1.`);
-      }
-    }
-  }
-};
-
 export const startListener = async (options: ListenerOptions): Promise<DaemonListener> => {
   const timers = options.timers ?? systemTimers;
   const preClaimTimeoutMs = options.preClaimTimeoutMs ?? DEFAULT_PRE_CLAIM_TIMEOUT_MS;
@@ -270,7 +219,50 @@ export const startListener = async (options: ListenerOptions): Promise<DaemonLis
 
   attachFrameGate(wss, { sessionManager: options.sessionManager, transport: "native", preClaimTimeoutMs, timers });
 
-  const loopbackServer = await listenOnBothAddresses(httpsServer, options);
+  // The wildcard bind, plus with `bindLoopback` a plain TCP server on `127.0.0.1` at the same port
+  // that hands each connection to `httpsServer`, so both addresses share one TLS context, one
+  // `WebSocketServer` and one frame gate. A configured port taken on either address fails startup;
+  // an OS-assigned port taken on `127.0.0.1` is given back and another one tried.
+  let loopbackServer: NetServer | undefined;
+
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await listen(httpsServer, options.port);
+    } catch (error) {
+      throw isAddressInUse(error) ? portInUseError(options.port) : error;
+    }
+
+    if (!options.bindLoopback) {
+      break;
+    }
+
+    const port = boundPort(httpsServer)!;
+    const candidate = createNetServer((socket) => httpsServer.emit("connection", socket));
+
+    candidate.on("error", () => {
+      // Same contract as the https server: never let a listener-level error take the daemon down.
+    });
+
+    try {
+      await listen(candidate, port, "127.0.0.1");
+      loopbackServer = candidate;
+      break;
+    } catch (error) {
+      await new Promise<void>((resolve) => httpsServer.close(() => resolve()));
+
+      if (!isAddressInUse(error)) {
+        throw error;
+      }
+
+      if (options.port !== 0) {
+        throw portInUseError(port);
+      }
+
+      if (attempt === MAX_PORT_ATTEMPTS) {
+        throw new Error(`Could not find a free port: ${MAX_PORT_ATTEMPTS} ports in a row were in use on 127.0.0.1.`);
+      }
+    }
+  }
 
   return {
     httpsServer,
