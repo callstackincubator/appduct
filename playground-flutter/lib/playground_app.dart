@@ -78,17 +78,17 @@ class _Shell extends StatelessWidget {
       bottomNavigationBar: NavigationBar(
         selectedIndex: onStatus ? 1 : 0,
         onDestinationSelected: (i) => context.go(i == 0 ? '/' : '/status'),
-        destinations: const [
+        destinations: [
           Semantics(
             identifier: 'tab-tools',
-            child: NavigationDestination(
+            child: const NavigationDestination(
               icon: Icon(Icons.build),
               label: 'Tools',
             ),
           ),
           Semantics(
             identifier: 'tab-status',
-            child: NavigationDestination(
+            child: const NavigationDestination(
               icon: Icon(Icons.wifi),
               label: 'Status',
             ),
