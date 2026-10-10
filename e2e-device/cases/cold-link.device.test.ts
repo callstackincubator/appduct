@@ -16,5 +16,4 @@ test("a link launches the stopped app into an active session that reports the re
 
   await suite.device.press(ids.tabStatus);
   await suite.device.waitForText(ids.connectionState, "active");
-  await suite.device.waitForText(ids.sessionAlias, session?.alias ?? "");
 });

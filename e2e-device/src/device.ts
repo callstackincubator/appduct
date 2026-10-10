@@ -9,8 +9,6 @@ export const ids = {
   tabStatus: "tab-status",
   callCount: "call-count",
   connectionState: "connection-state",
-  sessionAlias: "session-alias",
-  lastSessionEvent: "last-session-event",
   pingButton: "ping-button",
   lastPing: "last-ping",
 } as const;
@@ -89,8 +87,10 @@ export const openDevice = (target: Target, deviceId: string) => {
       }
     },
 
+    /** Presses the element once it is on screen, which on a fresh launch can take a while. */
     press: async (id: ElementId): Promise<void> => {
       await session();
+      await agent.command.wait({ ...where, selector: selector(id), timeoutMs: 120_000 });
       await agent.interactions.press({ ...where, selector: selector(id) });
     },
 
@@ -110,11 +110,6 @@ export const openDevice = (target: Target, deviceId: string) => {
       ).catch((error: Error) => {
         throw new Error(`${error.message} It last read ${last === undefined ? "nothing (not on screen)" : `"${last}"`}.`);
       });
-    },
-
-    /** Restarts the JS of an Expo app through Metro, keeping its native process. */
-    reloadJs: async (): Promise<void> => {
-      await agent.metro.reload({ metroPort: 8081 });
     },
 
     /** Ends the agent-device session. The app keeps running. */

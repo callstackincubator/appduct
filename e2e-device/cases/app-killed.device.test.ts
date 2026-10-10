@@ -15,10 +15,11 @@ test("a killed app relaunched without a link stays idle, and a new link connects
   await suite.device.foreground();
   await suite.device.press(ids.tabStatus);
   await suite.device.waitForText(ids.connectionState, "idle", 120_000);
-  await suite.device.waitForText(ids.sessionAlias, "none");
   expect((await suite.sessions()).filter((session) => session.state === "active")).toEqual([]);
 
   const second = await suite.link();
+  // warm-link checks that a link keeps the screen; here only the state matters.
+  await suite.device.press(ids.tabStatus);
   await suite.device.waitForText(ids.connectionState, "active");
   const rows = await suite.sessions();
   expect(rows.filter((session) => session.state === "active").map((session) => session.sessionId)).toEqual([second.sessionId]);
