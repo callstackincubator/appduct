@@ -488,7 +488,7 @@ internal class AppductClient private constructor(
                 closeTransport()
             }
             setClientState(AppductClientState.connecting, null)
-            val ack = performHandshake(options)
+            val ack = claimWithRetries(options, myEpoch)
 
             if (myEpoch != epoch) {
                 // Superseded by a newer connect()/handleUrl() while awaiting the ack; abandon
@@ -591,6 +591,32 @@ internal class AppductClient private constructor(
             options.sessionId.isNotEmpty() &&
             (hasClaimToken || hasResumeToken) &&
             !isAppductBootstrapExpired(options.expiresAt, nowSeconds)
+    }
+
+    /** A claim whose socket fails before the ack is tried again with the resume backoff until the
+     * link expires. A 1008 is final, so `already_claimed` on a retry ends it. */
+    private suspend fun claimWithRetries(
+        options: ConnectOptionsInternal,
+        myEpoch: Int,
+    ): JSONObject {
+        while (true) {
+            try {
+                return performHandshake(options)
+            } catch (e: AppductHandshakeClosedException) {
+                if (myEpoch != epoch || destroyed || isAppductTerminalCloseCode(e.code)) throw e
+                emitError(
+                    AppductUnifiedError(
+                        phase = "connect",
+                        message = "Appduct claim attempt failed: ${(e.message ?: "connection closed").trimEnd('.')}.",
+                        cause = e,
+                    ),
+                )
+                val delayMs = computeAppductFullJitterBackoffMs(reconnectAttempt, random = random)
+                reconnectAttempt += 1
+                delay(delayMs)
+                if (myEpoch != epoch || destroyed || isAppductBootstrapExpired(options.expiresAt, clock.nowMs() / 1000)) throw e
+            }
+        }
     }
 
     private suspend fun performHandshake(options: ConnectOptionsInternal): JSONObject {
