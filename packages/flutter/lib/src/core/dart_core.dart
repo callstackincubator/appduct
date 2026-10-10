@@ -166,6 +166,26 @@ class _DartCore implements AppductCore {
     final timer = _reconnectTimer;
     if (timer != null) _clock.clearTimeout(timer);
     _reconnectTimer = null;
+    _endClaimRetryWait();
+  }
+
+  /// Wakes the `connect()` that is waiting out the backoff before it retries its claim.
+  Completer<void>? _claimRetryWait;
+
+  void _endClaimRetryWait() {
+    final wait = _claimRetryWait;
+    _claimRetryWait = null;
+    if (wait != null && !wait.isCompleted) wait.complete();
+  }
+
+  Future<void> _waitBeforeClaimRetry(int ms) {
+    final wait = Completer<void>();
+    _claimRetryWait = wait;
+    _reconnectTimer = _clock.setTimeout(() {
+      _reconnectTimer = null;
+      _endClaimRetryWait();
+    }, ms);
+    return wait.future;
   }
 
   void _clearGraceTimer() {
@@ -486,10 +506,27 @@ class _DartCore implements AppductCore {
     );
     try {
       _setState(ClientState.connecting);
-      await _handshake(
-        options,
-        (ack) => _onAckReceived(ack, SessionChangeType.claimed, options),
-      );
+      // A claim whose socket fails before the ack is tried again with the resume backoff until the
+      // link expires. A 1008 is final, so `already_claimed` on a retry ends it.
+      while (true) {
+        try {
+          await _handshake(
+            options,
+            (ack) => _onAckReceived(ack, SessionChangeType.claimed, options),
+          );
+          break;
+        } on _HandshakeClosed catch (error) {
+          if (epoch != _epoch || isTerminalClose(error.code)) rethrow;
+          final cause = error.message.replaceFirst(RegExp(r'\.+$'), '');
+          _emitError('connect', 'Appduct claim attempt failed: $cause.');
+          final delayMs = fullJitterBackoffMs(_reconnectAttempt, _ports.random);
+          _reconnectAttempt += 1;
+          await _waitBeforeClaimRetry(delayMs);
+          if (epoch != _epoch || input.expiresAt <= _clock.now() ~/ 1000) {
+            rethrow;
+          }
+        }
+      }
     } on Object catch (error) {
       if (epoch == _epoch) {
         _connectingSessionId = null;
