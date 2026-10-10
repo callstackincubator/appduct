@@ -178,7 +178,7 @@ export type ExecBufferFn = (command: string, args: string[]) => Promise<ExecBuff
 /** Real subprocess execution via `execFile`, buffered as raw bytes. `maxBuffer` is generous (an
  * artifact's full decompressed contents are read into memory at once — see {@link readZipEntries})
  * since real `.ipa`/`.apk`/`.aab` files can run into the hundreds of MB. */
-export const defaultExecBuffer: ExecBufferFn = (command, args) => {
+const defaultExecBuffer: ExecBufferFn = (command, args) => {
   return new Promise((resolve, reject) => {
     execFile(
       command,

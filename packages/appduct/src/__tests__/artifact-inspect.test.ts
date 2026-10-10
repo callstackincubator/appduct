@@ -9,11 +9,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import {
-  defaultExecBuffer,
-  inspectArtifact,
-  type ExecBufferFn,
-} from "../artifact-inspect.js";
+import { inspectArtifact, type ExecBufferFn } from "../artifact-inspect.js";
 import { buildAppDirectoryFixture, buildZipFixture, makeFixtureRoot } from "./artifact-fixtures.js";
 
 const cleanupDirs: string[] = [];
@@ -350,10 +346,6 @@ describe("artifact-inspect: never reports absent when it cannot actually tell", 
     await expect(inspectArtifact(weirdPath)).rejects.toMatchObject({
       type: "usage_error",
     });
-  });
-
-  test("defaultExecBuffer is wired to the real `unzip` (sanity check the DI seam matches production)", () => {
-    expect(defaultExecBuffer).toBeInstanceOf(Function);
   });
 });
 

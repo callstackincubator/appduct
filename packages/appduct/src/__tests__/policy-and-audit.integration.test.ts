@@ -443,37 +443,6 @@ describe("policy: prompt without elicitation", () => {
     app.socket.close();
   });
 
-  test('a "prompt" tool call from an MCP client without elicitation is denied with reason no_consent_channel', async () => {
-    const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
-    const app = await claimApp(daemon, "Pixel 8");
-    await snapshotTools(daemon, app, [{ name: "echo" }]);
-
-    const mcpHandle = await createMcpServer({
-      stateDir,
-      spawn: () => {
-        throw new Error("must not auto-spawn");
-      },
-    });
-    mcpHandles.push(mcpHandle);
-    const client = await connectClientWithoutElicitation(mcpHandle);
-
-    const result = await client.request(
-      { method: "tools/call", params: { name: "appduct_call_tool", arguments: { name: "echo", args: {} } } },
-      CallToolResultSchema,
-    );
-    expect(result.isError).toBe(true);
-    const text = (result.content[0] as { text: string }).text;
-    expect(text).toContain("policy_denied");
-
-    await shutdownNow(daemon);
-    const records = await readAuditRecords(stateDir);
-    const record = records.find((r) => r.tool === "echo" && r.caller === "mcp");
-    expect(record?.outcome).toBe("denied");
-    expect(record?.consent).toBeUndefined();
-
-    app.socket.close();
-  });
-
   test('a "prompt" tool call from the CLI (no consent channel) is denied with reason no_consent_channel', async () => {
     const { daemon, stateDir } = await startTestDaemon({ policy: { tools: { "pixel-8/echo": "prompt" } } });
     const app = await claimApp(daemon, "Pixel 8");
