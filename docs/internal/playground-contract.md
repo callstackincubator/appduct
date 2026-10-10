@@ -8,7 +8,7 @@ each one implements this contract, and a test written against one runs on the ot
 | Expo | `playground` | `playground` | yes | yes | yes |
 | iOS native | `playground-native/ios` | `appduct-native` | yes | yes | yes |
 | Android native | `playground-native/android` | `appduct-native` | yes | yes | no, see below |
-| Flutter | `playground-flutter` | `appduct-flutter` | yes | yes, except two ids, see below | yes |
+| Flutter | `playground-flutter` | `appduct-flutter` | yes | yes | yes |
 | web | `playground-web` | none | yes | no (the page keeps its `#count` and `#ping` ids) | no |
 
 Schemes, bundle ids, application ids and each app's `.appduct/config.json` do not change with the
@@ -79,12 +79,13 @@ and go_router match the path, and the iOS app opens Status for `/status` when
 
 - **Android native has no `/status` link.** The core's `AppductLinkActivity` finishes on any
   non-Appduct link (`AppductLinkActivity.kt`), and changing that is an SDK decision.
+
 ## Checking a playground
 
 - Unit: `playground/__tests__/playground-contract.test.ts` registers the Expo and web tools on a
   real client over a fake core (`pnpm --filter playground test`).
   `playground-flutter/test/playground_tools_test.dart` does the same for Flutter and also reads the
   ids through the semantics tree (`flutter test`).
-- Device: the `e2e-device` skill reads the ids with agent-device and compares `tools ls --json`
-  and `events ls` across the playgrounds. The two native apps have no unit tests; the device
-  pass is their check.
+- Device: the suite in `e2e-device/` (`APPDUCT_E2E_TARGET=<target> pnpm e2e:device`) reads the ids
+  with agent-device and checks the tools and the event on each playground. The two native apps
+  have no unit tests; the suite is their check.

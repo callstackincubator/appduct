@@ -470,9 +470,11 @@ describe("session engine: rejection matrix (daemon and other sessions survive ev
   test("a frame over 256 KiB is rejected", async () => {
     const { daemon } = await startTestDaemon();
     const socket = await connectClient(daemon);
-    const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+    const closed = nextClose(socket);
     socket.send(JSON.stringify({ type: "session_claim", padding: "x".repeat(300 * 1024) }));
-    await closed;
+    const closeInfo = await closed;
+    expect(closeInfo.code).toBe(1009);
+    expect(closeInfo.reason).toBe("");
   });
 
   test("malformed JSON closes 1008 invalid_json", async () => {

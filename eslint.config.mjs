@@ -10,7 +10,8 @@ import tseslint from "typescript-eslint";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGES = ["packages/appduct/src", "packages/shared/src", "packages/web/src"];
 const SOURCE = PACKAGES.map((p) => `${p}/**/*.ts`);
-const TESTS = PACKAGES.map((p) => `${p}/__tests__/**/*.ts`);
+// The device suite is test code throughout: it may reach the OS, but never mock a module.
+const TESTS = [...PACKAGES.map((p) => `${p}/__tests__/**/*.ts`), "e2e-device/**/*.ts"];
 
 // Rule 2, ports. Anything that reaches outside the process goes through a port whose real
 // adapter is a file named node-<capability>.ts. Only those files and the composition roots
@@ -187,7 +188,7 @@ const moduleBoundary = {
 export default [
   { ignores: ["**/dist/**", "**/build/**", "**/node_modules/**"] },
   {
-    files: SOURCE,
+    files: [...SOURCE, ...TESTS],
     languageOptions: { parser: tseslint.parser, ecmaVersion: 2024, sourceType: "module" },
     plugins: { appduct: { rules: { "module-boundary": moduleBoundary, "no-node-io-dynamic-import": noNodeIoDynamicImport, "no-tls-bypass": noTlsBypass } } },
   },

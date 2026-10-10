@@ -140,6 +140,12 @@ the *bound* port, never the configured `0`. That is how several daemons coexist 
 without an operator hand-picking a port for each (the test suite's daemons all run this way).
 Any other value must be a port number in `1..65535`.
 
+The listener binds the wildcard address. On macOS it also binds `127.0.0.1` on the same port, because
+macOS otherwise lets another program bind `127.0.0.1:<port>` and routes loopback clients (the
+simulator, the CLI, tests) to it instead (issue #249); Linux refuses that bind, ours included, so
+the wildcard alone suffices there. With `0`, a port already taken on `127.0.0.1` is given back and
+another tried; a configured port taken on either address fails startup.
+
 `advertisedIp` overrides auto-detection of the address advertised in minted bootstrap
 payloads. `scheme` is the deep-link URI scheme composed into `appduct sessions link`'s output
 when `--scheme` is not passed (§10) — set it once here instead of on every invocation.

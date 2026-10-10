@@ -32,6 +32,8 @@ export default defineConfig({
 			editLink: { baseUrl: `${repo}/edit/main/website/` },
 			lastUpdated: true,
 			credits: false,
+			// src/pages/404.astro replaces Starlight's 404, in the landing page's look (docs/DESIGN.md).
+			disable404Route: true,
 			customCss: [
 				'@fontsource/geist-mono/latin-400.css',
 				'@fontsource/geist-mono/latin-500.css',

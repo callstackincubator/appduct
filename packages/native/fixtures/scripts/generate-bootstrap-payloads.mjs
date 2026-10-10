@@ -160,6 +160,10 @@ const negatives = [
     base64url: base64url(concatBytes(new Uint8Array([0x01]), validRawLayout().slice(1))),
   },
   {
+    name: "unknown-future-version-byte",
+    base64url: base64url(concatBytes(new Uint8Array([0x03]), validRawLayout().slice(1))),
+  },
+  {
     name: "unknown-family-byte",
     base64url: base64url(concatBytes(new Uint8Array([0x02, 0x99]), validRawLayout().slice(2))),
   },
@@ -168,6 +172,12 @@ const negatives = [
     // Drops the last 10 bytes (part of the token + all of expiresAt) -- fails the exact
     // total-length check in decodeBootstrap.
     base64url: base64url(validRawLayout().slice(0, validRawLayout().length - 10)),
+  },
+  {
+    name: "header-short-buffer",
+    // Version, family and three of the four address bytes: too short for the address, port and
+    // session-id length byte, so it is rejected before any of them is read.
+    base64url: base64url(validRawLayout().slice(0, 5)),
   },
   {
     name: "oversized-buffer",

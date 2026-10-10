@@ -40,7 +40,7 @@
     "build": "tsc -p tsconfig.build.json && node scripts/bundle.mjs",
     "clean": "rm -rf dist",
     "lint": "eslint src",
-    "test": "vitest run --config ../../vitest.config.ts src/__tests__",
+    "test": "vitest run src/__tests__",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

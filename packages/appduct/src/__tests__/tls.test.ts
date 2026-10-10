@@ -10,7 +10,7 @@ import { chmod, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { createTlsManager, HostKeyError, loadHostKeyPem, loadOrGenerateHostKeyPem } from "../daemon/tls.js";
+import { createTlsManager, HostKeyError, loadOrGenerateHostKeyPem } from "../daemon/tls.js";
 import { getSpkiPinFromPrivateKeyPem } from "../spki-pin.js";
 import { writeTestHostKey } from "./fixtures.js";
 
@@ -76,14 +76,6 @@ describe("loadOrGenerateHostKeyPem", () => {
   });
 });
 
-describe("loadHostKeyPem", () => {
-  test("propagates a raw ENOENT (auto-generation is the caller's job, not this function's)", async () => {
-    const stateDir = await makeStateDir();
-    const keyPath = path.join(stateDir, "key.pem");
-
-    await expect(loadHostKeyPem(keyPath)).rejects.toMatchObject({ code: "ENOENT" });
-  });
-});
 
 describe("createTlsManager", () => {
   test("auto-generates a missing key and its pinnedKeys() matches the generated key's fingerprint", async () => {

@@ -71,6 +71,7 @@ describe("route argument errors render as usage errors (no daemon required)", ()
     [["sessions", "revoke", "a", "b"], /Usage/u],
     [["events", "tail", "a", "b"], /Usage/u],
     [["events", "since", "a", "-1"], /"<cursor>" must be a non-negative integer/u],
+    [["events", "since", "not-a-number"], /"<cursor>" must be a non-negative integer/u],
   ])("%j", async (argv, message) => {
     const result = await runCliWithCapture([...argv, "--json", "--state-dir", "/nonexistent-appduct-state"]);
 

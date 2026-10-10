@@ -2,3 +2,6 @@
 android/.gradle/
 android/**/build/
 android/local.properties
+
+# xcodebuild -derivedDataPath build (the device e2e suite builds here)
+ios/build/

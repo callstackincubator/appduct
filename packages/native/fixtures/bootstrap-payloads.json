@@ -101,6 +101,11 @@
     "expected": null
   },
   {
+    "name": "unknown-future-version-byte",
+    "base64url": "AwTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA",
+    "expected": null
+  },
+  {
     "name": "unknown-family-byte",
     "base64url": "ApnAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAA7msoAA",
     "expected": null
@@ -108,6 +113,11 @@
   {
     "name": "truncated-buffer",
     "base64url": "AgTAqAEKIPsJc2Vzc2lvbi0xAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
+    "expected": null
+  },
+  {
+    "name": "header-short-buffer",
+    "base64url": "AgTAqAE",
     "expected": null
   },
   {

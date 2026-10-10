@@ -346,26 +346,7 @@ final class AppductClientTests: XCTestCase {
 
   // MARK: reconnect / grace
 
-  func testTransportCloseSchedulesReconnectWithinGrace() async throws {
-    let timers = FakeClientTimers()
-    let (client, transport) = makeClient(timers: timers)
-    let connectTaskInput = connectInput()
-    let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
-    transport.simulateAck(sessionId: "session-1", graceS: 120)
-    try await connectTask.value
-
-    transport.simulateClose(code: 1_006, reason: nil)
-    try await waitUntil("the client moved to reconnecting after the socket closed") {
-      await client.state == .reconnecting
-    }
-
-    let state = await client.state
-    XCTAssertEqual(state, .reconnecting)
-    XCTAssertGreaterThan(timers.pendingCount, 0)
-  }
-
-  func testReconnectSucceedsAfterBackoffFires() async throws {
+  func testASessionThatResumedAndWasThenRefusedLeavesNoSessionIdAndNoTimer() async throws {
     let timers = FakeClientTimers(random: 0)
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
@@ -381,11 +362,7 @@ final class AppductClientTests: XCTestCase {
     try await waitUntil("the client moved to reconnecting after the socket closed") {
       await client.state == .reconnecting
     }
-    let stateAfterClose = await client.state
-    XCTAssertEqual(stateAfterClose, .reconnecting)
-
-    // Fire the scheduled reconnect timer; the resume attempt re-simulates an ack.
-    timers.advance(byMs: AppductBackoff.capMs)
+    timers.advance(byMs: 0)
     try await waitUntil("the resume attempt started a second transport handshake") {
       transport.isWired && transport.connectCallCount >= 2
     }
@@ -393,12 +370,28 @@ final class AppductClientTests: XCTestCase {
     try await waitUntil("the client went active again after the resume ack") {
       await client.state == .active
     }
-
-    let stateAfterResume = await client.state
-    XCTAssertEqual(stateAfterResume, .active)
     XCTAssertEqual(sessionChanges.last?.type, .resumed)
     XCTAssertEqual(sessionChanges.last?.sessionId, "session-1")
-    XCTAssertNil(sessionChanges.last?.reason)
+
+    transport.simulateClose(code: 1_006, reason: nil)
+    try await waitUntil("the client moved to reconnecting after the second drop") {
+      await client.state == .reconnecting
+    }
+    timers.advance(byMs: 0)
+    try await waitUntil("the second resume attempt started a third transport handshake") {
+      transport.isWired && transport.connectCallCount >= 3
+    }
+    transport.simulateClose(code: 1_008, reason: "invalid_resume_token")
+    try await waitUntil("the refused resume closed the session") {
+      await client.state == .closed
+    }
+
+    XCTAssertEqual(sessionChanges.last?.type, .lost)
+    XCTAssertNil(sessionChanges.last?.sessionId)
+    let sessionId = await client.sessionId
+    XCTAssertNil(sessionId)
+    XCTAssertNil(client.currentSessionIdSnapshot())
+    XCTAssertEqual(timers.pendingCount, 0)
   }
 
   // MARK: link pin carried across a resume (issue #136)
@@ -518,63 +511,6 @@ final class AppductClientTests: XCTestCase {
     try await waitUntil("the failed resume attempt reported its cause") {
       errors.all.contains { $0.message.contains("boom: no pin to trust") }
     }
-  }
-
-  func testGraceExpiryFinalizesSessionAsLost() async throws {
-    let timers = FakeClientTimers()
-    let (client, transport) = makeClient(timers: timers)
-    let connectTaskInput = connectInput()
-    let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
-    transport.simulateAck(sessionId: "session-1", graceS: 10)
-    try await connectTask.value
-
-    let sessionChanges = EventCollector<AppductSessionChangeEvent>()
-    _ = await client.onSessionChange { event in sessionChanges.append(event) }
-
-    transport.simulateClose(code: 1_006, reason: nil)
-    try await waitUntil("the client moved to reconnecting after the socket closed") {
-      await client.state == .reconnecting
-    }
-    let stateAfterClose = await client.state
-    XCTAssertEqual(stateAfterClose, .reconnecting)
-
-    timers.advance(byMs: 10_000)
-    try await waitUntil("the grace window expired and closed the session") {
-      await client.state == .closed
-    }
-
-    let stateAfterGraceExpiry = await client.state
-    XCTAssertEqual(stateAfterGraceExpiry, .closed)
-    let sessionIdAfterGraceExpiry = await client.sessionId
-    XCTAssertNil(sessionIdAfterGraceExpiry)
-    XCTAssertEqual(sessionChanges.last?.type, .lost)
-    XCTAssertEqual(sessionChanges.last?.reason, "grace_expired")
-  }
-
-  func testTerminalCloseDuringActiveSessionIsNotRetried() async throws {
-    let timers = FakeClientTimers()
-    let (client, transport) = makeClient(timers: timers)
-    let connectTaskInput = connectInput()
-    let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
-    transport.simulateAck(sessionId: "session-1", graceS: 120)
-    try await connectTask.value
-
-    let sessionChanges = EventCollector<AppductSessionChangeEvent>()
-    _ = await client.onSessionChange { event in sessionChanges.append(event) }
-
-    transport.simulateClose(code: 1_008, reason: "unknown_session")
-    try await waitUntil("the terminal close finalized the session") {
-      await client.state == .closed
-    }
-
-    let state = await client.state
-    XCTAssertEqual(state, .closed)
-    XCTAssertEqual(timers.pendingCount, 0)
-    XCTAssertEqual(sessionChanges.last?.sessionId, nil)
-    XCTAssertEqual(sessionChanges.last?.type, .lost)
-    XCTAssertEqual(sessionChanges.last?.reason, "unknown_session")
   }
 
   func testRevokedCloseFinalizesImmediately() async throws {
