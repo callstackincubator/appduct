@@ -3,7 +3,10 @@
 A Flutter app (Android, iOS, macOS) that depends on [`packages/flutter`](../packages/flutter) by
 path and registers the same five tools and the `playground_ping` event as `playground` and
 `playground-native`, so `appduct tools ls` reports an equivalent surface whichever playground
-answered the link. It uses go_router, so an Appduct link reaching the app is checked against a real
+answered the link. The tools, the event and the screens' `Semantics` identifiers (`call-count`,
+`connection-state`, `ping-button` and the rest) follow the
+[playground contract](../docs/internal/playground-contract.md); `session-alias` and
+`last-session-event` stay `none` because the Flutter SDK does not expose them yet. It uses go_router, so an Appduct link reaching the app is checked against a real
 router.
 
 ```bash

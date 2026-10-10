@@ -21,7 +21,10 @@ extra debug screens for any of it.
   and resumes the session automatically with the same alias—no new deep link needed while the
   native app process stays alive.
 - **UI sandbox** (Expo Router) with two tabs: **Tools** (registers demo tools, renders the live
-  registry) and **Status** (connection state, alias, error feed, and a manual event post).
+  registry and the call counter) and **Status** (connection state, alias, last session event, error
+  feed, and a manual event post). The tools, the event and the `testID`s follow the
+  [playground contract](../docs/internal/playground-contract.md), so a script written for this app
+  runs on the other playgrounds too. The tools live in `playground-tools/`.
 
 ## Getting started
 
