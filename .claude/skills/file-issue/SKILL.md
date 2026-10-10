@@ -11,6 +11,8 @@ Never file an issue for something you can fix inside the change you are already 
 Note it in the PR instead. If told not to create the issue, print the title, labels and body
 in the format below instead of running `gh issue create`.
 
+Load `cite-evidence`; what the issue says about a dependency is cited or marked unverified.
+
 Read the `file-issue` section of `.agents/memory/LESSONS.md` before starting, plus General.
 
 ## 1. Pin the intent down
