@@ -15,7 +15,8 @@ test("an opted-in release build connects and answers calls", async (context) => 
   const { target, deviceId } = suite;
   const release = target.release;
   if (!release) {
-    return context.skip(`${target.name} has no opted-in release build`);
+    // The native playgrounds can't build an opted-in release variant yet: #247.
+    return context.skip(`${target.name} has no opted-in release build (#247)`);
   }
 
   await runSteps(target.dir, release.build, logFile(`build-release-${target.name}`));

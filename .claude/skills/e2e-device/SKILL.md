@@ -24,7 +24,7 @@ Pick from the paths the PR changes. Run every row that matches.
 | `packages/native/android/**` | `playground-native/android` on Android emulator | `native-android` |
 | `packages/flutter/ios/**`, `packages/flutter/darwin/**`, `packages/flutter/lib/**`, `playground-flutter/**` | `playground-flutter` on iOS simulator | `flutter-ios` |
 | `packages/flutter/android/**`, `packages/flutter/lib/**`, `playground-flutter/android/**` | `playground-flutter` on Android emulator | `flutter-android` |
-| `packages/flutter/**` and the PR names L3, L4, L5 or C5 | the device checks in "Flutter device checks"; L5 and C5 on iOS need a physical iPhone | none |
+| `packages/flutter/**` and the PR names R3, L3, L4, L5 or C5 | the device checks in "Flutter device checks"; L5 and C5 on iOS need a physical iPhone | none |
 | `packages/appduct/**`, `packages/shared/**` only | iOS row only | `expo-ios` |
 
 ## Run the suite
@@ -169,9 +169,44 @@ active() { $a sessions ls --json | jq -r '[.data[] | select(.state=="active")][0
 until id=$(active) && [ -n "$id" ]; do sleep 2; done
 ```
 
-T6 (device names), L1 (a link leaves the route alone), R2 and R3 (hot restart) and L4's UIScene
-runs are cases in the suite: `cold-link`, `warm-link`, `js-reload`, `reload-in-flight` and
-`status-deep-link`.
+T6 (device names), L1 (a link leaves the route alone), R2 (hot restart resumes the session) and
+L4's UIScene runs are cases in the suite: `cold-link`, `warm-link`, `js-reload` and
+`status-deep-link`. R3 stays manual: a hot restart takes about as long as `slow_task`, so the suite
+can't land it mid-call every time and `reload-in-flight` skips on Flutter.
+
+**R3, a call in flight fails at once on hot restart.** Start the app under `flutter run` with a pid
+file, in the background, then deliver a link as above and pick the active session with `active`:
+
+```bash
+cd playground-flutter
+(sleep 86400 | flutter run -d "$udid" --debug --pid-file /tmp/flutter-run.pid > /tmp/flutter-run.log 2>&1 &)
+until grep -q "Flutter run key commands" /tmp/flutter-run.log; do sleep 2; done
+cd ..
+# deliver a link, then: until id=$(active) && [ -n "$id" ]; do sleep 2; done
+restart() { # hot restart, then wait for the new "Restarted application" line
+  n=$(grep -c "Restarted application" /tmp/flutter-run.log)
+  kill -USR2 $(cat /tmp/flutter-run.pid)
+  until [ "$(grep -c "Restarted application" /tmp/flutter-run.log)" -gt "$n" ]; do sleep 1; done
+}
+```
+
+The playground's `slow_task` prints `slow_task started` to the run log when the handler begins, so
+the restart goes out only once the call is running:
+
+```bash
+n=$(grep -c "slow_task started" /tmp/flutter-run.log)
+( time $a tools call "$id" slow_task --input '{}' --json ) > /tmp/slow.out 2>&1 &
+until [ "$(grep -c "slow_task started" /tmp/flutter-run.log)" -gt "$n" ]; do sleep 0.1; done
+restart
+wait; cat /tmp/slow.out
+```
+
+The call fails with `session_suspended` well before the 5 s tool timeout, and its message contains
+`while the call was pending`. A message that says `is not active` means the call arrived while the
+session was already suspended, and a `done: true` result means the call finished before the
+restart landed: either way the run proves nothing, repeat it. Then check the session resumes
+(`until [ "$(active)" = "$id" ]` and a `call_count` of 0). Stop `flutter run` with
+`kill $(cat /tmp/flutter-run.pid)` when done.
 
 **L3, links through the shim with Flutter deep linking off (Android).** In
 `playground-flutter/android/app/src/main/AndroidManifest.xml` add

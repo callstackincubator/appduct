@@ -31,7 +31,7 @@ in `e2e-device/.artifacts/`.
 | File | Proves | Targets |
 | --- | --- | --- |
 | `cold-link` | a link launches the stopped app into an active session that reports the real device | all |
-| `warm-link` | a second link replaces the session and suspends the first | all |
+| `warm-link` | a second link replaces the session and suspends the first; the app stays on its screen | all; the screen check skips on Expo (#235) |
 | `tools-round-trip` | the five tools match the contract, and the counter on screen follows them | all |
 | `ui-event` | a press on the ping button reaches `waitForEvent` | all |
 | `status-deep-link` | `<scheme>:///status` opens Status and leaves the session active | all but `native-android` |
@@ -39,7 +39,7 @@ in `e2e-device/.artifacts/`.
 | `js-reload` | a Metro reload or hot restart resumes the same session with fresh state | Expo, Flutter |
 | `reload-in-flight` | a call running during the reload fails at once with `session_suspended` | Expo |
 | `app-killed` | a killed app relaunched without a link stays idle; a new link connects | all |
-| `release-opt-in` | an opted-in release build connects | `expo-android`, `flutter-android` |
+| `release-opt-in` | an opted-in release build connects | `expo-android`, `flutter-android`; native in #247 |
 
 ## Rules for a new case
 

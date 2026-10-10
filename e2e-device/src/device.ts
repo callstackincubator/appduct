@@ -97,6 +97,13 @@ export const openDevice = (target: Target, deviceId: string) => {
     /** The element's value as accessibility reads it, or `undefined` when it isn't on screen. */
     text,
 
+    /** Waits until the screen stops changing for a second, so a navigation still in flight lands
+     * before the next read. */
+    waitForStable: async (): Promise<void> => {
+      await session();
+      await agent.command.wait({ ...where, stable: true, quietMs: 1_000, timeoutMs: 15_000 });
+    },
+
     /** Waits until the element reads `value`, and fails with the last value it read. */
     waitForText: async (id: ElementId, value: string, timeoutMs = 30_000): Promise<void> => {
       let last: string | undefined;
