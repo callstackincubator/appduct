@@ -599,7 +599,8 @@ internal class AppductClient private constructor(
         try {
             connectTransport(options.toWireMap())
         } catch (e: Throwable) {
-            settlePendingAttempt(Result.failure(e))
+            // A connect that fails after a newer one replaced it must not settle that newer attempt.
+            if (pendingAttempt === deferred) settlePendingAttempt(Result.failure(e))
         }
         return deferred.await()
     }
@@ -1030,10 +1031,13 @@ internal class AppductClient private constructor(
             }
         }
 
-    private suspend fun closeTransport() =
+    private suspend fun closeTransport() {
+        // Closing the transport reports no close event, so in-flight handlers are aborted here.
+        toolInvoker.abortAllInFlight()
         suspendCancellableCoroutine<Unit> { cont ->
             transport.close { cont.resume(Unit) }
         }
+    }
 
     private suspend fun closeTransportForBackground() =
         suspendCancellableCoroutine<Unit> { cont ->

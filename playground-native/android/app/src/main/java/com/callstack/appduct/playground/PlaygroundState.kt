@@ -15,6 +15,8 @@ import com.callstack.appduct.ClientState
  * subscription and from the registered tool handlers; read from Composables.
  */
 object PlaygroundState {
+    enum class Screen { Tools, Status }
+
     var clientState by mutableStateOf(ClientState.idle)
         internal set
 
@@ -23,6 +25,12 @@ object PlaygroundState {
 
     var callCount by mutableStateOf(0)
         internal set
+
+    /** The `at` of the last `playground_ping` this app sent. */
+    var lastPing by mutableStateOf<Long?>(null)
+        internal set
+
+    var screen by mutableStateOf(Screen.Tools)
 
     val recentEvents: SnapshotStateList<String> = mutableStateListOf()
 

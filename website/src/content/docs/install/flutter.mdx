@@ -215,7 +215,29 @@ On Windows and Linux, a crash leaves a stale session record behind. The next sta
 
 ## Watch the connection and send events
 
-`Appduct.instance.state` is a `ValueListenable` holding `idle`, `connecting`, `active`, `reconnecting` or `closed`. To tell a test or agent that something happened, call `postEvent`; it's dropped when no session is connected:
+`Appduct.instance.state` is a `ValueListenable` holding `idle`, `connecting`, `active`, `reconnecting` or `closed`. `Appduct.instance.sessionId` is the current session's id, or `null` when there is none.
+
+To show which session the app is in, or why it lost one, listen to two streams:
+
+```dart
+Appduct.instance.sessionChanges.listen((change) {
+  switch (change.type) {
+    case SessionChangeType.claimed:
+    case SessionChangeType.resumed:
+      debugPrint('Appduct session ${change.sessionId} (${change.alias})');
+    case SessionChangeType.lost:
+      debugPrint('Appduct session lost: ${change.reason}');
+  }
+});
+
+Appduct.instance.errors.listen((error) {
+  debugPrint('Appduct ${error.phase} error: ${error.message}');
+});
+```
+
+`alias` is the name `appduct sessions ls` shows for the session. `reason` is set only when the session was lost, for example `grace_expired` when the connection stayed down for longer than the session allows. `error.phase` is `connect`, `bootstrap`, `socket` or `tool`. In a build without Appduct, both streams have no events and `sessionId` is `null`.
+
+To tell a test or agent that something happened, call `postEvent`; it's dropped when no session is connected:
 
 ```dart
 Appduct.instance.registerEvent(

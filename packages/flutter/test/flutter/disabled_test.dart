@@ -37,6 +37,16 @@ void main() {
       expect(appduct.state.value, AppductState.idle);
     }, skip: skip);
 
+    test('session changes and errors close without events', () async {
+      FakeShim().install();
+
+      final appduct = Appduct.ensureInitialized();
+
+      expect(await appduct.sessionChanges.toList(), isEmpty);
+      expect(await appduct.errors.toList(), isEmpty);
+      expect(appduct.sessionId, isNull);
+    }, skip: skip);
+
     test('Appduct.instance returns the same inert object', () {
       expect(Appduct.instance, same(Appduct.ensureInitialized()));
     }, skip: skip);

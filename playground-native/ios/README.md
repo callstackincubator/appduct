@@ -4,7 +4,10 @@ A plain SwiftUI app -- no React Native, no Expo -- that consumes `AppductCore`
 (`packages/native/ios`) directly through the `Appduct` facade
 (`packages/native/ios/Sources/AppductCore/Real/AppductAPI.swift`). It registers the same five
 tools the Expo playground (`playground/`) registers, so `appduct tools ls` reports an equivalent
-surface regardless of which playground app answered the link.
+surface regardless of which playground app answered the link. The tools, the `playground_ping`
+event, the two screens and their accessibility identifiers (`call-count`, `connection-state`,
+`ping-button` and the rest) follow the [playground contract](../../docs/internal/playground-contract.md),
+and `appduct-native:///status` opens the Status screen.
 
 See [`packages/native/ios/README.md`](../../packages/native/ios/README.md) for the SDK itself.
 
@@ -64,16 +67,17 @@ appduct doctor path/to/Release-iphonesimulator/AppductPlayground.app --assert-ab
 
 - `project.yml` -- the xcodegen project spec (targets, settings, the local package dependency).
 - `AppductPlayground/AppductPlaygroundApp.swift` -- the `@main` entry point:
-  `PlaygroundTools.registerAll()` at startup, `.onOpenURL { Appduct.shared.handle($0) }` on the
-  root scene.
+  `PlaygroundTools.registerAll()` at startup, `.onOpenURL` on the root scene handing the link to
+  `Appduct.shared.handle` and opening Status for `/status`.
 - `AppductPlayground/PlaygroundTools.swift` -- registers `sum`, `call_count`, `reset_counter`,
-  `slow_task`, `throwing_tool` -- the same names/descriptions/schemas
-  `playground/app/(tabs)/index.tsx` registers on the Expo side.
+  `slow_task`, `throwing_tool` and declares `playground_ping` -- the contract's names, groups,
+  annotations and descriptions.
 - `AppductPlayground/PlaygroundViewModel.swift` -- the `@MainActor` observable store backing the
   UI: call counter, connection state/session id (via `Appduct.shared.addListener`), and a short
   rolling activity log.
-- `AppductPlayground/ContentView.swift` -- the single screen: connection state, call counter, a
-  button that calls `Appduct.shared.postEvent(...)`, and the activity log.
+- `AppductPlayground/ContentView.swift` -- the Tools and Status screens and their tab bar:
+  call counter, connection state, alias, last session event, a button that posts `playground_ping`
+  and the activity log.
 - `AppductPlayground/Info.plist` -- declares the `appduct-native` URL scheme
   (`CFBundleURLTypes`). No `AppductTrust`/`AppductCliPins` keys: this playground is the
   zero-config example, so it trusts whatever pin `appduct sessions link` puts on the deep link for that

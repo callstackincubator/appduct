@@ -110,7 +110,8 @@ pnpm playground:appduct -- sessions link --open android   # app id comes from pl
 ## Native playgrounds
 
 Follow `playground-native/ios/README.md` (xcodegen, xcodebuild, `simctl install` and
-`launch`) and `playground-native/android/README.md`. They register the same five tools. Run the CLI from that playground's directory so the scheme
+`launch`) and `playground-native/android/README.md`. They register the same five tools and the
+`playground_ping` event. Run the CLI from that playground's directory so the scheme
 is discovered, or pass `--scheme`.
 
 ## Flutter playground

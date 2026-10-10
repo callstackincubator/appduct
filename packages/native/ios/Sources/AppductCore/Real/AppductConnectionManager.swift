@@ -538,8 +538,18 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
       return
     }
 
-    closeEventPending = true
+    // Finish tearing down before returning: the client connects again right after this (a warm
+    // link replacing the session), and `connect()` rejects while the state is still active. No
+    // close event follows for this socket, since the client would read a late one as the outcome
+    // of that new handshake. The session is released after its tasks finish, not cancelled, so the
+    // close frame still gets out.
     socketTask.cancel(with: .normalClosure, reason: nil)
+    let closingSession = session
+    session = nil
+    cleanup()
+    closingSession?.finishTasksAndInvalidate()
+    closeEventPending = false
+    state = .closed
   }
 
   /// Closes the socket with `1001 app_backgrounded` because the app is leaving the foreground, and
