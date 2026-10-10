@@ -7,15 +7,14 @@ import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Reconnect backoff and grace expiry replayed in virtual time: [AppductClient] runs on a
- * [StandardTestDispatcher] and reads its clock from the same scheduler, so no test waits on the
- * wall clock.
+ * Grace expiry replayed in virtual time: [AppductClient] runs on a [StandardTestDispatcher] and
+ * reads its clock from the same scheduler, so no test waits on the wall clock. Backoff timing is
+ * covered by the session scenarios.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppductClientVirtualTimeTest {
@@ -60,24 +59,6 @@ class AppductClientVirtualTimeTest {
         runCurrent()
         return harness
     }
-
-    @Test
-    fun `a dropped socket reconnects at the jittered backoff delay and not before`() =
-        runTest {
-            // First retry: random() * min(cap, 500 ms) = 0.5 * 500 = 250 ms.
-            val harness = connected(random = { 0.5 }, graceS = 600.0)
-            val connectsBeforeDrop = harness.fake.connectCalls.size
-
-            harness.fake.simulateClose(1006, null)
-            runCurrent()
-            advanceTimeBy(249)
-            runCurrent()
-            assertEquals(connectsBeforeDrop, harness.fake.connectCalls.size)
-
-            advanceTimeBy(1)
-            runCurrent()
-            assertEquals(connectsBeforeDrop + 1, harness.fake.connectCalls.size)
-        }
 
     @Test
     fun `grace expiry reports the session lost`() =
