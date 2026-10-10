@@ -34,9 +34,12 @@ public func terminalCloseReason(_ event: AppductCloseEvent) -> String {
 public struct AppductHandshakeClosedError: Error, Sendable {
   public let message: String
   public let closeEvent: AppductCloseEvent
-  public init(message: String, closeEvent: AppductCloseEvent) {
+  /// The socket closed because the daemon's key was not a trusted pin. A claim does not retry that.
+  public let pinRejected: Bool
+  public init(message: String, closeEvent: AppductCloseEvent, pinRejected: Bool = false) {
     self.message = message
     self.closeEvent = closeEvent
+    self.pinRejected = pinRejected
   }
 }
 
@@ -48,6 +51,12 @@ public struct AppductSocketConnectError: Error, Sendable {
   public init(underlying: any Error) {
     self.underlying = underlying
   }
+}
+
+/// Whether the transport reported the daemon's key as not a trusted pin, or could not check it.
+func isPinRejection(_ details: AppductErrorDetails?) -> Bool {
+  guard let details, details.phase == "tls", let nativeCode = details.nativeCode else { return false }
+  return ["pin_mismatch", "spki_pin_failed", "server_trust_unavailable"].contains(nativeCode)
 }
 
 public func isTerminalHandshakeRejection(_ error: Error) -> Bool {

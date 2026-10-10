@@ -25,6 +25,28 @@ enum AppductConnectionState: String {
   case error
 }
 
+/// Set from the URLSession delegate queue when a pin check cancels the TLS challenge, and read on
+/// the actor when the failed send comes back. The send's own error does not say why it failed.
+private final class AppductPinRejection: @unchecked Sendable {
+  private let lock = NSLock()
+  private var rejected = false
+
+  func record() {
+    lock.lock()
+    rejected = true
+    lock.unlock()
+  }
+
+  /// Whether a pin check rejected the daemon since the last call, clearing the record.
+  func take() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    let wasRejected = rejected
+    rejected = false
+    return wasRejected
+  }
+}
+
 private struct AppductModuleError: Error, LocalizedError {
   let message: String
   var errorDescription: String? { message }
@@ -381,6 +403,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
   nonisolated(unsafe) private var configuredPins: Set<String> = []
   private var allowPrivateLanOnly = true
   private var closeEventPending = false
+  private let pinRejection = AppductPinRejection()
   private var lastErrorDetails: AppductErrorDetails?
   private var keepaliveTask: Task<Void, Never>?
   private var pingFailureCount = 0
@@ -458,6 +481,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
     // `.connecting`, so a second call's guard at the top of this function deterministically
     // throws `already_connecting` instead of racing to create a second socket.
     cleanup()
+    _ = pinRejection.take()
 
     pendingOptions = options
     closeEventPending = true
@@ -506,7 +530,14 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
       ]
     }
 
-    try await sendRawObject(firstFrame, requireActiveSession: false)
+    do {
+      try await sendRawObject(firstFrame, requireActiveSession: false)
+    } catch {
+      // A pin failure cancels the TLS challenge, which fails this send; the client must not retry
+      // it. Any other failure here is the socket failing before it opened.
+      if pinRejection.take() { throw error }
+      throw AppductSocketConnectError(underlying: error)
+    }
   }
 
   public func send(message: String) async throws {
@@ -972,6 +1003,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
           hint: "Check the host certificate and trusted pins."
         )
       )
+      pinRejection.record()
       completionHandler(.cancelAuthenticationChallenge, nil)
       return
     }
@@ -991,6 +1023,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
             hint: "Verify cliPins matches the fingerprint from appduct keygen and rebuild the native app."
           )
         )
+        pinRejection.record()
         completionHandler(.cancelAuthenticationChallenge, nil)
         return
       }
@@ -1008,6 +1041,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
           hint: "Check the host certificate and trusted pins."
         )
       )
+      pinRejection.record()
       completionHandler(.cancelAuthenticationChallenge, nil)
     }
   }

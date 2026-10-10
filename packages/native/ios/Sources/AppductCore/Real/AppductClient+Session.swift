@@ -52,6 +52,7 @@ extension AppductClient {
     epoch += 1
     let myEpoch = epoch
     clearReconnectTimer()
+    endClaimRetryWait()
     clearGraceTimer()
     reconnectAttempt = 0
     heldSession = nil
@@ -93,8 +94,9 @@ extension AppductClient {
     }
   }
 
-  /// A claim whose socket fails before the ack is tried again with the resume backoff until the
-  /// link expires. A 1008 is final, so `already_claimed` on a retry ends it.
+  /// A claim whose socket fails before the ack, or before it opens, is tried again with the resume
+  /// backoff until the link expires. A 1008 is final, so `already_claimed` on a retry ends it, and
+  /// so do a pin mismatch and a build setting the transport refuses.
   private func claimWithRetries(
     _ options: AppductConnectOptions,
     expiresAt: Int,
@@ -103,8 +105,8 @@ extension AppductClient {
     while true {
       do {
         return try await performHandshake(options)
-      } catch let error as AppductHandshakeClosedError {
-        if myEpoch != epoch || isTerminalHandshakeRejection(error) { throw error }
+      } catch {
+        if myEpoch != epoch || !isRetryableClaimFailure(error) { throw error }
         emitError(
           AppductUnifiedErrorEvent(
             phase: "connect",
@@ -121,17 +123,30 @@ extension AppductClient {
     }
   }
 
+  /// The socket failed: it closed before the ack, or never opened (refused, reset during TLS, timed
+  /// out). Anything else the transport throws is a refusal of the connect itself.
+  private func isRetryableClaimFailure(_ error: Error) -> Bool {
+    if let closed = error as? AppductHandshakeClosedError {
+      return !isTerminalHandshakeRejection(closed) && !closed.pinRejected
+    }
+    return error is AppductSocketConnectError
+  }
+
   private func waitBeforeClaimRetry(afterMs delay: Double) async {
     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
       claimRetryWait = continuation
-      reconnectTimerHandle = timers.setTimeout(afterMs: delay) { [weak self] in
+      claimRetryTimerHandle = timers.setTimeout(afterMs: delay) { [weak self] in
         Task { await self?.endClaimRetryWait() }
       }
     }
   }
 
-  /// Wakes the `connect()` waiting out the backoff, whether the timer fired or was cleared.
+  /// Wakes the `connect()` waiting out the backoff, whether the timer fired or not.
   func endClaimRetryWait() {
+    if let handle = claimRetryTimerHandle {
+      timers.clearTimeout(handle)
+      claimRetryTimerHandle = nil
+    }
     let wait = claimRetryWait
     claimRetryWait = nil
     wait?.resume()
@@ -471,7 +486,8 @@ extension AppductClient {
 
     let handshakeError = AppductHandshakeClosedError(
       message: reason ?? errorDetails?.message ?? "Appduct connection closed.",
-      closeEvent: closeEvent
+      closeEvent: closeEvent,
+      pinRejected: isPinRejection(errorDetails)
     )
 
     if settlePendingAttempt(.failure(handshakeError)) {
@@ -492,7 +508,11 @@ extension AppductClient {
     let myEpoch = epoch
 
     guard heldSession != nil else {
-      setClientState(.closed, reason: "socket_closed")
+      // A claim waiting out its backoff owns the state, and a socket whose connect already failed
+      // is reported closed once more here, which tells the app nothing new.
+      if connectingSessionId == nil, clientState != .closed {
+        setClientState(.closed, reason: "socket_closed")
+      }
       return
     }
 
@@ -576,7 +596,6 @@ extension AppductClient {
       timers.clearTimeout(handle)
       reconnectTimerHandle = nil
     }
-    endClaimRetryWait()
   }
 
   func clearGraceTimer() {
@@ -678,6 +697,9 @@ extension AppductClient {
   /// last-resort dump of the error for anything else.
   private func describeResumeError(_ error: Error) -> String {
     if let handshakeError = error as? AppductHandshakeClosedError { return handshakeError.message }
+    if let socketError = error as? AppductSocketConnectError {
+      return (socketError.underlying as NSError).localizedDescription
+    }
     if let jsonError = error as? AppductJSONError { return jsonError.message }
     if let localizedError = error as? LocalizedError, let description = localizedError.errorDescription {
       return description
