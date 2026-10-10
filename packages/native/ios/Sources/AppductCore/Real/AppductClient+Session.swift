@@ -71,7 +71,7 @@ extension AppductClient {
       }
       setClientState(.connecting)
       let options = try buildTransportOptions(from: input)
-      let ack = try await performHandshake(options)
+      let ack = try await claimWithRetries(options, expiresAt: input.expiresAt, myEpoch: myEpoch)
 
       if myEpoch != epoch {
         // Superseded by a newer `connect()` while awaiting the ack; abandon silently.
@@ -91,6 +91,50 @@ extension AppductClient {
       }
       throw error
     }
+  }
+
+  /// A claim whose socket fails before the ack is tried again with the resume backoff until the
+  /// link expires. A 1008 is final, so `already_claimed` on a retry ends it.
+  private func claimWithRetries(
+    _ options: AppductConnectOptions,
+    expiresAt: Int,
+    myEpoch: Int
+  ) async throws -> SessionAck {
+    while true {
+      do {
+        return try await performHandshake(options)
+      } catch let error as AppductHandshakeClosedError {
+        if myEpoch != epoch || isTerminalHandshakeRejection(error) { throw error }
+        emitError(
+          AppductUnifiedErrorEvent(
+            phase: "connect",
+            message: "Appduct claim attempt failed: \(describeResumeError(error))"
+          )
+        )
+        let delay = AppductBackoff.fullJitterMs(attempt: reconnectAttempt, random: timers.random)
+        reconnectAttempt += 1
+        await waitBeforeClaimRetry(afterMs: delay)
+        if myEpoch != epoch || isAppductExpired(expiresAt: expiresAt, now: Int(timers.now() / 1_000)) {
+          throw error
+        }
+      }
+    }
+  }
+
+  private func waitBeforeClaimRetry(afterMs delay: Double) async {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      claimRetryWait = continuation
+      reconnectTimerHandle = timers.setTimeout(afterMs: delay) { [weak self] in
+        Task { await self?.endClaimRetryWait() }
+      }
+    }
+  }
+
+  /// Wakes the `connect()` waiting out the backoff, whether the timer fired or was cleared.
+  func endClaimRetryWait() {
+    let wait = claimRetryWait
+    claimRetryWait = nil
+    wait?.resume()
   }
 
   /// Starts recovery from the native process-memory lease. Resolves `true` once a resume attempt
@@ -532,6 +576,7 @@ extension AppductClient {
       timers.clearTimeout(handle)
       reconnectTimerHandle = nil
     }
+    endClaimRetryWait()
   }
 
   func clearGraceTimer() {

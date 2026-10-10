@@ -69,6 +69,8 @@ public actor AppductClient {
   var pendingAttempt: PendingAttempt?
   var reconnectAttempt: Int = 0
   var reconnectTimerHandle: (any AppductTimerHandle)?
+  /// The `connect()` that is waiting out the backoff before it retries its claim.
+  var claimRetryWait: CheckedContinuation<Void, Never>?
   var graceTimerHandle: (any AppductTimerHandle)?
   var resumeInFlight = false
   var backgrounded: Bool
