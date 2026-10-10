@@ -14,17 +14,31 @@ final class PlaygroundViewModel: ObservableObject {
   @Published private(set) var callCount = 0
   @Published private(set) var state: ClientState = .idle
   @Published private(set) var sessionId: String?
+  /// The current session's alias, `nil` while there is none.
+  @Published private(set) var alias: String?
+  /// `<type>` or `<type> (<reason>)` of the last session change, `nil` before the first.
+  @Published private(set) var lastSessionEvent: String?
+  /// The `at` of the last `playground_ping` this app sent.
+  @Published private(set) var lastPing: Int?
+  @Published var screen: Screen = .tools
   @Published private(set) var log: [String] = []
+
+  enum Screen {
+    case tools
+    case status
+  }
 
   private var subscription: Subscription?
   private let maxLogLines = 6
 
   private init() {}
 
-  /// Called once from `AppductPlaygroundApp.init()`. Snapshots the facade's current state
-  /// immediately (in case a session is already active by the time this view model is created --
-  /// e.g. after `restoreSession()` won a race with app launch), then subscribes for future changes.
+  /// Called once from `AppductPlaygroundApp.init()`, so the alias of a session claimed before the
+  /// Status screen is ever shown is not missed. Snapshots the facade's current state immediately
+  /// (in case a session is already active by the time this view model is created -- e.g. after
+  /// `restoreSession()` won a race with app launch), then subscribes for future changes.
   func start() {
+    guard subscription == nil else { return }
     state = Appduct.shared.state
     sessionId = Appduct.shared.sessionId
 
@@ -42,6 +56,8 @@ final class PlaygroundViewModel: ObservableObject {
       appendLog("state -> \(change.state.rawValue)" + (change.reason.map { " (\($0))" } ?? ""))
     case .sessionChange(let change):
       sessionId = change.sessionId
+      alias = change.type == .lost ? nil : change.alias
+      lastSessionEvent = change.type.rawValue + (change.reason.map { " (\($0))" } ?? "")
       appendLog(
         change.sessionId != nil
           ? "session -> \(change.sessionId ?? "") as \(change.alias ?? "?")"
@@ -62,6 +78,10 @@ final class PlaygroundViewModel: ObservableObject {
 
   func resetCallCount() {
     callCount = 0
+  }
+
+  func recordPing(at: Int) {
+    lastPing = at
   }
 
   func appendLog(_ line: String) {
