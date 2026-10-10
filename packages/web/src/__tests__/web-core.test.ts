@@ -111,11 +111,17 @@ describe("claiming a session", () => {
     expect(h.recorded.sessions).toEqual([]);
   });
 
-  it("surfaces a socket that never opens as an error from connect", async () => {
+  it("surfaces a socket that never opens as an error from connect once the link has expired", async () => {
     const h = setup();
-    const connecting = h.startClaim();
+    const connecting = h.startClaim({ expiresAt: Math.floor(START_MS / 1000) + 1 });
     const rejected = expect(connecting).rejects.toThrow("refused");
-    h.last().drop("refused");
+    for (const waitMs of [250, 500, 1000]) {
+      h.last().drop("refused");
+      await settle();
+      expect(h.core.getState()).toBe("connecting");
+      h.clock.advance(waitMs);
+      await settle();
+    }
     await rejected;
     expect(h.core.getState()).toBe("closed");
   });

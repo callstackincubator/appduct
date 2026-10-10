@@ -136,10 +136,26 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
   const emitSessionChange = (type: string, sessionId: string | null, alias: string | null, reason?: string) =>
     emit("sessionChange", { type, sessionId, alias, ...(reason !== undefined ? { reason } : {}) });
 
+  /** Wakes the `connect()` that is waiting out the backoff before it retries its claim. */
+  let claimRetryWake: (() => void) | undefined;
+  const endClaimRetryWait = () => {
+    const wake = claimRetryWake;
+    claimRetryWake = undefined;
+    wake?.();
+  };
   const clearReconnectTimer = () => {
     if (reconnectTimer !== undefined) clock.clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
+    endClaimRetryWait();
   };
+  const waitBeforeClaimRetry = (ms: number): Promise<void> =>
+    new Promise<void>((resolve) => {
+      claimRetryWake = resolve;
+      reconnectTimer = clock.setTimeout(() => {
+        reconnectTimer = undefined;
+        endClaimRetryWait();
+      }, ms);
+    });
   const clearGraceTimer = () => {
     if (graceTimer !== undefined) clock.clearTimeout(graceTimer);
     graceTimer = undefined;
@@ -419,7 +435,21 @@ export const createWebCore = (ports: WebCorePorts): AppductCore => {
 
     try {
       setState("connecting");
-      await handshake(options, (ack) => onAckReceived(ack, "claimed", options));
+      // A claim whose socket fails before the ack is tried again with the resume backoff until the
+      // link expires. A 1008 is final, so `already_claimed` on a retry ends it.
+      for (;;) {
+        try {
+          await handshake(options, (ack) => onAckReceived(ack, "claimed", options));
+          break;
+        } catch (error) {
+          if (myEpoch !== epoch || !(error instanceof HandshakeClosedError) || isTerminalCloseCode(error.code)) throw error;
+          emitError("connect", `Appduct claim attempt failed: ${error.message.replace(/\.+$/, "")}.`);
+          const delayMs = fullJitterBackoffMs(reconnectAttempt, ports.random);
+          reconnectAttempt += 1;
+          await waitBeforeClaimRetry(delayMs);
+          if (myEpoch !== epoch || isExpiredAt(expiresAt, Math.floor(clock.now() / 1000))) throw error;
+        }
+      }
     } catch (error) {
       if (myEpoch === epoch) {
         connectingSessionId = null;
