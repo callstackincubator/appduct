@@ -10,12 +10,14 @@
     "typecheck": "turbo run typecheck",
     "playground:appduct": "./playground/scripts/appduct.sh",
     "playground-flutter:appduct": "./playground-flutter/scripts/appduct.sh",
-    "playground:web": "pnpm --filter playground-web dev"
+    "playground:web": "pnpm --filter playground-web dev",
+    "e2e:device": "pnpm --filter @appduct/e2e-device device"
   },
   "workspaces": [
     "packages/*",
     "playground",
     "playground-web",
+    "e2e-device",
     "website"
   ],
   "devDependencies": {

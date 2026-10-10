@@ -25,6 +25,27 @@ importers:
         specifier: ^4.1.6
         version: 4.1.10(@types/node@24.13.6)(vite@8.1.4(@types/node@24.13.6)(esbuild@0.28.2)(terser@5.51.2)(yaml@2.9.0))
 
+  e2e-device:
+    devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.6.5)
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      agent-device:
+        specifier: 0.21.23
+        version: 0.21.23
+      appduct:
+        specifier: workspace:*
+        version: link:../packages/appduct
+      eslint:
+        specifier: ^10
+        version: 10.11.0
+      typescript:
+        specifier: ~5.9.2
+        version: 5.9.3
+
   packages/appduct:
     dependencies:
       '@appduct/shared':
@@ -3022,6 +3043,16 @@ packages:
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
+
+  agent-device@0.21.23:
+    resolution: {integrity: sha512-TZAuh3fMFa12Wh+1etcEll7FNvSCg1PjFkkfGz3XIYr9Ap9rJixHq89AnPqpTqnQ5fN2sp1UQgMFr7KcYoyqkA==}
+    engines: {node: '>=22.12'}
+    hasBin: true
+    peerDependencies:
+      ai: ^6.0.0 || ^7.0.0
+    peerDependenciesMeta:
+      ai:
+        optional: true
 
   ajv-draft-04@1.0.0:
     resolution: {integrity: sha512-mv00Te6nmYbRp5DCwclxtt7yV/joXJPGS7nM+97GdxvuttCOfgI3K4U25zboyeX0O+myI8ERluxQe5wljMmVIw==}
@@ -10679,6 +10710,8 @@ snapshots:
   acorn@8.17.0: {}
 
   agent-base@7.1.4: {}
+
+  agent-device@0.21.23: {}
 
   ajv-draft-04@1.0.0(ajv@8.20.0):
     optionalDependencies:
