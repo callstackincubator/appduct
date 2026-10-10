@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: on macOS, a connection to the daemon at `127.0.0.1` no longer lands on another program by mistake.** If another program already uses the configured `wssPort`, the daemon now refuses to start and names the port; set a different `wssPort` in `config.json`.
 - **New: Flutter apps can listen to `Appduct.instance.sessionChanges` and `Appduct.instance.errors` and read `Appduct.instance.sessionId`.** They report when a session is claimed, resumed or lost, and why a connection failed; see [Flutter setup](https://callstackincubator.github.io/appduct/install/flutter/#watch-the-connection-and-send-events).
 - **Fix: opening a second Appduct link in an app that is already connected now switches to the new session on iOS and Android.** Before, on iOS, the app dropped the old session and never connected to the new one.
 - **Fix: `appduct init` in a project that spans iOS and Android now prints the wiring step for both.** `init --json` also gains a `platforms` field listing the native platforms it found, such as `["android", "ios"]`.

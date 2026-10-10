@@ -290,7 +290,7 @@ Default location `~/.appduct/config.json`. Every key is optional. Read when the 
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `wssPort` | `8443` | Port devices connect to. `0` picks a free port. |
+| `wssPort` | `8443` | Port devices connect to. `0` picks a free port. If another program already uses the port, the background service does not start. |
 | `keyPath` | `<state-dir>/key.pem` | Private key file. Must be mode `0600`. |
 | `graceSeconds` | `600` | How long a disconnected session can resume. |
 | `linkTtlSeconds` | `300` | How long a new link stays valid. |
