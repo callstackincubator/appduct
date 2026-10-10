@@ -170,7 +170,7 @@ Outputs are on two channels. The wire channel is what the core asked of the conn
 
 | Expect | Fields | Is |
 | --- | --- | --- |
-| `connect` | `mode` (`claim` or `resume`), `sessionId`, `resumeToken?` | a new connection whose first frame is `session_claim` or `session_resume` |
+| `connect` | `mode` (`claim` or `resume`), `sessionId`, `token?` (a claim), `resumeToken?` (a resume) | a new connection whose first frame is `session_claim` or `session_resume` |
 | `send` | `frame` | any later frame the core sent |
 
 The app channel is what the core told the app:

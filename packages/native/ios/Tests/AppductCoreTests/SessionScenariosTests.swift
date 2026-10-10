@@ -48,7 +48,7 @@ final class SessionScenariosTests: XCTestCase {
   ] }
   private static var claimThenActive: [[String: Any]] { [
     ["drive": "connect", "sessionId": sessionId, "token": "claim-token", "expiresAt": 1_700_000_300],
-    ["expect": "connect", "mode": "claim", "sessionId": sessionId],
+    ["expect": "connect", "mode": "claim", "sessionId": sessionId, "token": "claim-token"],
     ["expect": "state", "state": "connecting"],
     ["drive": "receive", "frame": ack],
     ["expect": "state", "state": "active"],
@@ -359,6 +359,7 @@ private final class ScenarioReplay {
         "sessionId": options.sessionId,
       ]
       if let resumeToken = options.resumeToken { output["resumeToken"] = resumeToken }
+      if let token = options.token { output["token"] = token }
       return output
     case .send(let text):
       return ["kind": "send", "frame": try JSONSerialization.jsonObject(with: Data(text.utf8))]

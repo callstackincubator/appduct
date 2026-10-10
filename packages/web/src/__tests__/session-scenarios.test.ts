@@ -75,6 +75,7 @@ const replay = async (scenario: Scenario, expectTimeoutMs = 1000): Promise<void>
           mode: first.type === "session_resume" ? "resume" : "claim",
           sessionId: first.session_id,
           ...(typeof first.resume_token === "string" ? { resumeToken: first.resume_token } : {}),
+          ...(typeof first.token === "string" ? { token: first.token } : {}),
         });
         seen = 1;
       }
@@ -197,7 +198,7 @@ describe("the scenario runner", () => {
   };
   const claimThenActive: Step[] = [
     { drive: "connect", sessionId: SESSION_ID, token: "claim-token", expiresAt: 1700000300 },
-    { expect: "connect", mode: "claim", sessionId: SESSION_ID },
+    { expect: "connect", mode: "claim", sessionId: SESSION_ID, token: "claim-token" },
     { expect: "state", state: "connecting" },
     { drive: "receive", frame: ack },
     { expect: "state", state: "active" },

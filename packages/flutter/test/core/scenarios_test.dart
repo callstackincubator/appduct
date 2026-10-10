@@ -101,6 +101,7 @@ Future<void> replay(Scenario scenario) async {
           'sessionId': first['session_id'],
           if (first['resume_token'] is String)
             'resumeToken': first['resume_token'],
+          if (first['token'] is String) 'token': first['token'],
         });
         count = 1;
       }
@@ -260,7 +261,12 @@ void main() {
         'token': 'claim-token',
         'expiresAt': startMs ~/ 1000 + 300,
       },
-      {'expect': 'connect', 'mode': 'claim', 'sessionId': sessionId},
+      {
+        'expect': 'connect',
+        'mode': 'claim',
+        'sessionId': sessionId,
+        'token': 'claim-token',
+      },
       {'expect': 'state', 'state': 'connecting'},
       {'drive': 'receive', 'frame': ackFrame},
       {'expect': 'state', 'state': 'active'},
