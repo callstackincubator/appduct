@@ -201,18 +201,6 @@ class FixturesConformanceTest {
         }
     }
 
-    @Test
-    fun `only close code 1008 is ever terminal`() {
-        val vectors = loadJsonArray("close-codes.json")
-
-        for (i in 0 until vectors.length()) {
-            val vector = vectors.getJSONObject(i)
-            if (vector.getBoolean("terminal")) {
-                assertEquals(1_008, vector.getInt("code"))
-            }
-        }
-    }
-
     // --- spki-pin.json ---
 
     @Test

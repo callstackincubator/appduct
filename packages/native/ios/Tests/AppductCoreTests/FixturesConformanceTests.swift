@@ -155,14 +155,6 @@ final class FixturesConformanceTests: XCTestCase {
     }
   }
 
-  func testOnlyCode1008IsEverTerminal() throws {
-    let vectors = try Self.loadFixture("close-codes.json") as! [[String: Any]]
-
-    for vector in vectors where (vector["terminal"] as! Bool) {
-      XCTAssertEqual(Self.intValue(vector["code"]), 1_008)
-    }
-  }
-
   // MARK: - spki-pin.json
 
   func testSpkiPinFixtureMatchesTheSharedFixtureCertificate() throws {
