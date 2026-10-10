@@ -13,6 +13,7 @@ import "@appduct/react-native/auto";
 
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { SessionStatusProvider } from "@/hooks/use-session-status";
 
 const PlaygroundLightTheme = {
   ...DefaultTheme,
@@ -49,9 +50,11 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? PlaygroundDarkTheme : PlaygroundLightTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack>
+      <SessionStatusProvider>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        </Stack>
+      </SessionStatusProvider>
       <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
     </ThemeProvider>
   );

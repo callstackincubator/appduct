@@ -1,17 +1,16 @@
 import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { z } from "zod";
 import {
   getRegisteredTools,
   registerEvent,
   useAppductTool,
-  type AppductToolExecutionContext,
 } from "@appduct/react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Layout, Radius } from "@/constants/theme";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { playgroundPingEvent, playgroundTools } from "@/playground-tools";
 
 // The playground takes the zero-config path: no `cliPins`, so the app trusts the key pin carried by
 // the bootstrap link, and the daemon is the shared one in ~/.appduct. `playground:appduct` only
@@ -21,9 +20,6 @@ const CONNECT_COMMANDS = [
   "pnpm exec expo run:ios   # or: pnpm exec expo run:android",
   "pnpm run playground:appduct -- sessions link --open ios-sim   # or: --open android / --qr",
 ].join("\n");
-
-/** Delays `ms` without leaking a dangling timer past the call: each tool invocation owns its own. */
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type RegisteredTool = ReturnType<typeof getRegisteredTools>[number];
 
@@ -56,100 +52,23 @@ export default function ToolsScreen() {
 
   // Declared on the first tab, beside the tools, so `events ls` lists it from app start.
   useEffect(() => {
-    const declaration = registerEvent({
-      name: "playground_ping",
-      description: "The Send playground_ping button on the Status tab was pressed.",
-      payloadSchema: z.object({
-        at: z.number().describe("Press time, milliseconds since the epoch"),
-      }),
-    });
+    const declaration = registerEvent(playgroundPingEvent);
     return () => declaration.remove();
   }, []);
 
-  // Groups: `counter` and `diagnostics` (with a `diagnostics/progress` subgroup), plus `sum`
-  // left ungrouped -- so `appduct tools ls` shows headings, `--groups` has something to list, and
-  // `--group diagnostics` vs `--group diagnostics/progress` differ.
-  //
-  // These tools are the template an agent copies (https://callstackincubator.github.io/appduct/guides/writing-tools/#design-tools-for-the-agent-that-calls-them):
-  // every tool that returns something has an object-rooted `outputSchema`, observers carry
-  // `readOnlyHint`, the one that
-  // resets state carries `destructiveHint` (and `idempotentHint`, since resetting twice is the
-  // same as once), and each description's first line says what the tool does, then its side
-  // effects.
-  useAppductTool({
-    name: "sum",
-    description: "Adds two numbers. Counts as a call in call_count.",
-    inputSchema: z.object({
-      a: z.number(),
-      b: z.number(),
-    }),
-    outputSchema: z.object({
-      total: z.number(),
-    }),
-    handler: (args) => {
-      bumpCallCount();
-      return { total: args.a + args.b };
-    },
+  // The tools themselves live in `playground-tools`, the playground contract. `call_count` reads the
+  // count through `read()`, which closes over the latest render's state: the hook registers a stable
+  // wrapper that forwards to it, so the tool is not re-registered on each increment.
+  const contract = playgroundTools({
+    read: () => callCount,
+    bump: bumpCallCount,
+    reset: () => setCallCount(0),
   });
-
-  useAppductTool({
-    name: "call_count",
-    description: "Reports how many times the counted tools (sum, slow_task) have run. Read-only.",
-    group: "counter",
-    annotations: { readOnlyHint: true },
-    outputSchema: z.object({
-      count: z.number(),
-    }),
-    // Closes directly over `callCount` state. Registered once on mount, yet every call sees the
-    // value from the most recent render -- that is the freshness guarantee, demonstrated.
-    handler: () => ({ count: callCount }),
-  });
-
-  useAppductTool({
-    name: "reset_counter",
-    description: "Resets the call counter to zero. Destructive; a no-op when it is already zero.",
-    group: "counter",
-    annotations: { destructiveHint: true, idempotentHint: true },
-    outputSchema: z.object({
-      count: z.number(),
-    }),
-    handler: () => {
-      setCallCount(0);
-      return { count: 0 };
-    },
-  });
-
-  useAppductTool({
-    name: "slow_task",
-    description: "Takes about 1.5 s and reports progress along the way. Counts as a call in call_count.",
-    group: "diagnostics/progress",
-    outputSchema: z.object({
-      done: z.boolean(),
-    }),
-    timeoutMs: 5_000,
-    handler: async (_args, context: AppductToolExecutionContext) => {
-      for (const [progress, message] of [
-        [0.33, "warming up"],
-        [0.66, "almost there"],
-        [1, "done"],
-      ] as const) {
-        await delay(500);
-        await context.reportProgress(progress, message);
-      }
-      bumpCallCount();
-      return { done: true };
-    },
-  });
-
-  useAppductTool({
-    name: "throwing_tool",
-    description: "Always fails with tool_execution_error. Changes nothing.",
-    group: "diagnostics",
-    annotations: { readOnlyHint: true },
-    handler: () => {
-      throw new Error("throwing_tool always fails on purpose.");
-    },
-  });
+  useAppductTool(contract.sum);
+  useAppductTool(contract.callCount);
+  useAppductTool(contract.resetCounter);
+  useAppductTool(contract.slowTask);
+  useAppductTool(contract.throwingTool);
 
   // Reads the client's own registry after the tool-registering effects above have run (React runs
   // effects in declaration order on mount), so this list is never a hand-maintained duplicate.
@@ -214,7 +133,9 @@ export default function ToolsScreen() {
         <View style={cardStyle}>
           <ThemedText type="overline">Call counter</ThemedText>
           <View style={styles.row}>
-            <ThemedText type="subtitle">{callCount}</ThemedText>
+            <ThemedText type="subtitle" testID="call-count">
+              {callCount}
+            </ThemedText>
           </View>
           <ThemedText type="caption" style={styles.cardHint}>
             Bumped by sum/slow_task; call_count reads it back (a handler closing over state, never

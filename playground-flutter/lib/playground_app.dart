@@ -19,6 +19,7 @@ class PlaygroundApp extends StatefulWidget {
 
 class _PlaygroundAppState extends State<PlaygroundApp> {
   final _counter = PlaygroundCounter();
+  final _lastPing = ValueNotifier<int?>(null);
   late final void Function() _unregister;
 
   late final GoRouter _router = GoRouter(
@@ -32,7 +33,8 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
           ),
           GoRoute(
             path: '/status',
-            builder: (context, state) => _StatusScreen(appduct: widget.appduct),
+            builder: (context, state) =>
+                _StatusScreen(appduct: widget.appduct, lastPing: _lastPing),
           ),
         ],
       ),
@@ -49,6 +51,7 @@ class _PlaygroundAppState extends State<PlaygroundApp> {
   void dispose() {
     _unregister();
     _router.dispose();
+    _lastPing.dispose();
     _counter.dispose();
     super.dispose();
   }
@@ -76,8 +79,20 @@ class _Shell extends StatelessWidget {
         selectedIndex: onStatus ? 1 : 0,
         onDestinationSelected: (i) => context.go(i == 0 ? '/' : '/status'),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.build), label: 'Tools'),
-          NavigationDestination(icon: Icon(Icons.wifi), label: 'Status'),
+          Semantics(
+            identifier: 'tab-tools',
+            child: NavigationDestination(
+              icon: Icon(Icons.build),
+              label: 'Tools',
+            ),
+          ),
+          Semantics(
+            identifier: 'tab-status',
+            child: NavigationDestination(
+              icon: Icon(Icons.wifi),
+              label: 'Status',
+            ),
+          ),
         ],
       ),
     );
@@ -101,12 +116,11 @@ class _ToolsScreen extends StatelessWidget {
         style: TextStyle(fontFamily: 'monospace'),
       ),
       const SizedBox(height: 16),
+      const Text('Call counter'),
       ListenableBuilder(
         listenable: counter,
-        builder: (context, _) => Text(
-          'Calls counted: ${counter.count}',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        builder: (context, _) =>
+            _Value(id: 'call-count', value: '${counter.count}'),
       ),
       const SizedBox(height: 16),
       Text('Registered tools', style: Theme.of(context).textTheme.labelLarge),
@@ -117,26 +131,68 @@ class _ToolsScreen extends StatelessWidget {
 }
 
 class _StatusScreen extends StatelessWidget {
-  const _StatusScreen({required this.appduct});
+  const _StatusScreen({required this.appduct, required this.lastPing});
 
   final Appduct appduct;
+  final ValueNotifier<int?> lastPing;
+
+  Future<void> _ping() async {
+    final at = DateTime.now().millisecondsSinceEpoch;
+    await appduct.postEvent('playground_ping', {'at': at});
+    lastPing.value = at;
+  }
 
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(16),
     children: [
+      const Text('Connection'),
       ValueListenableBuilder(
         valueListenable: appduct.state,
         builder: (context, state, _) =>
-            Text('Session: ${state.name}', key: const Key('session-state')),
+            _Value(id: 'connection-state', value: state.name),
       ),
       const SizedBox(height: 16),
-      FilledButton(
-        onPressed: () => appduct.postEvent('playground_ping', {
-          'at': DateTime.now().millisecondsSinceEpoch,
-        }),
-        child: const Text('Send playground_ping'),
+      // The Flutter SDK exposes the connection state only, not the session's alias or its
+      // events, so these two stay at `none` until it does.
+      const Text('Alias'),
+      const _Value(id: 'session-alias', value: 'none'),
+      const SizedBox(height: 16),
+      const Text('Last session event'),
+      const _Value(id: 'last-session-event', value: 'none'),
+      const SizedBox(height: 16),
+      Semantics(
+        identifier: 'ping-button',
+        child: FilledButton(
+          onPressed: _ping,
+          child: const Text('Send playground_ping'),
+        ),
+      ),
+      const SizedBox(height: 16),
+      const Text('Last ping'),
+      ValueListenableBuilder(
+        valueListenable: lastPing,
+        builder: (context, at, _) =>
+            _Value(id: 'last-ping', value: at == null ? 'none' : '$at'),
       ),
     ],
+  );
+}
+
+/// A value a test runner finds by [id] and reads as exactly [value]; its label is a separate
+/// widget.
+class _Value extends StatelessWidget {
+  const _Value({required this.id, required this.value});
+
+  final String id;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    identifier: id,
+    label: value,
+    container: true,
+    excludeSemantics: true,
+    child: Text(value, style: Theme.of(context).textTheme.titleMedium),
   );
 }
