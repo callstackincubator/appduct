@@ -65,6 +65,8 @@ extension AppductClient {
 
     do {
       if supersedingReconnect && (nativeState == "connecting" || nativeState == "active") {
+        // Closing the transport reports no close event, so in-flight handlers are aborted here.
+        abortAllInFlight()
         await transport.close()
       }
       setClientState(.connecting)
@@ -208,12 +210,16 @@ extension AppductClient {
 
   func performHandshake(_ options: AppductConnectOptions) async throws -> SessionAck {
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<SessionAck, Error>) in
-      pendingAttempt = PendingAttempt(resume: { result in continuation.resume(with: result) })
+      let attempt = PendingAttempt(resume: { result in continuation.resume(with: result) })
+      pendingAttempt = attempt
       Task {
         do {
           try await self.transport.connect(options: options)
         } catch {
-          self.settlePendingAttempt(.failure(error))
+          // A connect that fails after a newer one replaced it must not settle that newer attempt.
+          if self.pendingAttempt === attempt {
+            self.settlePendingAttempt(.failure(error))
+          }
         }
       }
     }

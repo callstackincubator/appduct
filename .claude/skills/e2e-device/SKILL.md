@@ -92,8 +92,8 @@ pnpm playground:appduct -- sessions link --open android   # app id comes from pl
 ## Native playgrounds
 
 Follow `playground-native/ios/README.md` (xcodegen, xcodebuild, `simctl install` and
-`launch`) and `playground-native/android/README.md`. They register the same five tools, so
-the smoke pass below is identical. Run the CLI from that playground's directory so the scheme
+`launch`) and `playground-native/android/README.md`. They register the same five tools and the
+`playground_ping` event, so the smoke pass below is identical. Run the CLI from that playground's directory so the scheme
 is discovered, or pass `--scheme`.
 
 ## Flutter playground
@@ -282,6 +282,22 @@ make a selector-less call fail with `ambiguous_session`: set `a="pnpm playground
 `id=$(active)` as in the hot-restart section, and write each call as `$a tools call "$id" <tool> ...`.
 
 A checked-in script for this pass is planned; until it exists, this chain is the suite.
+
+## Playground contract checks
+
+Every device playground follows `docs/internal/playground-contract.md`: the same tools, the
+`playground_ping` event and the same test ids. Check them with agent-device (`snapshot`, then read
+the element whose id is `call-count`, `connection-state` or
+`last-ping`; press `tab-status` and `ping-button`):
+
+- `tools ls --json` and `events ls` list the five tools and `playground_ping` with the contract's
+  descriptions, groups and annotations.
+- After `reset_counter` and three `sum` calls, `call-count` reads `3`.
+- After a link, `connection-state` reads `active`.
+- After a press on `ping-button`, `last-ping` equals the `at` that `waitForEvent("playground_ping")`
+  returns.
+- On Expo, Flutter and iOS native, `xcrun simctl openurl "$udid" "<scheme>:///status"` shows the
+  Status screen and `sessions ls` still reports the session active. Android native has no such link.
 
 A step that fails and passes on one immediate rerun is a flake: report it as "flaky" with the
 step, do not rerun a third time, and file it with `file-issue` if no issue exists.

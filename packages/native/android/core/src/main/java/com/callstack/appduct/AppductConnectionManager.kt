@@ -717,12 +717,21 @@ internal class AppductConnectionManager(
             return
         }
 
-        closeEventPending = true
         // If a connect() attempt is still in flight (state == connecting, no onOpen yet), closing
         // now means it will never reach onOpen/onFailure — reject its promise instead of leaving
         // it pending forever. No-op if connect() already resolved.
         completeConnect(IllegalStateException("Appduct connection was closed before it finished connecting."))
+        // Finish tearing down before returning: the client connects again right after this (a warm
+        // link replacing the session), and `performConnect` rejects while the state is still
+        // active. No close event follows for this socket, since the client would read a late one
+        // as the outcome of that new handshake. A graceful close, not `cancel()`, so the close
+        // frame still gets out; dropping the reference makes `handleClosed` ignore the socket.
         socket.close(1000, "client_close")
+        webSocket = null
+        activeSessionId = null
+        pendingOptions = null
+        closeEventPending = false
+        state = AppductConnectionState.closed
     }
 
     private fun performInvalidation(

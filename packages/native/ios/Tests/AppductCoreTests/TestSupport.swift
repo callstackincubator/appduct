@@ -71,6 +71,23 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
   /// Set by a test to make the next `connect(options:)` throw instead of succeeding.
   var connectError: (@Sendable () -> Error)?
 
+  /// Set by a test to keep the next `connect(options:)` pending until `failHeldConnect` ends it,
+  /// like a real connect whose first frame is still being sent.
+  var holdNextConnect = false
+  private var _heldConnect: CheckedContinuation<Void, Error>?
+
+  var hasHeldConnect: Bool {
+    withLock { _heldConnect != nil }
+  }
+
+  func failHeldConnect(_ error: Error) {
+    let held = withLock {
+      defer { _heldConnect = nil }
+      return _heldConnect
+    }
+    held?.resume(throwing: error)
+  }
+
   /// `NSLock.lock()`/`unlock()` are unavailable from `async` contexts under strict concurrency;
   /// `withLock` is the scoped-locking replacement, usable from both sync and async call sites.
   private func withLock<T>(_ body: () -> T) -> T {
@@ -120,6 +137,12 @@ final class FakeTransportSession: AppductTransportSession, @unchecked Sendable {
       throw connectError()
     }
     stateSnapshot = "connecting"
+    if holdNextConnect {
+      holdNextConnect = false
+      try await withCheckedThrowingContinuation { continuation in
+        withLock { _heldConnect = continuation }
+      }
+    }
   }
 
   func send(message: String) async throws {

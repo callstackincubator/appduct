@@ -47,8 +47,12 @@ public actor AppductClient {
   /// The session an in-flight `connect()`/resume is claiming, before any ack sets `heldSession`.
   var connectingSessionId: String?
 
-  struct PendingAttempt {
+  final class PendingAttempt {
     let resume: (Result<SessionAck, Error>) -> Void
+
+    init(resume: @escaping (Result<SessionAck, Error>) -> Void) {
+      self.resume = resume
+    }
   }
 
   struct SessionAck: Sendable {
@@ -332,6 +336,8 @@ public actor AppductClient {
       emitSessionChange(type: .lost, sessionId: nil, alias: nil, reason: "closed_by_app")
     }
 
+    // Closing the transport reports no close event, so in-flight handlers are aborted here.
+    abortAllInFlight()
     await transport.close()
     // Only now: once the last background task ends iOS may suspend the app, and the close frame
     // has to have left first.

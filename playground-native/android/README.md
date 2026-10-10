@@ -4,8 +4,11 @@ A plain Jetpack Compose app that exercises `packages/native/android`'s `Appduct`
 no React Native anywhere in the stack -- the Android counterpart to `playground/`'s Expo app.
 It registers the same five
 tools the Expo playground does (`sum`, `call_count`, `reset_counter`, `slow_task`,
-`throwing_tool`), shows the current connection state/session/call count, logs recent
-state/session/error events, and has a button that posts an app event.
+`throwing_tool`), declares the `playground_ping` event, and has two screens, Tools and Status,
+with the test tags (`call-count`, `connection-state`, `ping-button` and the rest) of the
+[playground contract](../../docs/internal/playground-contract.md). `testTagsAsResourceId` is on at
+the root, so UI Automator sees the tags as resource ids. There is no `/status` deep link here:
+`AppductLinkActivity` finishes on any link that is not an Appduct link.
 
 ## Layout
 
@@ -20,7 +23,7 @@ playground-native/android/
       java/com/callstack/appduct/playground/
         PlaygroundApplication.kt   registers tools in Application.onCreate()
         PlaygroundState.kt         Compose-observable connection state / event log
-        MainActivity.kt            the one screen
+        MainActivity.kt            the Tools and Status screens
 ```
 
 This is **not** a published-artifact consumer: `settings.gradle`'s `includeBuild` substitutes

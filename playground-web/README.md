@@ -2,6 +2,8 @@
 
 A plain Vite and React page that registers the five demo tools the other playgrounds register,
 through `@appduct/web/react`, and declares one event, `playground_ping`, that its button sends.
+The tools and the event follow the [playground contract](../docs/internal/playground-contract.md);
+the page keeps its own `#count` and `#ping` ids.
 
 ```bash
 pnpm build
