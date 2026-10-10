@@ -495,6 +495,56 @@ final class AppductConnectionManagerTests: XCTestCase {
     XCTAssertEqual(manager.currentStateSnapshot(), "closed")
   }
 
+  // MARK: - close() then connect() (#234)
+
+  /// A warm link supersedes the live session: the client awaits `close()` and connects again at
+  /// once. `close()` therefore has to finish tearing down before it returns, or the new
+  /// `connect()` is rejected as "already connecting or active".
+  func testCloseWhileConnectingLeavesTheManagerClosedAndAcceptsANewConnect() async throws {
+    let manager = AppductConnectionManager()
+    // Private but unroutable, so the handshake stays pending while the test closes it.
+    let options = try connectOptions(ip: "10.255.255.1", port: 65530, token: "claim-token", linkPin: "sha256/link-pin")
+
+    let first = Task { try? await manager.connect(options: options) }
+    try await waitUntil("the first connect is in flight") { manager.currentStateSnapshot() == "connecting" }
+
+    await manager.close()
+    XCTAssertEqual(manager.currentStateSnapshot(), "closed")
+
+    let rejections = ThreadSafeStringArray()
+    let second = Task {
+      do { try await manager.connect(options: options) } catch { rejections.append("\(error)") }
+    }
+    try await waitUntil("the second connect was accepted") { manager.currentStateSnapshot() == "connecting" }
+    XCTAssertEqual(rejections.values, [])
+
+    await manager.invalidate()
+    first.cancel()
+    second.cancel()
+  }
+
+  /// The client reads a `close` event as the outcome of the handshake it is running. A late
+  /// event for the socket `close()` just dropped would fail the new one.
+  func testCloseDoesNotEmitACloseEventForTheSocketItDropped() async throws {
+    let manager = AppductConnectionManager()
+    let closeEvents = ClosedEventCounter()
+    manager.emitClose = { _ in
+      Task { await closeEvents.increment() }
+    }
+    let options = try connectOptions(ip: "10.255.255.1", port: 65530, token: "claim-token", linkPin: "sha256/link-pin")
+
+    let first = Task { try? await manager.connect(options: options) }
+    try await waitUntil("the connect is in flight") { manager.currentStateSnapshot() == "connecting" }
+
+    await manager.close()
+    await allowQueuedWorkToRun()
+
+    let count = await closeEvents.count
+    XCTAssertEqual(count, 0)
+    XCTAssertEqual(manager.currentStateSnapshot(), "closed")
+    first.cancel()
+  }
+
   func testConnectRejectsWhenNeitherTokenNorResumeTokenGiven() {
     XCTAssertThrowsError(
       try AppductConnectOptions([

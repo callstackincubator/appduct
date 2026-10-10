@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: opening a second Appduct link in an app that is already connected now switches to the new session on iOS and Android.** Before, on iOS, the app dropped the old session and never connected to the new one.
 - **Fix: `appduct init` in a project that spans iOS and Android now prints the wiring step for both.** `init --json` also gains a `platforms` field listing the native platforms it found, such as `["android", "ios"]`.
 - **Docs: the Build variants guide now tells apps with `expo` installed to exclude Appduct through `package.json`.** The `react-native.config.js` exclusion it showed before does nothing on Expo SDK 54, so Appduct still shipped; see [Leave Appduct out permanently](https://callstackincubator.github.io/appduct/guides/build-variants/#leave-appduct-out-permanently).
 - **Docs: a new home page, and every page now has a link preview when shared.** Agents can read the home page as Markdown at [index.md](https://callstackincubator.github.io/appduct/index.md).

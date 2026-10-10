@@ -137,7 +137,71 @@ final class AppductClientTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(transport.closeCallCount, 1)
   }
 
+  func testAConnectThatFailsAfterASupersedingConnectDoesNotFailTheNewOne() async throws {
+    let (client, transport) = makeClient()
+    transport.holdNextConnect = true
+    let firstConnectInput = connectInput(sessionId: "session-1")
+    let firstConnect = Task { try await client.connect(firstConnectInput) }
+    try await waitUntil("the first connect is still sending its claim") { transport.isWired && transport.hasHeldConnect }
+
+    let secondConnectInput = connectInput(sessionId: "session-2")
+    let secondConnect = Task { try await client.connect(secondConnectInput, supersede: true) }
+    try await waitUntil("the superseding connect started its own transport handshake") { transport.connectCallCount >= 2 }
+    transport.failHeldConnect(NSError(domain: "socket", code: 57))
+    await allowQueuedWorkToRun()
+    transport.simulateAck(sessionId: "session-2")
+
+    try await secondConnect.value
+    let sessionId = await client.sessionId
+    XCTAssertEqual(sessionId, "session-2")
+    _ = await firstConnect.result
+  }
+
+  func testSupersedingConnectAbortsTheOldSessionsInFlightToolHandler() async throws {
+    let handlerStarted = XCTestExpectation(description: "handler started")
+    let handlerCancelled = XCTestExpectation(description: "handler cancelled")
+    let (client, transport) = try await activeClient()
+    try client.registerTool(ToolDescriptor(name: "slow", description: "x")) { _, _ in
+      handlerStarted.fulfill()
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 1_000_000)
+      }
+      handlerCancelled.fulfill()
+      return .null
+    }
+    transport.simulateIncoming(toolCallText(id: "call-1", name: "slow"))
+    await fulfillment(of: [handlerStarted], timeout: 2)
+
+    let secondConnectInput = connectInput(sessionId: "session-2")
+    let secondConnect = Task { try await client.connect(secondConnectInput, supersede: true) }
+
+    await fulfillment(of: [handlerCancelled], timeout: 2)
+    try await waitUntil("the superseding connect started its own transport handshake") { transport.connectCallCount >= 2 }
+    transport.simulateAck(sessionId: "session-2")
+    try await secondConnect.value
+  }
+
   // MARK: disconnect
+
+  func testDisconnectAbortsAnInFlightToolHandler() async throws {
+    let handlerStarted = XCTestExpectation(description: "handler started")
+    let handlerCancelled = XCTestExpectation(description: "handler cancelled")
+    let (client, transport) = try await activeClient()
+    try client.registerTool(ToolDescriptor(name: "slow", description: "x")) { _, _ in
+      handlerStarted.fulfill()
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 1_000_000)
+      }
+      handlerCancelled.fulfill()
+      return .null
+    }
+    transport.simulateIncoming(toolCallText(id: "call-1", name: "slow"))
+    await fulfillment(of: [handlerStarted], timeout: 2)
+
+    await client.disconnect()
+
+    await fulfillment(of: [handlerCancelled], timeout: 2)
+  }
 
   func testDisconnectClosesAndClearsSession() async throws {
     let (client, transport) = makeClient()
