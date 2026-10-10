@@ -307,9 +307,7 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('shows none for last-ping at launch', (
-      tester,
-    ) async {
+    testWidgets('shows none for last-ping at launch', (tester) async {
       final handle = tester.ensureSemantics();
       await launch(tester);
       await tester.tap(find.bySemanticsIdentifier('tab-status'));
