@@ -26,14 +26,6 @@ object PlaygroundState {
     var callCount by mutableStateOf(0)
         internal set
 
-    /** The current session's alias, `null` while there is none. */
-    var alias by mutableStateOf<String?>(null)
-        internal set
-
-    /** `<type>` or `<type> (<reason>)` of the last session change, `null` before the first. */
-    var lastSessionEvent by mutableStateOf<String?>(null)
-        internal set
-
     /** The `at` of the last `playground_ping` this app sent. */
     var lastPing by mutableStateOf<Long?>(null)
         internal set

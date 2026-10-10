@@ -57,14 +57,13 @@ element with the id holds only the value; its label is a separate element.
 | `tab-tools`, `tab-status` | tab bar | pressable |
 | `call-count` | Tools | the bare integer, `0` at launch |
 | `connection-state` | Status | `idle`, `connecting`, `active`, `reconnecting` or `closed`, lowercase |
-| `session-alias` | Status | the current session's alias, or `none` |
-| `last-session-event` | Status | `<type>`, `<type> (<reason>)`, or `none` |
 | `ping-button` | Status | posts `playground_ping` with `at` = now in epoch ms |
 | `last-ping` | Status | the `at` of the last ping sent, or `none` |
 
-The state behind `session-alias` and `last-session-event` lives above the screens (a root provider,
-a view model, an application-level object), so a link that arrives before Status was ever opened
-still shows up there.
+Status shows the current `connection-state` as soon as it appears, not only after the next change:
+a screen that mounts lazily reads the state synchronously on mount. Every element with an id is
+visible without scrolling on an iPhone 17 Pro or a Pixel 8, since agent-device's snapshot leaves
+out off-screen elements.
 
 Extra UI (quick-start text, activity logs, Expo's build config and error feed) may stay, but must
 not use these ids.
@@ -80,10 +79,6 @@ and go_router match the path, and the iOS app opens Status for `/status` when
 
 - **Android native has no `/status` link.** The core's `AppductLinkActivity` finishes on any
   non-Appduct link (`AppductLinkActivity.kt`), and changing that is an SDK decision.
-- **Flutter cannot fill `session-alias` or `last-session-event`.** The Flutter SDK exposes the
-  connection state but neither the alias nor the session events, so the playground shows `none`
-  for both until it does.
-
 ## Checking a playground
 
 - Unit: `playground/__tests__/playground-contract.test.ts` registers the Expo and web tools on a

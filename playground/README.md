@@ -21,8 +21,8 @@ extra debug screens for any of it.
   and resumes the session automatically with the same alias—no new deep link needed while the
   native app process stays alive.
 - **UI sandbox** (Expo Router) with two tabs: **Tools** (registers demo tools, renders the live
-  registry and the call counter) and **Status** (connection state, alias, last session event, error
-  feed, and a manual event post). The tools, the event and the `testID`s follow the
+  registry and the call counter) and **Status** (connection state, the `playground_ping` button,
+  build config and error feed). The tools, the event and the `testID`s follow the
   [playground contract](../docs/internal/playground-contract.md), so a script written for this app
   runs on the other playgrounds too. The tools live in `playground-tools/`.
 
@@ -58,7 +58,7 @@ step required for the smoke test below.
 - **Physical device**: `pnpm run playground:appduct -- sessions link --qr`, then scan the QR code with the device's camera (it
   must be on the same LAN as the daemon, or `allowPrivateLanOnly` will reject it)
 
-The **Status** tab should flip to `active` with an alias once the app claims the session.
+The **Status** tab should flip to `active` once the app claims the session.
 
 ### 4. Drive it from the CLI
 

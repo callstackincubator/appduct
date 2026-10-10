@@ -108,10 +108,6 @@ private fun StatusScreen() {
 
     Value("Connection", PlaygroundState.clientState.name, "connection-state")
     Spacer(Modifier.height(8.dp))
-    Value("Alias", PlaygroundState.alias ?: "none", "session-alias")
-    Spacer(Modifier.height(8.dp))
-    Value("Last session event", PlaygroundState.lastSessionEvent ?: "none", "last-session-event")
-    Spacer(Modifier.height(8.dp))
     Text("Session: ${PlaygroundState.sessionId ?: "none"}", style = MaterialTheme.typography.bodySmall)
 
     Spacer(Modifier.height(16.dp))

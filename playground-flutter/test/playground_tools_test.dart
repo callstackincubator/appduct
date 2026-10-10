@@ -307,7 +307,7 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('shows none for last-session-event and last-ping at launch', (
+    testWidgets('shows none for last-ping at launch', (
       tester,
     ) async {
       final handle = tester.ensureSemantics();
@@ -315,7 +315,6 @@ void main() {
       await tester.tap(find.bySemanticsIdentifier('tab-status'));
       await tester.pumpAndSettle();
 
-      expect(valueOf(tester, 'last-session-event'), 'none');
       expect(valueOf(tester, 'last-ping'), 'none');
       handle.dispose();
     });

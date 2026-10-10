@@ -5,13 +5,13 @@ import {
   getAppductBuildConfig,
   postEvent,
   addAppductListener,
+  getAppductState,
   type AppductClientState,
   type AppductUnifiedErrorEvent,
 } from "@appduct/react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Layout, Radius } from "@/constants/theme";
-import { useSessionStatus } from "@/hooks/use-session-status";
 import { useThemeColor } from "@/hooks/use-theme-color";
 
 const MAX_ERRORS = 5;
@@ -45,7 +45,9 @@ export default function StatusScreen() {
   const tint = useThemeColor({}, "tint");
   const tintForeground = useThemeColor({}, "tintForeground");
 
-  const { connectionState, alias, lastSessionEvent } = useSessionStatus();
+  // Read synchronously on mount: the tab mounts the first time it is opened, usually after the
+  // session is already active.
+  const [connectionState, setConnectionState] = useState<AppductClientState>(getAppductState);
   // Native build config never changes within a process's lifetime, so a plain `useState`
   // initializer -- read once, no listener needed -- is enough to show which trust mode this
   // artifact was actually built with.
@@ -65,11 +67,15 @@ export default function StatusScreen() {
   );
 
   useEffect(() => {
+    const stateSubscription = addAppductListener("stateChange", (event) => {
+      setConnectionState(event.state);
+    });
     const errorSubscription = addAppductListener("error", (event) => {
       setErrors((previous) => [event, ...previous].slice(0, MAX_ERRORS));
     });
 
     return () => {
+      stateSubscription.remove();
       errorSubscription.remove();
     };
   }, []);
@@ -112,35 +118,9 @@ export default function StatusScreen() {
               {connectionState}
             </ThemedText>
           </View>
-          <View style={styles.row}>
-            <ThemedText type="caption">Alias:</ThemedText>
-            <ThemedText type="caption" testID="session-alias">
-              {alias ?? "none"}
-            </ThemedText>
-          </View>
-          <View style={styles.row}>
-            <ThemedText type="caption">Last session event:</ThemedText>
-            <ThemedText type="caption" testID="last-session-event">
-              {lastSessionEvent
-                ? `${lastSessionEvent.type}${lastSessionEvent.reason ? ` (${lastSessionEvent.reason})` : ""}`
-                : "none"}
-            </ThemedText>
-          </View>
           <ThemedText type="caption" style={styles.cardHint}>
             Metro reload should suspend and resume this session automatically -- reload the app
             and watch this state go reconnecting → active without a new deep link.
-          </ThemedText>
-        </View>
-
-        <View style={cardStyle}>
-          <ThemedText type="overline">Build config</ThemedText>
-          <ThemedText type="caption" style={styles.cardHint}>
-            trust: {buildConfig.trust} · embedded pins: {buildConfig.hasEmbeddedPins ? "yes" : "no"} ·
-            private LAN only: {buildConfig.allowPrivateLanOnly ? "yes" : "no"}
-          </ThemedText>
-          <ThemedText type="caption" style={styles.cardHint}>
-            Read from the native module&apos;s getConstants() -- the fastest way to tell, on a
-            device, which trust mode this artifact was actually built with.
           </ThemedText>
         </View>
 
@@ -164,6 +144,18 @@ export default function StatusScreen() {
           </View>
           <ThemedText type="caption" style={styles.cardHint}>
             Watch it arrive with: appduct events tail --follow
+          </ThemedText>
+        </View>
+
+        <View style={cardStyle}>
+          <ThemedText type="overline">Build config</ThemedText>
+          <ThemedText type="caption" style={styles.cardHint}>
+            trust: {buildConfig.trust} · embedded pins: {buildConfig.hasEmbeddedPins ? "yes" : "no"} ·
+            private LAN only: {buildConfig.allowPrivateLanOnly ? "yes" : "no"}
+          </ThemedText>
+          <ThemedText type="caption" style={styles.cardHint}>
+            Read from the native module&apos;s getConstants() -- the fastest way to tell, on a
+            device, which trust mode this artifact was actually built with.
           </ThemedText>
         </View>
 

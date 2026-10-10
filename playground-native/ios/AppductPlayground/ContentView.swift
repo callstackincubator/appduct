@@ -80,8 +80,6 @@ private struct StatusScreen: View {
       List {
         Section(header: Text("Connection")) {
           row("State", viewModel.state.rawValue, id: "connection-state")
-          row("Alias", viewModel.alias ?? "none", id: "session-alias")
-          row("Last session event", viewModel.lastSessionEvent ?? "none", id: "last-session-event")
           row("Session", viewModel.sessionId ?? "none")
           row("Trust", Appduct.shared.buildConfig.trust)
         }

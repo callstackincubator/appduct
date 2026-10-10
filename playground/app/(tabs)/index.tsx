@@ -101,6 +101,19 @@ export default function ToolsScreen() {
         </View>
 
         <View style={cardStyle}>
+          <ThemedText type="overline">Call counter</ThemedText>
+          <View style={styles.row}>
+            <ThemedText type="subtitle" testID="call-count">
+              {callCount}
+            </ThemedText>
+          </View>
+          <ThemedText type="caption" style={styles.cardHint}>
+            Bumped by sum/slow_task; call_count reads it back (a handler closing over state, never
+            re-registered); reset_counter (destructive) sets it to zero. Try denying destructive
+            tools in the daemon config to see it get rejected instead.
+          </ThemedText>
+        </View>
+        <View style={cardStyle}>
           <ThemedText type="overline">Quick start</ThemedText>
           <View style={monoSurfaceStyle}>
             <ThemedText type="mono" selectable>
@@ -130,19 +143,6 @@ export default function ToolsScreen() {
           </View>
         </View>
 
-        <View style={cardStyle}>
-          <ThemedText type="overline">Call counter</ThemedText>
-          <View style={styles.row}>
-            <ThemedText type="subtitle" testID="call-count">
-              {callCount}
-            </ThemedText>
-          </View>
-          <ThemedText type="caption" style={styles.cardHint}>
-            Bumped by sum/slow_task; call_count reads it back (a handler closing over state, never
-            re-registered); reset_counter (destructive) sets it to zero. Try denying destructive
-            tools in the daemon config to see it get rejected instead.
-          </ThemedText>
-        </View>
       </ScrollView>
     </ThemedView>
   );

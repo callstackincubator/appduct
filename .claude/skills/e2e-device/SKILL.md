@@ -287,20 +287,17 @@ A checked-in script for this pass is planned; until it exists, this chain is the
 
 Every device playground follows `docs/internal/playground-contract.md`: the same tools, the
 `playground_ping` event and the same test ids. Check them with agent-device (`snapshot`, then read
-the element whose id is `call-count`, `connection-state`, `session-alias`, `last-session-event` or
+the element whose id is `call-count`, `connection-state` or
 `last-ping`; press `tab-status` and `ping-button`):
 
 - `tools ls --json` and `events ls` list the five tools and `playground_ping` with the contract's
   descriptions, groups and annotations.
 - After `reset_counter` and three `sum` calls, `call-count` reads `3`.
-- After a link, `connection-state` reads `active` and `session-alias` equals the alias in
-  `sessions ls`.
+- After a link, `connection-state` reads `active`.
 - After a press on `ping-button`, `last-ping` equals the `at` that `waitForEvent("playground_ping")`
   returns.
 - On Expo, Flutter and iOS native, `xcrun simctl openurl "$udid" "<scheme>:///status"` shows the
   Status screen and `sessions ls` still reports the session active. Android native has no such link.
-- On Flutter, `session-alias` and `last-session-event` read `none` whatever the session, a gap the
-  contract records.
 
 A step that fails and passes on one immediate rerun is a flake: report it as "flaky" with the
 step, do not rerun a third time, and file it with `file-issue` if no issue exists.

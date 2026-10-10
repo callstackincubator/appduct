@@ -153,14 +153,6 @@ class _StatusScreen extends StatelessWidget {
             _Value(id: 'connection-state', value: state.name),
       ),
       const SizedBox(height: 16),
-      // The Flutter SDK exposes the connection state only, not the session's alias or its
-      // events, so these two stay at `none` until it does.
-      const Text('Alias'),
-      const _Value(id: 'session-alias', value: 'none'),
-      const SizedBox(height: 16),
-      const Text('Last session event'),
-      const _Value(id: 'last-session-event', value: 'none'),
-      const SizedBox(height: 16),
       Semantics(
         identifier: 'ping-button',
         child: FilledButton(

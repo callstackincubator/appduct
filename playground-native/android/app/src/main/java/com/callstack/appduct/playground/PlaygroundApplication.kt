@@ -3,7 +3,6 @@ package com.callstack.appduct.playground
 import android.app.Application
 import com.callstack.appduct.Appduct
 import com.callstack.appduct.AppductEvent
-import com.callstack.appduct.SessionChangeType
 import com.callstack.appduct.ToolAnnotations
 import kotlinx.coroutines.delay
 import org.json.JSONObject
@@ -36,9 +35,6 @@ class PlaygroundApplication : Application() {
                 }
                 is AppductEvent.SessionChange -> {
                     PlaygroundState.sessionId = event.sessionId
-                    PlaygroundState.alias = if (event.type == SessionChangeType.lost) null else event.alias
-                    PlaygroundState.lastSessionEvent =
-                        event.type.name + (event.reason?.let { " ($it)" } ?: "")
                     PlaygroundState.logEvent("session -> ${event.sessionId ?: "none"}")
                 }
                 is AppductEvent.Error -> {
