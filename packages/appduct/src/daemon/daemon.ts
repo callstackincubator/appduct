@@ -657,6 +657,7 @@ export const startDaemon = async (options: DaemonOptions): Promise<RunningDaemon
 
     listener = await startListener({
       port: config.wssPort,
+      bindLoopback: process.platform === "darwin",
       tls,
       sessionManager,
     });
