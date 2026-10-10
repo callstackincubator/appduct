@@ -22,23 +22,29 @@ class IoTransport implements Transport {
   @override
   Socket open(Uri url, String? pin, SocketEvents events) {
     final pins = _trust().pinsFor(pin);
+    var pinMismatch = false;
     final client = HttpClient(context: SecurityContext(withTrustedRoots: false))
       ..connectionTimeout = const Duration(seconds: 15)
       ..badCertificateCallback = (cert, host, port) {
         final actual = spkiPin(cert.der);
-        return actual != null && pins.contains(actual);
+        final trusted = actual != null && pins.contains(actual);
+        // Recorded here: the handshake then fails with the same exception a reset connection
+        // raises, so the exception alone cannot tell the two apart.
+        if (!trusted) pinMismatch = true;
+        return trusted;
       };
-    return _IoSocket(url, client, events);
+    return _IoSocket(url, client, events, () => pinMismatch);
   }
 }
 
 class _IoSocket implements Socket {
-  _IoSocket(Uri url, this._client, this._events) {
+  _IoSocket(Uri url, this._client, this._events, this._pinMismatch) {
     unawaited(_connect(url));
   }
 
   final HttpClient _client;
   final SocketEvents _events;
+  final bool Function() _pinMismatch;
   WebSocket? _ws;
   bool _closeRequested = false;
   bool _reportedClose = false;
@@ -49,11 +55,14 @@ class _IoSocket implements Socket {
       ws = await WebSocket.connect(url.toString(), customClient: _client);
     } on Object catch (error) {
       _client.close(force: true);
-      _events.onError(
-        error is HandshakeException || error is TlsException
-            ? 'TLS handshake failed: the daemon\'s key does not match the pin.'
-            : 'Could not connect: $error',
-      );
+      if (_pinMismatch()) {
+        _events.onPinMismatch();
+        _events.onError(
+          'TLS handshake failed: the daemon\'s key does not match the pin.',
+        );
+      } else {
+        _events.onError('Could not connect: $error');
+      }
       _reportClose(null, null);
       return;
     }

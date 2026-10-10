@@ -55,7 +55,14 @@ class ConnectionHandlers {
   final void Function(WireMessage message) onMessage;
 
   /// The socket closed on its own. Not called for a close this side asked for with [Connection.close].
-  final void Function(int? code, String? reason, String? error) onClose;
+  /// [pinMismatch] is true when the daemon's key was not one of the trusted pins.
+  final void Function(
+    int? code,
+    String? reason,
+    String? error,
+    bool pinMismatch,
+  )
+  onClose;
 }
 
 enum _Phase { connecting, active, failed }
@@ -67,6 +74,7 @@ class _Current {
   Socket? socket;
   _Phase phase = _Phase.connecting;
   String? lastError;
+  bool pinMismatch = false;
 
   /// Why this side closed the socket, reported from `onClose` in place of the echoed wire code.
   ({int code, String reason})? closedByCore;
@@ -228,7 +236,9 @@ class Connection {
           onMessage: (text) {
             if (_current == entry) _handleMessage(entry, text);
           },
-          onPinMismatch: () {},
+          onPinMismatch: () {
+            if (_current == entry) entry.pinMismatch = true;
+          },
           onError: (message) {
             if (_current == entry) entry.lastError = message;
           },
@@ -246,6 +256,7 @@ class Connection {
               code,
               reason == null || reason.isEmpty ? null : reason,
               entry.lastError,
+              entry.pinMismatch,
             );
           },
         ),

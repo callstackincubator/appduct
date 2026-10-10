@@ -67,10 +67,18 @@ class _HeldSession {
 
 /// A handshake the daemon rejected by closing the socket before (or instead of) an ack.
 class _HandshakeClosed extends AppductException {
-  const _HandshakeClosed(super.message, this.code, this.reason);
+  const _HandshakeClosed(
+    super.message,
+    this.code,
+    this.reason, {
+    this.pinMismatch = false,
+  });
 
   final int? code;
   final String? reason;
+
+  /// The daemon's key was not a trusted pin. A claim does not retry that.
+  final bool pinMismatch;
 }
 
 class _Pending {
@@ -166,13 +174,17 @@ class _DartCore implements AppductCore {
     final timer = _reconnectTimer;
     if (timer != null) _clock.clearTimeout(timer);
     _reconnectTimer = null;
-    _endClaimRetryWait();
   }
 
-  /// Wakes the `connect()` that is waiting out the backoff before it retries its claim.
+  /// The `connect()` that is waiting out the backoff before it retries its claim, and its timer.
+  /// Only `connect`, `disconnect` and `destroy` end the wait early; going to the background does not.
   Completer<void>? _claimRetryWait;
+  TimerHandle? _claimRetryTimer;
 
   void _endClaimRetryWait() {
+    final timer = _claimRetryTimer;
+    if (timer != null) _clock.clearTimeout(timer);
+    _claimRetryTimer = null;
     final wait = _claimRetryWait;
     _claimRetryWait = null;
     if (wait != null && !wait.isCompleted) wait.complete();
@@ -181,10 +193,7 @@ class _DartCore implements AppductCore {
   Future<void> _waitBeforeClaimRetry(int ms) {
     final wait = Completer<void>();
     _claimRetryWait = wait;
-    _reconnectTimer = _clock.setTimeout(() {
-      _reconnectTimer = null;
-      _endClaimRetryWait();
-    }, ms);
+    _claimRetryTimer = _clock.setTimeout(_endClaimRetryWait, ms);
     return wait.future;
   }
 
@@ -248,12 +257,13 @@ class _DartCore implements AppductCore {
     }
   }
 
-  void _onClose(int? code, String? reason, String? error) {
+  void _onClose(int? code, String? reason, String? error, bool pinMismatch) {
     final settled = _settlePending(
       _HandshakeClosed(
         reason ?? error ?? 'Appduct connection closed.',
         code,
         reason,
+        pinMismatch: pinMismatch,
       ),
     );
     if (settled) return;
@@ -480,6 +490,7 @@ class _DartCore implements AppductCore {
     _epoch += 1;
     final epoch = _epoch;
     _clearReconnectTimer();
+    _endClaimRetryWait();
     _clearGraceTimer();
     _reconnectAttempt = 0;
     _held = null;
@@ -516,7 +527,11 @@ class _DartCore implements AppductCore {
           );
           break;
         } on _HandshakeClosed catch (error) {
-          if (epoch != _epoch || isTerminalClose(error.code)) rethrow;
+          if (epoch != _epoch ||
+              isTerminalClose(error.code) ||
+              error.pinMismatch) {
+            rethrow;
+          }
           final cause = error.message.replaceFirst(RegExp(r'\.+$'), '');
           _emitError('connect', 'Appduct claim attempt failed: $cause.');
           final delayMs = fullJitterBackoffMs(_reconnectAttempt, _ports.random);
@@ -689,6 +704,7 @@ class _DartCore implements AppductCore {
   Future<void> disconnect() async {
     _epoch += 1;
     _clearReconnectTimer();
+    _endClaimRetryWait();
     _clearGraceTimer();
 
     final hadSession = _held != null;
