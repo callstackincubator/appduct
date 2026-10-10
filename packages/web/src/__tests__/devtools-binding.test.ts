@@ -19,7 +19,47 @@ describe("the devtools binding transport", () => {
   it("asks the relay for a daemon socket when opened", () => {
     const { sent } = setup();
 
-    expect(sent).toEqual([{ kind: "open" }]);
+    expect(sent).toEqual([{ kind: "open", socket: 1 }]);
+  });
+
+  it("tags each daemon socket it asks for, so the relay can say which one it means", () => {
+    const { devtools, socket, sent } = setup();
+    socket.close(1000, "superseded");
+
+    devtools.transport.open("ws://127.0.0.1:49152", { open() {}, message() {}, close() {}, error() {} });
+
+    expect(sent.filter((message) => message.kind === "open")).toEqual([
+      { kind: "open", socket: 1 },
+      { kind: "open", socket: 2 },
+    ]);
+  });
+
+  it("ignores what the relay says about a socket the page has since replaced", () => {
+    const { devtools, socket } = setup();
+    socket.close(1000, "superseded");
+    const events: string[] = [];
+    devtools.transport.open("ws://127.0.0.1:49152", {
+      open: () => events.push("open"),
+      message: (text) => events.push(`message:${text}`),
+      close: (code, reason) => events.push(`close:${code}:${reason}`),
+      error: (message) => events.push(`error:${message}`),
+    });
+
+    devtools.receive(JSON.stringify({ kind: "open", socket: 1 }));
+    devtools.receive(JSON.stringify({ kind: "message", socket: 1, text: '{"type":"session_ack"}' }));
+    devtools.receive(JSON.stringify({ kind: "close", socket: 1, code: 1006, reason: "" }));
+    devtools.receive(JSON.stringify({ kind: "open", socket: 2 }));
+
+    expect(events).toEqual(["open"]);
+  });
+
+  it("delivers an untagged relay message to the open socket, as an older relay sends them", () => {
+    const { devtools, events } = setup();
+
+    devtools.receive(JSON.stringify({ kind: "open" }));
+    devtools.receive(JSON.stringify({ kind: "message", text: '{"type":"y"}' }));
+
+    expect(events).toEqual(["open", 'message:{"type":"y"}']);
   });
 
   it("reports the socket open once the relay says the daemon socket is", () => {
