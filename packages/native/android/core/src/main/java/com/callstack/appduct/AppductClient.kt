@@ -631,14 +631,22 @@ internal class AppductClient private constructor(
             else -> false
         }
 
+    /** A socket that failed (an `IOException`) is reported twice: the connect fails, then the
+     * transport emits the socket's close. Only the close settles the attempt, so it cannot land on
+     * the retry. Any other connect failure is a refusal before a socket existed; no close follows. */
+    private var socketFailure: IOException? = null
+
     private suspend fun performHandshake(options: ConnectOptionsInternal): JSONObject {
         val deferred = CompletableDeferred<JSONObject>()
         pendingAttempt = deferred
+        socketFailure = null
         try {
             connectTransport(options.toWireMap())
         } catch (e: Throwable) {
             // A connect that fails after a newer one replaced it must not settle that newer attempt.
-            if (pendingAttempt === deferred) settlePendingAttempt(Result.failure(e))
+            if (pendingAttempt === deferred) {
+                if (e is IOException) socketFailure = e else settlePendingAttempt(Result.failure(e))
+            }
         }
         return deferred.await()
     }
@@ -905,14 +913,17 @@ internal class AppductClient private constructor(
         val errorEvent = lastErrorEvent
         lastErrorEvent = null
 
+        val failedConnect = socketFailure
+        socketFailure = null
         val settled =
             settlePendingAttempt(
                 Result.failure(
-                    AppductHandshakeClosedException(
-                        reason ?: errorEvent?.message ?: "Appduct connection closed.",
-                        code,
-                        reason,
-                    ),
+                    failedConnect
+                        ?: AppductHandshakeClosedException(
+                            reason ?: errorEvent?.message ?: "Appduct connection closed.",
+                            code,
+                            reason,
+                        ),
                 ),
             )
         if (settled) return
