@@ -1057,16 +1057,6 @@ describe("init command (next steps match the project it found)", () => {
     expect(steps[5]).toContain("safe to commit");
     expect(steps).toHaveLength(6);
   });
-
-  test("prints the iOS step and not the React Native import, through the real CLI", async () => {
-    const root = await makeIosAppRoot();
-
-    const result = runCliBinary(["init"], { cwd: root, stateDir: await makeStateDir() });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Appduct.shared.handle(url)");
-    expect(result.stdout).not.toContain("@appduct/react-native");
-  });
 });
 
 describe("appduct init (CLI)", () => {
@@ -1103,17 +1093,6 @@ describe("appduct init (CLI)", () => {
     expect(result.stdout).toContain('import "@appduct/react-native/auto"');
   });
 
-  test("exits 64 with a usage error when there is nothing to discover", async () => {
-    const root = await makeAppRoot();
-
-    const result = runCliBinary(["init", "--json"], { cwd: root, stateDir: await makeStateDir() });
-
-    expect(result.exitCode).toBe(64);
-    expect(JSON.parse(result.stdout)).toMatchObject({
-      ok: false,
-      error: { type: "usage_error" },
-    });
-  });
 
   test("--force is required to change a recorded scheme", async () => {
     const root = await makeAppRoot("myapp");

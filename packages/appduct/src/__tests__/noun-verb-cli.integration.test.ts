@@ -65,36 +65,30 @@ describe("a bare noun with no verb, or an unknown verb, names its verbs (criteri
   // The issue asks for the verbs on the *noun's own* `--help`, not only the global one: an agent
   // that runs `appduct events --help` needs to learn about `since` right there.
   test.each([
-    ["sessions", ["ls", "revoke", "link"]],
-    ["tools", ["ls", "describe", "call"]],
-    ["events", ["ls", "tail", "since"]],
-  ])('"appduct %s --help" exits 0 and names its verbs', (noun, verbs) => {
+    ["sessions", "ls|revoke|link"],
+    ["tools", "ls|describe|call"],
+    ["events", "ls|tail|since"],
+  ])('"appduct %s --help" exits 0 and names its verbs in the usage line', (noun, verbs) => {
     const result = runCliBinary([noun, "--help"]);
 
     expect(result.exitCode).toBe(0);
-    for (const verb of verbs) {
-      expect(result.stdout).toContain(verb);
-    }
+    expect(result.stdout.split("\n")).toContain(`  $ appduct ${noun} <${verbs}> [selector] [args]`);
   });
 
   // The global `--help`'s "Commands" section also names every verb, exactly like `daemon`'s
   // already does.
-  test.each([
-    ["sessions", ["ls", "revoke", "link"]],
-    ["tools", ["ls", "describe", "call"]],
-    ["events", ["ls", "tail", "since"]],
-  ])('"appduct --help" prints %s\'s verbs in its description', (noun, verbs) => {
+  test('"appduct --help" names every noun\'s verbs in its description', () => {
     const result = runCliBinary(["--help"]);
 
     expect(result.exitCode).toBe(0);
 
     const commandsSection = result.stdout.split(/\n\s*\n/u).find((block) => block.startsWith("Commands:"));
     expect(commandsSection).toBeDefined();
-    const nounLine = commandsSection!.split("\n").find((line) => line.trim().startsWith(`${noun} `));
-    expect(nounLine, commandsSection).toBeDefined();
+    const descriptionOf = (noun: string) =>
+      commandsSection!.split("\n").find((line) => line.trim().startsWith(`${noun} `));
 
-    for (const verb of verbs) {
-      expect(nounLine).toContain(verb);
-    }
+    expect(descriptionOf("sessions")).toMatch(/: ls, revoke, or link\.$/u);
+    expect(descriptionOf("tools")).toMatch(/: ls, describe, or call\.$/u);
+    expect(descriptionOf("events")).toMatch(/: ls, tail, or since\.$/u);
   });
 });

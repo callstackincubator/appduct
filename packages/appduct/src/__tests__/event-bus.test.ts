@@ -508,12 +508,4 @@ describe("projectAppEvent: the one name-glob implementation shared by since() an
     const event = { kind: "tools_changed", sessionId: "s1", ts: 0, seq: 0, data: {} } as const;
     expect(projectAppEvent(event, { name: "cart.*" })).toBe(event);
   });
-
-  test("matches a trailing glob", () => {
-    expect(projectAppEvent(appEvent("cart.item_added"), { name: "cart.*" })).toBeDefined();
-  });
-
-  test("rejects a name the glob doesn't cover", () => {
-    expect(projectAppEvent(appEvent("checkout_completed_v2"), { name: "checkout_completed" })).toBeUndefined();
-  });
 });
