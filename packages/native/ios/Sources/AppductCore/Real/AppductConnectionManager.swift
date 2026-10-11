@@ -369,7 +369,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
   nonisolated(unsafe) private(set) var stateSnapshot = AppductConnectionState.idle.rawValue
 
   private var session: URLSession?
-  private var socketTask: URLSessionWebSocketTask?
+  private(set) var socketTask: URLSessionWebSocketTask?
   private var activeSessionId: String?
   private var pendingOptions: AppductConnectOptions?
   nonisolated private let ownerGeneration: Int64
@@ -382,6 +382,11 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
   private var allowPrivateLanOnly = true
   private var closeEventPending = false
   private var lastErrorDetails: AppductErrorDetails?
+  /// A TLS failure recorded synchronously by the challenge callback, so the socket's close (a
+  /// separate callback that can run first) publishes it ahead of itself. Taken by whichever of
+  /// `publishPendingChallengeError` runs first; dropped when the socket is gone.
+  nonisolated(unsafe) private var pendingChallengeError: AppductErrorDetails?
+  nonisolated private let pendingChallengeErrorLock = NSLock()
   private var keepaliveTask: Task<Void, Never>?
   private var pingFailureCount = 0
 
@@ -504,9 +509,24 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
         "device_model": device.model,
         "device_os": device.os,
       ]
+
+      // The device read above suspends this call. If the socket failed meanwhile (its close event
+      // is already out) and the client retried, `socketTask` is the retry's socket, which this
+      // claim must not be sent on.
+      guard socketTask === task else {
+        throw AppductSocketConnectError(underlying: AppductModuleError(message: "Appduct socket closed before the claim was sent."))
+      }
     }
 
-    try await sendRawObject(firstFrame, requireActiveSession: false)
+    do {
+      try await sendRawObject(firstFrame, requireActiveSession: false)
+    } catch let error as AppductModuleError {
+      throw error
+    } catch {
+      // The socket failed before it opened, and its close event follows. The client settles on that
+      // event, with the error details published before it saying whether a pin check failed.
+      throw AppductSocketConnectError(underlying: error)
+    }
   }
 
   public func send(message: String) async throws {
@@ -613,6 +633,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
     activeSessionId = nil
     pendingOptions = nil
     lastErrorDetails = nil
+    _ = takePendingChallengeError()
   }
 
   private func markCurrentLeaseDisconnected(at disconnectedAtMs: Int64) {
@@ -991,7 +1012,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
             hint: "Verify cliPins matches the fingerprint from appduct keygen and rebuild the native app."
           )
         )
-        completionHandler(.cancelAuthenticationChallenge, nil)
+          completionHandler(.cancelAuthenticationChallenge, nil)
         return
       }
 
@@ -1015,9 +1036,29 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
   /// Fire-and-forget error report from a `nonisolated` context: hops onto the actor to update
   /// `lastErrorDetails` and invoke `emitError`, without making the (synchronous) caller wait.
   nonisolated private func reportError(_ details: AppductErrorDetails) {
+    pendingChallengeErrorLock.lock()
+    pendingChallengeError = details
+    pendingChallengeErrorLock.unlock()
     Task {
-      await self.publishError(details)
+      await self.publishPendingChallengeError()
     }
+  }
+
+  nonisolated private func takePendingChallengeError() -> AppductErrorDetails? {
+    pendingChallengeErrorLock.lock()
+    defer { pendingChallengeErrorLock.unlock() }
+    let details = pendingChallengeError
+    pendingChallengeError = nil
+    return details
+  }
+
+  /// Publishes a recorded TLS failure if its socket is still open; one that arrives after the
+  /// socket's teardown is dropped, so it can never ride on a later socket's close.
+  private func publishPendingChallengeError() {
+    guard let details = takePendingChallengeError(), closeEventPending else {
+      return
+    }
+    publishError(details)
   }
 
   public nonisolated func urlSession(
@@ -1055,6 +1096,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
       return
     }
 
+    publishPendingChallengeError()
     let decodedReason = reason.flatMap { String(data: $0, encoding: .utf8) }
 
     if state == .connecting, let decodedReason {
@@ -1070,6 +1112,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
       return
     }
 
+    publishPendingChallengeError()
     if let error, lastErrorDetails == nil, state != .error {
       publishError(
         classifyTransportFailure(

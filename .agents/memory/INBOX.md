@@ -99,3 +99,15 @@ One note per PR that hit friction, four lines:
 - 2026-10-10 #232 skill: implement-issue
   What went wrong: Issue #227 required Flutter to show the session alias and last event on screen and also banned SDK changes, but the Flutter SDK exposes only the connection state, so implementation got blocked.
   Would have prevented it: file-issue should check that every on-screen value a playground criterion asks for is exposed by each SDK before marking the issue ready.
+- 2026-10-10 #246 skill: implement-issue
+  What went wrong: making a native claim retryable surfaced three successive iOS/Android races (connect error vs close event, stale close settling the retry, an await in connect() after socketTask is set), one per review round, and hit the loop limit.
+  Would have prevented it: when changing when a socket failure settles a handshake, first list every await and every callback that can fire between creating the socket and the ack, and give each attempt its own identity (task or epoch) checked after every await.
+  Cost: two review rounds, loop limit
+- 2026-10-10 #246 skill: implement-issue
+  What went wrong: a round reported the web e2e "a page on a foreign origin is refused" timing out as unrelated ("this change does not touch that package"), though the PR had changed the web core's claim handling; it was a real regression caught a round later.
+  Would have prevented it: before calling a failing test unrelated, check whether the PR's diff touches any code that test runs, and run it on main if unsure.
+  Cost: extra fix round
+- 2026-10-11 #246 skill: implement-issue
+  What went wrong: new iOS tests that depended on the order of two transport callbacks passed locally but failed in CI's `-test-iterations 20 -run-tests-until-failure` run, because each callback started its own Task; the same race also sat in the real transport below the fake.
+  Would have prevented it: before pushing iOS tests that depend on callback order, run them in a loop under CPU load (as CI's iteration run effectively does), and fix ordering in both the client and the real transport, not only behind the fake.
+  Cost: CI failure, extra fix and review round

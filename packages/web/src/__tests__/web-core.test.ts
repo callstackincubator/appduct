@@ -111,13 +111,35 @@ describe("claiming a session", () => {
     expect(h.recorded.sessions).toEqual([]);
   });
 
-  it("surfaces a socket that never opens as an error from connect", async () => {
+  it("surfaces a socket that closes before it ever opened as an error from connect, without retrying", async () => {
     const h = setup();
     const connecting = h.startClaim();
     const rejected = expect(connecting).rejects.toThrow("refused");
     h.last().drop("refused");
     await rejected;
+
     expect(h.core.getState()).toBe("closed");
+    expect(h.recorded.states.at(-1)).toEqual({ state: "closed", reason: "connect_error" });
+    h.clock.advance(60_000);
+    await settle();
+    expect(h.transport.connections).toHaveLength(1);
+  });
+
+  it("retries a claim whose socket opened and then dropped before the ack, until the link has expired", async () => {
+    const h = setup();
+    const connecting = h.startClaim({ expiresAt: Math.floor(START_MS / 1000) + 1 });
+    const rejected = expect(connecting).rejects.toThrow("reset");
+    for (const waitMs of [250, 500, 1000]) {
+      h.last().open();
+      h.last().drop("reset");
+      await settle();
+      expect(h.core.getState()).toBe("connecting");
+      h.clock.advance(waitMs);
+      await settle();
+    }
+    await rejected;
+    expect(h.core.getState()).toBe("closed");
+    expect(h.transport.connections).toHaveLength(3);
   });
 
   it("surfaces a transport that cannot open as an error from connect", async () => {

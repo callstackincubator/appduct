@@ -5,7 +5,7 @@
     "random": 0.5,
     "steps": [
       {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
-      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
       {"expect":"state","state":"connecting"},
       {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
       {"expect":"state","state":"active"},
@@ -31,7 +31,7 @@
     "random": 0.5,
     "steps": [
       {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
-      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
       {"expect":"state","state":"connecting"},
       {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
       {"expect":"state","state":"active"},
@@ -51,7 +51,7 @@
     "random": 0.5,
     "steps": [
       {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
-      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
       {"expect":"state","state":"connecting"},
       {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
       {"expect":"state","state":"active"},
@@ -72,7 +72,7 @@
     "random": 0.5,
     "steps": [
       {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
-      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
       {"expect":"state","state":"connecting"},
       {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
       {"expect":"state","state":"active"},
@@ -90,7 +90,7 @@
     "random": 0.5,
     "steps": [
       {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
-      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
       {"expect":"state","state":"connecting"},
       {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
       {"expect":"state","state":"active"},
@@ -112,7 +112,7 @@
     "random": 0.5,
     "steps": [
       {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
-      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
       {"expect":"state","state":"connecting"},
       {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
       {"expect":"state","state":"active"},
@@ -129,13 +129,93 @@
     ]
   },
   {
+    "name": "retries a claim whose socket dropped before the ack, with the same token",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"drop"},
+      {"drive":"advance","ms":250},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}}
+    ]
+  },
+  {
+    "name": "does not retry a claim before the jittered backoff delay",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"drop"},
+      {"drive":"advance","ms":249},
+      {"drive":"disconnect"},
+      {"expect":"state","state":"closed","reason":"closed_by_app"}
+    ]
+  },
+  {
+    "name": "gives up retrying a claim once the link has expired",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000001},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"drop"},
+      {"drive":"advance","ms":250},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"drive":"drop"},
+      {"drive":"advance","ms":500},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"drive":"drop"},
+      {"drive":"advance","ms":1000},
+      {"expect":"state","state":"closed","reason":"connect_error"},
+      {"drive":"advance","ms":31000}
+    ]
+  },
+  {
+    "name": "never retries a claim the daemon refuses with 1008",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"close","code":1008,"reason":"invalid_token"},
+      {"expect":"state","state":"closed","reason":"connect_error"},
+      {"drive":"advance","ms":31000}
+    ]
+  },
+  {
+    "name": "never retries a claim again once the retry is refused with already_claimed",
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"expect":"state","state":"connecting"},
+      {"drive":"drop"},
+      {"drive":"advance","ms":250},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"drive":"close","code":1008,"reason":"already_claimed"},
+      {"expect":"state","state":"closed","reason":"connect_error"},
+      {"drive":"advance","ms":31000}
+    ]
+  },
+  {
     "name": "answers tool_timeout and cancels the call when it outlasts its timeout_ms",
     "startMs": 1700000000000,
     "random": 0.5,
     "steps": [
       {"drive":"registerTool","descriptor":{"name":"slow","description":"Waits for the app.","timeout_ms":5000}},
       {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
-      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
       {"expect":"state","state":"connecting"},
       {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
       {"expect":"state","state":"active"},
@@ -155,7 +235,7 @@
     "steps": [
       {"drive":"registerTool","descriptor":{"name":"slow","description":"Waits for the app.","timeout_ms":5000}},
       {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
-      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
       {"expect":"state","state":"connecting"},
       {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
       {"expect":"state","state":"active"},
@@ -177,7 +257,7 @@
     "steps": [
       {"drive":"registerTool","descriptor":{"name":"slow","description":"Waits for the app.","timeout_ms":5000}},
       {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
-      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
       {"expect":"state","state":"connecting"},
       {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
       {"expect":"state","state":"active"},
@@ -199,7 +279,7 @@
     "steps": [
       {"drive":"registerTool","descriptor":{"name":"slow","description":"Waits for the app.","timeout_ms":5000}},
       {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
-      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
       {"expect":"state","state":"connecting"},
       {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
       {"expect":"state","state":"active"},
@@ -221,7 +301,7 @@
     "steps": [
       {"drive":"registerTool","descriptor":{"name":"slow","description":"Waits for the app.","timeout_ms":5000}},
       {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
-      {"expect":"connect","mode":"claim","sessionId":"session-1"},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
       {"expect":"state","state":"connecting"},
       {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
       {"expect":"state","state":"active"},
@@ -233,6 +313,41 @@
       {"expect":"state","state":"reconnecting"},
       {"expect":"cancel","call":"call-1","reason":"session_suspended"},
       {"drive":"respond","call":"call-1","result":{"ok":true}}
+    ]
+  },
+  {
+    "name": "retries a claim whose connection failed before its socket opened, with the same token",
+    "notOnWeb": true,
+    "startMs": 1700000000000,
+    "random": 0.5,
+    "steps": [
+      {"drive":"failNextConnect"},
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"state","state":"connecting"},
+      {"drive":"advance","ms":249},
+      {"drive":"advance","ms":1},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}}
+    ]
+  },
+  {
+    "name": "retries a claim once, with no backoff, when the failed socket's close event arrives after the retry began",
+    "notOnWeb": true,
+    "startMs": 1700000000000,
+    "random": 0,
+    "steps": [
+      {"drive":"failNextConnect"},
+      {"drive":"connect","sessionId":"session-1","token":"claim-token","expiresAt":1700000300},
+      {"expect":"state","state":"connecting"},
+      {"drive":"advance","ms":1},
+      {"expect":"connect","mode":"claim","sessionId":"session-1","token":"claim-token"},
+      {"drive":"receive","frame":{"type":"session_ack","session_id":"session-1","status":"ok","alias":"phone","resume_token":"resume-1","keepalive_interval_s":15,"grace_s":10}},
+      {"expect":"state","state":"active"},
+      {"expect":"session","type":"claimed"},
+      {"expect":"send","frame":{"type":"tool_registry_snapshot","session_id":"session-1","tools":[]}}
     ]
   }
 ]

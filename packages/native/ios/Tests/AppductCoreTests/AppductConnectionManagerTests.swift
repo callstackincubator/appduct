@@ -33,6 +33,49 @@ final class AppductConnectionManagerTests: XCTestCase {
     XCTAssertEqual(RecordingURLProtocol.canInitCallCount, 0)
   }
 
+  /// The client retries a claim only when the socket failed, and tells that from a refusal by this
+  /// error type.
+  func testConnectReportsASocketThatNeverOpenedAsASocketConnectError() async throws {
+    let manager = AppductConnectionManager()
+    let options = try connectOptions(ip: "127.0.0.1", port: 65530, token: "claim-token", linkPin: "sha256/link-pin")
+
+    do {
+      try await manager.connect(options: options)
+      XCTFail("connecting to a closed port should fail")
+    } catch {
+      XCTAssertTrue(error is AppductSocketConnectError, "got \(error)")
+    }
+    await manager.invalidate()
+  }
+
+  /// While the claim waits for the main actor (device fields), the socket can fail and the client
+  /// can retry onto a new socket. The waiting call must not send its claim on that new socket, and
+  /// must report the socket failure, not a plain error the client would read as a refusal.
+  @MainActor
+  func testConnectWhoseSocketFailedWhileItWaitedForTheMainActorReportsASocketConnectError() async throws {
+    let manager = AppductConnectionManager()
+    let options = try connectOptions(ip: "127.0.0.1", port: 65530, token: "claim-token", linkPin: "sha256/link-pin")
+    let closed = DispatchSemaphore(value: 0)
+    manager.emitClose = { _ in closed.signal() }
+
+    let connecting = Task.detached { () -> Error? in
+      do {
+        try await manager.connect(options: options)
+        return nil
+      } catch {
+        return error
+      }
+    }
+
+    // This test holds the main actor, so connect() is parked waiting for it. Block (without
+    // suspending) until the refused socket's close event has been emitted.
+    XCTAssertEqual(closed.wait(timeout: .now() + 10), .success)
+
+    let error = await connecting.value
+    XCTAssertTrue(error is AppductSocketConnectError, "got \(String(describing: error))")
+    await manager.invalidate()
+  }
+
   // MARK: - formatAppductWebSocketUrl (IPv6 bracketing, matches transport.ts's formatAgentWebSocketUrl)
 
   func testFormatWebSocketUrlLeavesIpv4Unbracketed() {
@@ -545,6 +588,83 @@ final class AppductConnectionManagerTests: XCTestCase {
     first.cancel()
   }
 
+  // MARK: - Pin failure ordering (#246)
+
+  /// The client settles a claim from the socket's close and reads the pin verdict from the error
+  /// published before it. URLSession delivers the challenge and the task completion on its own
+  /// queue, so the manager must publish a pin failure ahead of that socket's close however the two
+  /// callbacks interleave.
+  func testPinMismatchIsPublishedBeforeTheCloseOfTheSameSocket() async throws {
+    for attempt in 0..<300 {
+      let manager = AppductConnectionManager()
+      let events = ThreadSafeStringArray()
+      manager.emitError = { events.append("error:\($0.nativeCode ?? $0.code)") }
+      manager.emitClose = { _ in events.append("close") }
+
+      let task = try await startPendingSocket(manager)
+      let challenge = try Self.pinMismatchChallenge()
+      manager.urlSession(URLSession.shared, didReceive: challenge) { _, _ in }
+      manager.urlSession(URLSession.shared, task: task, didCompleteWithError: URLError(.cancelled))
+
+      try await waitUntil("attempt \(attempt) closes") { events.values.contains("close") }
+      XCTAssertEqual(events.values, ["error:pin_mismatch", "close"], "attempt \(attempt)")
+      await manager.invalidate()
+    }
+  }
+
+  /// A pin failure reported after its socket is gone belongs to nothing; the next socket's close
+  /// must not carry it.
+  func testPinMismatchReportedAfterItsSocketClosedDoesNotReachTheNextSocket() async throws {
+    let manager = AppductConnectionManager()
+    let events = ThreadSafeStringArray()
+    manager.emitError = { events.append("error:\($0.nativeCode ?? $0.code)") }
+    manager.emitClose = { _ in events.append("close") }
+
+    let first = try await startPendingSocket(manager)
+    manager.urlSession(URLSession.shared, task: first, didCompleteWithError: URLError(.cancelled))
+    try await waitUntil("the first socket closes") { events.values.contains("close") }
+
+    let challenge = try Self.pinMismatchChallenge()
+    manager.urlSession(URLSession.shared, didReceive: challenge) { _, _ in }
+    await allowQueuedWorkToRun()
+
+    let second = try await startPendingSocket(manager)
+    manager.urlSession(URLSession.shared, task: second, didCompleteWithError: URLError(.cancelled))
+    try await waitUntil("the second socket closes") { events.values.filter { $0 == "close" }.count == 2 }
+
+    XCTAssertFalse(events.values.contains("error:pin_mismatch"), "got \(events.values)")
+    await manager.invalidate()
+  }
+
+  /// Starts a connect that stays pending (unroutable address) and returns its socket task.
+  private func startPendingSocket(_ manager: AppductConnectionManager) async throws -> URLSessionTask {
+    let options = try connectOptions(ip: "10.255.255.1", port: 65530, token: "claim-token", linkPin: "sha256/link-pin")
+    Task { try? await manager.connect(options: options) }
+    try await waitUntil("the connect is in flight") { manager.currentStateSnapshot() == "connecting" }
+    try await waitUntil("the socket exists") { await manager.socketTask != nil }
+    return await manager.socketTask!
+  }
+
+  private static func pinMismatchChallenge() throws -> URLAuthenticationChallenge {
+    let fixtures = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("fixtures/spki-pin.json")
+    let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: fixtures)) as! [String: Any]
+    let der = Data(base64Encoded: fixture["certificateDerBase64"] as! String)!
+    let certificate = SecCertificateCreateWithData(nil, der as CFData)!
+    var trust: SecTrust?
+    SecTrustCreateWithCertificates(certificate, SecPolicyCreateBasicX509(), &trust)
+    let space = TrustProtectionSpace(trust: trust!)
+    return URLAuthenticationChallenge(
+      protectionSpace: space,
+      proposedCredential: nil,
+      previousFailureCount: 0,
+      failureResponse: nil,
+      error: nil,
+      sender: NoopChallengeSender()
+    )
+  }
+
   func testConnectRejectsWhenNeitherTokenNorResumeTokenGiven() {
     XCTAssertThrowsError(
       try AppductConnectOptions([
@@ -873,4 +993,23 @@ private final class ThreadSafeInt64Array: @unchecked Sendable {
     defer { lock.unlock() }
     storage.append(value)
   }
+}
+
+private final class TrustProtectionSpace: URLProtectionSpace, @unchecked Sendable {
+  private let trust: SecTrust
+
+  init(trust: SecTrust) {
+    self.trust = trust
+    super.init(host: "127.0.0.1", port: 8443, protocol: "https", realm: nil, authenticationMethod: NSURLAuthenticationMethodServerTrust)
+  }
+
+  required init?(coder: NSCoder) { fatalError("unused") }
+
+  override var serverTrust: SecTrust? { trust }
+}
+
+private final class NoopChallengeSender: NSObject, URLAuthenticationChallengeSender {
+  func use(_ credential: URLCredential, for challenge: URLAuthenticationChallenge) {}
+  func continueWithoutCredential(for challenge: URLAuthenticationChallenge) {}
+  func cancel(_ challenge: URLAuthenticationChallenge) {}
 }

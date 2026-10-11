@@ -18,6 +18,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
+import java.security.cert.CertificateException
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -488,7 +490,7 @@ internal class AppductClient private constructor(
                 closeTransport()
             }
             setClientState(AppductClientState.connecting, null)
-            val ack = performHandshake(options)
+            val ack = claimWithRetries(options, myEpoch)
 
             if (myEpoch != epoch) {
                 // Superseded by a newer connect()/handleUrl() while awaiting the ack; abandon
@@ -593,14 +595,58 @@ internal class AppductClient private constructor(
             !isAppductBootstrapExpired(options.expiresAt, nowSeconds)
     }
 
+    /** A claim whose socket fails before the ack, or before it opens, is tried again with the resume
+     * backoff until the link expires. A 1008 is final, so `already_claimed` on a retry ends it, and
+     * so do a pin mismatch and a build setting the transport refuses. */
+    private suspend fun claimWithRetries(
+        options: ConnectOptionsInternal,
+        myEpoch: Int,
+    ): JSONObject {
+        while (true) {
+            try {
+                return performHandshake(options)
+            } catch (e: Throwable) {
+                if (myEpoch != epoch || destroyed || !isRetryableClaimFailure(e)) throw e
+                emitError(
+                    AppductUnifiedError(
+                        phase = "connect",
+                        message = "Appduct claim attempt failed: ${(e.message ?: "connection closed").trimEnd('.')}.",
+                        cause = e,
+                    ),
+                )
+                val delayMs = computeAppductFullJitterBackoffMs(reconnectAttempt, random = random)
+                reconnectAttempt += 1
+                delay(delayMs)
+                if (myEpoch != epoch || destroyed || isAppductBootstrapExpired(options.expiresAt, clock.nowMs() / 1000)) throw e
+            }
+        }
+    }
+
+    /** The socket failed: it closed before the ack, or never opened (refused, reset during TLS, timed
+     * out). The transport reports a pin mismatch as a certificate failure, which is final. */
+    private fun isRetryableClaimFailure(e: Throwable): Boolean =
+        when (e) {
+            is AppductHandshakeClosedException -> !isAppductTerminalCloseCode(e.code)
+            is IOException -> generateSequence(e as Throwable) { it.cause }.none { it is CertificateException }
+            else -> false
+        }
+
+    /** A socket that failed (an `IOException`) is reported twice: the connect fails, then the
+     * transport emits the socket's close. Only the close settles the attempt, so it cannot land on
+     * the retry. Any other connect failure is a refusal before a socket existed; no close follows. */
+    private var socketFailure: IOException? = null
+
     private suspend fun performHandshake(options: ConnectOptionsInternal): JSONObject {
         val deferred = CompletableDeferred<JSONObject>()
         pendingAttempt = deferred
+        socketFailure = null
         try {
             connectTransport(options.toWireMap())
         } catch (e: Throwable) {
             // A connect that fails after a newer one replaced it must not settle that newer attempt.
-            if (pendingAttempt === deferred) settlePendingAttempt(Result.failure(e))
+            if (pendingAttempt === deferred) {
+                if (e is IOException) socketFailure = e else settlePendingAttempt(Result.failure(e))
+            }
         }
         return deferred.await()
     }
@@ -867,14 +913,17 @@ internal class AppductClient private constructor(
         val errorEvent = lastErrorEvent
         lastErrorEvent = null
 
+        val failedConnect = socketFailure
+        socketFailure = null
         val settled =
             settlePendingAttempt(
                 Result.failure(
-                    AppductHandshakeClosedException(
-                        reason ?: errorEvent?.message ?: "Appduct connection closed.",
-                        code,
-                        reason,
-                    ),
+                    failedConnect
+                        ?: AppductHandshakeClosedException(
+                            reason ?: errorEvent?.message ?: "Appduct connection closed.",
+                            code,
+                            reason,
+                        ),
                 ),
             )
         if (settled) return
@@ -897,7 +946,11 @@ internal class AppductClient private constructor(
         val session = heldSession
 
         if (session == null) {
-            setClientState(AppductClientState.closed, "socket_closed")
+            // A claim waiting out its backoff owns the state, and a socket whose connect already
+            // failed is reported closed once more here, which tells the app nothing new.
+            if (connectingSessionId == null && clientState != AppductClientState.closed) {
+                setClientState(AppductClientState.closed, "socket_closed")
+            }
             return
         }
 

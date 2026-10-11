@@ -181,6 +181,124 @@ final class AppductClientTests: XCTestCase {
     try await secondConnect.value
   }
 
+  // MARK: a claim whose socket fails
+
+  private func claimingClient(
+    firstConnectFails error: (@Sendable () -> Error)? = nil
+  ) async throws -> (client: AppductClient, transport: FakeTransportSession, timers: FakeClientTimers, connect: Task<Void, Error>) {
+    let timers = FakeClientTimers(startMs: 1_700_000_000_000, random: 0.5)
+    let (client, transport) = makeClient(timers: timers)
+    transport.failNextConnectOnce = error
+    let input = connectInput(expiresAt: 1_700_000_300)
+    let connect = Task { try await client.connect(input) }
+    try await waitUntil("the first claim attempt reached the transport") { transport.isWired && transport.connectCallCount >= 1 }
+    await allowQueuedWorkToRun()
+    return (client, transport, timers, connect)
+  }
+
+  private static let refusedSocket: @Sendable () -> Error = {
+    AppductSocketConnectError(underlying: NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotConnectToHost))
+  }
+
+  private func pinMismatchDetails() -> AppductErrorDetails {
+    AppductErrorDetails(
+      code: "pin_mismatch",
+      message: "Appduct host certificate pin mismatch.",
+      phase: "tls",
+      nativeCode: "pin_mismatch",
+      closeReason: nil,
+      isRetryable: false,
+      hint: nil
+    )
+  }
+
+  func testAClaimWhoseSocketFailedKeepsWaitingOutItsBackoffWhenTheCloseEventArrivesLate() async throws {
+    let (client, transport, timers, connect) = try await claimingClient(firstConnectFails: Self.refusedSocket)
+
+    transport.simulateClose(code: nil, reason: nil)
+    await allowQueuedWorkToRun()
+    let state = await client.state
+    XCTAssertEqual(state, .connecting)
+
+    timers.advance(byMs: 250)
+    try await waitUntil("the claim was tried again") { transport.connectCallCount >= 2 }
+    transport.simulateAck(sessionId: "session-1")
+    try await connect.value
+  }
+
+  func testAClaimWhoseSocketFailedIsNotRetriedBeforeTheCloseEventArrives() async throws {
+    let (client, transport, timers, connect) = try await claimingClient(firstConnectFails: Self.refusedSocket)
+
+    timers.advance(byMs: 60_000)
+    await allowQueuedWorkToRun()
+    guard transport.connectCallCount == 1 else {
+      XCTFail("the claim was tried again before the failed socket's close event: \(transport.connectCallCount) attempts")
+      await client.disconnect()
+      _ = await connect.result
+      return
+    }
+
+    transport.simulateClose(code: nil, reason: nil)
+    await allowQueuedWorkToRun()
+    timers.advance(byMs: 250)
+    try await waitUntil("the claim was tried again") { transport.connectCallCount >= 2 }
+    transport.simulateAck(sessionId: "session-1")
+    try await connect.value
+    let state = await client.state
+    XCTAssertEqual(state, .active)
+    XCTAssertEqual(transport.connectCallCount, 2)
+  }
+
+  func testAClaimWhoseConnectFailedOnAPinMismatchIsNotRetried() async throws {
+    let (client, transport, timers, connect) = try await claimingClient(firstConnectFails: Self.refusedSocket)
+    transport.emitError?(pinMismatchDetails())
+    transport.simulateClose(code: nil, reason: nil)
+    await allowQueuedWorkToRun()
+    timers.advance(byMs: 60_000)
+    await allowQueuedWorkToRun()
+
+    let state = await client.state
+    let attempts = transport.connectCallCount
+    await client.disconnect()
+    _ = await connect.result
+    XCTAssertEqual(state, .closed)
+    XCTAssertEqual(attempts, 1)
+  }
+
+  func testAClaimThatFailsOnAPinMismatchIsNotRetried() async throws {
+    let (client, transport, timers, connect) = try await claimingClient()
+    // A pin failure cancels the TLS challenge; the daemon never sees a claim.
+    transport.emitError?(pinMismatchDetails())
+    transport.simulateClose(code: nil, reason: nil)
+    await allowQueuedWorkToRun()
+    timers.advance(byMs: 60_000)
+    await allowQueuedWorkToRun()
+
+    let state = await client.state
+    let attempts = transport.connectCallCount
+    // A claim that is still being retried would wait for an ack for ever.
+    await client.disconnect()
+    _ = await connect.result
+    XCTAssertEqual(state, .closed)
+    XCTAssertEqual(attempts, 1)
+  }
+
+  func testAClaimThatTheTransportRefusedAsMisconfiguredIsNotRetried() async throws {
+    let (client, transport, timers, connect) = try await claimingClient(firstConnectFails: {
+      NSError(domain: "config", code: 1, userInfo: [NSLocalizedDescriptionKey: "Appduct only allows local IPv4 addresses."])
+    })
+    timers.advance(byMs: 60_000)
+    await allowQueuedWorkToRun()
+
+    let state = await client.state
+    let attempts = transport.connectCallCount
+    // A claim that is still being retried would wait for an ack for ever.
+    await client.disconnect()
+    _ = await connect.result
+    XCTAssertEqual(state, .closed)
+    XCTAssertEqual(attempts, 1)
+  }
+
   // MARK: disconnect
 
   func testDisconnectAbortsAnInFlightToolHandler() async throws {

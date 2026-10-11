@@ -14,12 +14,14 @@ class Recorder {
   final opened = Completer<void>();
   final closed = Completer<(int?, String?)>();
   final errors = <String>[];
+  var pinMismatches = 0;
 
   late final events = SocketEvents(
     onOpen: opened.complete,
     onMessage: messages.add,
     onClose: (code, reason) => closed.complete((code, reason)),
     onError: errors.add,
+    onPinMismatch: () => pinMismatches++,
   );
 }
 
@@ -68,9 +70,33 @@ void main() {
 
         expect(code, isNull);
         expect(rec.opened.isCompleted, isFalse);
+        expect(rec.pinMismatches, 1);
         expect(rec.errors, isNotEmpty);
         expect(server.requests, 0);
         expect(server.received, isEmpty);
+      },
+    );
+
+    test(
+      'does not report a pin mismatch when the handshake is reset',
+      () async {
+        final reset = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(reset.close);
+        reset.listen((connection) => connection.destroy());
+        final rec = Recorder();
+
+        IoTransport(TrustPolicy.parse()).open(
+          Uri(scheme: 'wss', host: '127.0.0.1', port: reset.port),
+          server.pin,
+          rec.events,
+        );
+        final (code, _) = await rec.closed.future.timeout(
+          const Duration(seconds: 5),
+        );
+
+        expect(code, isNull);
+        expect(rec.errors, isNotEmpty);
+        expect(rec.pinMismatches, 0);
       },
     );
 

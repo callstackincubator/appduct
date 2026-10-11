@@ -69,6 +69,10 @@ public actor AppductClient {
   var pendingAttempt: PendingAttempt?
   var reconnectAttempt: Int = 0
   var reconnectTimerHandle: (any AppductTimerHandle)?
+  /// The `connect()` that is waiting out the backoff before it retries its claim, and its timer.
+  /// Only `connect`, `disconnect` and `destroy` end the wait early; going to the background does not.
+  var claimRetryWait: CheckedContinuation<Void, Never>?
+  var claimRetryTimerHandle: (any AppductTimerHandle)?
   var graceTimerHandle: (any AppductTimerHandle)?
   var resumeInFlight = false
   var backgrounded: Bool
@@ -163,17 +167,28 @@ public actor AppductClient {
     transport.emitMessageRaw = { [weak self] text in
       Task { await self?.handleIncomingWireText(text) }
     }
-    transport.emitError = { [weak self] details in
-      Task { await self?.handleTransportError(details) }
+    // The error details that explain a close arrive just before it, so the two are handled in the
+    // order the transport emitted them. Separate `Task`s start in no fixed order.
+    let (socketEvents, socketEventSink) = AsyncStream.makeStream(of: SocketEvent.self)
+    transport.emitError = { details in
+      socketEventSink.yield(.error(details))
     }
-    transport.emitClose = { [weak self] payload in
-      // Extracted to `Sendable` values before crossing into the `Task`: `NSDictionary` itself is
-      // not provably `Sendable` under strict concurrency, even though this particular payload
-      // (built fresh by `AppductConnectionManager` for exactly this callback) is never mutated
-      // again after this closure receives it.
+    transport.emitClose = { payload in
+      // Extracted to `Sendable` values first: `NSDictionary` itself is not provably `Sendable` under
+      // strict concurrency, even though this payload (built fresh by `AppductConnectionManager` for
+      // exactly this callback) is never mutated again after this closure receives it.
       let code = (payload["code"] as? NSNumber)?.intValue
       let reason = payload["reason"] as? String
-      Task { await self?.handleTransportClose(code: code, reason: reason) }
+      socketEventSink.yield(.close(code: code, reason: reason))
+    }
+    Task { [weak self] in
+      for await event in socketEvents {
+        guard let self else { return }
+        switch event {
+        case .error(let details): await self.handleTransportError(details)
+        case .close(let code, let reason): await self.handleTransportClose(code: code, reason: reason)
+        }
+      }
     }
     foregroundSubscription = foregroundObserver.onChange { [weak self] background in
       Task { await self?.handleForegroundChange(background: background) }
@@ -317,6 +332,7 @@ public actor AppductClient {
   public func disconnect() async {
     epoch += 1
     clearReconnectTimer()
+    endClaimRetryWait()
     clearGraceTimer()
 
     let hadSession = heldSession != nil
@@ -351,6 +367,7 @@ public actor AppductClient {
   public func destroy() async {
     destroyed = true
     clearReconnectTimer()
+    endClaimRetryWait()
     clearGraceTimer()
     settlePendingAttempt(.failure(AppductClientClosedError()))
     abortAllInFlight()
@@ -365,6 +382,12 @@ public actor AppductClient {
     if bytes > appductMaxFrameBytes { throw AppductFrameTooLargeError(bytes: bytes) }
     try await transport.send(message: text)
   }
+}
+
+/// What the transport reports about its socket, in the order it reported it.
+private enum SocketEvent: Sendable {
+  case error(AppductErrorDetails)
+  case close(code: Int?, reason: String?)
 }
 
 /// The daemon closes the socket with 1009 on a larger frame (PROTOCOL.md section 3).
