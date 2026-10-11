@@ -2,8 +2,8 @@
  * The architecture rules in AGENTS.md are enforced by the root ESLint config. These tests lint
  * small snippets under hypothetical paths, so they pin the rules themselves rather than the
  * current state of the tree: a module's index.ts is its only import surface, Node I/O is reached
- * only from adapters and composition roots, tests never module-mock, and tests never switch off
- * TLS verification.
+ * only from adapters and composition roots, tests never module-mock, tests never switch off
+ * TLS verification, and source never builds a RegExp from a runtime string.
  */
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -141,6 +141,61 @@ describe("lint: TLS verification in tests", () => {
 
   test("source outside tests is not linted by it: on a TLS server the option is about client certificates", async () => {
     const rules = await lint("packages/appduct/src/daemon/node-probe-server.ts", 'import { createServer } from "node:https";\nexport const s = createServer({ requestCert: false, rejectUnauthorized: false });\n');
+    expect(rules).toEqual([]);
+  });
+});
+
+describe("lint: RegExp from a runtime string", () => {
+  const SRC = "packages/appduct/src/daemon/probe-new.ts";
+
+  test("new RegExp with a variable pattern fails", async () => {
+    const rules = await lint(SRC, "export const re = (pattern: string) => new RegExp(pattern);\n");
+    expect(rules).toContain("appduct/no-dynamic-regexp");
+  });
+
+  test("a bare RegExp call with a template literal holding an expression fails", async () => {
+    const rules = await lint(SRC, "export const re = (name: string) => RegExp(`^${name}$`);\n");
+    expect(rules).toContain("appduct/no-dynamic-regexp");
+  });
+
+  test("new RegExp with a template literal holding an expression fails", async () => {
+    const rules = await lint(SRC, "export const re = (name: string) => new RegExp(`^${name}$`, \"u\");\n");
+    expect(rules).toContain("appduct/no-dynamic-regexp");
+  });
+
+  test("a concatenated pattern fails", async () => {
+    const rules = await lint(SRC, 'export const re = (name: string) => new RegExp("^" + name);\n');
+    expect(rules).toContain("appduct/no-dynamic-regexp");
+  });
+
+  test("a pattern spread from an array fails", async () => {
+    const rules = await lint(SRC, "export const re = (args: [string]) => new RegExp(...args);\n");
+    expect(rules).toContain("appduct/no-dynamic-regexp");
+  });
+
+  test("the same rule holds in @appduct/shared", async () => {
+    const rules = await lint("packages/shared/src/domains/probe-new.ts", "export const re = (p: string) => new RegExp(p);\n");
+    expect(rules).toContain("appduct/no-dynamic-regexp");
+  });
+
+  test("new RegExp with a string literal passes", async () => {
+    expect(await lint(SRC, 'export const re = new RegExp("^a+$");\n')).toEqual([]);
+  });
+
+  test("a bare RegExp call with a string literal and flags passes", async () => {
+    expect(await lint(SRC, 'export const re = RegExp("^a+$", "u");\n')).toEqual([]);
+  });
+
+  test("a template literal with no expression passes", async () => {
+    expect(await lint(SRC, "export const re = new RegExp(`^a+$`);\n")).toEqual([]);
+  });
+
+  test("a regex literal passes", async () => {
+    expect(await lint(SRC, "export const re = /^a+$/u;\n")).toEqual([]);
+  });
+
+  test("a test may build a RegExp from a runtime string", async () => {
+    const rules = await lint("packages/appduct/src/__tests__/probe.test.ts", "export const re = (p: string) => new RegExp(p);\n");
     expect(rules).toEqual([]);
   });
 });
