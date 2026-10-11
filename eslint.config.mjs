@@ -155,6 +155,26 @@ const noTlsBypass = {
   },
 };
 
+// A pattern compiled from a runtime string (a tool name, an event name) can backtrack
+// exponentially and block the single-threaded daemon. Match such strings without a regex, as
+// daemon/event-bus.ts does. Only a literal pattern is allowed: a string, a template literal with
+// no expressions, or a regex literal. Detecting backtracking inside a literal is out of scope.
+const REGEXP_MESSAGE =
+  "Do not build a RegExp from a runtime string: it can backtrack exponentially and block the daemon. Match without a regex (split and indexOf, as daemon/event-bus.ts does), or use a regex literal.";
+const isLiteralPattern = (node) =>
+  node.type === "Literal" || (node.type === "TemplateLiteral" && node.expressions.length === 0);
+const noDynamicRegexp = {
+  meta: { type: "problem", docs: { description: "no RegExp built from a runtime string" }, schema: [], messages: { dynamic: REGEXP_MESSAGE } },
+  create(context) {
+    const check = (node) => {
+      if (node.callee.type !== "Identifier" || node.callee.name !== "RegExp") return;
+      const pattern = node.arguments[0];
+      if (pattern !== undefined && !isLiteralPattern(pattern)) context.report({ node, messageId: "dynamic" });
+    };
+    return { NewExpression: check, CallExpression: check };
+  },
+};
+
 const moduleBoundary = {
   meta: {
     type: "problem",
@@ -190,7 +210,7 @@ export default [
   {
     files: [...SOURCE, ...TESTS],
     languageOptions: { parser: tseslint.parser, ecmaVersion: 2024, sourceType: "module" },
-    plugins: { appduct: { rules: { "module-boundary": moduleBoundary, "no-node-io-dynamic-import": noNodeIoDynamicImport, "no-tls-bypass": noTlsBypass } } },
+    plugins: { appduct: { rules: { "module-boundary": moduleBoundary, "no-dynamic-regexp": noDynamicRegexp, "no-node-io-dynamic-import": noNodeIoDynamicImport, "no-tls-bypass": noTlsBypass } } },
   },
   {
     files: SOURCE,
@@ -211,5 +231,10 @@ export default [
     files: TESTS,
     ignores: LEGACY_TLS_BYPASS,
     rules: { "appduct/no-tls-bypass": "error" },
+  },
+  {
+    files: ["packages/appduct/src/**/*.ts", "packages/shared/src/**/*.ts"],
+    ignores: ["**/__tests__/**"],
+    rules: { "appduct/no-dynamic-regexp": "error" },
   },
 ];
