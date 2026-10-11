@@ -369,7 +369,7 @@ public actor AppductConnectionManager: NSObject, URLSessionDelegate, URLSessionW
   nonisolated(unsafe) private(set) var stateSnapshot = AppductConnectionState.idle.rawValue
 
   private var session: URLSession?
-  private var socketTask: URLSessionWebSocketTask?
+  private(set) var socketTask: URLSessionWebSocketTask?
   private var activeSessionId: String?
   private var pendingOptions: AppductConnectOptions?
   nonisolated private let ownerGeneration: Int64
