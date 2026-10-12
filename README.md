@@ -187,7 +187,7 @@ Try a complete example before adding Appduct to your own app. Each playground re
 
 ## License
 
-[MIT](https://github.com/callstackincubator/appduct/blob/main/LICENSE). Made at [Callstack](https://callstack.com/).
+[MIT](https://github.com/callstackincubator/appduct/blob/main/LICENSE).
 
 [license-badge]: https://img.shields.io/npm/l/appduct?style=for-the-badge
 [license]: https://github.com/callstackincubator/appduct/blob/main/LICENSE
@@ -195,3 +195,11 @@ Try a complete example before adding Appduct to your own app. Each playground re
 [npm-downloads]: https://www.npmjs.com/package/appduct
 [prs-welcome-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge
 [prs-welcome]: https://github.com/callstackincubator/appduct/pulls
+
+## Made with ❤️ at Callstack
+
+`appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
+
+Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
+
+[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love
