@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Prints the release version and fails unless the three npm packages and the Flutter package carry
+ * Prints the release version and fails unless the four npm packages and the Flutter package carry
  * the same, non-prerelease version (the Flutter package is its `pubspec.yaml` its podspec and its Gradle build).
  *
  * Usage: node scripts/release-version.mjs [--root <dir>] [--tag <vX.Y.Z>]
@@ -22,7 +22,7 @@ const root = resolve(
 const tag = option("--tag");
 
 const versions = new Map();
-for (const name of ["shared", "appduct", "react-native"]) {
+for (const name of ["shared", "appduct", "react-native", "web"]) {
   const file = `packages/${name}/package.json`;
   versions.set(
     file,

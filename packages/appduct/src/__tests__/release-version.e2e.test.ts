@@ -25,7 +25,7 @@ type Versions = {
   gradle?: string;
 };
 
-/** A repo layout with the three npm packages at `npm` and the Flutter package at `flutter`. */
+/** A repo layout with the four npm packages at `npm` and the Flutter package at `flutter`. */
 function fixture({
   npm = "0.15.0",
   flutter = "0.15.0",
@@ -34,7 +34,7 @@ function fixture({
 }: Versions = {}): string {
   const root = mkdtempSync(join(tmpdir(), "release-version-"));
   roots.push(root);
-  for (const name of ["shared", "appduct", "react-native"]) {
+  for (const name of ["shared", "appduct", "react-native", "web"]) {
     mkdirSync(join(root, "packages", name), { recursive: true });
     writeFileSync(
       join(root, "packages", name, "package.json"),
@@ -99,6 +99,17 @@ describe("release version check", () => {
     const result = run(root);
     expect(result.code).toBe(1);
     expect(result.err).toContain("differ");
+  });
+
+  it("rejects a web package whose version differs from the other npm packages", () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, "packages", "web", "package.json"),
+      JSON.stringify({ version: "0.14.0" }),
+    );
+    const result = run(root);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("packages/web/package.json");
   });
 
   it("rejects a prerelease version", () => {

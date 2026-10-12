@@ -41,7 +41,7 @@ jobs:
           # restoring a pnpm store from a prior run's cache would let a poisoned cache entry slip
           # dependencies into a published package. Every run resolves and installs cleanly.
       - name: Validate production release version
-        # The three npm packages and the Flutter package must carry one version, and it must be
+        # The four npm packages and the Flutter package must carry one version, and it must be
         # the release tag's.
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
@@ -56,6 +56,7 @@ jobs:
           pnpm --filter @appduct/shared pack --pack-destination release
           pnpm --filter appduct pack --pack-destination release
           pnpm --filter @appduct/react-native pack --pack-destination release
+          pnpm --filter @appduct/web pack --pack-destination release
       - name: Upload release tarballs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -139,13 +140,38 @@ jobs:
       - name: Publish React Native package
         run: npm publish ./release/appduct-react-native-*.tgz --access public --provenance --tag latest
 
+  publish-web:
+    needs: publish-shared
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      id-token: write
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Verify npm version
+        run: >-
+          node -e 'const [major, minor, patch] = process.argv[1].split(".").map(Number);
+          if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) process.exit(1);'
+          "$(npm --version)"
+      - name: Download release tarballs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-packages
+          path: release
+      - name: Publish web package
+        run: npm publish ./release/appduct-web-*.tgz --access public --provenance --tag latest
+
   publish-cocoapods:
     # Deliberately last, after every npm publish has succeeded. A CocoaPods trunk version is
     # permanent -- `pod trunk` has no unpublish, and a version can never be replaced or reused --
     # whereas npm allows `npm unpublish` within 72 hours. So the irreversible half of the release
     # only runs once the reversible half is known good; a trunk push that lands next to a failed
     # npm publish would pin the repo to a version number it can never ship again.
-    needs: [publish-cli, publish-react-native]
+    needs: [publish-cli, publish-react-native, publish-web]
     runs-on: macos-latest
     timeout-minutes: 45
     # Holds COCOAPODS_TRUNK_TOKEN (from `pod trunk register`). CocoaPods has no OIDC/trusted-
@@ -225,7 +251,7 @@ jobs:
     #
     # Re-run safe, like publish-cocoapods: an already-published version is skipped, and a deployment
     # uploaded by an earlier attempt of this run is picked back up instead of being uploaded twice.
-    needs: [publish-cli, publish-react-native]
+    needs: [publish-cli, publish-react-native, publish-web]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Holds CENTRAL_TOKEN_USERNAME/PASSWORD (Central Portal user token) and the GPG key pair.
@@ -450,7 +476,7 @@ jobs:
     # npm publishes. Nothing needs this job, so a pub.dev problem never fails the npm release; the
     # publish run shows its own result under Actions > Publish to pub.dev and can be started again
     # by hand on the tag.
-    needs: [publish-cli, publish-react-native]
+    needs: [publish-cli, publish-react-native, publish-web]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

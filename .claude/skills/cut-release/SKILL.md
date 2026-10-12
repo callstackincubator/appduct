@@ -1,18 +1,18 @@
 ---
 name: cut-release
-description: Cut a release of the three npm packages and the Flutter package - propose the version from the Unreleased changelog, bump versions in lockstep, open the release PR, and after it merges create the GitHub release that triggers publishing, only on an explicit yes. Use when asked to release, cut a version, tag or publish.
+description: Cut a release of the four npm packages and the Flutter package - propose the version from the Unreleased changelog, bump versions in lockstep, open the release PR, and after it merges create the GitHub release that triggers publishing, only on an explicit yes. Use when asked to release, cut a version, tag or publish.
 model: sonnet
 effort: low
 ---
 
 # Cut a release
 
-The three npm packages (`@appduct/shared`, `appduct`, `@appduct/react-native`) and the Flutter
+The four npm packages (`@appduct/shared`, `appduct`, `@appduct/react-native`, `@appduct/web`) and the Flutter
 package (`appduct` on pub.dev) share one version. Podspecs and Gradle read it from `package.json`,
 and the Flutter package carries it in `pubspec.yaml`, `darwin/appduct.podspec` and
-`android/build.gradle.kts`, so the version lives in exactly six files. Publishing is
+`android/build.gradle.kts`, so the version lives in exactly seven files. Publishing is
 `.github/workflows/deploy.yaml`, triggered by a published GitHub release whose tag is
-`v<version>`; it refuses to run if the six files disagree
+`v<version>`; it refuses to run if the seven files disagree
 (`node scripts/release-version.mjs`).
 
 Two phases. Never run phase 2 inside a `work-issue` loop or without the explicit yes.
@@ -38,7 +38,7 @@ Read the `cut-release` section of `.agents/memory/LESSONS.md` before starting, p
 
    ```bash
    v=<version>
-   for p in shared appduct react-native; do
+   for p in shared appduct react-native web; do
      node -e "const f='packages/$p/package.json';const fs=require('fs');const j=JSON.parse(fs.readFileSync(f));j.version='$v';fs.writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
    done
    ```
@@ -52,7 +52,7 @@ Read the `cut-release` section of `.agents/memory/LESSONS.md` before starting, p
    sed -i.bak -E "s/(s\.version +=) '[^']*'/\1 '$v'/" packages/flutter/darwin/appduct.podspec
    sed -i.bak -E "s/^version = \"[^\"]*\"/version = \"$v\"/" packages/flutter/android/build.gradle.kts
    rm packages/flutter/pubspec.yaml.bak packages/flutter/darwin/appduct.podspec.bak packages/flutter/android/build.gradle.kts.bak
-   node scripts/release-version.mjs   # prints $v when all six files agree
+   node scripts/release-version.mjs   # prints $v when all seven files agree
    (cd packages/flutter && dart pub publish --dry-run)
    ```
 
