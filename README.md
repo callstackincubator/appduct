@@ -6,20 +6,42 @@
 
 Appduct lets a terminal, a test runner, or an AI agent call functions inside your running iOS, Android, React Native, Flutter or web app. Appduct calls these functions tools. Only the tools you register are reachable.
 
-## Why you'd want this
+## Why use Appduct
 
 - **E2E tests skip the setup.** Instead of tapping through login, onboarding and an empty cart, a test calls `log_in` or `seed_cart` and starts at the screen it's testing.
 - **Agents can drive your app.** Over MCP or the CLI, an agent can flip a feature flag, open a screen, or read some state through your tools.
-- **No hidden debug UI.** There's no secret gesture or admin panel for someone to find.
-- **Release builds leave it out.** By default Appduct is only in debug builds (debug and profile in Flutter). You can opt in for internal builds such as TestFlight; see [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/).
+- **No extra debug screens.** Register tools for test setup instead of adding menus or buttons to your app.
+- **Production builds leave it out by default.** You can opt in for internal builds such as TestFlight; see [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/).
 
 ## How it works
 
-1. You add the Appduct library to your app and register tools. Each tool has a name, a description, an input schema and a handler.
-2. You install the `appduct` CLI on your computer. To connect, the CLI gives your app a link, either opened on the device for you or scanned as a QR code. The app then connects back to your computer over an encrypted connection. The connection survives reloads, backgrounding and dropped Wi-Fi.
-3. You call tools from the terminal, a test, or an agent.
+1. **Register tools in your app.** Give each function a name, a description and a handler. Schemas tell callers what inputs and outputs to expect.
+2. **Connect the running app.** A connection link pairs it with Appduct on your computer.
+3. **Call the tools.** Use the CLI, a test runner or an agent over MCP.
 
-Register a tool in your app:
+## Getting started
+
+You need Node 20 or newer for the CLI and a development build of your app. Check your SDK's setup guide below for platform requirements.
+
+### 1. Install the CLI
+
+```bash
+npm install -g appduct
+```
+
+### 2. Add Appduct and register a tool
+
+Follow the setup guide for your platform to install the SDK and configure the connection:
+
+| Platform | SDK and setup |
+| --- | --- |
+| iOS | [AppductCore](packages/native/ios/README.md), with Swift Package Manager or CocoaPods |
+| Android | [Native Android SDK](packages/native/android/README.md), from Maven Central |
+| React Native | [@appduct/react-native](packages/react-native/README.md), for Expo development builds or bare apps |
+| Flutter | [appduct](packages/flutter/README.md), from pub.dev |
+| Web | [@appduct/web](packages/web/README.md), for any framework or plain JavaScript |
+
+The same tool can be registered on each platform:
 
 <details open>
 <summary>iOS (Swift)</summary>
@@ -57,7 +79,33 @@ Appduct.register(
 </details>
 
 <details>
+<summary>React Native</summary>
+
+```tsx
+import { useAppductTool } from "@appduct/react-native";
+import { z } from "zod";
+
+export function AppductTools() {
+  useAppductTool({
+    name: "seed_cart",
+    description: "Fill the cart with test items.",
+    inputSchema: z.object({ items: z.number() }),
+    outputSchema: z.object({ added: z.number() }),
+    handler: async ({ items }) => ({ added: items }),
+  });
+
+  return null;
+}
+```
+
+Mount `<AppductTools />` near your app's root.
+
+</details>
+
+<details>
 <summary>Flutter (Dart)</summary>
+
+Register after `Appduct.ensureInitialized()` in your app startup code.
 
 ```dart
 import 'package:appduct/appduct.dart';
@@ -75,25 +123,6 @@ Appduct.instance.registerTool(
 ```
 
 </details>
-
-<details>
-<summary>React Native</summary>
-
-```ts
-import { useAppductTool } from "@appduct/react-native";
-import { z } from "zod";
-
-useAppductTool({
-  name: "seed_cart",
-  description: "Fill the cart with test items.",
-  inputSchema: z.object({ items: z.number() }),
-  outputSchema: z.object({ added: z.number() }),
-  handler: async ({ items }) => ({ added: items }),
-});
-```
-
-</details>
-
 
 <details>
 <summary>Web</summary>
@@ -115,41 +144,46 @@ registerTool({
 
 </details>
 
-Call it from your terminal:
+### 3. Connect and call the tool
+
+With your app running, choose one connection method. Run the command from your app's project directory, using the scheme configured in its setup guide:
+
+| Target | Command |
+| --- | --- |
+| iOS Simulator | `appduct sessions link --open ios-sim` |
+| Android emulator or USB device | `appduct sessions link --open android --app-id com.example.shop` |
+| Physical iOS or Android device | `appduct sessions link --qr` |
+| Web page | `appduct sessions link --open web http://localhost:5173/` |
+
+For Android, replace `com.example.shop` with your installed build's app id. For a physical device, scan the QR code on the same local network as your computer. For Web, open the URL the CLI prints. See [Connect a device](https://callstackincubator.github.io/appduct/guides/cli/#connect-a-device) for other options.
+
+Once connected, list the tools and call the one you registered:
 
 ```bash
+appduct tools ls
 appduct tools call seed_cart --input '{"items":3}'
 ```
 
-## Getting started
-
-1. Install the CLI:
-
-   ```bash
-   npm install -g appduct
-   ```
-
-2. Add Appduct to your app:
-   - [iOS](packages/native/ios/README.md), with Swift Package Manager or CocoaPods
-   - [Android](packages/native/android/README.md), from Maven Central
-   - [React Native](packages/react-native/README.md). You need a development build; Expo Go doesn't work.
-   - [Flutter](packages/flutter/README.md), from pub.dev
-   - [Web](packages/web/README.md), for any framework or plain JavaScript
+The example returns `{"added":3}`. Replace its handler with your app's cart setup.
 
 ## Try a playground
 
-Run an example app before adding Appduct to your own: [iOS](playground-native/ios/README.md), [Android](playground-native/android/README.md), [React Native](playground/README.md), [Flutter](playground-flutter/README.md) or [Web](playground-web/README.md). Each registers the same five demo tools and the `playground_ping` event.
+Try a complete example before adding Appduct to your own app. Each playground registers the same five demo tools and the `playground_ping` event:
+
+- [iOS](playground-native/ios/README.md): SwiftUI
+- [Android](playground-native/android/README.md): Jetpack Compose
+- [React Native](playground/README.md): Expo
+- [Flutter](playground-flutter/README.md): Android, iOS and macOS
+- [Web](playground-web/README.md): React and Vite
 
 ## Learn more
 
-- [Documentation site](https://callstackincubator.github.io/appduct/): guides and reference for every platform
-- [CLI guide](packages/appduct/README.md): connect to a device, list and call tools
-- [Use Appduct with an agent](https://callstackincubator.github.io/appduct/guides/agents/): MCP config and the agent skill
+- [Use the CLI](packages/appduct/README.md): connect, find tools and watch events
+- [Connect an agent](https://callstackincubator.github.io/appduct/guides/agents/): MCP configuration and the agent skill
 - [Call tools from tests](packages/appduct/README.md#test-runners-appductclient): the `appduct/client` API
-- [Registering tools](https://callstackincubator.github.io/appduct/guides/writing-tools/): schemas, long-running tools and events
-- [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/): which builds include Appduct, including web production bundles
-- [Security](https://callstackincubator.github.io/appduct/guides/security/): what it protects against, trust and key rotation
-- [Packages and platform support](https://callstackincubator.github.io/appduct/start/introduction/#packages)
+- [Write tools](https://callstackincubator.github.io/appduct/guides/writing-tools/): schemas, long-running tools and events
+- [Choose build variants](https://callstackincubator.github.io/appduct/guides/build-variants/): which builds include Appduct
+- [Configure security](https://callstackincubator.github.io/appduct/guides/security/): trust, policy and key rotation
 
 ## License
 

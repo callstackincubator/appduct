@@ -11,7 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
-- **Docs: package and playground READMEs share the Appduct banner and shorter getting-started guides.** Platform setup, build behavior and detailed reference documentation are linked from each SDK.
+- **Docs: the root, package and playground READMEs share the Appduct banner and shorter getting-started guides.** Platform setup, build behavior and detailed reference documentation are linked from each SDK.
 
 ## 0.15.0 (2026-10-12)
 
