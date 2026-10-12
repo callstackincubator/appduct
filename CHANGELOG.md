@@ -11,6 +11,8 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Docs: the root, package and playground READMEs share the Appduct banner, Callstack footer and shorter getting-started guides.** Platform setup, build behavior and detailed reference documentation are linked from each SDK.
+
 ## 0.15.0 (2026-10-12)
 
 - **Fix: an app whose first connection to the daemon fails now keeps trying instead of staying unconnected.** It retries until the link expires, which fixes Android apps that sometimes never claimed a freshly opened link; a link the daemon refuses is still not retried, and neither, in a browser, is a daemon it cannot reach.

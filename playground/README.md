@@ -1,112 +1,71 @@
-[![Appduct][appduct-banner]][repo]
+<a href="https://callstackincubator.github.io/appduct/"><img src="https://raw.githubusercontent.com/callstackincubator/appduct/main/.github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
 
-### Reference app: tools from the CLI—no debug UI
+# Appduct playground for React Native
 
-[![MIT license][license-badge]][license] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
+An Expo app that registers five demo tools and an event through `@appduct/react-native`. Run it to try calling app functions from the CLI or an agent before adding Appduct to your own app.
 
-The playground is an Expo **development build** that shows Appduct end to end: a **daemon** on
-your machine, an app that opens a deep link and connects to it over a pinned `wss://` connection,
-and the **CLI** or an MCP client calling tools the app registers in JavaScript. The app has no
-extra debug screens for any of it.
+## Requirements
 
-## Why it's here
-
-- **Zero-config path**: no keys or pins to set up. The app trusts the key pin carried by the
-  bootstrap link (`trust: "link"`, the default without `cliPins`), and uses the same shared daemon
-  in `~/.appduct` as any other app, while tools run from the **CLI** (or an MCP client), not
-  in-app menus.
-- **Safe local defaults**: `allowPrivateLanOnly` stays enabled while iterating—same knob as
-  production, not a statement that Appduct only works offline or on one subnet.
-- **Resume smoke test**: the app uses `@appduct/react-native/auto`, so a Metro reload suspends
-  and resumes the session automatically with the same alias—no new deep link needed while the
-  native app process stays alive.
-- **UI sandbox** (Expo Router) with two tabs: **Tools** (registers demo tools, renders the live
-  registry and the call counter) and **Status** (connection state, the `playground_ping` button,
-  build config and error feed). The tools, the event and the `testID`s follow the
-  [playground contract](../docs/internal/playground-contract.md), so a script written for this app
-  runs on the other playgrounds too. The tools live in `playground-tools/`.
+- Node 24 and pnpm 11, plus Xcode for iOS or the Android SDK for Android.
+- An Expo development build; Expo Go doesn't run Appduct's native module.
 
 ## Getting started
 
-Everything below runs from the monorepo root unless noted. Use a **development build**, not Expo
-Go—this app ships native pinning code.
+From the repository root, install dependencies and build the packages:
 
-### 1. Nothing to configure
+```bash
+pnpm install --frozen-lockfile
+pnpm build
+```
 
-The deep-link scheme and the app's id on each platform are recorded in `.appduct/config.json`,
-so no `--scheme` or `--app-id` flags are needed. The `playground:appduct` script below runs this
-repository's own CLI build from the playground directory; the daemon it talks to is the shared
-one in `~/.appduct`.
+Run the app from `playground`:
 
-### 2. Build and run the dev client
-
-From the `playground` directory (`expo` is a dependency of this app, not of the monorepo root):
-
-```sh
+```bash
+cd playground
 pnpm exec expo run:ios
-# or
-pnpm exec expo run:android
+# or: pnpm exec expo run:android
 ```
 
-This also starts Metro. The daemon auto-spawns on first CLI/MCP use—no separate `daemon start`
-step required for the smoke test below.
+In another terminal, from the repository root, connect to the running app:
 
-### 3. Bootstrap a session
-
-- **iOS Simulator**: `pnpm run playground:appduct -- sessions link --open ios-sim`
-- **Android emulator**: `pnpm run playground:appduct -- sessions link --open android`
-- **Physical device**: `pnpm run playground:appduct -- sessions link --qr`, then scan the QR code with the device's camera (it
-  must be on the same LAN as the daemon, or `allowPrivateLanOnly` will reject it)
-
-The **Status** tab should flip to `active` once the app claims the session.
-
-### 4. Drive it from the CLI
-
-```sh
-pnpm run playground:appduct -- sessions ls
-pnpm run playground:appduct -- tools ls
-pnpm run playground:appduct -- tools call sum --input '{"a":1,"b":2}'
-pnpm run playground:appduct -- tools call call_count --input '{}'      # reads state a handler closes over
-pnpm run playground:appduct -- tools call reset_counter --input '{}'   # destructive; denied if policy.destructive=deny
-pnpm run playground:appduct -- tools call slow_task --input '{}'       # watch progress with events tail --follow
-pnpm run playground:appduct -- tools call throwing_tool --input '{}'   # exercises tool_execution_error
-pnpm run playground:appduct -- events ls                              # lists playground_ping, the event the app declares
-pnpm run playground:appduct -- events ls --name playground_ping       # its full payload schema
-pnpm run playground:appduct -- events tail --follow
+```bash
+pnpm playground:appduct -- sessions link --open ios-sim
+# or: pnpm playground:appduct -- sessions link --open android
 ```
 
-Tap **Send playground_ping** on the Status tab while `events tail --follow` is running to see the
-`app_event` show up on the stream.
+The script runs this checkout's CLI from the playground directory, where the scheme and app ids are already recorded. The Status screen shows `active` after connecting.
 
-### 5. Try the resume behavior
+## Try the tools
 
-With a session active, trigger a Metro reload (press `r` in the Metro terminal, or shake the
-device and choose Reload). The Status tab should show `reconnecting` then `active` again with the
-**same alias**—no new `appduct sessions link` needed. Keep the native app process alive: the resume
-lease exists only in native process memory, so killing/relaunching the app requires a new link.
-The daemon-side session grace window (`graceSeconds` in `config.json`) starts when the transport
-suspends/disconnects.
+The app registers `sum`, `call_count`, `reset_counter`, `slow_task` and `throwing_tool`, plus the `playground_ping` event. After connecting:
 
-## Platform compatibility
+```bash
+pnpm playground:appduct -- tools ls
+pnpm playground:appduct -- tools call sum --input '{"a":2,"b":3}'
+pnpm playground:appduct -- tools call call_count --input '{}'
+pnpm playground:appduct -- events ls
+pnpm playground:appduct -- events tail --follow
+```
 
-- **iOS** and **Android** development builds, New Architecture.
-- **Web**: Appduct client is a stub; this app is not targeting web sessions.
+`sum` returns `{"total":5}`. Open the Status screen and press **Send playground_ping** to see an event in the terminal. See the [playground contract](../docs/internal/playground-contract.md) for all tool names, groups and screen identifiers.
 
-## Documentation
+## Things to know
 
-- [Monorepo README](../README.md)
-- [Architecture](../docs/ARCHITECTURE.md)
-- [@appduct/react-native](../packages/react-native/README.md)
-- [appduct (CLI/daemon/MCP)](../packages/appduct/README.md)
+- **Try a reload.** Press `r` in Metro with an active session. The session resumes with the same alias. Killing the native app requires a new link.
+- **Use QR for a physical device.** Run `pnpm playground:appduct -- sessions link --qr`; the device must be on the same local network as your computer.
+- **Debug includes Appduct.** For internal release builds or JavaScript stripping, see [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/).
+- **This example targets iOS and Android.** For a browser example, use the [Web playground](../playground-web/README.md). The SDK also supports [Web builds](https://callstackincubator.github.io/appduct/install/react-native/).
 
-## Authors
+## Learn more
 
-Ships with [Appduct][repo] · [Callstack][callstack-readme-with-love].
+- [React Native SDK](../packages/react-native/README.md)
+- [Connect an agent](https://callstackincubator.github.io/appduct/guides/agents/)
+- [Device E2E suite](../e2e-device/README.md)
 
-[appduct-banner]: https://img.shields.io/badge/Appduct-callstack%2Fincubator-111827?style=for-the-badge&logo=github&logoColor=white
-[repo]: https://github.com/callstackincubator/appduct
-[license-badge]: https://img.shields.io/npm/l/%40appduct%2Freact-native?style=for-the-badge
-[license]: https://github.com/callstackincubator/appduct/blob/main/LICENSE
-[prs-welcome-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge
-[prs-welcome]: https://github.com/callstackincubator/appduct/pulls
+## Made with ❤️ at Callstack
+
+`appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
+
+Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
+
 [callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love

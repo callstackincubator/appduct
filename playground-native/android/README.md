@@ -1,83 +1,66 @@
-# Appduct native playground (Android)
+<a href="https://callstackincubator.github.io/appduct/"><img src="https://raw.githubusercontent.com/callstackincubator/appduct/main/.github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
 
-A plain Jetpack Compose app that exercises `packages/native/android`'s `Appduct` facade with
-no React Native anywhere in the stack -- the Android counterpart to `playground/`'s Expo app.
-It registers the same five
-tools the Expo playground does (`sum`, `call_count`, `reset_counter`, `slow_task`,
-`throwing_tool`), declares the `playground_ping` event, and has two screens, Tools and Status,
-with the test tags (`call-count`, `connection-state`, `ping-button` and the rest) of the
-[playground contract](../../docs/internal/playground-contract.md). `testTagsAsResourceId` is on at
-the root, so UI Automator sees the tags as resource ids. There is no `/status` deep link here:
-`AppductLinkActivity` finishes on any link that is not an Appduct link.
+# Appduct playground for Android
 
-## Layout
-
-```
-playground-native/android/
-  settings.gradle   includeBuild("../../packages/native/android") with dependency substitution
-  build.gradle       root build script (AGP/Kotlin versions match packages/native/android's)
-  app/
-    build.gradle     debugImplementation(core) / releaseImplementation(core-noop)
-    src/main/
-      AndroidManifest.xml
-      java/com/callstack/appduct/playground/
-        PlaygroundApplication.kt   registers tools in Application.onCreate()
-        PlaygroundState.kt         Compose-observable connection state / event log
-        MainActivity.kt            the Tools and Status screens
-```
-
-This is **not** a published-artifact consumer: `settings.gradle`'s `includeBuild` substitutes
-`com.callstack.appduct:core`/`:core-noop` with the local Gradle projects from
-`packages/native/android`, so the playground always builds against whatever is in this worktree,
-with no publish-then-consume round trip. A real consumer app instead depends on the published
-Maven coordinates -- see `packages/native/android/README.md`.
+A Jetpack Compose app that registers five demo tools and an event through the native Android SDK. It builds against the SDK in this checkout and uses the same tools and screens as the other playgrounds.
 
 ## Requirements
 
-Java 17, the Android SDK (`ANDROID_HOME`), and `packages/native/android`'s own Gradle wrapper
-distribution (this project's `gradle/wrapper` is a copy of that one, kept in sync by hand since
-the two are not otherwise linked).
+- Java 17, the Android SDK with `ANDROID_HOME` set, and an emulator or USB device.
+- Node 24 and pnpm 11 to build this checkout's CLI.
 
-## Commands
+## Getting started
 
-From this directory:
-
-```bash
-./gradlew :app:assembleDebug           # debugImplementation(core) -- the real Appduct core
-./gradlew :app:assembleRelease         # releaseImplementation(core-noop) -- inert, no network code
-```
-
-Verify the split against the built artifacts, from the repo root, with the workspace's own
-`appduct` build (see the note at the end):
+From the repository root:
 
 ```bash
-node packages/appduct/dist/bin.js doctor \
-  playground-native/android/app/build/outputs/apk/debug/app-debug.apk --assert-present
-
-node packages/appduct/dist/bin.js doctor \
-  playground-native/android/app/build/outputs/apk/release/app-release-unsigned.apk --assert-absent
-```
-
-Install and run on a booted emulator or device:
-
-```bash
+pnpm install --frozen-lockfile
+pnpm build
+cd playground-native/android
+./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n com.callstack.appduct.playground/.MainActivity
 ```
 
-Then drive it from the `appduct` CLI. Run these from inside `playground-native/`, where
-`.appduct/config.json` records the app's scheme and app id, so no `--scheme` or `--app-id` is
-needed:
+From `playground-native`, connect using this checkout's CLI:
 
 ```bash
-appduct sessions link --open android
-appduct tools ls
-appduct tools call sum --input '{"a":2,"b":3}'
-appduct events tail
+node ../packages/appduct/bin.js sessions link --open android
 ```
 
-## Use the workspace's own `appduct` build
+The scheme and app id are already recorded in `.appduct/config.json`. The Status screen shows `active` after connecting.
 
-If `appduct` is also installed globally, `pnpm exec appduct` can run that global copy instead of
-this workspace's build. Run `node packages/appduct/dist/bin.js ...` from the repo root when the
-two might differ, or check which one runs with `pnpm exec which appduct`.
+## Try the tools
+
+The app registers `sum`, `call_count`, `reset_counter`, `slow_task` and `throwing_tool`, plus the `playground_ping` event. After connecting:
+
+```bash
+node ../packages/appduct/bin.js tools ls
+node ../packages/appduct/bin.js tools call sum --input '{"a":2,"b":3}'
+node ../packages/appduct/bin.js tools call call_count --input '{}'
+node ../packages/appduct/bin.js events ls
+node ../packages/appduct/bin.js events tail --follow
+```
+
+`sum` returns `{"total":5}`. Open the Status screen and press **Send playground_ping** to see an event in the terminal. See the [playground contract](../../docs/internal/playground-contract.md) for all tool names, groups and screen identifiers.
+
+## Things to know
+
+- **Debug includes `core`; Release uses `core-noop`.** Build Release with `./gradlew :app:assembleRelease` from this directory. From the repository root, verify it with `node packages/appduct/bin.js doctor playground-native/android/app/build/outputs/apk/release/app-release-unsigned.apk --assert-absent`.
+- **Short network drops resume the session.** Killing the app requires a new link.
+- **Use the Tools and Status tabs.** This playground doesn't handle a `/status` navigation link.
+- **Dependencies are local.** `settings.gradle` substitutes the published SDK coordinates with `packages/native/android`. Tool registration is in `app/src/main/java/com/callstack/appduct/playground/PlaygroundApplication.kt`.
+
+## Learn more
+
+- [Android SDK](../../packages/native/android/README.md)
+- [Connect an agent](https://callstackincubator.github.io/appduct/guides/agents/)
+- [Device E2E suite](../../e2e-device/README.md)
+
+## Made with ❤️ at Callstack
+
+`appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
+
+Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
+
+[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love

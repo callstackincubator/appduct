@@ -25,12 +25,12 @@ This page adds Appduct to a plain iOS app, with no React Native or Expo. You reg
    <Tabs syncKey="ios-pm">
      <TabItem label="Swift Package Manager">
        ```swift title="Package.swift"
-       .package(url: "https://github.com/callstackincubator/appduct", from: "0.10.0")
+       .package(url: "https://github.com/callstackincubator/appduct", from: "0.14.0")
        ```
 
        Add the `AppductCore` product to your app target. In Xcode: File → Add Package Dependencies, then paste the repository URL.
 
-       `from: "0.10.0"` resolves to the newest `0.x` release.
+       `from: "0.14.0"` resolves to the newest `0.x` release.
      </TabItem>
      <TabItem label="CocoaPods">
        ```ruby title="Podfile"
@@ -219,7 +219,7 @@ For an internal or QA build that needs Appduct in its Release configuration:
 - **Swift Package Manager:** enable the `AlwaysEnabled` package trait:
 
   ```swift
-  .package(url: "https://github.com/callstackincubator/appduct", from: "0.10.0", traits: ["AlwaysEnabled"])
+  .package(url: "https://github.com/callstackincubator/appduct", from: "0.14.0", traits: ["AlwaysEnabled"])
   ```
 
 - **CocoaPods:** remove the `:configurations` restriction.
@@ -240,6 +240,18 @@ Always check the built app, not the build settings:
 appduct doctor build/Shop.app --assert-absent    # a Release build that shouldn't have it
 appduct doctor build/Shop.app --assert-present   # a build that should
 ```
+
+## Backgrounding
+
+When the app goes to the background, tool calls keep working for as long as iOS lets the app
+run, about 30 seconds. A call that finishes within that time returns its result. After that,
+calls fail at once with `session_suspended` and a message saying the app is in the background,
+including a call still running when the time ends. `appduct sessions ls` shows the session as
+`suspended (app in background)`.
+The session resumes on its own when the app returns to the foreground.
+
+Appduct asks iOS for this time the way any app can. It needs no background mode, entitlement or
+`Info.plist` change, and it does not bring the app to the foreground.
 
 ## Troubleshooting
 

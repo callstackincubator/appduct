@@ -1,84 +1,68 @@
-# Appduct Playground (native iOS)
+<a href="https://callstackincubator.github.io/appduct/"><img src="https://raw.githubusercontent.com/callstackincubator/appduct/main/.github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
 
-A plain SwiftUI app -- no React Native, no Expo -- that consumes `AppductCore`
-(`packages/native/ios`) directly through the `Appduct` facade
-(`packages/native/ios/Sources/AppductCore/Real/AppductAPI.swift`). It registers the same five
-tools the Expo playground (`playground/`) registers, so `appduct tools ls` reports an equivalent
-surface regardless of which playground app answered the link. The tools, the `playground_ping`
-event, the two screens and their accessibility identifiers (`call-count`, `connection-state`,
-`ping-button` and the rest) follow the [playground contract](../../docs/internal/playground-contract.md),
-and `appduct-native:///status` opens the Status screen.
+# Appduct playground for iOS
 
-See [`packages/native/ios/README.md`](../../packages/native/ios/README.md) for the SDK itself.
+A SwiftUI app that registers five demo tools and an event through `AppductCore`. It builds against the SDK in this checkout and uses the same tools and screens as the other playgrounds.
 
-## Run it
+## Requirements
 
-Three commands, from this directory (`playground-native/ios`):
+- Xcode 16.3 or newer and an iOS Simulator.
+- XcodeGen: `brew install xcodegen`.
+- Node 24 and pnpm 11 to build this checkout's CLI.
+
+## Getting started
+
+From the repository root:
 
 ```bash
-# 1. Generate the Xcode project from project.yml (installs xcodegen with brew if you don't have it).
-#    Re-run this after editing project.yml; the .xcodeproj itself is gitignored.
-brew install xcodegen  # once, if you don't already have it
+pnpm install --frozen-lockfile
+pnpm build
+cd playground-native/ios
 xcodegen generate
-
-# 2. Build and run on a booted simulator (swap the destination for whatever
-#    `xcrun simctl list devices available` shows on your machine).
-xcodebuild build -project AppductPlayground.xcodeproj -scheme AppductPlayground \
-  -configuration Debug -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
-xcrun simctl install booted \
-  ~/Library/Developer/Xcode/DerivedData/AppductPlayground-*/Build/Products/Debug-iphonesimulator/AppductPlayground.app
-xcrun simctl launch booted com.callstack.appduct.playgroundnative
-
-# 3. Point the CLI at it. playground-native/.appduct/config.json records the app's
-#    `appduct-native` URL scheme, so no --scheme is needed.
-appduct sessions link --open ios-sim
-appduct tools ls
-appduct tools call sum --input '{"a":2,"b":3}'
+open AppductPlayground.xcodeproj
 ```
 
-Opening the project in Xcode (`open AppductPlayground.xcodeproj`) and hitting Run works exactly
-the same way; the three commands above are just the scriptable/CI-friendly equivalent.
+In Xcode, select the **AppductPlayground** scheme and an iOS Simulator, then Run the Debug configuration. Regenerate the project after changing `project.yml`.
 
-## Why xcodegen
-
-The `.xcodeproj` is generated from `project.yml` rather than committed, so there is one source of
-truth for the target's settings (matching how `packages/native/ios`'s own `Package.swift` is the
-single source of truth for the Swift package) and no `.pbxproj` merge conflicts. `project.yml`
-declares a local SwiftPM dependency on the repo-root `Package.swift`
-(`packages: { AppductCore: { path: ../../ } }`), so this app always builds against the worktree's
-own `AppductCore` sources -- there is nothing to vendor or publish first.
-
-## Debug ships the real core, Release ships the stub
-
-This target sets no `APPDUCT_ENABLED` define of its own. Xcode passes the configuration name
-straight through to SwiftPM, and `Package.swift`'s `.when(configuration: .debug)` does the rest:
-a `Debug` build links the real `AppductCore` implementation, a `Release` build links the
-same-API `Stub/` implementation, and neither configuration needed a build setting naming
-`APPDUCT_ENABLED` explicitly. Verify this against the built artifact rather than trusting the
-build log:
+In another terminal, from `playground-native`, connect using this checkout's CLI:
 
 ```bash
-appduct doctor path/to/Debug-iphonesimulator/AppductPlayground.app --assert-present
-appduct doctor path/to/Release-iphonesimulator/AppductPlayground.app --assert-absent
+node ../packages/appduct/bin.js sessions link --open ios-sim
 ```
 
-## Layout
+The scheme is already recorded in `.appduct/config.json`. The Status screen shows `active` after connecting.
 
-- `project.yml` -- the xcodegen project spec (targets, settings, the local package dependency).
-- `AppductPlayground/AppductPlaygroundApp.swift` -- the `@main` entry point:
-  `PlaygroundTools.registerAll()` at startup, `.onOpenURL` on the root scene handing the link to
-  `Appduct.shared.handle` and opening Status for `/status`.
-- `AppductPlayground/PlaygroundTools.swift` -- registers `sum`, `call_count`, `reset_counter`,
-  `slow_task`, `throwing_tool` and declares `playground_ping` -- the contract's names, groups,
-  annotations and descriptions.
-- `AppductPlayground/PlaygroundViewModel.swift` -- the `@MainActor` observable store backing the
-  UI: call counter, connection state/session id (via `Appduct.shared.addListener`), and a short
-  rolling activity log.
-- `AppductPlayground/ContentView.swift` -- the Tools and Status screens and their tab bar:
-  call counter, connection state, alias, last session event, a button that posts `playground_ping`
-  and the activity log.
-- `AppductPlayground/Info.plist` -- declares the `appduct-native` URL scheme
-  (`CFBundleURLTypes`). No `AppductTrust`/`AppductCliPins` keys: this playground is the
-  zero-config example, so it trusts whatever pin `appduct sessions link` puts on the deep link for that
-  session (`trust: "link"`) -- see [Security](https://callstackincubator.github.io/appduct/guides/security/#choose-what-a-build-trusts).
+## Try the tools
+
+The app registers `sum`, `call_count`, `reset_counter`, `slow_task` and `throwing_tool`, plus the `playground_ping` event. After connecting:
+
+```bash
+node ../packages/appduct/bin.js tools ls
+node ../packages/appduct/bin.js tools call sum --input '{"a":2,"b":3}'
+node ../packages/appduct/bin.js tools call call_count --input '{}'
+node ../packages/appduct/bin.js events ls
+node ../packages/appduct/bin.js events tail --follow
+```
+
+`sum` returns `{"total":5}`. Open the Status screen and press **Send playground_ping** to see an event in the terminal. See the [playground contract](../../docs/internal/playground-contract.md) for all tool names, groups and screen identifiers.
+
+## Things to know
+
+- **Debug includes Appduct; Release uses an inert API.** Check a built app with `appduct doctor <path-to-app> --assert-present` or `--assert-absent`.
+- **Short network drops resume the session.** Killing the app requires a new link.
+- **The app supports a Status link.** `appduct-native:///status` opens the Status screen.
+- **The project is generated.** `project.yml` defines the target and its local SwiftPM dependency. Tool registration is in `AppductPlayground/PlaygroundTools.swift`.
+
+## Learn more
+
+- [iOS SDK](../../packages/native/ios/README.md)
+- [Connect an agent](https://callstackincubator.github.io/appduct/guides/agents/)
+- [Device E2E suite](../../e2e-device/README.md)
+
+## Made with ❤️ at Callstack
+
+`appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
+
+Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
+
+[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love

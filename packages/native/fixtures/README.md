@@ -1,13 +1,23 @@
+<a href="https://callstackincubator.github.io/appduct/"><img src="https://raw.githubusercontent.com/callstackincubator/appduct/main/.github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
+
 # Cross-language conformance fixtures
 
-The TypeScript (`@appduct/shared`, and `appduct` where noted), Swift (`packages/native/ios`) and
-Kotlin (`packages/native/android/core`) implementations of the same wire protocol
+The TypeScript (`@appduct/shared`, `@appduct/web` and `appduct`), Swift
+(`packages/native/ios`), Kotlin (`packages/native/android/core`) and Dart (`packages/flutter`) implementations of the same wire protocol
 (`docs/PROTOCOL.md`) must agree byte-for-byte and rule-for-rule. Each file here is a
 language-neutral JSON vector table that several test suites load and assert against their own
 implementation, so a change that makes one implementation drift from the others fails a test
 instead of shipping silently.
 
-Consumers:
+## Conformance rule
+
+**A change to any one implementation's parsing/validation behavior must change a fixture file
+here, and the updated fixture must still pass in every consuming suite.** If it doesn't pass in every
+consumer, that's not a fixture bug to paper over — it's a real divergence between implementations,
+and whichever implementation disagrees with `docs/PROTOCOL.md` / `@appduct/shared` (the
+authoritative source per PROTOCOL.md's own header) is the one to fix, not the fixture.
+
+## Consumers
 
 - `packages/shared/src/__tests__/fixtures-conformance.test.ts` (vitest): every file except
   `spki-pin.json`, `event-registry-frames.json`, `session-scenarios.json` and
@@ -33,15 +43,53 @@ Consumers:
 - The Swift, Kotlin and Dart suites also load `session-scenarios-background.json`. The web suite
   does not, because the web core has no background state.
 
-## The rule
+## Run the suites
 
-**A change to any one implementation's parsing/validation behavior must change a fixture file
-here, and the updated fixture must still pass in all three suites.** If it doesn't pass in all
-three, that's not a fixture bug to paper over — it's a real divergence between implementations,
-and whichever implementation disagrees with `docs/PROTOCOL.md` / `@appduct/shared` (the
-authoritative source per PROTOCOL.md's own header) is the one to fix, not the fixture.
+From the repository root, run the TypeScript suites (including Web) and Swift suite:
 
-## Files
+```bash
+pnpm build
+pnpm test
+swift test
+```
+
+From `packages/native/android`, with the Android SDK configured:
+
+```bash
+./gradlew :core:testDebugUnitTest
+```
+
+From `packages/flutter`:
+
+```bash
+flutter test
+```
+
+Run all consumers affected by your vector, as listed above.
+
+## Add a vector
+
+1. Decide which file the new case belongs to in [Fixture formats](#fixture-formats).
+2. For `bootstrap-payloads.json`: add a case to `scripts/generate-bootstrap-payloads.mjs` (either
+   a `buildValid(...)` call for a well-formed payload, or a hand-built byte layout for a
+   rejection case) and rerun it. For every other file: edit the JSON directly.
+3. [Run every consuming suite](#run-the-suites) and confirm the new case passes.
+4. If implementations disagree, fix the one that differs from `docs/PROTOCOL.md`, not the fixture.
+
+## Fixture formats
+
+| File | Covers |
+| --- | --- |
+| [bootstrap-payloads.json](#bootstrap-payloadsjson) | Payload encoding and decoding |
+| [bootstrap-links.json](#bootstrap-linksjson) | Deep-link parsing |
+| [event-descriptors.json](#event-descriptorsjson) | Event declaration validation |
+| [event-registry-frames.json](#event-registry-framesjson) | Event snapshots and deltas |
+| [tool-descriptors.json](#tool-descriptorsjson) | Tool descriptor validation |
+| [close-codes.json](#close-codesjson) | Terminal and retryable socket closes |
+| [session-scenarios.json](#session-scenariosjson) | Session and tool-call behavior |
+| [frame-limits.json](#frame-limitsjson) | Frame size limits |
+| [session-scenarios-background.json](#session-scenarios-backgroundjson) | Backgrounding and foreground recovery |
+| [spki-pin.json](#spki-pinjson) | Certificate pin calculation |
 
 ### `bootstrap-payloads.json`
 
@@ -256,14 +304,15 @@ to ever succeed.
 No private key is included or was ever committed (this repo requires `git ls-files "*.pem"` to
 stay empty) — the key was discarded after deriving `expectedPin` once.
 
-## Adding a vector
+## Learn more
 
-1. Decide which file the new case belongs to (above).
-2. For `bootstrap-payloads.json`: add a case to `scripts/generate-bootstrap-payloads.mjs` (either
-   a `buildValid(...)` call for a well-formed payload, or a hand-built byte layout for a
-   rejection case) and rerun it. For every other file: edit the JSON directly.
-3. Run all three suites (`pnpm build && pnpm test`; `swift test` at the repo root; `cd
-   packages/native/android && ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew
-   :core:testDebugUnitTest`) and confirm the new case passes in all three.
-4. If it doesn't pass in all three, see "The rule" above — fix the implementation that disagrees
-   with `docs/PROTOCOL.md`, not the fixture.
+- [Wire protocol](../../../docs/PROTOCOL.md)
+- [Architecture](../../../docs/ARCHITECTURE.md)
+
+## Made with ❤️ at Callstack
+
+`appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
+
+Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
+
+[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love
