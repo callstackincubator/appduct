@@ -18,10 +18,6 @@ The [SwiftUI playground](https://github.com/callstackincubator/appduct/blob/main
 
 See [Native core development](https://github.com/callstackincubator/appduct/blob/main/docs/internal/native-core.md) for source layout, React Native integration and publishing. [Conformance fixtures](https://github.com/callstackincubator/appduct/blob/main/packages/native/fixtures/README.md) check shared behavior across implementations.
 
-## License
-
-[MIT](https://github.com/callstackincubator/appduct/blob/main/LICENSE).
-
 ## Made with ❤️ at Callstack
 
 `appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!

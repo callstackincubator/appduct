@@ -185,10 +185,6 @@ Try a complete example before adding Appduct to your own app. Each playground re
 - [Choose build variants](https://callstackincubator.github.io/appduct/guides/build-variants/): which builds include Appduct
 - [Configure security](https://callstackincubator.github.io/appduct/guides/security/): trust, policy and key rotation
 
-## License
-
-[MIT](https://github.com/callstackincubator/appduct/blob/main/LICENSE).
-
 [license-badge]: https://img.shields.io/npm/l/appduct?style=for-the-badge
 [license]: https://github.com/callstackincubator/appduct/blob/main/LICENSE
 [npm-downloads-badge]: https://img.shields.io/npm/dm/appduct?style=for-the-badge

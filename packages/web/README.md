@@ -78,10 +78,6 @@ Use it only in builds you control. Web pages don't pin the daemon's key; review 
 - [Connect an agent](https://callstackincubator.github.io/appduct/guides/agents/) over MCP
 - [Web playground](https://github.com/callstackincubator/appduct/blob/main/playground-web/README.md): a runnable example
 
-## License
-
-[MIT](https://github.com/callstackincubator/appduct/blob/main/LICENSE).
-
 ## Made with ❤️ at Callstack
 
 `appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!

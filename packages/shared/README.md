@@ -16,10 +16,6 @@
 - [Wire protocol](https://github.com/callstackincubator/appduct/blob/main/docs/PROTOCOL.md): messages, schemas and connection rules
 - [Conformance fixtures](https://github.com/callstackincubator/appduct/blob/main/packages/native/fixtures/README.md): shared parsing and validation cases
 
-## License
-
-[MIT](https://github.com/callstackincubator/appduct/blob/main/LICENSE).
-
 ## Made with ❤️ at Callstack
 
 `appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!

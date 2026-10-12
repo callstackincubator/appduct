@@ -56,10 +56,6 @@ The build also writes `llms.txt`, `llms-full.txt`, and `llms-small.txt` for LLMs
 - [Design guide](../docs/DESIGN.md)
 - [Documentation site](https://callstackincubator.github.io/appduct/)
 
-## License
-
-[MIT](https://github.com/callstackincubator/appduct/blob/main/LICENSE).
-
 ## Made with ❤️ at Callstack
 
 `appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
