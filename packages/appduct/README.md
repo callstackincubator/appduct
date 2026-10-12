@@ -1,204 +1,68 @@
-[![Appduct][appduct-banner]][repo]
+<a href="https://callstackincubator.github.io/appduct/"><img src="https://raw.githubusercontent.com/callstackincubator/appduct/main/.github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
 
-### Call functions in your running iOS, Android, React Native, Flutter or web app from a terminal, a test or an agent
+# Appduct CLI, MCP server and test client
 
-[![MIT license][license-badge]][license] [![npm downloads][npm-downloads-badge]][npm-downloads] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
+Call tools inside a running iOS, Android, React Native, Flutter or Web app from your terminal, an AI agent or a test suite. The `appduct` package connects to apps that have an Appduct SDK installed and tools registered.
 
-The `appduct` package is the operator/agent side of Appduct: a CLI and an MCP server, backed by a long-lived background daemon that holds your device sessions. You use it to list and call the tools a connected app has registered — from a terminal, from an agent, or from a test suite — instead of driving the app through a hidden debug menu.
+## Requirements
 
-## Why use this package
-
-- **One daemon, many devices.** It starts on first use and serves every connected iOS, Android and React Native app on one port. A session survives backgrounding, network drops and React Native reloads: it pauses while the app is away and resumes when it reconnects.
-- **Same surface for humans and agents.** The CLI (`sessions`, `tools`, `events`, ...) and `appduct mcp` use the same RPC methods, so an agent sees the tools a human operator does.
-- **Local to your user account.** The CLI and MCP server reach the daemon through a local socket only your user account can open, and the daemon's key and logs are readable only by you (see [Security][security]).
-- **Fits production-minded apps.** The app only exposes what you register; trust boundaries are pins and TLS, and production deployments can gate tools with policy and audit every call.
+- Node 20 or newer.
+- An Appduct-enabled app. Choose an [SDK setup guide](https://callstackincubator.github.io/appduct/start/introduction/#packages), or [try a playground](https://callstackincubator.github.io/appduct/start/playground/).
+- For automatic device delivery: Xcode for an iOS Simulator, or `adb` for Android. Physical devices can use a QR code; Web pages use their URL.
 
 ## Getting started
 
+Install the CLI:
+
 ```bash
 npm install -g appduct
+```
+
+With your app running, connect from its project directory:
+
+```bash
 appduct sessions link --qr
 ```
 
-`sessions link` needs your app's deep-link scheme. Run from your app's directory, it usually finds the scheme on its own, in `app.json` or the iOS and Android project files (see [The deep-link scheme](#the-deep-link-scheme)). `--scheme` overrides whatever it finds.
+Scan the QR code with the device's camera. The app needs a URL scheme, which the CLI can discover from static project files; use `--scheme myapp` if needed. A physical device must be on the same local network as your computer.
 
-Scan the QR (or open the deep link) in an Appduct-enabled app, then:
+For a simulator, Android device or Web page, choose one of these paths instead:
+
+```bash
+appduct sessions link --open ios-sim
+appduct sessions link --open android --app-id com.example.shop
+appduct sessions link --open web http://localhost:5173/
+```
+
+The Web command prints a URL to open. Once connected, list tools and call one your app registered:
 
 ```bash
 appduct tools ls
-appduct tools call sum --input '{"a":2,"b":3}'
+appduct tools call seed_cart --input '{"items":3}'
 ```
 
-That's the whole loop. There is no host process to start — `appduct` auto-spawns its daemon the first time any command needs it.
+The SDK quick starts register this example tool, which returns `{"added":3}`. Appduct starts its background service automatically.
 
-## Commands
+## Common commands
 
-Every command is `appduct <noun> <verb> [selector] [args]`, the same shape as `appduct daemon run|start|stop|status`:
-
-| Command | Role |
+| Command | What you can do |
 | --- | --- |
-| `appduct init [--scheme <s>] [--ios-app-id <id>] [--android-app-id <id>] [--force]` | set up an app directory: write `.appduct/config.json`, print the MCP snippet |
-| `appduct keygen [--out <path>] [--force]` | generate a daemon private key, print its app pin |
-| `appduct sessions ls` | list sessions: alias, state, device, tool count |
-| `appduct sessions link [--ttl <s>] [--qr] [--open android\|ios-sim\|ios-device] [--device <id>] [--app-id <id>] [--relaunch] [--scheme <s>]` | mint a pending session and print its deep link |
-| `appduct sessions revoke [selector]` | revoke a session |
-| `appduct tools ls [selector] [--full] [--group <name>] [--filter <text>] [--limit <n>] [--offset <n>]` | list a session's tools (one call signature + description per line) |
-| `appduct tools ls [selector] --groups` | list a session's tool groups with their tool counts |
-| `appduct tools describe [selector] <name>` | show one tool's full schema |
-| `appduct tools call [selector] <name> --input '<json>' [--timeout <ms>]` | call a tool |
-| `appduct events ls [selector] [--name <glob>] [--limit <n>] [--offset <n>]` | list the events the app declares, one signature line each; an exact `--name` prints the full payload schema; `--limit`/`--offset` page a long list, ending with a `Showing n of total events (offset o).` line when events were left out; `--json` carries the full descriptors, with `total` counting matches before paging |
-| `appduct events tail [selector] [--follow] [--name <glob>] [--payload-max-bytes <n>]` | stream the events the app posts with `postEvent`; `--name` keeps only matching names, `--payload-max-bytes` cuts each payload down to a preview; `--json` emits NDJSON |
-| `appduct events since [selector] <cursor> [--name <glob>] [--payload-max-bytes <n>]` | one-shot pull the events retained since `<cursor>`, with the same filters as `tail`; `--json` emits NDJSON |
-| `appduct daemon run\|start\|stop\|status` | daemon lifecycle |
-| `appduct mcp [--scheme <s>]` | start a stdio MCP server proxying connected apps' tools to MCP clients |
-| `appduct doctor <artifact> [--assert-present\|--assert-absent]` | release-gate step: report or assert whether a built `.app`/`.ipa`/`.apk`/`.aab` contains Appduct |
+| `appduct init` | Record your project's scheme and app ids, and print MCP configuration. |
+| `appduct sessions ls` | Find connected sessions and their aliases. |
+| `appduct tools ls` | Find registered tools; use `--groups` or `--group cart` for larger registries. |
+| `appduct tools describe seed_cart` | Read a tool's full schema. |
+| `appduct tools call seed_cart --input '{"items":3}'` | Call a tool. |
+| `appduct events ls` | Find the events the app declares. |
+| `appduct events tail --follow` | Watch events the app posts. |
+| `appduct sessions revoke` | Disconnect a session. |
+| `appduct daemon status` | Inspect the background service. |
+| `appduct doctor build/Shop.ipa --assert-absent` | Check that a built app excludes Appduct. |
 
-Every command that targets a session accepts an optional `selector` (a session id or an alias from `appduct sessions ls`); omit it when exactly one session is active. Global flags: `--json` (machine-readable output; compact by default, one line), `--pretty` (indent `--json` output, and JSON values embedded in human output, 2 spaces — never NDJSON event lines), `--verbose` (include the `meta` block — `command`, `timestamp`, `duration_ms` — omitted by default in both human and `--json` output), `--no-color`, `--state-dir <path>` (default `~/.appduct`), `--daemon-restart` (on a daemon/CLI version mismatch, restart the daemon even though that drops live sessions and unclaimed links — `APPDUCT_DAEMON_RESTART=1` and `config.json`'s `restartDaemonOnVersionMismatch` do the same for every command, and `--no-daemon-restart` overrules both for one). Run `appduct <noun> --help` for the exact flags any of its verbs takes.
+Run `appduct <command> --help` for flags, or read the [CLI reference](https://callstackincubator.github.io/appduct/reference/cli/). Use `--json` for scripts.
 
-`--timeout` on `tools call` is clamped to 1,000–600,000 ms and can only **shorten** the deadline, never extend it past the app's own timer: the app aborts the handler at the tool's declared `timeoutMs`, or 10 seconds for a tool that declares none, regardless of what the caller asks for. If a tool needs more room, declare `timeoutMs` on its registration.
+## Connect an agent
 
-### `appduct tools ls`: a signature per tool
-
-`appduct tools ls` prints one call signature plus a one-line description per tool, not the full schema — cheap to read even against an app that registers hundreds of tools:
-
-```
-Tools
-  seed_cart(items: int, sku?: string, clear?: bool = true) -> { added: int, cartId: string }
-    Fill the cart with test items for the current user.
-  set_flag(name: "dark_mode" | "new_checkout", enabled: bool)  [prompt]
-    Toggle a feature flag.
-
-Run `appduct tools describe <name>` for a tool's full schema.
-```
-
-A signature is derived straight from the tool's JSON Schema: required params are `name: type`, optional ones `name?: type` (with `= <default>` when the schema declares a short one), and `-> type` is the result when the tool declares an `output_schema`. `...` anywhere means the schema shape wasn't one this renderer could summarize — the tool's full schema (`appduct tools describe <name>`) still has it. A `[prompt]`/`[deny]` tag follows a tool whose effective policy isn't `"allow"`.
-
-Use `--filter <text>` to narrow the listing to tools whose name or description contains `<text>` (case-insensitive), and `--limit <n>`/`--offset <n>` to page through it; a truncated listing prints a trailing `Showing n of total tools (offset o). Narrow with --filter <text> or page with --offset <n>.` line so you know more were left out. `appduct tools ls --json` returns `{ tools, total, groups }` — `total` is the count after `--group`/`--filter` but before `--limit`/`--offset`. `appduct tools describe <name>` (a single tool) is unaffected by any of this and always returns the bare tool descriptor; passing `--group`, `--groups`, `--filter`, `--limit` or `--offset` with `describe` is a usage error.
-
-### Tool groups
-
-When the app puts its tools in groups ([Write tools](https://callstackincubator.github.io/appduct/guides/writing-tools/#group-tools-in-a-large-app)), `appduct tools ls` lists them under group headings, with subgroups indented under their parent and ungrouped tools last:
-
-```
-Tools
-  cart
-    add_item(sku: string, quantity: number)
-      Add a product to the cart
-  checkout
-    begin_checkout()
-      Start checkout with the current cart
-    checkout/payment
-      pay_with_card(card: string)
-        Pay for the order with a test card
-  (ungrouped)
-    reset_app()
-      Clear all local data
-```
-
-On a large app, start with `--groups` to see what there is, then list one group:
-
-```
-$ appduct tools ls --groups
-Groups
-  cart                12
-  checkout             8
-    checkout/payment   3
-  (ungrouped)          2
-
-22 tools in total. Run `appduct tools ls --group <name>` to list one group's tools.
-
-$ appduct tools ls --group checkout
-```
-
-`--group checkout` lists `checkout` and all of its subgroups; `--group checkout/payment` lists only that subgroup. Matching is by whole name and case-sensitive, so `--group checkout` never matches a `checkoutx` group. `--group` combines with `--filter`, `--limit` and `--offset`. When a listing without `--group` is cut short, the footer names the top-level groups to narrow to: `Showing 5 of 22 tools (offset 0). Narrow with --group <name> (groups: cart 12, checkout 8) or --filter <text>, or page with --offset <n>.` A group that is not one or two `/`-separated names of letters, digits, `_` and `-` (for example `checkout/` or `a/b/c`) is a usage error. With `--json`, each tool carries its `group` — `null` for an ungrouped tool, exactly the value `groups` uses for its own ungrouped row — and `groups` lists every group with its count, whatever `--group` or `--filter` you passed.
-
-### The deep-link scheme
-
-`appduct sessions link`, `appduct mcp`, and the MCP `appduct_connect` tool all resolve the scheme the same way, first match wins:
-
-1. `--scheme <s>`
-2. the `APPDUCT_SCHEME` environment variable
-3. the nearest `.appduct/config.json` that declares a `scheme`, walking up from the working directory (a file without that key doesn't stop the walk; the walk skips `~/.appduct` and the active state dir, so global config is never mistaken for a project's)
-4. `scheme` in `<state-dir>/config.json`
-5. a static-file project probe, tried in this order (no walk-up — an app root is where you run these commands):
-   1. `<cwd>/app.json`'s `expo.scheme` — a string, or the first entry of an array
-   2. **Android**: `app/build.gradle.kts` or `app/build.gradle`'s `appductScheme` manifest placeholder (`manifestPlaceholders["appductScheme"] = "myapp"` or `manifestPlaceholders.appductScheme = "myapp"`), then `app/src/main/AndroidManifest.xml`'s first `<data android:scheme>` inside an intent filter that also declares `android.intent.action.VIEW`
-   3. **iOS**: any `Info.plist` up to two levels below the app root (excluding `Pods`, `build`, `node_modules`, `DerivedData`) for the first `CFBundleURLSchemes` entry, then xcodegen's `project.yml` for the same key under `info.properties.CFBundleURLTypes`
-6. otherwise an error naming every location above
-
-In a Flutter project root (a directory with a `pubspec.yaml`), the Android probes read `android/app/` instead of `app/`, and the iOS and macOS ones find `ios/Runner/Info.plist` and `macos/Runner/Info.plist`. `appduct init` there prints the Flutter setup steps instead of the React Native reminder.
-
-In an Expo app root, none of this needs configuring; a plain Xcode or Gradle app root doesn't either, once its `Info.plist`/`AndroidManifest.xml`/`build.gradle` already declares deep links. These probes never execute `app.config.js`/`app.config.ts`, `xcodebuild`, `plutil`, or a Gradle evaluation — each is a plain, defensively-parsed read of a static project file. If your project uses dynamic config, or the probes can't make sense of your setup, use `--scheme`, `APPDUCT_SCHEME`, or `appduct init --scheme <s>` instead.
-
-**Disagreement is never guessed away.** If more than one native probe resolves to a different scheme (say, an `android/` and an `ios/` tree in the same repo declaring different values), resolution fails with a usage error naming every conflicting source instead of picking one.
-
-`appduct init`, run in an app root, writes `.appduct/config.json` (mode `0600`, in a `0700` directory) with the discovered scheme and prints the MCP server entry to paste, plus the wiring your app still needs: the `import "@appduct/react-native/auto"` reminder for a React Native or Expo app, or the step a plain iOS or Android app needs (`Appduct.shared.handle(url)`, or the `appductScheme` placeholder). A `react-native` or `expo` dependency in your `package.json` is what says this is a React Native app; running `init` from the app's `ios/` or `android/` directory finds that manifest where the native toolchain puts you. It never generates keys or touches daemon state.
-
-`init` only looks at `--scheme` and the static-file discovery in step 5 above (`app.json`, then the native probes), plus whatever the file already records — it deliberately ignores `APPDUCT_SCHEME` and does not walk up to a parent `.appduct/config.json`, since baking either into a committed file would be wrong (a shell variable that happened to be exported, or a parent project's scheme silently copied into a sub-package). `--json`'s `source` field reports which input won: `"--scheme"`, `"app.json"`, one of the four native-probe names (`"android-gradle"`, `"android-manifest"`, `"ios-info-plist"`, `"ios-project-yml"`), or `"already-recorded"`. `platforms` lists every native platform discovery saw (`["android", "ios"]` for a root that spans both), on every run including `"already-recorded"` and `--scheme`, and is left out when it saw none; `init` prints the wiring step for each platform in it.
-
-It's idempotent and safe to re-run:
-
-- A plain re-run keeps whatever scheme is already recorded. If discovery has since found a different value, the result carries a `note` rather than failing.
-- `--scheme <different>` needs `--force` to replace a recorded scheme; `--force` on its own re-adopts `app.json`'s value.
-- `--force` merges into the existing JSON rather than truncating it.
-
-`--ios-app-id <id>` and `--android-app-id <id>` write `appId.ios` and `appId.android` into the same file — the installed app ids that `--open android`, `--open ios-device` and `appduct_connect` need (see [Delivering the link to a device](#delivering-the-link-to-a-device)). They're two flags rather than one because the platforms' ids don't always match, and `init` never guesses one from the other. Like `--scheme`, replacing an id that's already recorded needs `--force`.
-
-A project `.appduct/config.json` holds client-side settings only — it can never redirect the state directory, key, or policy (`--state-dir` / `APPDUCT_STATE_DIR` do that). **Do not point `--state-dir` at a project `.appduct/` directory you commit** — the state dir is where the daemon keeps `key.pem` and its audit log, and a committed one would publish a private key. The two directories share a name and nothing else.
-
-`appduct mcp` is the one exception to step 6: it starts even with no scheme, because it's still useful for proxying tools to a session paired another way. Only `appduct_connect` fails, and its error names every location tried.
-
-### Delivering the link to a device
-
-`--open` hands the freshly minted deep link straight to a device, so nothing has to scan a QR code:
-
-| `--open` | Mechanism | Address in the link |
-| --- | --- | --- |
-| `android` | `adb reverse tcp:<port> tcp:<port>`, then `adb shell am start -a android.intent.action.VIEW -d '<link>' -p <app-id>` | `127.0.0.1` (the port is forwarded onto the device) |
-| `ios-sim` | `xcrun simctl openurl <udid> <link>` | `127.0.0.1` (the simulator shares the host's network) |
-| `ios-device` **(experimental)** | `xcrun devicectl device process launch --device <udid> [--terminate-existing] --payload-url <link> <app-id>` | the machine's detected LAN address — there's no `adb reverse` equivalent on iOS |
-
-With no `--device`, every target requires exactly one device and errors naming each candidate rather than picking one arbitrarily: `android` counts attached devices (`ANDROID_SERIAL` disambiguates), `ios-sim` counts booted simulators, and `ios-device` counts connected iOS devices only — `devicectl` lists every device the Mac has ever paired, so disconnected phones and non-iOS ones are filtered out first.
-
-**`android` and `ios-device` need the installed app's id** — the Android package name or the iOS bundle id. Pass `--app-id <id>` (`appId` over MCP), or record it once in `.appduct/config.json` with `appduct init --android-app-id <id> --ios-app-id <id>`. Without one the command fails before minting anything. Naming the app is what keeps Android from showing an "Open with" chooser when more than one installed app declares your scheme — `adb` would report success, and the session would never be claimed. `ios-sim` needs no app id (`simctl openurl` has no equivalent), and passing one with it is an error. The id may contain only letters, digits, `.`, `_` and `-`, and must start with a letter or digit.
-
-#### `--open ios-device` (experimental)
-
-This is the only automated path for a wired iPhone or iPad — otherwise you're scanning a QR code by hand. It relies on `xcrun devicectl`'s undocumented `--payload-url` flag, which can't be verified in CI, so treat a failure here as a reason to fall back to the QR flow rather than as a bug in your app.
-
-It needs all of:
-
-- **iOS 17 or newer** on the device, and **Xcode 15 or newer** on the host (`devicectl` doesn't exist before that). For iOS 16 and below, use the QR/deep-link flow instead.
-- The device **paired and trusted** by this Mac, with **Developer Mode** enabled on it (Settings → Privacy & Security → Developer Mode).
-- A **development-signed build of your app already installed** — `devicectl` launches an installed app, it doesn't install one.
-- The phone and this machine **on the same network**, reachable at the address the link advertises. `appduct sessions link` prints it on its `Endpoint` line (`--json`: `endpoint.address`); `advertisedIp` in `config.json` overrides detection. If no routable address is found, detection falls back to `127.0.0.1` — which a phone can't reach — so `ios-device` refuses to deliver such a link and tells you to set `advertisedIp`.
-- The app's **bundle id** — see [Delivering the link to a device](#delivering-the-link-to-a-device) for how to supply it.
-
-```bash
-appduct sessions link --scheme myapp --open ios-device --app-id com.example.myapp
-```
-
-Two things worth knowing before you rely on this:
-
-- **What happens when the app is already running hasn't been verified on hardware.** If delivery to an already-running app does nothing, pass **`--relaunch`** (`relaunch: true` over MCP) — it kills the running instance first. Appduct copes with the restart either way; a delivered link supersedes a held session.
-- **A physical iPhone is never auto-detected.** `appduct_connect` called without a `target` only considers booted simulators and attached Android devices, and `appduct sessions link` without `--open` doesn't look for a device at all — a paired iPhone is often someone's personal phone, so it has to be asked for explicitly.
-
-## MCP setup (Claude Code, Cursor, and similar)
-
-Add `appduct mcp` to the agent's MCP server config — no separate server process to manage, it auto-spawns the daemon the same way the CLI does:
-
-```json
-{
-  "mcpServers": {
-    "appduct": {
-      "command": "appduct",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-An MCP server is usually launched with a working directory you don't control, so `app.json` discovery may not apply. On a machine with more than one app, make the entry self-contained by naming the scheme in it — which is exactly what `appduct init` prints:
+Add this entry to your agent's MCP configuration, replacing `myapp` with your app's scheme:
 
 ```json
 {
@@ -211,170 +75,45 @@ An MCP server is usually launched with a working directory you don't control, so
 }
 ```
 
-Once configured, an agent reaches the connected app's tools through three built-in tools that work like the CLI:
+The agent can connect a device, list your app's tools, inspect their schemas and call them. App tools are reached through `appduct_list_tools`, `appduct_describe_tool` and `appduct_call_tool`; event and connection tools are available too. See [Use Appduct with an agent](https://callstackincubator.github.io/appduct/guides/agents/) for client setup and approval policy.
 
-| Tool | Does what | CLI equivalent |
-| --- | --- | --- |
-| `appduct_list_tools` | Lists the app's tools as one-line signatures, with each tool's group and policy, plus the app's groups with counts. Returns 50 at a time unless given `limit`; takes `group`, `filter` and `offset`. | `appduct tools ls` |
-| `appduct_describe_tool` | Shows one tool's full input and output schema. | `appduct tools describe <name>` |
-| `appduct_call_tool` | Calls a tool by `name` with `args`, with progress and errors preserved. | `appduct tools call` |
+## Call tools from tests
 
-The app's tools don't show up as MCP tools of their own. An app with hundreds of tools still adds only these three to the agent's tool list, and that list doesn't change when tools register or a device connects. With more than one device connected, each of the three needs `selector`: the session alias or id from `appduct sessions ls`.
+<a id="test-runners-appductclient"></a>
 
-Your MCP client asks permission for `appduct_call_tool` as a single tool, so choosing "always allow" there approves every tool the app registers, destructive ones included. To keep a person approving those calls, set `policy.destructive` to `"prompt"` in the state directory's `config.json`. Each call to a tool marked `destructiveHint` then shows an approval prompt in clients that support it, and is denied in clients that don't. A destructive tool without that annotation falls under `policy.default` instead.
-
-Set this before you connect: the daemon reads `config.json` only when it starts, so changing it later takes `appduct daemon stop`. That disconnects every device, which then has to link again, and leaves a running `appduct mcp` without a daemon, so restart the MCP server in your client as well.
-
-Five more built-in tools cover what the app's own tools can't. `appduct_connect` mints a link and, by default, delivers it to whichever `android`/`ios-sim` device it detects — pass `target`/`device` to choose, or `target: "none"` to force the human flow — falling back to a QR code, plus instructions to show it, only when there's nothing to deliver to. Delivering to `android` (chosen or detected) needs `appId`, resolved the same way as `--app-id` (see [Delivering the link to a device](#delivering-the-link-to-a-device)); passing it with `target: "ios-sim"` or `"none"` is an error. `appduct_wait_for_session` then waits for that session to be claimed. `target: "ios-device"` reaches a paired physical iPhone or iPad, with `appId` and the [prerequisites above](#--open-ios-device-experimental) — it's experimental and never auto-detected, so an agent has to ask for it by name.
-
-The other three give an agent a pull surface over `postEvent()`-pushed app events. `appduct_list_events` lists the events the app declared (`appduct events ls`) as signatures with descriptions, plus the payload schema when `name` is an exact name, so an agent learns the names before it waits on one. `appduct_events` drains everything retained since a cursor, and `appduct_wait_for_event` blocks for the next event whose name matches `name`, a whole-name glob (`*` waits for any name) — checking what's already retained before waiting live — rejecting with `tool_timeout` if none arrives in time.
-
-## Test runners: `appduct/client`
-
-A thin typed wrapper over the same daemon RPC the CLI and MCP server use — for a Jest/Vitest/Detox spec that drives a running app without spawning `appduct tools call ... --json` and parsing stdout:
+Install `appduct` as a dev dependency of your test project. With the app connected:
 
 ```ts
 import { connect } from "appduct/client";
 
-// auto-spawns the daemon and picks the single session, or pass { selector: "pixel-8" } to target one explicitly
 const app = await connect();
-
-await app.tools();                                  // ListedToolDescriptor[]; an ungrouped tool's group is null
-const { total } = await app.call("sum", { a: 2, b: 3 });
-const { payload } = await app.waitForEvent("checkout_done", { timeoutMs: 5_000 });
-app.close();
+try {
+  const result = await app.call("seed_cart", { items: 3 });
+  // result: { added: 3 }
+} finally {
+  app.close();
+}
 ```
 
-Errors surface as an `AppductError` whose `type` preserves the daemon's wire error type verbatim, so a test can assert on it directly instead of string-matching stderr:
+The client also pairs devices, waits for sessions, reads events and supports a typed tool map. Failures reject with an `AppductError` whose `type` names the error. See [Test setup](https://callstackincubator.github.io/appduct/guides/cli/#drive-the-app-from-a-test-suite) and the [client reference](https://callstackincubator.github.io/appduct/reference/cli/#appductclient).
 
-```ts
-await expect(app.call("checkout", {})).rejects.toMatchObject({ type: "policy_denied" });
-```
+<a id="the-deep-link-scheme"></a>
 
-Pair a simulator/emulator in a `globalSetup` without shelling out, via `link`/`waitForSession`:
+## Things to know
 
-```ts
-import { link, waitForSession } from "appduct/client";
+- **Select a session when several are connected.** Pass an alias or session id from `appduct sessions ls`; the CLI won't guess.
+- **Declare longer timeouts in the app.** `tools call --timeout` can shorten a deadline, but it can't extend the app's timer. See [Long-running tools](https://callstackincubator.github.io/appduct/guides/writing-tools/#long-running-tools).
+- **Keep project settings and private state separate.** `appduct init` writes project settings to `.appduct/config.json`. The daemon keeps its key and logs in `~/.appduct`; don't commit that directory.
+- **Pin builds you distribute.** `appduct keygen` prints a pin to embed in the app. See [Security](https://callstackincubator.github.io/appduct/guides/security/) for trust, policy and key rotation.
+- **Reconnect after stopping the daemon.** `appduct daemon stop` disconnects apps. Config changes require a restart; see [Service configuration](https://callstackincubator.github.io/appduct/reference/cli/#background-service-state-dirconfigjson).
 
-const { sessionId } = await link({ target: "ios-sim" });
-const app = await waitForSession(sessionId, { timeoutMs: 60_000 });
-```
+## Learn more
 
-`app.call`'s tool name and args/result types can't be inferred automatically — tools are registered by the connected app at runtime — so declare your own tool map once for typed calls throughout a suite:
+- [CLI guide](https://callstackincubator.github.io/appduct/guides/cli/): devices, events and scripting
+- [CLI reference](https://callstackincubator.github.io/appduct/reference/cli/): commands, configuration, MCP tools and client API
+- SDKs: [iOS](https://callstackincubator.github.io/appduct/install/ios/), [Android](https://callstackincubator.github.io/appduct/install/android/), [React Native](https://callstackincubator.github.io/appduct/install/react-native/), [Flutter](https://callstackincubator.github.io/appduct/install/flutter/), [Web](https://callstackincubator.github.io/appduct/install/web/)
+- [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/): inclusion and artifact checks
 
-```ts
-type Tools = {
-  sum: { args: { a: number; b: number }; result: { total: number } };
-};
+## License
 
-const app = await connect<Tools>();
-const { total } = await app.call("sum", { a: 2, b: 3 }); // typed
-```
-
-`waitForEvent`'s first argument is a whole-name glob (`*` waits for any name, `"cart.*"` for any name starting with `cart.`). It first drains the daemon's per-session retained buffer for an already-arrived match before falling back to a live wait, so it's safe to call after the action that emits the event. Pass `since` (the `cursor` from a previous `app.events()`/`waitForEvent()` call) to skip events already handled, and `payloadMaxBytes` to cap the resolved event's payload the same way `app.events()` does — without it the payload always comes back whole:
-
-```ts
-const { events, cursor } = await app.events();               // pull: what already happened
-const next = await app.waitForEvent("checkout_done", { since: cursor });
-const capped = await app.waitForEvent("checkout_done", { payloadMaxBytes: 1024 }); // check `truncated` before reading `payload`
-```
-
-For anything the client doesn't cover, the package's main entry exports `runCli(argv, { stdout, stderr })`, which runs any `appduct` command in your Node or Bun process and resolves to its exit code.
-
-## Keys and pins
-
-You can skip this entirely while your app has no `cliPins` configured — the zero-config default, in any build type. The daemon auto-generates its own `key.pem` the first time it starts if one isn't already there (mode `0600`) and prints its `sha256/...` fingerprint on that first run; `appduct sessions link` carries that fingerprint on the deep link for the app to pick up. See [Security][security]'s "Trust modes" for what that does and doesn't protect.
-
-For a build that should trust only a key you embedded ahead of time, generate one explicitly:
-
-```bash
-appduct keygen
-```
-
-This writes an unencrypted PEM private key (PKCS#8) to `<state-dir>/key.pem` by default (override with `--out`; add `--force` to overwrite) and prints the exact `sha256/...` SPKI fingerprint your app should place into `cliPins`. It runs non-interactively, so it's safe to call from CI or a setup script.
-
-The deep link `appduct sessions link` prints carries the daemon's current fingerprint in its `pin` parameter. A build with embedded `cliPins` ignores it: embedded pins always win, in every build type. A build with no embedded pins trusts it for that one session.
-
-## Daemon lifecycle
-
-The daemon auto-starts the first time any CLI or MCP command needs it — you don't normally run `appduct daemon start` yourself. It keeps its key, config, logs and audit log in the state directory (`~/.appduct` by default), runs one instance per state directory, and keeps running whatever happens to a device, so an app reload or crash never takes the daemon down.
-
-Use `appduct daemon status` to see what's running (version, pid, `wssPort`, pinned keys, live sessions, effective policy, and the audit log's retention window, file count, size, and failure counters) and `appduct daemon stop` to shut it down explicitly.
-
-Because the daemon outlives the CLI that started it, upgrading Appduct would otherwise leave the old daemon serving your commands. Every CLI/MCP process compares its version with the daemon's on its first command and replaces a stale daemon when nothing would be lost; when there is something at stake — connected sessions, or an unexpired link nobody has scanned yet — the command stops instead, naming both versions, until you run `appduct daemon stop` or pass `--daemon-restart`. A daemon newer than your CLI is left alone with a warning, so a project-local install never downgrades a global one's daemon.
-
-No log grows without bound: `audit/<YYYY-MM-DD>.jsonl` files older than `auditRetentionDays` (default 30) are pruned at daemon start and once a day after, a `daemon.log` over `daemonLogMaxBytes` (default 10 MiB) is rotated to `daemon.log.1` when a daemon is next spawned, and `events.log` is rotated to `events.log.1` as soon as it passes `eventsLogMaxBytes` (default 10 MiB). `events.log` records the daemon's own events (links, sessions, tool registries and tool calls), one JSON line each, for debugging Appduct itself; your app's events are never written to it. All three are `config.json` keys; see below.
-
-### Daemon settings: `config.json`
-
-`<state-dir>/config.json` (`~/.appduct/config.json` by default) is optional, and so is every key in it. The daemon reads it when it starts, so after editing it run `appduct daemon stop`; the next command starts a fresh daemon with the new values. Stopping the daemon disconnects every device.
-
-| Key | Default | What it sets |
-| --- | --- | --- |
-| `wssPort` | `8443` | Port devices connect to. `0` picks a free port. |
-| `graceSeconds` | `600` | How long a disconnected session can still resume. |
-| `linkTtlSeconds` | `300` | How long a new link stays valid. Override per link with `--ttl`. |
-| `eventBufferSize` | `256` | App events kept per session for `events since` and `waitForEvent`. |
-| `advertisedIp` | detected | Address put in links for physical devices. |
-| `scheme` | none | Fallback deep-link scheme (step 4 of [The deep-link scheme](#the-deep-link-scheme)). |
-| `restartDaemonOnVersionMismatch` | `false` | Always replace an outdated daemon, even with devices connected. |
-| `policy` | `{ "default": "allow", "destructive": "allow" }` | Which tools callers may run without approval; see [Security][security]. |
-| `auditRetentionDays` | `30` | Days of audit log to keep. |
-| `daemonLogMaxBytes`, `eventsLogMaxBytes` | 10 MiB | Size at which `daemon.log` and `events.log` are rotated. |
-
-`keyPath` and `keepaliveIntervalSeconds` exist too; you rarely need them. An unknown key prints a warning and is ignored.
-
-## Release gate: `appduct doctor`
-
-Appduct's inclusion in a build is controlled entirely by autolinking exclusion (see [Build variants][build-variants]) — there's no runtime `debuggable` check to catch a pipeline that forgot to exclude the package. `doctor` checks the built artifact itself, not the config you think produced it:
-
-```bash
-appduct doctor ./build/MyApp.ipa --assert-absent
-appduct doctor ./build/app-release.apk --assert-absent
-```
-
-It exits with:
-
-| Code | Meaning |
-| --- | --- |
-| `0` | The artifact was inspected, and any `--assert-present`/`--assert-absent` held |
-| `3` | The artifact was inspected and the assertion failed |
-| `66` | The artifact couldn't be inspected: it's missing, unreadable or corrupt, or a tool `doctor` needs (such as `unzip`) isn't installed |
-
-A pipeline should fail on anything other than `0`. `66` never means "absent", so a broken runner image can't pass the gate by accident.
-
-## Related packages
-
-- **[Appduct for iOS](https://github.com/callstackincubator/appduct/blob/main/packages/native/ios/README.md)** — Swift SDK for native iOS apps.
-- **[Appduct for Android](https://github.com/callstackincubator/appduct/blob/main/packages/native/android/README.md)** — Kotlin SDK for native Android apps.
-- **[@appduct/react-native](https://github.com/callstackincubator/appduct/blob/main/packages/react-native/README.md)** — React Native SDK and Expo config plugin.
-
-## Documentation
-
-- [Architecture][architecture]
-- [Wire protocol][protocol]
-- [Security model & key rotation][security]
-- [Build variants][build-variants]
-- [Monorepo README](https://github.com/callstackincubator/appduct/blob/main/README.md)
-
-## Made with ❤️ at Callstack
-
-`appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
-
-Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
-
-[appduct-banner]: https://img.shields.io/badge/Appduct-callstack%2Fincubator-111827?style=for-the-badge&logo=github&logoColor=white
-[repo]: https://github.com/callstackincubator/appduct
-[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love
-[architecture]: https://github.com/callstackincubator/appduct/blob/main/docs/ARCHITECTURE.md
-[protocol]: https://github.com/callstackincubator/appduct/blob/main/docs/PROTOCOL.md
-[security]: https://callstackincubator.github.io/appduct/guides/security/
-[build-variants]: https://callstackincubator.github.io/appduct/guides/build-variants/
-[license-badge]: https://img.shields.io/npm/l/appduct?style=for-the-badge
-[license]: https://github.com/callstackincubator/appduct/blob/main/LICENSE
-[npm-downloads-badge]: https://img.shields.io/npm/dm/appduct?style=for-the-badge
-[npm-downloads]: https://www.npmjs.com/package/appduct
-[prs-welcome-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge
-[prs-welcome]: https://github.com/callstackincubator/appduct/pulls
-[chat-badge]: https://img.shields.io/discord/426714625279524876.svg?style=for-the-badge
-[chat]: https://discord.gg/xgGt7KAjxv
+[MIT](https://github.com/callstackincubator/appduct/blob/main/LICENSE). Made at [Callstack](https://callstack.com/).

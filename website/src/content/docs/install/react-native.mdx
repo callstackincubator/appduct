@@ -94,11 +94,11 @@ You don't need keys, certificates, or a config plugin for a first run, in any bu
 
    export function AppductTools() {
      useAppductTool({
-       name: "sum",
-       description: "Add two numbers.",
-       inputSchema: z.object({ a: z.number(), b: z.number() }),
-       outputSchema: z.object({ total: z.number() }),
-       handler: async ({ a, b }) => ({ total: a + b }),
+       name: "seed_cart",
+       description: "Fill the cart with test items.",
+       inputSchema: z.object({ items: z.number() }),
+       outputSchema: z.object({ added: z.number() }),
+       handler: async ({ items }) => ({ added: items }),
      });
 
      return null;
@@ -146,7 +146,7 @@ Then:
 
 ```bash
 appduct tools ls
-appduct tools call sum --input '{"a":2,"b":3}'
+appduct tools call seed_cart --input '{"items":3}'
 ```
 
 A physical device must be on the same local network as your computer. For every way to connect, see [Connect a device](/appduct/guides/cli/#connect-a-device).
@@ -157,7 +157,7 @@ On iOS, tool calls keep working for a short time after the app goes to the backg
 
 ## What's in each build
 
-By default, Appduct's native code is in **debug** builds only. In a release build the library is inactive: every function still exists, but does nothing and never throws. To ship Appduct in an internal release build, or to strip its JavaScript too, see [Build variants](/appduct/guides/build-variants/).
+By default, Appduct's native code is in **debug** builds only. In a release build without the native module, registration is inert and `connect()` rejects with `appduct_disabled`. To ship Appduct in an internal release build, or to strip its JavaScript too, see [Build variants](/appduct/guides/build-variants/).
 
 With no configuration, a build trusts the computer whose link it opened, for that session. Before you give a build to anyone outside your team, [pin it to your key](/appduct/guides/security/#pin-a-build-to-your-key).
 

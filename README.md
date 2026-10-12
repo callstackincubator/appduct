@@ -1,5 +1,7 @@
 <a href="https://callstackincubator.github.io/appduct/"><img src=".github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
 
+# Appduct
+
 [![MIT license][license-badge]][license] [![npm downloads][npm-downloads-badge]][npm-downloads] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
 Appduct lets a terminal, a test runner, or an AI agent call functions inside your running iOS, Android, React Native, Flutter or web app. Appduct calls these functions tools. Only the tools you register are reachable.
@@ -85,6 +87,28 @@ useAppductTool({
   name: "seed_cart",
   description: "Fill the cart with test items.",
   inputSchema: z.object({ items: z.number() }),
+  outputSchema: z.object({ added: z.number() }),
+  handler: async ({ items }) => ({ added: items }),
+});
+```
+
+</details>
+
+
+<details>
+<summary>Web</summary>
+
+```ts
+import { registerTool } from "@appduct/web";
+
+registerTool({
+  name: "seed_cart",
+  description: "Fill the cart with test items.",
+  inputSchema: {
+    type: "object",
+    properties: { items: { type: "number" } },
+    required: ["items"],
+  },
   handler: async ({ items }) => ({ added: items }),
 });
 ```
@@ -97,7 +121,7 @@ Call it from your terminal:
 appduct tools call seed_cart --input '{"items":3}'
 ```
 
-## Get started
+## Getting started
 
 1. Install the CLI:
 
@@ -112,7 +136,9 @@ appduct tools call seed_cart --input '{"items":3}'
    - [Flutter](packages/flutter/README.md), from pub.dev
    - [Web](packages/web/README.md), for any framework or plain JavaScript
 
-To try it before touching your own app, run a playground app: [iOS](playground-native/ios/README.md), [Android](playground-native/android/README.md) or [React Native](playground/README.md).
+## Try a playground
+
+Run an example app before adding Appduct to your own: [iOS](playground-native/ios/README.md), [Android](playground-native/android/README.md), [React Native](playground/README.md), [Flutter](playground-flutter/README.md) or [Web](playground-web/README.md). Each registers the same five demo tools and the `playground_ping` event.
 
 ## Learn more
 
@@ -125,19 +151,13 @@ To try it before touching your own app, run a playground app: [iOS](playground-n
 - [Security](https://callstackincubator.github.io/appduct/guides/security/): what it protects against, trust and key rotation
 - [Packages and platform support](https://callstackincubator.github.io/appduct/start/introduction/#packages)
 
-## Made with ❤️ at Callstack
+## License
 
-`appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
+[MIT](https://github.com/callstackincubator/appduct/blob/main/LICENSE). Made at [Callstack](https://callstack.com/).
 
-Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
-
-[repo]: https://github.com/callstackincubator/appduct
-[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love
 [license-badge]: https://img.shields.io/npm/l/appduct?style=for-the-badge
 [license]: https://github.com/callstackincubator/appduct/blob/main/LICENSE
 [npm-downloads-badge]: https://img.shields.io/npm/dm/appduct?style=for-the-badge
 [npm-downloads]: https://www.npmjs.com/package/appduct
 [prs-welcome-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge
 [prs-welcome]: https://github.com/callstackincubator/appduct/pulls
-[chat-badge]: https://img.shields.io/discord/426714625279524876.svg?style=for-the-badge
-[chat]: https://discord.gg/xgGt7KAjxv

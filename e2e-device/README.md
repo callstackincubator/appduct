@@ -1,15 +1,36 @@
+<a href="https://callstackincubator.github.io/appduct/"><img src="https://raw.githubusercontent.com/callstackincubator/appduct/main/.github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
+
 # Device e2e suite
 
 Drives a playground app on an iOS simulator or Android emulator. agent-device presses and reads the
 screen; `appduct/client`, the CLI and the MCP server assert on the daemon side. One file per case,
-run serially against one device. The playgrounds follow the contract in #227; the cases read only
-its ids.
+run serially against one device. The playgrounds follow the [playground contract](../docs/internal/playground-contract.md); the cases read only its ids.
+
+## Requirements
+
+Node 24 and pnpm 11.
+
+Install agent-device and its prerequisites (Xcode, or the Android SDK with `ANDROID_HOME` set and an
+emulator already running), `flutter` on `PATH` for the Flutter targets, and `xcodegen` for
+`native-ios`. An Expo target starts
+its own Metro on port 8081 and refuses to run when something already listens there.
+
+## Getting started
+
+From the repository root, install dependencies and run a target:
 
 ```bash
+pnpm install --frozen-lockfile
 pnpm build                                     # the suite runs this checkout's CLI
 APPDUCT_E2E_TARGET=expo-ios pnpm e2e:device    # build, install, run every case that applies
 APPDUCT_E2E_TARGET=expo-ios pnpm e2e:device -- cases/app-killed.device.test.ts   # one case
 ```
+
+## Choose a target
+
+Set `APPDUCT_E2E_TARGET` to `expo-ios`, `expo-android`, `native-ios`, `native-android`, `flutter-ios` or `flutter-android`.
+
+## Run options
 
 | Variable | Meaning |
 | --- | --- |
@@ -17,11 +38,6 @@ APPDUCT_E2E_TARGET=expo-ios pnpm e2e:device -- cases/app-killed.device.test.ts  
 | `APPDUCT_E2E_DEVICE` | Simulator udid or emulator serial. Default: the first iPhone on the newest iOS runtime, or the one running emulator. |
 | `APPDUCT_E2E_SKIP_BUILD=1` | Install the last build instead of building again. |
 | `APPDUCT_E2E_RELEASE=1` | Also run `release-opt-in`, which builds the opted-in release variant (`expo-android`, `flutter-android`). |
-
-Needs agent-device's prerequisites (Xcode, or the Android SDK with `ANDROID_HOME` set and an
-emulator already running), `flutter` on `PATH` for the Flutter targets, and `xcodegen` for
-`native-ios`. An Expo target starts
-its own Metro on port 8081 and refuses to run when something already listens there.
 
 Each case file gets its own daemon in a fresh state dir. Build, Metro and `flutter run` output lands
 in `e2e-device/.artifacts/`.
@@ -41,9 +57,18 @@ in `e2e-device/.artifacts/`.
 | `app-killed` | a killed app relaunched without a link stays idle; a new link connects | all |
 | `release-opt-in` | an opted-in release build connects | `expo-android`, `flutter-android`; native in #247 |
 
-## Rules for a new case
+## Add a case
 
 - No fixed sleeps. Wait on a condition with a deadline (`until`, `waitForText`, `waitForSessionState`).
 - Prove a negative ("stays idle") only after a positive state shows on screen.
 - Always pass the session id. Suspended sessions from earlier in the file stay listed for 600 s.
 - A case that passes only on a rerun is a flake. Report it; never add a retry.
+
+## Learn more
+
+- [Playground contract](../docs/internal/playground-contract.md)
+- [CLI test client](https://callstackincubator.github.io/appduct/guides/cli/#drive-the-app-from-a-test-suite)
+
+## License
+
+[MIT](https://github.com/callstackincubator/appduct/blob/main/LICENSE). Made at [Callstack](https://callstack.com/).

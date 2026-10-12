@@ -1,26 +1,61 @@
-# Appduct Playground (Flutter)
+<a href="https://callstackincubator.github.io/appduct/"><img src="https://raw.githubusercontent.com/callstackincubator/appduct/main/.github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
 
-A Flutter app (Android, iOS, macOS) that depends on [`packages/flutter`](../packages/flutter) by
-path and registers the same five tools and the `playground_ping` event as `playground` and
-`playground-native`, so `appduct tools ls` reports an equivalent surface whichever playground
-answered the link. The tools, the event and the screens' `Semantics` identifiers (`call-count`,
-`connection-state`, `ping-button` and the rest) follow the
-[playground contract](../docs/internal/playground-contract.md). It uses go_router, so an Appduct
-link reaching the app is checked against a real router.
+# Appduct playground for Flutter
+
+A Flutter app for Android, iOS and macOS that registers five demo tools and an event through the local `appduct` plugin. It uses the same tools and screens as the other playgrounds and receives links through go_router.
+
+## Requirements
+
+- Flutter 3.38 or newer, plus the toolchain for your target platform.
+- Node 24 and pnpm 11 to build this checkout's CLI.
+
+## Getting started
+
+From the repository root:
 
 ```bash
+pnpm install --frozen-lockfile
+pnpm build
 cd playground-flutter
 flutter pub get
-flutter run -d <device>                          # debug build, Appduct included
-cd ..
-pnpm playground-flutter:appduct -- sessions link --open android      # or ios-sim
-pnpm playground-flutter:appduct -- tools call sum --input '{"a":2,"b":3}'
+flutter run -d <device>
 ```
 
-`flutter test` checks the tools against the package's in-memory fakes. The device checks (hot
-restart, links under UIScene, a profile build on an iPhone, an opted-in release build) are in the
-`e2e-device` skill, `.claude/skills/e2e-device/SKILL.md`.
+In another terminal, from the repository root, connect to the running app:
 
-The scheme is `appduct-flutter`. The Android manifest has the `INTERNET` permission, `Info.plist`
-has `NSLocalNetworkUsageDescription`, and the macOS entitlements have
-`com.apple.security.network.client`, the three things `appduct init` prints for a Flutter project.
+```bash
+pnpm playground-flutter:appduct -- sessions link --open android
+# or: pnpm playground-flutter:appduct -- sessions link --open ios-sim
+```
+
+The script uses this checkout's CLI. The scheme, app ids and required platform permissions are already configured. For macOS, follow [Connect a desktop app](https://callstackincubator.github.io/appduct/install/flutter/#connect-a-desktop-app) using the scheme `appduct-flutter`.
+
+## Try the tools
+
+The app registers `sum`, `call_count`, `reset_counter`, `slow_task` and `throwing_tool`, plus the `playground_ping` event. After connecting:
+
+```bash
+pnpm playground-flutter:appduct -- tools ls
+pnpm playground-flutter:appduct -- tools call sum --input '{"a":2,"b":3}'
+pnpm playground-flutter:appduct -- tools call call_count --input '{}'
+pnpm playground-flutter:appduct -- events ls
+pnpm playground-flutter:appduct -- events tail --follow
+```
+
+`sum` returns `{"total":5}`. Open the Status screen and press **Send playground_ping** to see an event in the terminal. See the [playground contract](../docs/internal/playground-contract.md) for all tool names, groups and screen identifiers.
+
+## Things to know
+
+- **Hot restart resumes the session.** Killing the app requires a new link.
+- **Debug and profile include Appduct.** Release leaves it out unless you set `--dart-define=APPDUCT_ENABLED=true`; see [Flutter build variants](https://callstackincubator.github.io/appduct/guides/build-variants/#flutter-the-appduct_enabled-define).
+- **Run tool tests locally.** From this directory, `flutter test` checks the tools against in-memory fakes. The [device suite](../e2e-device/README.md) exercises the running app.
+
+## Learn more
+
+- [Flutter SDK](../packages/flutter/README.md)
+- [Flutter setup](https://callstackincubator.github.io/appduct/install/flutter/)
+- [Connect an agent](https://callstackincubator.github.io/appduct/guides/agents/)
+
+## License
+
+[MIT](https://github.com/callstackincubator/appduct/blob/main/LICENSE). Made at [Callstack](https://callstack.com/).
