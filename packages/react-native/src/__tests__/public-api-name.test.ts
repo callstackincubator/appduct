@@ -137,11 +137,10 @@ describe("public API type name (issue #155)", () => {
       fileURLToPath(new URL("../../../../CHANGELOG.md", import.meta.url)),
       "utf8",
     );
-    const from = changelog.indexOf("## Unreleased");
-    expect(from).toBeGreaterThan(-1);
-    const unreleased = changelog.slice(from, changelog.indexOf("\n## ", from + 1));
-    expect(unreleased).toContain("CordierePublicApi");
-    expect(unreleased).toContain(REMOVED_IN);
+    // A release renames `## Unreleased`, so the line may sit in a released section by then.
+    const line = changelog.split("\n").find((l) => l.includes("CordierePublicApi"));
+    expect(line).toBeDefined();
+    expect(line).toContain(REMOVED_IN);
   });
 
   test("the new name is exported without a deprecation warning", () => {

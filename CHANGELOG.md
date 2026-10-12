@@ -11,6 +11,8 @@ section into a versioned heading.
 
 ## Unreleased
 
+## 0.15.0 (2026-10-12)
+
 - **Fix: an app whose first connection to the daemon fails now keeps trying instead of staying unconnected.** It retries until the link expires, which fixes Android apps that sometimes never claimed a freshly opened link; a link the daemon refuses is still not retried, and neither, in a browser, is a daemon it cannot reach.
 - **Fix: on macOS, a connection to the daemon at `127.0.0.1` no longer lands on another program by mistake.** If another program already uses the configured `wssPort`, the daemon now refuses to start and names the port; set a different `wssPort` in `config.json`.
 - **New: Flutter apps can listen to `Appduct.instance.sessionChanges` and `Appduct.instance.errors` and read `Appduct.instance.sessionId`.** They report when a session is claimed, resumed or lost, and why a connection failed; see [Flutter setup](https://callstackincubator.github.io/appduct/install/flutter/#watch-the-connection-and-send-events).
