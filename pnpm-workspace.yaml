@@ -2,6 +2,7 @@ packages:
   - "packages/*"
   - "playground"
   - "playground-web"
+  - "e2e-device"
   - "website"
 allowBuilds:
   # esbuild works without its postinstall (it loads the platform binary from its optional

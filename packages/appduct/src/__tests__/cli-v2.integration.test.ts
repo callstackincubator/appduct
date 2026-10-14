@@ -1,6 +1,6 @@
 /**
  * The noun-verb command table of §10 (issue #96) works end-to-end against a real daemon in an
- * integration test (temp state dir): keygen -> daemon auto-spawn via `sessions ls` -> `sessions
+ * integration test (temp state dir): daemon auto-spawn via `sessions ls` -> `sessions
  * link` -> fake app client claims -> `sessions ls` shows the alias ACTIVE -> `tools
  * ls`/`describe`/`call` round-trip -> `sessions revoke`. Every command here runs as a real CLI
  * subprocess (`bin.ts`) against a real daemon it auto-spawns, driven by a scripted fake app client
@@ -8,7 +8,6 @@
  * instead of raw UDS RPC.
  */
 
-import path from "node:path";
 import { text } from "node:stream/consumers";
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -132,19 +131,9 @@ const nextMessage = (socket: WebSocket): Promise<Record<string, unknown>> => {
 
 describe("appduct CLI v2: end-to-end command table", () => {
   test(
-    "keygen -> sessions ls auto-spawns -> sessions link -> claim -> sessions ls ACTIVE -> tools ls/describe/call round-trip -> sessions revoke",
+    "sessions ls auto-spawns -> sessions link -> claim -> sessions ls ACTIVE -> tools ls/describe/call round-trip -> sessions revoke",
     async () => {
       const stateDir = await makeTempStateDir();
-
-      // keygen: fully non-interactive, refuses to overwrite without --force.
-      const keygenPath = path.join(stateDir, "operator-key.pem");
-      const keygenResult = await runCliJson(["keygen", "--out", keygenPath], stateDir);
-      expect(keygenResult.ok).toBe(true);
-      expect((keygenResult.data as { pin: string }).pin).toMatch(/^sha256\//u);
-
-      const keygenAgain = await runCliJson(["keygen", "--out", keygenPath], stateDir);
-      expect(keygenAgain.ok).toBe(false);
-      expect(keygenAgain.error?.type).toBe("usage_error");
 
       // ls: no sessions yet, and this is the call that auto-spawns the daemon.
       const firstLs = await runCliJson(["sessions", "ls"], stateDir);

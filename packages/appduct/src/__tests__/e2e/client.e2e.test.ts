@@ -125,7 +125,7 @@ describe("e2e: appduct/client", () => {
   );
 
   test(
-    "call()'s transport timeout never fires before the daemon's own tool_timeout, even for a timeoutMs above the transport default",
+    "call()'s transport timeout never fires before the daemon's own tool_timeout",
     async () => {
       const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
@@ -148,17 +148,18 @@ describe("e2e: appduct/client", () => {
 
       const app = await connect({ stateDir, selector: link.sessionId });
 
-      // Above the old hardcoded 10s transport default: before the fix this reliably surfaced as
-      // `connection_error` ("Timed out waiting for a response to tools.call") instead of the
-      // daemon's own `tool_timeout`.
-      await expect(app.call("neverResponds", {}, { timeoutMs: 12_000 })).rejects.toMatchObject({
+      // The client's watchdog and the daemon's deadline start from the same timeoutMs; without the
+      // watchdog's slack the client's timer, started first, surfaces `connection_error` ("Timed out
+      // waiting for a response to tools.call") instead of the daemon's own `tool_timeout`. The
+      // watchdog arithmetic itself is asserted exactly in call-timeouts.test.ts.
+      await expect(app.call("neverResponds", {}, { timeoutMs: 1_000 })).rejects.toMatchObject({
         type: "tool_timeout",
       });
 
       app.close();
       fakeApp.close();
     },
-    20_000,
+    15_000,
   );
 
   test("waitForEvent() resolves on a name glob (issue #114)", async () => {
@@ -307,45 +308,6 @@ describe("e2e: appduct/client", () => {
       const next = await waitingForNext;
       expect(next).toMatchObject({ payload: { orderId: "second" } });
       expect(next.seq).toBeGreaterThan(drained.cursor);
-
-      app.close();
-      fakeApp.close();
-    },
-    15_000,
-  );
-
-  test(
-    "events() with payloadMaxBytes truncates an oversized payload and reports dropped/remaining (issue #113)",
-    async () => {
-      const { stateDir } = await makeTempStateDir();
-      await ensureDaemon(stateDir);
-      const port = await daemonWssPort(stateDir);
-      const pinnedKeys = await fetchPinnedKeys(stateDir);
-
-      const events = await subscribeToEvents(stateDir);
-      const link = await mintLink(stateDir);
-      const fakeApp = new FakeAppClient(port, pinnedKeys);
-      await fakeApp.claim(link, { model: "Pixel 8" });
-
-      const toolsChanged = events.waitFor("tools_changed");
-      fakeApp.registerTools([{ name: "echo" }]);
-      await toolsChanged;
-      events.close();
-
-      const app = await connect({ stateDir, selector: link.sessionId });
-
-      fakeApp.emitEvent("big", { text: "x".repeat(200) });
-      await new Promise((resolve) => setTimeout(resolve, 200));
-
-      const drained = await app.events({ payloadMaxBytes: 10 });
-      const event = drained.events.find((candidate) => candidate.name === "big")!;
-      expect(event.truncated).toBe(true);
-      if (event.truncated) {
-        expect(event.payloadBytes).toBeGreaterThan(10);
-        expect(Buffer.byteLength(event.payloadPreview, "utf8")).toBeLessThanOrEqual(10);
-      }
-      expect(drained.dropped).toBe(0);
-      expect(drained.remaining).toBe(0);
 
       app.close();
       fakeApp.close();

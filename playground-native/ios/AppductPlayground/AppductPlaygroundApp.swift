@@ -8,6 +8,7 @@ import SwiftUI
 struct AppductPlaygroundApp: App {
   init() {
     PlaygroundTools.registerAll()
+    PlaygroundViewModel.shared.start()
   }
 
   var body: some Scene {
@@ -15,10 +16,13 @@ struct AppductPlaygroundApp: App {
       ContentView()
         .onOpenURL { url in
           // `handle(_:)` returns `true` iff `url` carried an Appduct bootstrap payload; the
-          // playground has nothing else to do with the result here since a plain `Bool` return
-          // (rather than a thrown error) is exactly what lets an app compose this with its own,
-          // unrelated deep links -- see packages/native/ios/README.md#2-forward-deep-links.
-          _ = Appduct.shared.handle(url)
+          // playground uses the `false` case for its own link: `<scheme>:///status` opens the Status
+          // screen, as the playground contract says. A plain `Bool` return (rather than a thrown
+          // error) is exactly what lets an app compose this with its own, unrelated deep links --
+          // see packages/native/ios/README.md#2-forward-deep-links.
+          if !Appduct.shared.handle(url), url.path == "/status" {
+            PlaygroundViewModel.shared.screen = .status
+          }
         }
     }
   }

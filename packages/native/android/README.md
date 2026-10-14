@@ -1,79 +1,48 @@
-# `packages/native/android`
+<a href="https://callstackincubator.github.io/appduct/"><img src="https://raw.githubusercontent.com/callstackincubator/appduct/main/.github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
 
-The framework-free Android core behind Appduct, plus a public `Appduct` facade for plain apps
-that want it with no React Native anywhere in the stack. If you're building a React Native app,
-use [`@appduct/react-native`](../../react-native/README.md) instead — it vendors this module's
-sources and gives you the same functionality behind a JS API. This README is for a plain
-Kotlin/Java Android app.
+# Appduct for Android
+
+Call functions inside your running Kotlin or Java Android app from a terminal, a test runner or an AI agent. Register tools with the `Appduct` SDK; only the tools you register are reachable.
+
+For a React Native app, use [`@appduct/react-native`](https://github.com/callstackincubator/appduct/blob/main/packages/react-native/README.md).
 
 ## Requirements
 
-- `minSdkVersion` 24 (Android 7.0) or higher.
+- Android 7.0 (API 24) or newer.
+- The `appduct` CLI on your computer: `npm install -g appduct` (Node 20 or newer).
+- `adb` on your `PATH` for automatic link delivery to an emulator or USB device.
 
-## 1. Install
+## Getting started
 
-Two artifacts, same public API, one real, one inert:
+Add the real and inert artifacts from Maven Central to your app's Gradle dependencies. Use the same Appduct version for both:
 
 ```kotlin
 dependencies {
-  debugImplementation("com.callstack.appduct:core:<version>")
-  releaseImplementation("com.callstack.appduct:core-noop:<version>")
+  debugImplementation("com.callstack.appduct:core:0.15.0")
+  releaseImplementation("com.callstack.appduct:core-noop:0.15.0")
+}
+
+android {
+  defaultConfig {
+    manifestPlaceholders["appductScheme"] = "myapp-appduct"
+  }
 }
 ```
 
-`core` is the real implementation (TLS-pinned transport, session lifecycle, tool registry, the
-`Appduct` facade). `core-noop` is the exact same public API with every method inert — no
-`okhttp`, no `kotlinx.coroutines` dependency, no network code at all. Pairing them this way keeps
-the real implementation's bytecode off a release build's classpath by default (the same pairing
-`@appduct/react-native`'s own Android bridge uses internally). Opt a release build back in by
-resolving `core` for it instead, the same way you'd override any other dependency per variant.
-
-### The `INTERNET` permission
-
-Appduct's library manifest declares no permissions, so your app's own `AndroidManifest.xml` needs
-`INTERNET` for a debug build to reach the daemon. Most apps already have it; if yours doesn't, add
-it:
+Use a dedicated scheme if your app already handles its own deep links. Ensure your app's `AndroidManifest.xml` has this permission, outside `<application>`:
 
 ```xml
 <uses-permission android:name="android.permission.INTERNET" />
 ```
 
-Without it, the app opens the link but never claims the session.
-
-### The `appductScheme` placeholder
-
-`core`'s manifest declares a trampoline activity with an intent filter on a scheme your app names:
+Register a tool in your `Application.onCreate()`:
 
 ```kotlin
-android {
-  defaultConfig {
-    manifestPlaceholders["appductScheme"] = "myapp"
-  }
-}
-```
-
-Forgetting this is a **manifest-merger error at build time**, not a silent no-op:
-
-```
-Attribute data@scheme at ... requires a placeholder substitution but no value for <appductScheme> is provided.
-```
-
-The scheme you pick is what `appduct sessions link --scheme <s>` / `appduct init --scheme <s>` must
-match on the CLI side. It can be a dedicated scheme distinct from your app's own primary
-deep-link scheme — see [Deep links](#3-deep-links) for why that matters if you already handle
-your own scheme.
-
-## 2. Registering a tool
-
-Call `Appduct.register` once, wherever your app initializes — `Application.onCreate()` is the
-natural place, since [initialization](#4-initialization-the-init-provider) has already happened
-by the time it runs:
-
-```kotlin
+import android.app.Application
 import com.callstack.appduct.Appduct
 import org.json.JSONObject
 
-class MyApp : Application() {
+class ShopApp : Application() {
   override fun onCreate() {
     super.onCreate()
 
@@ -90,246 +59,53 @@ class MyApp : Application() {
 }
 ```
 
-`register` returns a `ToolRegistration`; call `.remove()` to unregister just that tool. A second
-overload takes a `ToolCallContext` as well, for tools that need to report progress:
+If you added this `Application` class, set `android:name=".ShopApp"` on your manifest's `<application>` element. Appduct initializes automatically; you don't need an `init` call or a link handler.
 
-```kotlin
-Appduct.register(name = "slow_task", description = "...") { args, context ->
-  context.reportProgress(0.5, "halfway")
-  JSONObject().put("done", true)
-}
+Build and install your debug app on an emulator or USB device. From your Android project directory, record the scheme and the installed variant's `applicationId`, then connect:
+
+```bash
+appduct init --scheme myapp-appduct --android-app-id com.example.shop
+appduct sessions link --open android
+appduct tools ls
+appduct tools call seed_cart --input '{"items":3}'
 ```
 
-Schemas are raw JSON Schema (`org.json.JSONObject`), not `kotlinx.serialization` or any other
-schema library. Nothing validates call arguments against `inputSchema`, so check what your handler
-needs before using it. `annotations` takes a
-`ToolAnnotations(readOnlyHint?, destructiveHint?, idempotentHint?)`: `appduct tools ls` and MCP
-clients show them, and a `config.json` policy can require approval for every tool marked
-`destructiveHint`.
+The tool returns `{"added":3}`. Include any `applicationIdSuffix` in the id you record.
 
-Tools are read by agents from a one-line signature and the first line of the description: name
-them by intent, set `readOnlyHint` on observers and `destructiveHint` on anything that deletes,
-signs out or pays, and give every tool an `outputSchema`. See
-[Write tools](https://callstackincubator.github.io/appduct/guides/writing-tools/#design-tools-for-the-agent-that-calls-them) for the full list of rules.
+## Things to know
 
-On an app with many tools, pass `group` so agents can list them one area at a time
-(`appduct tools ls --group cart`). A group is `"cart"` or one subgroup below it, like
-`"checkout/payment"`; each part uses tool-name characters (letters, digits, `_`, `-`, at most 64).
-A malformed group makes `register` throw `IllegalArgumentException`, like a malformed name:
-
-```kotlin
-Appduct.register(name = "add_item", description = "Add a product to the cart.", group = "cart") { args ->
-  JSONObject().put("added", args.optString("sku"))
-}
-```
-
-A handler's return value is converted to JSON the same way the underlying client always has:
-`org.json` values pass through, and plain Kotlin/Java `Map`/`List`/`String`/`Number`/`Boolean`/
-`null` convert automatically. Anything else fails that one call with `tool_serialization_error`
-rather than crashing the caller.
-
-### Declaring events
-
-To let an agent list an event before waiting on it (`appduct events ls`), declare it. A name is any
-string up to 4096 characters, so `cart.item_added` works as it is posted. `payloadSchema` is an
-optional JSON Schema object, passed on as is. Declaring needs an up-to-date CLI; against an older
-one the declaration is silently ignored and the session works as before.
-
-```kotlin
-val registration = Appduct.registerEvent(
-  name = "cart.item_added",
-  description = "An item went into the cart.",
-  payloadSchema = JSONObject("""{"type":"object","properties":{"sku":{"type":"string"}}}"""),
-)
-registration.remove() // withdraws the declaration
-```
-
-An empty name or description makes `registerEvent` throw `IllegalArgumentException`. Nothing warns
-about an undeclared name or a payload that doesn't match its schema; React Native does.
-
-### Posting an event
-
-`postEvent` is a suspend function; call it from a coroutine:
-
-```kotlin
-lifecycleScope.launch {
-  Appduct.postEvent("cart.item_added", mapOf("sku" to "SKU-1042"))
-}
-```
-
-Read it back with `appduct events tail`. The payload converts to JSON the same way a handler's
-return value does. While no session is active the event is dropped; it doesn't throw, and a
-failure to send shows up as an `AppductEvent.Error` on `addListener` instead.
-
-### Observing connection state, session, and errors
-
-```kotlin
-val subscription = Appduct.addListener { event ->
-  when (event) {
-    is AppductEvent.StateChange -> Log.d("Appduct", "state -> ${event.state} ${event.reason ?: ""}")
-    is AppductEvent.SessionChange -> Log.d("Appduct", "session -> ${event.sessionId ?: "none"}")
-    is AppductEvent.Error -> Log.w("Appduct", "error [${event.phase}]: ${event.message}")
-  }
-}
-
-// later, to stop listening:
-subscription.remove()
-```
-
-`state` is one of `idle`, `connecting`, `active`, `reconnecting` or `closed`. A `SessionChange`
-carries `type` (`claimed`, `resumed` or `lost`), `sessionId` and `alias`. `Appduct.state` and
-`Appduct.sessionId` are snapshots you can read at any time without a listener, for example for a
-view's first render. A listener can be called off the main thread, so hop to `Dispatchers.Main`
-before touching UI, as in [Threading](#threading).
-
-### Threading
-
-Handlers run on this client's own background dispatcher — never the main thread. Hop to
-`Dispatchers.Main` yourself for any UI work a handler needs to do:
-
-```kotlin
-Appduct.register(name = "flash_screen", description = "...") { _ ->
-  withContext(Dispatchers.Main) {
-    // touch a View / Compose state here
-  }
-  JSONObject()
-}
-```
-
-Cancellation is coroutine-native, not a separate token: when the daemon sends `tool_cancel` for a
-call, or the session suspends entirely, the handler's own coroutine is cancelled. A handler that
-calls further suspend functions observes that as an ordinary `CancellationException`; one that
-does no further suspending work simply runs to completion, the same way a JS handler that ignores
-`AbortSignal` still replies normally.
-
-## 3. Deep links
-
-Appduct ships a no-UI trampoline activity, `AppductLinkActivity`, declared in `core`'s own
-manifest with an intent filter on `${appductScheme}`. Open a bootstrap link
-(`appduct sessions link --scheme myapp`) and it reaches your registered tools with no code required on
-your side: the OS routes the link to the trampoline, which calls `Appduct.handle(intent)` and
-finishes immediately.
-
-If your app already handles its own deep links on the very same scheme, the trampoline can't tell
-your links apart from Appduct's — it isn't aware of your app's own navigation, so a link with no
-Appduct payload is not forwarded anywhere; it's simply not consumed further. Pick one:
-
-- Give Appduct a **dedicated scheme** (`manifestPlaceholders["appductScheme"]` can differ
-  from `expo.scheme` / your primary deep-link scheme), so the two never collide, or
-- **Remove the trampoline** (below) and call `Appduct.handle(intent)` yourself from your own
-  activity's `onCreate`/`onNewIntent`, wherever your existing deep-link handling lives.
-
-You can also call `Appduct.handle` directly with a `Uri` (`Appduct.handle(uri)`) — both overloads
-return `true` if the input carried an Appduct bootstrap payload, `false` otherwise, so your own
-code knows whether to keep handling it.
-
-## 4. Initialization: the init provider
-
-There is no `Appduct.init(context)` call. `core` sets itself up before
-`Application.onCreate()` runs, through a `ContentProvider` named `AppductInitProvider`, so you can
-call `Appduct.register(...)` from your own `onCreate()`. At the same point it starts resuming the
-session a previous process held, if one is still valid.
+- **Switch to the main thread for UI work.** Handlers and listeners run in the background; use `withContext(Dispatchers.Main) { … }` for UI changes.
+- **Check arguments in your handler.** Raw JSON Schema describes inputs but doesn't validate them. Return JSON-compatible values; other values fail with `tool_serialization_error`.
+- **Remove tools explicitly.** `register` returns a `ToolRegistration`; call `.remove()`. Registering the same name replaces its handler.
+- **Check setup when a link doesn't connect.** A missing `appductScheme` fails the build; a missing `INTERNET` permission prevents the connection. See [Troubleshooting](https://callstackincubator.github.io/appduct/install/android/#troubleshooting).
+- **Reconnect after process death.** Short network drops resume the session; killing the app requires a new link.
 
 ### Opting out of the init provider and trampoline
 
-Both the provider and the trampoline activity are declared only in `core`'s manifest (never in
-`core-noop`'s, which has no manifest entries at all), so a release build that resolves
-`core-noop` never gets either. To remove them from a **debug** build too — for example, to drive
-initialization or deep links entirely by hand — add a `tools:node="remove"` override in your
-app's own manifest, matching the component by its fully qualified name:
+Keep the startup provider unless you supply initialization yourself. If you need to handle deep links in your own activity, follow [Deep links](https://callstackincubator.github.io/appduct/install/android/#deep-links); the guide also explains the consequences of removing either component.
 
-```xml
-<manifest xmlns:tools="http://schemas.android.com/tools">
-  <application>
-    <provider
-        android:name="com.callstack.appduct.AppductInitProvider"
-        tools:node="remove" />
-    <activity
-        android:name="com.callstack.appduct.AppductLinkActivity"
-        tools:node="remove" />
-  </application>
-</manifest>
-```
+## Release builds
 
-Removing the provider without a replacement means nothing ever attaches your app's `Context`, so
-every `Appduct` call after that throws a clear `IllegalStateException` naming this exact
-situation, rather than silently doing nothing. Removing the trampoline just means no deep link
-ever reaches `Appduct` automatically; call `Appduct.handle` yourself instead (see
-[Deep links](#3-deep-links)).
+The `debugImplementation(core)` / `releaseImplementation(core-noop)` pairing includes Appduct in debug builds and an inert API in release builds. For an internal release build, depend on `core` for that variant and pin it to your key. See [Release setup](https://callstackincubator.github.io/appduct/install/android/#ship-appduct-in-a-release-build).
 
-## 5. Hardened builds
-
-`Appduct.buildConfig` reports this build's effective trust configuration —
-`BuildConfig(trust, hasEmbeddedPins, allowPrivateLanOnly)` — read from the exact same manifest
-`<meta-data>` values a real `connect()`/link claim uses. See
-[Security](https://callstackincubator.github.io/appduct/guides/security/#choose-what-a-build-trusts) for the full trust-mode explanation;
-the keys themselves, set as `<meta-data>` on your app's `<application>` tag:
-
-| Name | Purpose |
-| --- | ------- |
-| `com.callstack.appduct.CLI_PINS` | JSON array string of `sha256/...` SPKI pins |
-| `com.callstack.appduct.TRUST` | `"link"` \| `"pin"` — any other value is a hard error at connect time |
-| `com.callstack.appduct.ALLOW_PRIVATE_LAN_ONLY` | Boolean (a `"true"`/`"false"` string is also accepted); defaults to `true` (fail-closed) when absent |
-
-With no keys set, `trust: "link"` is the default: the app trusts whichever SPKI pin a delivered
-bootstrap link carries, for that one session only — zero setup, appropriate for local
-development, not for anything you'd hand to someone outside it. Set `CLI_PINS` (which makes
-`trust: "pin"` the effective mode) to make a build trust only keys you embedded ahead of time;
-`appduct keygen` prints the exact fingerprint string to use.
-
-`ALLOW_PRIVATE_LAN_ONLY` (default `true`) restricts a bootstrap link's target address to a local
-IPv4 address (RFC1918 ranges or `127.0.0.1`) — a dev-hardening switch, not a claim that Appduct
-only ever runs on a LAN.
-
-## 6. Compiling Appduct out, and `doctor --assert-absent`
-
-`debugImplementation(core)` / `releaseImplementation(core-noop)` already keeps the real
-implementation off a release build's classpath by default — that pairing alone is what "compiled
-out of release" means here, no environment variable or extra config needed on the Android side.
-Verify it against the artifact you actually shipped, not the Gradle config that was supposed to
-produce it:
+Check a release APK that should exclude Appduct:
 
 ```bash
-appduct doctor path/to/app-release.apk --assert-absent
-appduct doctor path/to/app-debug.apk --assert-present
+appduct doctor app/build/outputs/apk/release/app-release.apk --assert-absent
 ```
 
-`doctor` reports `core-noop` as absent and works on minified (R8) builds. It exits non-zero when
-the assertion fails, so you can run it as a release-pipeline step. See
-[Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/) for how other build variants are
-handled.
+## Learn more
 
-## Troubleshooting
+- [Android setup](https://callstackincubator.github.io/appduct/install/android/): deep links, listeners, events and troubleshooting
+- [Write tools](https://callstackincubator.github.io/appduct/guides/writing-tools/): schemas, timeouts and groups
+- [Connect an agent](https://callstackincubator.github.io/appduct/guides/agents/) over MCP
+- [Security](https://callstackincubator.github.io/appduct/guides/security/): trust and key pinning
+- [Android playground](https://github.com/callstackincubator/appduct/blob/main/playground-native/android/README.md): a runnable Compose example
 
-**Manifest-merger error naming `appductScheme`.** You haven't set
-`manifestPlaceholders["appductScheme"]` in your app's `build.gradle` — see
-[The `appductScheme` placeholder](#the-appductscheme-placeholder) above.
+## Made with ❤️ at Callstack
 
-**`appduct sessions link --open android` reports "unable to resolve Intent".** Either the app id
-(`--app-id`, or `appId.android` in `.appduct/config.json`) isn't the installed build's
-`applicationId` — check for an `applicationIdSuffix` on the variant you installed — or the scheme
-`appduct sessions link` used doesn't match `manifestPlaceholders["appductScheme"]` on the installed build.
-If the app was built before that placeholder was set, rebuild and reinstall — placeholders are
-baked in at build time, not read at runtime.
+`appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
 
-**A bootstrap link reaches the trampoline but the app never claims the session, failing with an
-EPERM-style connect error.** Your app's manifest is missing the `INTERNET` permission; see
-[The `INTERNET` permission](#the-internet-permission).
+Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
 
-**"Appduct is not initialized" `IllegalStateException`.** `AppductInitProvider` never ran — most
-likely you removed it (`tools:node="remove"`) without wiring up an alternative. See
-[Opting out of the init provider and trampoline](#opting-out-of-the-init-provider-and-trampoline).
-
-**A tool handler needs to touch a `View` or Compose state.** Handlers run off the main thread by
-design (see [Threading](#threading)) — wrap the UI-touching part in
-`withContext(Dispatchers.Main) { ... }`.
-
-## Related
-
-- [Security](https://callstackincubator.github.io/appduct/guides/security/) — trust modes, pins, and the threat model.
-- [Build variants](https://callstackincubator.github.io/appduct/guides/build-variants/) — how inclusion is decided and
-  verified across this whole repo.
-- [`playground-native/android/README.md`](../../../playground-native/android/README.md) — a
-  runnable Compose app exercising everything above.
-- [`@appduct/react-native` README](../../react-native/README.md) — the React Native path, which
-  vendors this module's sources instead of depending on the published artifact.
+[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love

@@ -115,18 +115,19 @@ describe("relayPage", () => {
     expect(page.received()).toEqual([{ kind: "open" }]);
   });
 
-  it("tags everything it tells the page with the socket the page asked for", () => {
+  it("tells the page which socket each open, message and close belongs to", () => {
     const { page, daemon } = setup();
-    page.call({ kind: "open", socket: 7 });
+    page.call({ kind: "open", id: "a" });
+    page.call({ kind: "open", id: "b" });
 
-    daemon.sockets[0]!.open();
-    daemon.sockets[0]!.receive('{"type":"session_ack"}');
-    daemon.sockets[0]!.closeFromDaemon(1008, "invalid_token");
+    daemon.sockets[1]!.open();
+    daemon.sockets[1]!.receive("{}");
+    daemon.sockets[1]!.closeFromDaemon(1006, "lost");
 
     expect(page.received()).toEqual([
-      { kind: "open", socket: 7 },
-      { kind: "message", socket: 7, text: '{"type":"session_ack"}' },
-      { kind: "close", socket: 7, code: 1008, reason: "invalid_token" },
+      { kind: "open", id: "b" },
+      { kind: "message", id: "b", text: "{}" },
+      { kind: "close", id: "b", code: 1006, reason: "lost" },
     ]);
   });
 });

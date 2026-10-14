@@ -563,12 +563,10 @@ describe("output rendering", () => {
     const result = { ok: true as const, data: { a: 1, b: { c: 2 } } };
 
     const compact = renderResult(result, { command: "tools call", flags: flags({ json: true }) }).stdout ?? "";
-    expect(compact.replace(/\n$/u, "").split("\n")).toHaveLength(1);
-    expect(JSON.parse(compact)).toEqual(result);
+    expect(compact).toBe(JSON.stringify(result) + "\n");
 
     const pretty = renderResult(result, { command: "tools call", flags: flags({ json: true, pretty: true }) }).stdout ?? "";
-    expect(pretty.split("\n").length).toBeGreaterThan(1);
-    expect(JSON.parse(pretty)).toEqual(result);
+    expect(pretty).toBe(JSON.stringify(result, null, 2) + "\n");
   });
 });
 

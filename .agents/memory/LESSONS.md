@@ -17,6 +17,8 @@ Caps: 10 entries per section, 40 in total. Over the cap, the next review merges 
 
 ## architecture
 
+## cite-evidence
+
 ## implement-issue
 
 - 2026-09-28 (#116, #118, #120) Write every doc comment, help line, changelog line and skill doc about a computed value (cursor, count, truncated preview) from the function that computes it, with one worked example, never from memory of the API.

@@ -63,6 +63,9 @@ pnpm playground-flutter:appduct -- <cli args>        # the same, from playground
 9. **Memory.** Before a task, read the section of [.agents/memory/LESSONS.md](.agents/memory/LESSONS.md)
    named after your skill, plus General. Never read `INBOX.md`; only append to it, and only
    through the work-issue friction gate.
+10. **Evidence.** A claim about how a tool, library, API or platform outside this repo behaves
+    is backed by a source-code snippet or a documentation quote at the version we use, or
+    labelled unverified. Load the `cite-evidence` skill.
 
 ## Writing
 
@@ -81,6 +84,7 @@ effort however it is started, and sees only the arguments it was invoked with.
 | Task | Skill | Model | Effort | Forked |
 | --- | --- | --- | --- | --- |
 | Designing or writing any non-trivial code | `architecture` | none | none | no |
+| Stating how a tool, library, API or platform outside this repo behaves | `cite-evidence` | none | none | no |
 | Implementing an issue (tests first, draft PR, checkpoints) | `implement-issue` | sonnet | medium | yes |
 | Reviewing a PR or branch | `review-pr` | opus | high | yes |
 | Investigating a bug report | `triage-issue` | opus | high | yes |

@@ -1,10 +1,11 @@
 import AppductCore
 import Foundation
 
-/// Registers the same tools `playground/app/(tabs)/index.tsx` (the Expo playground) registers --
-/// same names, descriptions, and schemas -- so `appduct tools ls` reports an equivalent surface
-/// regardless of which playground app answered the link. Implementations are simple in-memory
-/// mirrors of the Expo versions, backed by `PlaygroundViewModel.shared` instead of React state.
+/// Registers the tools and the event of the playground contract
+/// (`docs/internal/playground-contract.md`) -- same names, groups, annotations and descriptions on
+/// every playground -- so `appduct tools ls` reports an equivalent surface regardless of which
+/// playground app answered the link. Implementations are simple in-memory mirrors of the Expo
+/// versions, backed by `PlaygroundViewModel.shared` instead of React state.
 enum PlaygroundTools {
   /// Called once from `AppductPlaygroundApp.init()`. `try!` is deliberate: every descriptor
   /// below is a compile-time-fixed literal, so a throw here can only mean a programmer error in
@@ -13,6 +14,19 @@ enum PlaygroundTools {
   @MainActor
   static func registerAll() {
     let store = PlaygroundViewModel.shared
+
+    // Declared before any link, so `events ls` lists it from app start.
+    try! Appduct.shared.registerEvent(
+      name: "playground_ping",
+      description: "The Send playground_ping button on the Status screen was pressed.",
+      payloadSchema: [
+        "type": "object",
+        "properties": [
+          "at": ["type": "number", "description": "Press time, milliseconds since the epoch"]
+        ],
+        "required": ["at"],
+      ]
+    )
 
     try! Appduct.shared.register(
       name: "sum",
@@ -43,7 +57,8 @@ enum PlaygroundTools {
         "type": "object",
         "properties": ["count": ["type": "number"]],
       ],
-      annotations: ToolAnnotations(readOnlyHint: true)
+      annotations: ToolAnnotations(readOnlyHint: true),
+      group: "counter"
     ) { _ in
       ["count": await store.callCount]
     }
@@ -55,7 +70,8 @@ enum PlaygroundTools {
         "type": "object",
         "properties": ["count": ["type": "number"]],
       ],
-      annotations: ToolAnnotations(destructiveHint: true, idempotentHint: true)
+      annotations: ToolAnnotations(destructiveHint: true, idempotentHint: true),
+      group: "counter"
     ) { _ in
       await store.resetCallCount()
       return ["count": 0]
@@ -68,7 +84,8 @@ enum PlaygroundTools {
         "type": "object",
         "properties": ["done": ["type": "boolean"]],
       ],
-      timeoutMs: 5_000
+      timeoutMs: 5_000,
+      group: "diagnostics/progress"
     ) { _, context in
       for (progress, message) in [(0.33, "warming up"), (0.66, "almost there"), (1.0, "done")] {
         try await Task.sleep(nanoseconds: 500_000_000)
@@ -81,7 +98,8 @@ enum PlaygroundTools {
     try! Appduct.shared.register(
       name: "throwing_tool",
       description: "Always fails with tool_execution_error. Changes nothing.",
-      annotations: ToolAnnotations(readOnlyHint: true)
+      annotations: ToolAnnotations(readOnlyHint: true),
+      group: "diagnostics"
     ) { _ in
       throw PlaygroundToolError.alwaysFails
     }

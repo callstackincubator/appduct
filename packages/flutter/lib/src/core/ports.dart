@@ -9,6 +9,7 @@ class SocketEvents {
     required this.onMessage,
     required this.onClose,
     required this.onError,
+    required this.onPinMismatch,
   });
 
   final void Function() onOpen;
@@ -17,6 +18,10 @@ class SocketEvents {
   final void Function(String text) onMessage;
   final void Function(int? code, String? reason) onClose;
   final void Function(String message) onError;
+
+  /// The daemon's key is not one of the pins this socket trusts. Called before [onError] and the
+  /// [onClose] that follows, and never for a handshake that failed some other way.
+  final void Function() onPinMismatch;
 }
 
 abstract interface class Socket {

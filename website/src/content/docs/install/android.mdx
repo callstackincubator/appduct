@@ -23,8 +23,8 @@ This page adds Appduct to a plain Android app, with no React Native. You registe
 
    ```kotlin title="app/build.gradle.kts"
    dependencies {
-     debugImplementation("com.callstack.appduct:core:<version>")
-     releaseImplementation("com.callstack.appduct:core-noop:<version>")
+     debugImplementation("com.callstack.appduct:core:0.15.0")
+     releaseImplementation("com.callstack.appduct:core-noop:0.15.0")
    }
    ```
 
@@ -53,6 +53,7 @@ This page adds Appduct to a plain Android app, with no React Native. You registe
 4. Register tools in `Application.onCreate()`:
 
    ```kotlin
+   import android.app.Application
    import com.callstack.appduct.Appduct
    import org.json.JSONObject
 
@@ -73,7 +74,7 @@ This page adds Appduct to a plain Android app, with no React Native. You registe
    }
    ```
 
-   There's no `init` call: Appduct starts itself before `onCreate()` runs.
+   If you added this `Application` class, set `android:name=".ShopApp"` on the manifest's `<application>` element. There's no `init` call: Appduct starts itself before `onCreate()` runs.
 
 5. In your project directory, record your package name so the CLI can open links on a device:
 
@@ -127,7 +128,64 @@ The app restores its session on its own after a short network drop. If the app p
 - **Optional arguments:** `outputSchema`, `annotations` (`ToolAnnotations(readOnlyHint, destructiveHint, idempotentHint)`), `timeoutMs` (default 10 seconds), and `group`. See [Writing tools](/appduct/guides/writing-tools/) for what each one does. A malformed name or group throws `IllegalArgumentException`.
 - **Unregistering:** `register` returns a `ToolRegistration`; call `.remove()`.
 
-To watch the connection, use `Appduct.addListener { event -> … }`, which reports state changes, session changes, and errors, and returns a subscription you can `remove()`. `Appduct.state` and `Appduct.sessionId` give the current values. To tell a test or agent that something happened, call `Appduct.postEvent(name, payload)` from a coroutine. The event is dropped if no session is connected. To list an event for agents before it is posted, declare it with `Appduct.registerEvent(name, description, payloadSchema)` (the schema is an optional `JSONObject`); it returns an `EventRegistration` whose `.remove()` withdraws it, and `appduct events ls` shows what is declared. Read events with [`appduct events tail`](/appduct/guides/cli/#watch-events), or [wait for one from a test](/appduct/guides/cli/#drive-the-app-from-a-test-suite).
+## Watch the connection and send events
+
+### Declare an event
+
+To let an agent list an event before waiting on it (`appduct events ls`), declare it. A name is any
+string up to 4096 characters, so `cart.item_added` works as it is posted. `payloadSchema` is an
+optional JSON Schema object, passed on as is. Declaring needs an up-to-date CLI; against an older
+one the declaration is silently ignored and the session works as before.
+
+```kotlin
+val registration = Appduct.registerEvent(
+  name = "cart.item_added",
+  description = "An item went into the cart.",
+  payloadSchema = JSONObject("""{"type":"object","properties":{"sku":{"type":"string"}}}"""),
+)
+registration.remove() // withdraws the declaration
+```
+
+An empty name or description makes `registerEvent` throw `IllegalArgumentException`. Nothing warns
+about an undeclared name or a payload that doesn't match its schema; React Native does.
+
+### Post an event
+
+`postEvent` is a suspend function; call it from a coroutine:
+
+```kotlin
+lifecycleScope.launch {
+  Appduct.postEvent("cart.item_added", mapOf("sku" to "SKU-1042"))
+}
+```
+
+Read it back with `appduct events tail`. The payload converts to JSON the same way a handler's
+return value does. While no session is active the event is dropped; it doesn't throw, and a
+failure to send shows up as an `AppductEvent.Error` on `addListener` instead.
+
+### Observe the connection
+
+```kotlin
+import android.util.Log
+import com.callstack.appduct.AppductEvent
+
+val subscription = Appduct.addListener { event ->
+  when (event) {
+    is AppductEvent.StateChange -> Log.d("Appduct", "state -> ${event.state} ${event.reason ?: ""}")
+    is AppductEvent.SessionChange -> Log.d("Appduct", "session -> ${event.sessionId ?: "none"}")
+    is AppductEvent.Error -> Log.w("Appduct", "error [${event.phase}]: ${event.message}")
+  }
+}
+
+// later, to stop listening:
+subscription.remove()
+```
+
+`state` is one of `idle`, `connecting`, `active`, `reconnecting` or `closed`. A `SessionChange`
+carries `type` (`claimed`, `resumed` or `lost`), `sessionId` and `alias`. `Appduct.state` and
+`Appduct.sessionId` are snapshots you can read at any time without a listener, for example for a
+view's first render. A listener can be called off the main thread, so hop to `Dispatchers.Main`
+before touching UI, as in [Register tools in Kotlin](#register-tools-in-kotlin).
 
 ## Deep links
 

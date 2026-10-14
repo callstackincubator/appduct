@@ -228,6 +228,23 @@ canvas {
 	background: var(--accent-hover);
 }
 
+/* The closing wordmark, APPDUCT as wide as the frame. Used at the foot of the landing and 404. */
+.finale {
+	container-type: inline-size;
+}
+.giant {
+	margin: 0;
+	padding: 7cqi 0 5cqi;
+	font-family: var(--font-display);
+	font-weight: 500;
+	font-size: 21.6cqi;
+	line-height: 0.8;
+	letter-spacing: -0.045em;
+	text-align: center;
+	color: var(--accent);
+	user-select: none;
+}
+
 /* Code on the landing page: Shiki with CSS-variable colours, so it follows the accent. */
 .astro-code {
 	margin: 0;

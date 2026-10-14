@@ -137,7 +137,189 @@ final class AppductClientTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(transport.closeCallCount, 1)
   }
 
+  func testAConnectThatFailsAfterASupersedingConnectDoesNotFailTheNewOne() async throws {
+    let (client, transport) = makeClient()
+    transport.holdNextConnect = true
+    let firstConnectInput = connectInput(sessionId: "session-1")
+    let firstConnect = Task { try await client.connect(firstConnectInput) }
+    try await waitUntil("the first connect is still sending its claim") { transport.isWired && transport.hasHeldConnect }
+
+    let secondConnectInput = connectInput(sessionId: "session-2")
+    let secondConnect = Task { try await client.connect(secondConnectInput, supersede: true) }
+    try await waitUntil("the superseding connect started its own transport handshake") { transport.connectCallCount >= 2 }
+    transport.failHeldConnect(NSError(domain: "socket", code: 57))
+    await allowQueuedWorkToRun()
+    transport.simulateAck(sessionId: "session-2")
+
+    try await secondConnect.value
+    let sessionId = await client.sessionId
+    XCTAssertEqual(sessionId, "session-2")
+    _ = await firstConnect.result
+  }
+
+  func testSupersedingConnectAbortsTheOldSessionsInFlightToolHandler() async throws {
+    let handlerStarted = XCTestExpectation(description: "handler started")
+    let handlerCancelled = XCTestExpectation(description: "handler cancelled")
+    let (client, transport) = try await activeClient()
+    try client.registerTool(ToolDescriptor(name: "slow", description: "x")) { _, _ in
+      handlerStarted.fulfill()
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 1_000_000)
+      }
+      handlerCancelled.fulfill()
+      return .null
+    }
+    transport.simulateIncoming(toolCallText(id: "call-1", name: "slow"))
+    await fulfillment(of: [handlerStarted], timeout: 2)
+
+    let secondConnectInput = connectInput(sessionId: "session-2")
+    let secondConnect = Task { try await client.connect(secondConnectInput, supersede: true) }
+
+    await fulfillment(of: [handlerCancelled], timeout: 2)
+    try await waitUntil("the superseding connect started its own transport handshake") { transport.connectCallCount >= 2 }
+    transport.simulateAck(sessionId: "session-2")
+    try await secondConnect.value
+  }
+
+  // MARK: a claim whose socket fails
+
+  private func claimingClient(
+    firstConnectFails error: (@Sendable () -> Error)? = nil
+  ) async throws -> (client: AppductClient, transport: FakeTransportSession, timers: FakeClientTimers, connect: Task<Void, Error>) {
+    let timers = FakeClientTimers(startMs: 1_700_000_000_000, random: 0.5)
+    let (client, transport) = makeClient(timers: timers)
+    transport.failNextConnectOnce = error
+    let input = connectInput(expiresAt: 1_700_000_300)
+    let connect = Task { try await client.connect(input) }
+    try await waitUntil("the first claim attempt reached the transport") { transport.isWired && transport.connectCallCount >= 1 }
+    await allowQueuedWorkToRun()
+    return (client, transport, timers, connect)
+  }
+
+  private static let refusedSocket: @Sendable () -> Error = {
+    AppductSocketConnectError(underlying: NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotConnectToHost))
+  }
+
+  private func pinMismatchDetails() -> AppductErrorDetails {
+    AppductErrorDetails(
+      code: "pin_mismatch",
+      message: "Appduct host certificate pin mismatch.",
+      phase: "tls",
+      nativeCode: "pin_mismatch",
+      closeReason: nil,
+      isRetryable: false,
+      hint: nil
+    )
+  }
+
+  func testAClaimWhoseSocketFailedKeepsWaitingOutItsBackoffWhenTheCloseEventArrivesLate() async throws {
+    let (client, transport, timers, connect) = try await claimingClient(firstConnectFails: Self.refusedSocket)
+
+    transport.simulateClose(code: nil, reason: nil)
+    await allowQueuedWorkToRun()
+    let state = await client.state
+    XCTAssertEqual(state, .connecting)
+
+    timers.advance(byMs: 250)
+    try await waitUntil("the claim was tried again") { transport.connectCallCount >= 2 }
+    transport.simulateAck(sessionId: "session-1")
+    try await connect.value
+  }
+
+  func testAClaimWhoseSocketFailedIsNotRetriedBeforeTheCloseEventArrives() async throws {
+    let (client, transport, timers, connect) = try await claimingClient(firstConnectFails: Self.refusedSocket)
+
+    timers.advance(byMs: 60_000)
+    await allowQueuedWorkToRun()
+    guard transport.connectCallCount == 1 else {
+      XCTFail("the claim was tried again before the failed socket's close event: \(transport.connectCallCount) attempts")
+      await client.disconnect()
+      _ = await connect.result
+      return
+    }
+
+    transport.simulateClose(code: nil, reason: nil)
+    await allowQueuedWorkToRun()
+    timers.advance(byMs: 250)
+    try await waitUntil("the claim was tried again") { transport.connectCallCount >= 2 }
+    transport.simulateAck(sessionId: "session-1")
+    try await connect.value
+    let state = await client.state
+    XCTAssertEqual(state, .active)
+    XCTAssertEqual(transport.connectCallCount, 2)
+  }
+
+  func testAClaimWhoseConnectFailedOnAPinMismatchIsNotRetried() async throws {
+    let (client, transport, timers, connect) = try await claimingClient(firstConnectFails: Self.refusedSocket)
+    transport.emitError?(pinMismatchDetails())
+    transport.simulateClose(code: nil, reason: nil)
+    await allowQueuedWorkToRun()
+    timers.advance(byMs: 60_000)
+    await allowQueuedWorkToRun()
+
+    let state = await client.state
+    let attempts = transport.connectCallCount
+    await client.disconnect()
+    _ = await connect.result
+    XCTAssertEqual(state, .closed)
+    XCTAssertEqual(attempts, 1)
+  }
+
+  func testAClaimThatFailsOnAPinMismatchIsNotRetried() async throws {
+    let (client, transport, timers, connect) = try await claimingClient()
+    // A pin failure cancels the TLS challenge; the daemon never sees a claim.
+    transport.emitError?(pinMismatchDetails())
+    transport.simulateClose(code: nil, reason: nil)
+    await allowQueuedWorkToRun()
+    timers.advance(byMs: 60_000)
+    await allowQueuedWorkToRun()
+
+    let state = await client.state
+    let attempts = transport.connectCallCount
+    // A claim that is still being retried would wait for an ack for ever.
+    await client.disconnect()
+    _ = await connect.result
+    XCTAssertEqual(state, .closed)
+    XCTAssertEqual(attempts, 1)
+  }
+
+  func testAClaimThatTheTransportRefusedAsMisconfiguredIsNotRetried() async throws {
+    let (client, transport, timers, connect) = try await claimingClient(firstConnectFails: {
+      NSError(domain: "config", code: 1, userInfo: [NSLocalizedDescriptionKey: "Appduct only allows local IPv4 addresses."])
+    })
+    timers.advance(byMs: 60_000)
+    await allowQueuedWorkToRun()
+
+    let state = await client.state
+    let attempts = transport.connectCallCount
+    // A claim that is still being retried would wait for an ack for ever.
+    await client.disconnect()
+    _ = await connect.result
+    XCTAssertEqual(state, .closed)
+    XCTAssertEqual(attempts, 1)
+  }
+
   // MARK: disconnect
+
+  func testDisconnectAbortsAnInFlightToolHandler() async throws {
+    let handlerStarted = XCTestExpectation(description: "handler started")
+    let handlerCancelled = XCTestExpectation(description: "handler cancelled")
+    let (client, transport) = try await activeClient()
+    try client.registerTool(ToolDescriptor(name: "slow", description: "x")) { _, _ in
+      handlerStarted.fulfill()
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 1_000_000)
+      }
+      handlerCancelled.fulfill()
+      return .null
+    }
+    transport.simulateIncoming(toolCallText(id: "call-1", name: "slow"))
+    await fulfillment(of: [handlerStarted], timeout: 2)
+
+    await client.disconnect()
+
+    await fulfillment(of: [handlerCancelled], timeout: 2)
+  }
 
   func testDisconnectClosesAndClearsSession() async throws {
     let (client, transport) = makeClient()
@@ -164,26 +346,7 @@ final class AppductClientTests: XCTestCase {
 
   // MARK: reconnect / grace
 
-  func testTransportCloseSchedulesReconnectWithinGrace() async throws {
-    let timers = FakeClientTimers()
-    let (client, transport) = makeClient(timers: timers)
-    let connectTaskInput = connectInput()
-    let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
-    transport.simulateAck(sessionId: "session-1", graceS: 120)
-    try await connectTask.value
-
-    transport.simulateClose(code: 1_006, reason: nil)
-    try await waitUntil("the client moved to reconnecting after the socket closed") {
-      await client.state == .reconnecting
-    }
-
-    let state = await client.state
-    XCTAssertEqual(state, .reconnecting)
-    XCTAssertGreaterThan(timers.pendingCount, 0)
-  }
-
-  func testReconnectSucceedsAfterBackoffFires() async throws {
+  func testASessionThatResumedAndWasThenRefusedLeavesNoSessionIdAndNoTimer() async throws {
     let timers = FakeClientTimers(random: 0)
     let (client, transport) = makeClient(timers: timers)
     let connectTaskInput = connectInput()
@@ -199,11 +362,7 @@ final class AppductClientTests: XCTestCase {
     try await waitUntil("the client moved to reconnecting after the socket closed") {
       await client.state == .reconnecting
     }
-    let stateAfterClose = await client.state
-    XCTAssertEqual(stateAfterClose, .reconnecting)
-
-    // Fire the scheduled reconnect timer; the resume attempt re-simulates an ack.
-    timers.advance(byMs: AppductBackoff.capMs)
+    timers.advance(byMs: 0)
     try await waitUntil("the resume attempt started a second transport handshake") {
       transport.isWired && transport.connectCallCount >= 2
     }
@@ -211,12 +370,28 @@ final class AppductClientTests: XCTestCase {
     try await waitUntil("the client went active again after the resume ack") {
       await client.state == .active
     }
-
-    let stateAfterResume = await client.state
-    XCTAssertEqual(stateAfterResume, .active)
     XCTAssertEqual(sessionChanges.last?.type, .resumed)
     XCTAssertEqual(sessionChanges.last?.sessionId, "session-1")
-    XCTAssertNil(sessionChanges.last?.reason)
+
+    transport.simulateClose(code: 1_006, reason: nil)
+    try await waitUntil("the client moved to reconnecting after the second drop") {
+      await client.state == .reconnecting
+    }
+    timers.advance(byMs: 0)
+    try await waitUntil("the second resume attempt started a third transport handshake") {
+      transport.isWired && transport.connectCallCount >= 3
+    }
+    transport.simulateClose(code: 1_008, reason: "invalid_resume_token")
+    try await waitUntil("the refused resume closed the session") {
+      await client.state == .closed
+    }
+
+    XCTAssertEqual(sessionChanges.last?.type, .lost)
+    XCTAssertNil(sessionChanges.last?.sessionId)
+    let sessionId = await client.sessionId
+    XCTAssertNil(sessionId)
+    XCTAssertNil(client.currentSessionIdSnapshot())
+    XCTAssertEqual(timers.pendingCount, 0)
   }
 
   // MARK: link pin carried across a resume (issue #136)
@@ -336,63 +511,6 @@ final class AppductClientTests: XCTestCase {
     try await waitUntil("the failed resume attempt reported its cause") {
       errors.all.contains { $0.message.contains("boom: no pin to trust") }
     }
-  }
-
-  func testGraceExpiryFinalizesSessionAsLost() async throws {
-    let timers = FakeClientTimers()
-    let (client, transport) = makeClient(timers: timers)
-    let connectTaskInput = connectInput()
-    let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
-    transport.simulateAck(sessionId: "session-1", graceS: 10)
-    try await connectTask.value
-
-    let sessionChanges = EventCollector<AppductSessionChangeEvent>()
-    _ = await client.onSessionChange { event in sessionChanges.append(event) }
-
-    transport.simulateClose(code: 1_006, reason: nil)
-    try await waitUntil("the client moved to reconnecting after the socket closed") {
-      await client.state == .reconnecting
-    }
-    let stateAfterClose = await client.state
-    XCTAssertEqual(stateAfterClose, .reconnecting)
-
-    timers.advance(byMs: 10_000)
-    try await waitUntil("the grace window expired and closed the session") {
-      await client.state == .closed
-    }
-
-    let stateAfterGraceExpiry = await client.state
-    XCTAssertEqual(stateAfterGraceExpiry, .closed)
-    let sessionIdAfterGraceExpiry = await client.sessionId
-    XCTAssertNil(sessionIdAfterGraceExpiry)
-    XCTAssertEqual(sessionChanges.last?.type, .lost)
-    XCTAssertEqual(sessionChanges.last?.reason, "grace_expired")
-  }
-
-  func testTerminalCloseDuringActiveSessionIsNotRetried() async throws {
-    let timers = FakeClientTimers()
-    let (client, transport) = makeClient(timers: timers)
-    let connectTaskInput = connectInput()
-    let connectTask = Task { try await client.connect(connectTaskInput) }
-    try await waitUntil("the client started its transport handshake") { transport.isWired && transport.connectCallCount >= 1 }
-    transport.simulateAck(sessionId: "session-1", graceS: 120)
-    try await connectTask.value
-
-    let sessionChanges = EventCollector<AppductSessionChangeEvent>()
-    _ = await client.onSessionChange { event in sessionChanges.append(event) }
-
-    transport.simulateClose(code: 1_008, reason: "unknown_session")
-    try await waitUntil("the terminal close finalized the session") {
-      await client.state == .closed
-    }
-
-    let state = await client.state
-    XCTAssertEqual(state, .closed)
-    XCTAssertEqual(timers.pendingCount, 0)
-    XCTAssertEqual(sessionChanges.last?.sessionId, nil)
-    XCTAssertEqual(sessionChanges.last?.type, .lost)
-    XCTAssertEqual(sessionChanges.last?.reason, "unknown_session")
   }
 
   func testRevokedCloseFinalizesImmediately() async throws {

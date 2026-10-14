@@ -2,8 +2,10 @@ package com.callstack.appduct
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -160,6 +162,64 @@ class AppductClientTest {
 
             assertEquals("sess-2", client.sessionId)
             assertEquals(AppductClientState.active, client.state)
+        }
+
+    @Test
+    fun `a connect that fails after a superseding connect does not fail the new one`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            fake.holdNextConnect = true
+            // Expected to fail once the second connect() below supersedes it -- not a test failure.
+            val firstConnect =
+                launch(Dispatchers.Default) {
+                    try {
+                        client.connect(explicitInput(sessionId = "sess-1"))
+                    } catch (_: Exception) {
+                    }
+                }
+            waitUntil { fake.hasHeldConnect }
+
+            val secondConnect = async(Dispatchers.Default) { runCatching { client.connect(explicitInput(sessionId = "sess-2"), supersede = true) } }
+            waitUntil { fake.connectCalls.size >= 2 }
+            fake.failHeldConnect(IllegalStateException("Appduct connection was closed before it finished connecting."))
+            Thread.sleep(150)
+            fake.simulateAck("sess-2")
+
+            assertTrue(secondConnect.await().isSuccess)
+            firstConnect.join()
+            assertEquals("sess-2", client.sessionId)
+        }
+
+    @Test
+    fun `a superseding connect aborts the old session's in-flight tool handler`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            client.connectAndAck(fake)
+            val started = CompletableDeferred<Unit>()
+            val aborted = CompletableDeferred<Unit>()
+            client.registerTool(AppductToolDescriptor(name = "slow", description = "Never finishes.")) { _, _ ->
+                started.complete(Unit)
+                try {
+                    kotlinx.coroutines.delay(60_000)
+                } finally {
+                    aborted.complete(Unit)
+                }
+                null
+            }
+            fake.simulateMessage(
+                JSONObject().put("type", "tool_call").put("session_id", "sess-1").put("id", "call-1").put("name", "slow").put(
+                    "args",
+                    JSONObject(),
+                ),
+            )
+            started.await()
+
+            val secondConnect = launch(Dispatchers.Default) { client.connect(explicitInput(sessionId = "sess-2"), supersede = true) }
+
+            withTimeout(2_000) { aborted.await() }
+            waitUntil { fake.connectCalls.size >= 2 }
+            fake.simulateAck("sess-2")
+            secondConnect.join()
         }
 
     // --- registerTool / unregisterTool ---
@@ -751,6 +811,35 @@ class AppductClientTest {
         }
 
     // --- disconnect / postEvent ---
+
+    @Test
+    fun `disconnect aborts an in-flight tool handler`() =
+        runBlocking {
+            val (client, fake) = newClient()
+            client.connectAndAck(fake)
+            val started = CompletableDeferred<Unit>()
+            val aborted = CompletableDeferred<Unit>()
+            client.registerTool(AppductToolDescriptor(name = "slow", description = "Never finishes.")) { _, _ ->
+                started.complete(Unit)
+                try {
+                    kotlinx.coroutines.delay(60_000)
+                } finally {
+                    aborted.complete(Unit)
+                }
+                null
+            }
+            fake.simulateMessage(
+                JSONObject().put("type", "tool_call").put("session_id", "sess-1").put("id", "call-1").put("name", "slow").put(
+                    "args",
+                    JSONObject(),
+                ),
+            )
+            started.await()
+
+            client.disconnect()
+
+            withTimeout(2_000) { aborted.await() }
+        }
 
     @Test
     fun `disconnect closes the transport, moves to closed, and fires sessionChange lost reason closed_by_app`() =

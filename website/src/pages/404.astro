@@ -1,0 +1,156 @@
+---
+// Not found: the ducts with the front tube broken off short of the app, a dashed outline where it
+// should run, and each pulse flaring at the open end instead of arriving. Starlight's own 404 is
+// disabled (disable404Route in astro.config.mjs). GitHub Pages serves the built 404.html at any
+// unknown path, so every URL on this page is absolute and carries the base.
+import Landing from '../layouts/Landing.astro';
+import Dither from '../components/landing/Dither.astro';
+import Footer from '../components/landing/Footer.astro';
+import Nav from '../components/landing/Nav.astro';
+import { site } from '../landing/content';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<Landing
+	title="Page not found · Appduct"
+	description="There is no page at this address. Start from the Appduct docs or the home page."
+	noindex
+>
+	<Nav />
+	<main class="frame">
+		<section class="nf" aria-labelledby="nf-title">
+			<div class="nf-scene">
+				<Dither scene="broken" focus={0.8} />
+			</div>
+			<div class="nf-card">
+				<p class="label nf-code"><span>404</span> Page not found</p>
+				<h1 class="h1" id="nf-title">This page doesn't exist. <em>The rest of Appduct does.</em></h1>
+				<p class="lede">
+					Nothing is at <span data-path>this address</span>. The link you followed may be out of date.
+				</p>
+				<div class="actions">
+					<a class="btn" href={`${base}/`}>Home <span aria-hidden="true">→</span></a>
+					<a class="btn btn--dark" href={`${base}/start/introduction/`}>Docs</a>
+				</div>
+				<p class="nf-links">
+					<a class="label more" href={`${base}/start/quick-start/`}>Quick start <span aria-hidden="true">→</span></a>
+					<a class="label more" href={site.repo}>GitHub <span aria-hidden="true">→</span></a>
+				</p>
+			</div>
+		</section>
+		<section class="finale nf-finale" aria-hidden="true">
+			<p class="giant" translate="no">APPDUCT</p>
+		</section>
+	</main>
+	<Footer />
+</Landing>
+
+<script>
+	// The path the visitor asked for, set as text only.
+	const el = document.querySelector<HTMLElement>('[data-path]');
+	let path = location.pathname;
+	try {
+		path = decodeURIComponent(path);
+	} catch {
+		// A malformed escape: show the path as it came.
+	}
+	if (el && !/\/404(\.html)?$/.test(path)) {
+		el.textContent = path.length > 80 ? `${path.slice(0, 77)}...` : path;
+		el.classList.add('nf-path');
+	}
+</script>
+
+<style>
+	.nf {
+		position: relative;
+		display: flex;
+		align-items: center;
+		min-height: max(38rem, calc(100dvh - 3.75rem));
+		overflow: hidden;
+	}
+	.nf-scene {
+		position: absolute;
+		inset: 0;
+	}
+	.nf-card {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1.25rem;
+		width: min(100% - 2 * var(--pad), 34rem);
+		margin: var(--pad);
+		padding: var(--pad);
+		background: var(--bg);
+		border: 1px solid var(--line-strong);
+	}
+	.nf-code {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin: 0;
+		color: var(--muted);
+	}
+	.nf-code span {
+		padding: 0.125rem 0.375rem;
+		background: var(--accent);
+		color: var(--on-accent);
+	}
+	.nf-card .h1 {
+		max-width: 15ch;
+	}
+	.nf-card .h1 em {
+		font-style: normal;
+		color: var(--accent);
+	}
+	.nf-path {
+		padding: 0.05em 0.3em;
+		background: var(--field);
+		font-family: var(--font-mono);
+		font-size: 0.85em;
+		color: var(--text);
+		overflow-wrap: anywhere;
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		margin-top: 0.25rem;
+	}
+	.nf-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem 2rem;
+		margin: 0;
+	}
+	.more {
+		color: var(--text);
+		text-decoration: none;
+		white-space: nowrap;
+		transition: color 120ms;
+	}
+	.more:hover {
+		color: var(--accent);
+	}
+	.nf-finale {
+		border-top: 1px solid var(--line);
+	}
+	@media (max-width: 48rem) {
+		/* On a phone the card comes first and the broken duct shows below it. */
+		.nf {
+			flex-direction: column;
+			align-items: stretch;
+			min-height: 0;
+		}
+		.nf-card {
+			width: auto;
+		}
+		.nf-scene {
+			position: relative;
+			order: 1;
+			height: 20rem;
+			border-top: 1px solid var(--line);
+		}
+	}
+</style>

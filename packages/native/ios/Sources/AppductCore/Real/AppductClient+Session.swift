@@ -52,6 +52,7 @@ extension AppductClient {
     epoch += 1
     let myEpoch = epoch
     clearReconnectTimer()
+    endClaimRetryWait()
     clearGraceTimer()
     reconnectAttempt = 0
     heldSession = nil
@@ -65,11 +66,13 @@ extension AppductClient {
 
     do {
       if supersedingReconnect && (nativeState == "connecting" || nativeState == "active") {
+        // Closing the transport reports no close event, so in-flight handlers are aborted here.
+        abortAllInFlight()
         await transport.close()
       }
       setClientState(.connecting)
       let options = try buildTransportOptions(from: input)
-      let ack = try await performHandshake(options)
+      let ack = try await claimWithRetries(options, expiresAt: input.expiresAt, myEpoch: myEpoch)
 
       if myEpoch != epoch {
         // Superseded by a newer `connect()` while awaiting the ack; abandon silently.
@@ -89,6 +92,63 @@ extension AppductClient {
       }
       throw error
     }
+  }
+
+  /// A claim whose socket fails before the ack, or before it opens, is tried again with the resume
+  /// backoff until the link expires. A 1008 is final, so `already_claimed` on a retry ends it, and
+  /// so do a pin mismatch and a build setting the transport refuses.
+  private func claimWithRetries(
+    _ options: AppductConnectOptions,
+    expiresAt: Int,
+    myEpoch: Int
+  ) async throws -> SessionAck {
+    while true {
+      do {
+        return try await performHandshake(options)
+      } catch {
+        if myEpoch != epoch || !isRetryableClaimFailure(error) { throw error }
+        emitError(
+          AppductUnifiedErrorEvent(
+            phase: "connect",
+            message: "Appduct claim attempt failed: \(describeResumeError(error))"
+          )
+        )
+        let delay = AppductBackoff.fullJitterMs(attempt: reconnectAttempt, random: timers.random)
+        reconnectAttempt += 1
+        await waitBeforeClaimRetry(afterMs: delay)
+        if myEpoch != epoch || isAppductExpired(expiresAt: expiresAt, now: Int(timers.now() / 1_000)) {
+          throw error
+        }
+      }
+    }
+  }
+
+  /// The socket failed: it closed before the ack, or never opened (refused, reset during TLS, timed
+  /// out), and its close event says so. Anything else the transport throws is a refusal of the
+  /// connect itself.
+  private func isRetryableClaimFailure(_ error: Error) -> Bool {
+    guard let closed = error as? AppductHandshakeClosedError else { return false }
+    return !isTerminalHandshakeRejection(closed) && !closed.pinRejected
+  }
+
+  private func waitBeforeClaimRetry(afterMs delay: Double) async {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      claimRetryWait = continuation
+      claimRetryTimerHandle = timers.setTimeout(afterMs: delay) { [weak self] in
+        Task { await self?.endClaimRetryWait() }
+      }
+    }
+  }
+
+  /// Wakes the `connect()` waiting out the backoff, whether the timer fired or not.
+  func endClaimRetryWait() {
+    if let handle = claimRetryTimerHandle {
+      timers.clearTimeout(handle)
+      claimRetryTimerHandle = nil
+    }
+    let wait = claimRetryWait
+    claimRetryWait = nil
+    wait?.resume()
   }
 
   /// Starts recovery from the native process-memory lease. Resolves `true` once a resume attempt
@@ -208,12 +268,20 @@ extension AppductClient {
 
   func performHandshake(_ options: AppductConnectOptions) async throws -> SessionAck {
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<SessionAck, Error>) in
-      pendingAttempt = PendingAttempt(resume: { result in continuation.resume(with: result) })
+      let attempt = PendingAttempt(resume: { result in continuation.resume(with: result) })
+      pendingAttempt = attempt
       Task {
         do {
           try await self.transport.connect(options: options)
         } catch {
-          self.settlePendingAttempt(.failure(error))
+          // A socket that failed is reported twice: the connect throws, then the transport emits the
+          // socket's close. Only the close settles the attempt, so it cannot land on the retry, and
+          // the transport has torn the socket down by the time a retry connects.
+          if error is AppductSocketConnectError { return }
+          // A connect that fails after a newer one replaced it must not settle that newer attempt.
+          if self.pendingAttempt === attempt {
+            self.settlePendingAttempt(.failure(error))
+          }
         }
       }
     }
@@ -421,7 +489,8 @@ extension AppductClient {
 
     let handshakeError = AppductHandshakeClosedError(
       message: reason ?? errorDetails?.message ?? "Appduct connection closed.",
-      closeEvent: closeEvent
+      closeEvent: closeEvent,
+      pinRejected: isPinRejection(errorDetails)
     )
 
     if settlePendingAttempt(.failure(handshakeError)) {
@@ -442,7 +511,11 @@ extension AppductClient {
     let myEpoch = epoch
 
     guard heldSession != nil else {
-      setClientState(.closed, reason: "socket_closed")
+      // A claim waiting out its backoff owns the state, and a socket whose connect already failed
+      // is reported closed once more here, which tells the app nothing new.
+      if connectingSessionId == nil, clientState != .closed {
+        setClientState(.closed, reason: "socket_closed")
+      }
       return
     }
 

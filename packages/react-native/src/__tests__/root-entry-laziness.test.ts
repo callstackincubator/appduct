@@ -6,14 +6,9 @@ import type { Spec } from "../NativeAppduct";
 
 /**
  * The root entry must be side-effect-free and its TurboModule lookup lazy (ARCHITECTURE.md §11):
- * importing it, and calling `registerTool`, must never *throw*. Under default-inert release
- * builds, an unavailable native module is no longer treated as necessarily a broken
- * dev build: `connect()` (and every other exported function) now degrades to the exact `./noop`
- * entry's behavior instead of throwing an actionable "rebuild your dev client" error — a release
- * build with no `cliPins`/`enableInReleaseBuilds` opt-in is expected to have no native module at
- * all, so silently degrading (behind one warning log) is the correct default, not a defect to
- * surface loudly on every `connect()` call. See `noop-parity.test.ts` for the parity contract this
- * degrade path relies on.
+ * importing it never touches the native module, and the session lease is read only when asked
+ * for. What each export does once the module turns out to be missing is the `./noop` parity
+ * contract in `root-entry-inert-parity.test.ts`.
  *
  * "react-native"'s own source cannot be parsed under a Node test runner (Flow-typed; see
  * `deep-link-install.test.ts` for the same constraint), so it is mocked with working `AppState`/
@@ -47,14 +42,6 @@ const resetMocks = async () => {
   }));
 };
 
-const validConnectInput = () => ({
-  ip: "127.0.0.1",
-  port: 8443,
-  sessionId: "session-1",
-  token: "a".repeat(43),
-  expiresAt: Math.floor(Date.now() / 1000) + 60,
-});
-
 describe("root entry (@appduct/react-native): TurboModule laziness", () => {
   beforeEach(async () => {
     await resetMocks();
@@ -76,45 +63,5 @@ describe("root entry (@appduct/react-native): TurboModule laziness", () => {
     const { restoreSession } = await import("../index");
 
     await expect(restoreSession()).resolves.toBe(false);
-  });
-
-  test("registerTool does not throw, even with no native module available", async () => {
-    const { registerTool } = await import("../index");
-
-    const registration = registerTool({
-      name: "noop-tool",
-      description: "test",
-      handler: () => undefined,
-    });
-
-    registration.remove();
-    // Not asserting `nativeAccessAttempts === 0` here: constructing the default client (lazily,
-    // on this first top-level call) resiliently *attempts* native listener wiring -- the important
-    // guarantee is that neither that attempt nor `registerTool` itself ever throws.
-  });
-
-  test("getAppductState() never throws, even with no native module available", async () => {
-    // Since opt-in hardening this *does* touch the native module once, via the
-    // `isAppductNativeModuleAvailable` availability probe every exported function now runs —
-    // unlike before, when only `connect` ever reached the native layer. The probe itself never
-    // throws (`AppductModule.ts` catches internally), so the guarantee this test cares about
-    // (no throw) still holds; only the "never touches" framing changed.
-    const { getAppductState } = await import("../index");
-
-    expect(getAppductState()).toBe("idle");
-  });
-
-  test("connect() degrades to the exact ./noop behavior when no native module is available", async () => {
-    const { connect } = await import("../index");
-    // Imported dynamically (not statically at the top of the file) so this is the *same* module
-    // instance `connect`'s rejection actually throws from — `vi.resetModules()` in `resetMocks`
-    // means a static top-level import would resolve to a stale, different `Appduct.types`
-    // instance, and `instanceof`/`toThrow(Class)` would spuriously fail across that boundary.
-    const { AppductDisabledError } = await import("../Appduct.types");
-
-    await expect(connect(validConnectInput())).rejects.toThrow(
-      AppductDisabledError,
-    );
-    expect(nativeAccessAttempts).toBeGreaterThan(0);
   });
 });

@@ -85,6 +85,17 @@ abstract final class Appduct {
   Future<void> disconnect();
 
   ValueListenable<AppductState> get state;
+
+  /// A session was claimed, resumed or lost. [SessionChangeEvent.reason] is set when it was lost.
+  /// Empty in a build without Appduct.
+  Stream<SessionChangeEvent> get sessionChanges;
+
+  /// Failures to connect, read a link or keep the socket, and tool errors. Empty in a build
+  /// without Appduct.
+  Stream<ErrorEvent> get errors;
+
+  /// The id of the current session, or `null` when there is none.
+  String? get sessionId;
 }
 
 final Appduct _noop = _Noop();
@@ -113,6 +124,15 @@ Appduct installAppduct(BindingPorts ports) {
 final class _Noop implements Appduct {
   @override
   final ValueNotifier<AppductState> state = ValueNotifier(ClientState.idle);
+
+  @override
+  Stream<SessionChangeEvent> get sessionChanges => const Stream.empty();
+
+  @override
+  Stream<ErrorEvent> get errors => const Stream.empty();
+
+  @override
+  String? get sessionId => null;
 
   @override
   void Function() registerTool(
@@ -222,6 +242,15 @@ final class _Live with WidgetsBindingObserver implements Appduct {
 
   @override
   ValueListenable<AppductState> get state => _state;
+
+  @override
+  Stream<SessionChangeEvent> get sessionChanges => _core.sessionChanges;
+
+  @override
+  Stream<ErrorEvent> get errors => _core.errors;
+
+  @override
+  String? get sessionId => _core.sessionId;
 
   DeviceFields _fallbackDevice() => DeviceFields(
     manufacturer: 'Unknown',

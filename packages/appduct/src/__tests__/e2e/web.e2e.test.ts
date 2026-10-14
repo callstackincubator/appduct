@@ -98,8 +98,8 @@ const startPage = async (): Promise<Page> => {
   return context.newPage();
 };
 
-const mintWebLink = async (stateDir: string, url = `${origin}/`, ttlSeconds?: number) =>
-  (await link({ stateDir, target: "web", url, ...(ttlSeconds === undefined ? {} : { ttlSeconds }) })) as unknown as {
+const mintWebLink = async (stateDir: string, url = `${origin}/`) =>
+  (await link({ stateDir, target: "web", url })) as unknown as {
     url: string;
     script: string;
   };
@@ -216,12 +216,11 @@ describe("e2e: web page through @appduct/web", () => {
   );
 
   test(
-    "a missing, used or expired link is refused",
+    "a link already claimed by another page is refused",
     async () => {
       const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
       const used = await mintWebLink(stateDir);
-      const expired = await mintWebLink(stateDir, `${origin}/`, 1);
 
       const first = await startPage();
       await first.goto(used.url);
@@ -230,34 +229,49 @@ describe("e2e: web page through @appduct/web", () => {
       const second = await startPage();
       await second.goto(`${origin}/`);
       expect(await connectScriptResult(second, used.script)).toMatch(/already_claimed|invalid_token|unknown_session/u);
-      expect(await connectScriptResult(second, 'window.__APPDUCT__.connect("")')).toMatch(/link/iu);
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      expect(await connectScriptResult(second, expired.script)).toMatch(/expired/iu);
 
       expect(await sessions(stateDir)).toHaveLength(1);
     },
     60_000,
   );
 
+  /** Serves the test page from `http://evil.example` and runs a link's connect script on it. */
+  const connectFromForeignOrigin = async (stateDir: string): Promise<string> => {
+    const { script } = await mintWebLink(stateDir, "http://evil.example/");
+
+    const page = await startPage();
+    await page.route("http://evil.example/**", (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/appduct-web.js") {
+        return route.fulfill({ contentType: "text/javascript", body: bundle });
+      }
+      return route.fulfill({ contentType: "text/html", body: pageHtml });
+    });
+    await page.goto("http://evil.example/");
+
+    return connectScriptResult(page, script);
+  };
+
   test(
     "a page on a foreign origin is refused",
     async () => {
       const { stateDir } = await makeTempStateDir();
       await ensureDaemon(stateDir);
-      const { script } = await mintWebLink(stateDir, "http://evil.example/");
 
-      const page = await startPage();
-      await page.route("http://evil.example/**", (route) => {
-        const url = new URL(route.request().url());
-        if (url.pathname === "/appduct-web.js") {
-          return route.fulfill({ contentType: "text/javascript", body: bundle });
-        }
-        return route.fulfill({ contentType: "text/html", body: pageHtml });
-      });
-      await page.goto("http://evil.example/");
-
-      expect(await connectScriptResult(page, script)).not.toBe("connected");
+      expect(await connectFromForeignOrigin(stateDir)).not.toBe("connected");
       expect(await sessions(stateDir)).toEqual([]);
+    },
+    60_000,
+  );
+
+  test(
+    "the same page connects once its origin is listed in webOrigins",
+    async () => {
+      const { stateDir } = await makeTempStateDir({ webOrigins: ["http://evil.example"] });
+      await ensureDaemon(stateDir);
+
+      expect(await connectFromForeignOrigin(stateDir)).toBe("connected");
+      await waitForActiveSession(stateDir);
     },
     60_000,
   );

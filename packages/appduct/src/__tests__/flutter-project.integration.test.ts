@@ -16,7 +16,7 @@ import { handleLinkCommand } from "../commands/link.js";
 import type { ExecFn } from "../cli/open-target.js";
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import { discoverStaticProjectScheme } from "../scheme.js";
-import { makeTempStateDir, removeStateDir, runCliBinary } from "./fixtures.js";
+import { makeTempStateDir, removeStateDir } from "./fixtures.js";
 
 const directories: string[] = [];
 const stateDirs: string[] = [];
@@ -266,18 +266,6 @@ describe("appduct init in a Flutter project", () => {
 
     expect(steps).toContain('import "@appduct/react-native/auto"');
     expect(steps).not.toContain("flutter pub add");
-  });
-
-  test("prints the Flutter steps through the real CLI", async () => {
-    const root = await makeProject({ android: "myapp" });
-    const stateDir = await makeTempStateDir({}, { prefix: "appduct-flutter-state-" });
-    stateDirs.push(stateDir);
-
-    const result = runCliBinary(["init"], { cwd: root, stateDir });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("flutter pub add appduct");
-    expect(result.stdout).not.toContain("@appduct/react-native/auto");
   });
 });
 

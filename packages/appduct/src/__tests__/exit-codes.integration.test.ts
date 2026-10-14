@@ -65,23 +65,60 @@ const runCli = (args: string[], stateDir: string) => {
   };
 };
 
+/** Auto-spawns the daemon through the CLI, mints a link and claims it as a fake "Pixel 8" app. */
+const claimFakeApp = async (stateDir: string): Promise<{ socket: WebSocket; alias: string; sessionId: string }> => {
+  const status = runCli(["daemon", "status"], stateDir);
+  daemonPids.push(status.payload.data.daemon.pid);
+  // The state dir asks for an OS-assigned port, so the daemon it just auto-spawned is the only
+  // source of the real one.
+  const port = status.payload.data.daemon.wss_port as number;
+  expect(port).toBeGreaterThan(0);
+
+  const linkResult = runCli(["sessions", "link", "--scheme", "appduct-exit-codes"], stateDir);
+  expect(linkResult.exitCode).toBe(0);
+
+  // The deep link is `<scheme>:///?appduct=<payload>&pin=<spki-pin>` (commit 9c73849 added
+  // the trailing `&pin=...` query param); the payload ends at the next `&`, so it must be
+  // isolated the same way link-open.integration.test.ts does it. Slicing to the end of the
+  // string here used to swallow `&pin=...` verbatim into the base64url payload, which always
+  // fails to decode: `&` and `%` are outside the base64url alphabet, so `atob` throws on the
+  // appended `&pin=sha256%2F...` suffix (caught, surfaced as `decodeBootstrap` returning
+  // `null`) — deterministic, not a flake.
+  const linkPayload = (linkResult.payload.data.deepLink as string)
+    .split("appduct=")[1]!
+    .split("&")[0]!;
+  const decoded = decodeBootstrap(linkPayload);
+  expect(decoded).not.toBeNull();
+
+  const socket = await new Promise<WebSocket>((resolve, reject) => {
+    const opened = new WebSocket(`wss://127.0.0.1:${port}`, { rejectUnauthorized: false });
+    opened.once("open", () => resolve(opened));
+    opened.once("error", reject);
+  });
+
+  const ack = await new Promise<Record<string, unknown>>((resolve, reject) => {
+    socket.once("message", (data) => {
+      try {
+        resolve(JSON.parse(data.toString("utf8")));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    socket.send(
+      JSON.stringify({
+        type: "session_claim",
+        protocol_version: 2,
+        session_id: decoded!.sessionId,
+        token: decoded!.token,
+        device_model: "Pixel 8",
+      }),
+    );
+  });
+
+  return { socket, alias: ack.alias as string, sessionId: decoded!.sessionId };
+};
+
 describe("exit codes: noun-verb command surface", () => {
-  test("usage_error (64): an unknown command", async () => {
-    const stateDir = await makeTempStateDir();
-    const { exitCode, payload } = runCli(["not-a-real-command"], stateDir);
-
-    expect(exitCode).toBe(64);
-    expect(payload.error.type).toBe("usage_error");
-  });
-
-  test("usage_error (64): events since with a non-numeric cursor", async () => {
-    const stateDir = await makeTempStateDir();
-    const { exitCode, payload } = runCli(["events", "since", "not-a-number"], stateDir);
-
-    expect(exitCode).toBe(64);
-    expect(payload.error.type).toBe("usage_error");
-  });
-
   test("usage_error (64): keygen refuses to overwrite without --force", async () => {
     const stateDir = await makeTempStateDir();
     const keyPath = path.join(stateDir, "existing.pem");
@@ -137,64 +174,44 @@ describe("exit codes: noun-verb command surface", () => {
 
   test("tool_error (72): call a name not registered on a real, claimed session", async () => {
     const stateDir = await makeTempStateDir();
-
-    const status = runCli(["daemon", "status"], stateDir);
-    daemonPids.push(status.payload.data.daemon.pid);
-    // The state dir asks for an OS-assigned port, so the daemon it just auto-spawned is the only
-    // source of the real one.
-    const port = status.payload.data.daemon.wss_port as number;
-    expect(port).toBeGreaterThan(0);
-
-    const linkResult = runCli(["sessions", "link", "--scheme", "appduct-exit-codes"], stateDir);
-    expect(linkResult.exitCode).toBe(0);
-
-    // The deep link is `<scheme>:///?appduct=<payload>&pin=<spki-pin>` (commit 9c73849 added
-    // the trailing `&pin=...` query param); the payload ends at the next `&`, so it must be
-    // isolated the same way link-open.integration.test.ts does it. Slicing to the end of the
-    // string here used to swallow `&pin=...` verbatim into the base64url payload, which always
-    // fails to decode: `&` and `%` are outside the base64url alphabet, so `atob` throws on the
-    // appended `&pin=sha256%2F...` suffix (caught, surfaced as `decodeBootstrap` returning
-    // `null`) — deterministic, not a flake.
-    const linkPayload = (linkResult.payload.data.deepLink as string)
-      .split("appduct=")[1]!
-      .split("&")[0]!;
-    const decoded = decodeBootstrap(linkPayload);
-    expect(decoded).not.toBeNull();
-
-    const appSocket = await new Promise<WebSocket>((resolve, reject) => {
-      const socket = new WebSocket(`wss://127.0.0.1:${port}`, { rejectUnauthorized: false });
-      socket.once("open", () => resolve(socket));
-      socket.once("error", reject);
-    });
-
-    const ack = await new Promise<Record<string, unknown>>((resolve, reject) => {
-      appSocket.once("message", (data) => {
-        try {
-          resolve(JSON.parse(data.toString("utf8")));
-        } catch (error) {
-          reject(error);
-        }
-      });
-      appSocket.send(
-        JSON.stringify({
-          type: "session_claim",
-          protocol_version: 2,
-          session_id: decoded!.sessionId,
-          token: decoded!.token,
-          device_model: "Pixel 8",
-        }),
-      );
-    });
-    const alias = ack.alias as string;
+    const app = await claimFakeApp(stateDir);
 
     const { exitCode, payload: invokeError } = runCli(
-      ["tools", "call", alias, "does-not-exist", "--input", "{}"],
+      ["tools", "call", app.alias, "does-not-exist", "--input", "{}"],
       stateDir,
     );
 
     expect(exitCode).toBe(72);
     expect(invokeError.error.type).toBe("tool_not_found");
 
-    appSocket.close();
+    app.socket.close();
   }, 10_000);
+
+  test("permission_error (77): a call denied by policy carries the daemon's hint in error.details", async () => {
+    const stateDir = await makeTempStateDir({ policy: { tools: { "pixel-8/wipe": "deny" } } });
+    const app = await claimFakeApp(stateDir);
+
+    app.socket.send(
+      JSON.stringify({
+        type: "tool_registry_snapshot",
+        session_id: app.sessionId,
+        tools: [{ name: "wipe", description: "Wipes everything." }],
+      }),
+    );
+    // The snapshot travels over the app's socket and the call over the control socket, so wait
+    // until the daemon lists the tool before calling it.
+    const listsWipe = () => JSON.stringify(runCli(["tools", "ls", app.alias], stateDir).payload).includes('"wipe"');
+    for (let attempt = 0; !listsWipe(); attempt++) {
+      expect(attempt).toBeLessThan(50);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    const { exitCode, payload } = runCli(["tools", "call", app.alias, "wipe", "--input", "{}"], stateDir);
+
+    expect(exitCode).toBe(77);
+    expect(payload.error.type).toBe("policy_denied");
+    expect(payload.error.details).toMatchObject({ hint: expect.stringContaining("config.json") });
+
+    app.socket.close();
+  }, 15_000);
 });

@@ -20,7 +20,6 @@ import { afterEach, describe, expect, test } from "vitest";
 import { decodeBootstrap } from "@appduct/shared";
 
 import { handleLinkCommand } from "../commands/link.js";
-import { handleLsCommand } from "../commands/ls.js";
 import { startDaemon, type RunningDaemon } from "../daemon/daemon.js";
 import type { ExecFn } from "../cli/open-target.js";
 import { makeTempStateDir, removeStateDir } from "./fixtures.js";
@@ -56,6 +55,18 @@ const startTestDaemon = async (
   // only knowable from the listener that bound it — never pre-picked, which is what used to race
   // another vitest process for the same number.
   return { daemon, stateDir, port: daemon.listener.port()! };
+};
+
+/** Session ids of every link the daemon mints from now on. `sessions ls` cannot show this: a
+ * pending link is never listed, so an empty listing passes whether or not one was minted. */
+const recordMintedLinks = (daemon: RunningDaemon): Array<string | undefined> => {
+  const minted: Array<string | undefined> = [];
+  daemon.eventBus.subscribe((event) => {
+    if (event.kind === "link_created") {
+      minted.push(event.sessionId);
+    }
+  });
+  return minted;
 };
 
 /** A project root (distinct from the state dir — `appId` resolution never reads the state dir's
@@ -233,7 +244,8 @@ describe("link --open: CLI wiring", () => {
   });
 
   test("no app id anywhere (android): a usage error naming every fix, and no session is minted", async () => {
-    const { stateDir } = await startTestDaemon();
+    const { daemon, stateDir } = await startTestDaemon();
+    const minted = recordMintedLinks(daemon);
 
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec: ExecFn = async (command, args) => {
@@ -248,12 +260,7 @@ describe("link --open: CLI wiring", () => {
     // Raised before `link.create`: nothing ran, and no pending session was left behind to expire
     // on its own TTL.
     expect(calls).toEqual([]);
-
-    const sessions = await handleLsCommand({ stateDir });
-    expect(sessions.ok).toBe(true);
-    if (sessions.ok) {
-      expect(sessions.data).toEqual([]);
-    }
+    expect(minted).toEqual([]);
   });
 
   test("--app-id beats the project config", async () => {
@@ -353,7 +360,8 @@ describe("link --open ios-device: the LAN address, not 127.0.0.1", () => {
   });
 
   test("no app id anywhere (ios-device): a usage error naming every fix, and no session is minted", async () => {
-    const { stateDir } = await startTestDaemon();
+    const { daemon, stateDir } = await startTestDaemon();
+    const minted = recordMintedLinks(daemon);
 
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec = devicectlExec(calls, [{ udid: "00008030-AAAA", name: "My iPhone" }]);
@@ -365,12 +373,7 @@ describe("link --open ios-device: the LAN address, not 127.0.0.1", () => {
     // Raised before `link.create`, so a call that could never deliver does not leave a pending
     // session behind to expire on its own TTL.
     expect(calls).toHaveLength(0);
-
-    const sessions = await handleLsCommand({ stateDir });
-    expect(sessions.ok).toBe(true);
-    if (sessions.ok) {
-      expect(sessions.data).toEqual([]);
-    }
+    expect(minted).toEqual([]);
   });
 
   test("--app-id only applies with --open android or --open ios-device", async () => {
@@ -459,7 +462,8 @@ describe("link --open ios-device: the LAN address, not 127.0.0.1", () => {
   });
 
   test("a --app-id that could be read as a devicectl option is rejected before minting", async () => {
-    const { stateDir } = await startTestDaemon();
+    const { daemon, stateDir } = await startTestDaemon();
+    const minted = recordMintedLinks(daemon);
 
     const calls: Array<{ command: string; args: string[] }> = [];
     const exec = devicectlExec(calls, [{ udid: "00008030-AAAA", name: "My iPhone" }]);
@@ -469,6 +473,7 @@ describe("link --open ios-device: the LAN address, not 127.0.0.1", () => {
     ).rejects.toThrow(/not a valid app id/u);
 
     expect(calls).toEqual([]);
+    expect(minted).toEqual([]);
   });
 });
 

@@ -15,9 +15,11 @@ import { faq, site as meta } from '../landing/content';
 interface Props {
 	title: string;
 	description: string;
+	/** The 404 page: kept out of search, with no canonical URL, structured data or Markdown copy. */
+	noindex?: boolean;
 }
 
-const { title, description } = Astro.props;
+const { title, description, noindex = false } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
 const home = new URL(`${base}/`, Astro.site).href;
@@ -74,7 +76,7 @@ const jsonLd = {
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<title>{title}</title>
 		<meta name="description" content={description} />
-		<link rel="canonical" href={canonical} />
+		{noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
 
 		<meta name="color-scheme" content="dark" />
 		<meta name="theme-color" content="#0a0a0a" />
@@ -87,7 +89,7 @@ const jsonLd = {
 		<meta property="og:type" content="website" />
 		<meta property="og:site_name" content="Appduct" />
 		<meta property="og:locale" content="en" />
-		<meta property="og:url" content={canonical} />
+		{!noindex && <meta property="og:url" content={canonical} />}
 		<meta property="og:title" content={title} />
 		<meta property="og:description" content={description} />
 		<meta property="og:image" content={ogImage} />
@@ -103,13 +105,13 @@ const jsonLd = {
 
 		<!-- For agents: the docs index and a Markdown copy of this page. -->
 		<link rel="alternate" type="text/plain" title="llms.txt" href={`${base}/llms.txt`} />
-		<link rel="alternate" type="text/markdown" title="This page as Markdown" href={`${base}/index.md`} />
+		{!noindex && <link rel="alternate" type="text/markdown" title="This page as Markdown" href={`${base}/index.md`} />}
 
 		<!-- The three faces the first screen uses, so text never waits on the stylesheet. -->
 		<link rel="preload" href={switzerMedium} as="font" type="font/woff2" crossorigin />
 		<link rel="preload" href={switzerRegular} as="font" type="font/woff2" crossorigin />
 		<link rel="preload" href={geistMono} as="font" type="font/woff2" crossorigin />
-		<script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+		{!noindex && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
 	</head>
 	<body>
 		<slot />

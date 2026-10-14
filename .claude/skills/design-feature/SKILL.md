@@ -12,7 +12,7 @@ The bug counterpart of this skill is `triage-issue`. This one takes a feature re
 outcome is clear but whose shape is not, and produces a design a human can approve in five
 minutes and agents can implement slice by slice without talking to each other.
 
-Load the `architecture` skill first. Read the `design-feature` section of
+Load the `architecture` and `cite-evidence` skills first. Read the `design-feature` section of
 `.agents/memory/LESSONS.md`, plus General.
 
 ```bash

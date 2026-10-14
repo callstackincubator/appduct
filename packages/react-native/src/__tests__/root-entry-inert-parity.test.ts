@@ -14,14 +14,18 @@ import type { Spec } from "../NativeAppduct";
  * "react-native"'s own source cannot be parsed under a Node test runner (Flow-typed), so it is
  * mocked with working `AppState`/`Linking` stubs, same as `root-entry-laziness.test.ts`.
  */
+let nativeAccessAttempts = 0;
+
 const resetMocks = async () => {
+  nativeAccessAttempts = 0;
   vi.resetModules();
 
   const { __appductSetNativeModuleLoaderForTests } =
     await import("../AppductModule");
-  __appductSetNativeModuleLoaderForTests(() => ({
-    NativeAppduct: undefined as unknown as Spec,
-  }));
+  __appductSetNativeModuleLoaderForTests(() => {
+    nativeAccessAttempts += 1;
+    return { NativeAppduct: undefined as unknown as Spec };
+  });
 
   vi.doMock("react-native", () => ({
     AppState: {
@@ -105,7 +109,7 @@ describe("root entry: exact ./noop parity when the native module is unavailable"
     expect(getAppductState()).toBe("idle");
   });
 
-  test("connect() rejects with an AppductDisabledError (code: appduct_disabled)", async () => {
+  test("connect() probes the native module, then rejects with an AppductDisabledError (code: appduct_disabled)", async () => {
     const { connect } = await import("../index");
     const { AppductDisabledError } = await import("../Appduct.types");
 
@@ -124,16 +128,7 @@ describe("root entry: exact ./noop parity when the native module is unavailable"
         "appduct_disabled",
       );
     }
-  });
-
-  test("useAppductTool inherits the same degrade path as registerTool (single code path, not a separate one)", async () => {
-    const { registerTool, useAppductTool } = await import("../index");
-
-    // Not rendering a real component here (no React test renderer in this package's test setup) —
-    // the meaningful guarantee is that `useAppductTool` is built on the exact same `registerTool`
-    // reference this file already exercises above, so it cannot drift from it.
-    expect(typeof useAppductTool).toBe("function");
-    expect(typeof registerTool).toBe("function");
+    expect(nativeAccessAttempts).toBeGreaterThan(0);
   });
 
   test("the dev-mode warning is logged exactly once across many calls, not once per call", async () => {

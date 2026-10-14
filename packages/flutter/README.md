@@ -1,21 +1,25 @@
+<a href="https://callstackincubator.github.io/appduct/"><img src="https://raw.githubusercontent.com/callstackincubator/appduct/main/.github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
+
 # Appduct for Flutter
 
-Call functions inside your running Flutter app from a terminal, a test runner or an AI agent. You register a few functions, called tools, with a name, a description and an input schema. The `appduct` CLI and its MCP server list and call them over an encrypted connection. Only the tools you register are reachable.
+Call functions inside your running Flutter app from a terminal, a test runner or an AI agent. Register functions as tools; only the tools you register are reachable.
 
 Works on Android, iOS, macOS, Windows and Linux. Flutter web isn't supported.
 
 ## Requirements
 
-- Flutter 3.38 or newer, iOS 15 or newer, Android 7.0 (API 24) or newer.
+- Flutter 3.38 or newer (Dart 3.10), iOS 15 or newer, Android 7.0 (API 24) or newer.
 - The `appduct` CLI on your computer: `npm install -g appduct` (Node 20 or newer).
 
 ## Getting started
+
+Install the package:
 
 ```bash
 flutter pub add appduct
 ```
 
-Start Appduct before `runApp`, and register a tool:
+Start Appduct before `runApp`, and register a tool in your existing app:
 
 ```dart
 import 'package:appduct/appduct.dart';
@@ -30,9 +34,7 @@ void main() {
     description: 'Fill the cart with test items.',
     inputSchema: {
       'type': 'object',
-      'properties': {
-        'items': {'type': 'number'},
-      },
+      'properties': {'items': {'type': 'number'}},
       'required': ['items'],
     },
     handler: (args, context) => {'added': (args['items'] as num).toInt()},
@@ -42,39 +44,57 @@ void main() {
 }
 ```
 
-Then give the app a URL scheme and the permissions to reach your computer: a scheme on Android, iOS and macOS, `INTERNET` in the main Android manifest, `NSLocalNetworkUsageDescription` on iOS and the network client entitlement on macOS. The [Flutter setup guide](https://callstackincubator.github.io/appduct/install/flutter/) has each step.
+Use your app's root widget in place of `ShopApp`.
 
-With the app running in debug mode on a simulator or emulator, connect and call the tool:
+Before connecting, **complete the [platform setup](https://callstackincubator.github.io/appduct/install/flutter/#set-up-the-app)** for each platform you use. Android, iOS and macOS need a URL scheme; Android needs `INTERNET` in the main manifest, iOS needs `NSLocalNetworkUsageDescription`, and macOS needs the network client entitlement. The guide includes the snippets to add. Windows and Linux use a [desktop connection](https://callstackincubator.github.io/appduct/install/flutter/#connect-a-desktop-app) instead of link delivery.
+
+For the Android emulator path, record the scheme you configured and your installed build's `applicationId`, then run a debug build:
 
 ```bash
-appduct sessions link --open ios-sim     # or: --open android
+appduct init --scheme myapp --android-app-id com.example.shop
+flutter run -d <device>
+```
+
+In another terminal, from the Flutter project root:
+
+```bash
+appduct sessions link --open android
+appduct tools ls
 appduct tools call seed_cart --input '{"items":3}'
 ```
 
+The tool returns `{"added":3}`. On a booted iOS Simulator, use `--open ios-sim` instead.
+
 ## Things to know
 
-- **Read numbers as `num`.** A JSON number arrives as an `int` or a `double`, so use `args['items'] as num`, not `as double`.
-- **Move heavy work to `Isolate.run`.** Handlers run on the main isolate. A long computation inside one freezes your UI.
-- **Create the futures a handler awaits inside the handler.** A future created earlier that fails doesn't reach your `try`/`catch`, and the call ends with `tool_timeout`.
-
-[Register tools in Dart](https://callstackincubator.github.io/appduct/install/flutter/#register-tools-in-dart) explains each of these.
+- **Read numbers as `num`.** JSON numbers arrive as an `int` or a `double`; use `(args['items'] as num).toInt()`.
+- **Validate arguments when needed.** Raw JSON Schema describes the tool to callers; it doesn't validate arguments. The [Dart tool guide](https://callstackincubator.github.io/appduct/install/flutter/#register-tools-in-dart) covers `validated(schema, handler)`.
+- **Move heavy work to `Isolate.run`.** Handlers run on the main isolate; a long computation freezes your UI.
+- **Create awaited futures inside the handler.** An earlier future that fails can leave the call waiting until `tool_timeout`. See the [Dart tool guide](https://callstackincubator.github.io/appduct/install/flutter/#register-tools-in-dart).
+- **Reconnect after process death.** Hot restart and short network drops resume the session; killing the app requires a new link.
 
 ## Release builds
 
-Appduct is in debug and profile builds. A release build leaves it out, and your `Appduct.*` calls do nothing. To include it in an internal build, or to leave it out of debug and profile builds, set a define:
+Appduct is included in debug and profile builds. A release build leaves it out, and your `Appduct.*` calls do nothing. To include it in an internal build:
 
 ```bash
 flutter build apk --release --dart-define=APPDUCT_ENABLED=true
 ```
 
-Pin an included build to your key with `APPDUCT_PINS` and `APPDUCT_TRUST` through `--dart-define-from-file`. See [Ship Appduct in a release build](https://callstackincubator.github.io/appduct/install/flutter/#ship-appduct-in-a-release-build) and [Security](https://callstackincubator.github.io/appduct/guides/security/). Check the built app with `appduct doctor <file> --assert-absent`.
+Use `APPDUCT_ENABLED=false` to exclude it from debug and profile builds. Pin an included build to your key with `APPDUCT_PINS` and `APPDUCT_TRUST`; see [Release setup](https://callstackincubator.github.io/appduct/install/flutter/#ship-appduct-in-a-release-build). Check an APK that should exclude it with `appduct doctor build/app/outputs/flutter-apk/app-release.apk --assert-absent`.
 
 ## Learn more
 
-- [Documentation](https://callstackincubator.github.io/appduct/): guides and reference for every platform
+- [Flutter setup](https://callstackincubator.github.io/appduct/install/flutter/): platform configuration, events and troubleshooting
 - [Write tools](https://callstackincubator.github.io/appduct/guides/writing-tools/): schemas, timeouts, groups and events
 - [Connect an agent](https://callstackincubator.github.io/appduct/guides/agents/) over MCP
+- [Security](https://callstackincubator.github.io/appduct/guides/security/): trust and key pinning
+- [Flutter playground](https://github.com/callstackincubator/appduct/blob/main/playground-flutter/README.md): a runnable example
 
-## License
+## Made with ❤️ at Callstack
 
-MIT. Made at [Callstack](https://callstack.com/).
+`appduct` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
+
+Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
+
+[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love

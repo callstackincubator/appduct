@@ -48,7 +48,7 @@ final class SessionScenariosTests: XCTestCase {
   ] }
   private static var claimThenActive: [[String: Any]] { [
     ["drive": "connect", "sessionId": sessionId, "token": "claim-token", "expiresAt": 1_700_000_300],
-    ["expect": "connect", "mode": "claim", "sessionId": sessionId],
+    ["expect": "connect", "mode": "claim", "sessionId": sessionId, "token": "claim-token"],
     ["expect": "state", "state": "connecting"],
     ["drive": "receive", "frame": ack],
     ["expect": "state", "state": "active"],
@@ -144,6 +144,17 @@ private final class ResponseBox: @unchecked Sendable {
   }
 }
 
+/// iOS refusing any background time, reported the way `UIKitAppductBackgroundTime` reports it:
+/// `onExpire` runs before `begin` returns. The fixtures describe a core that suspends as soon as the
+/// app is backgrounded, as the Kotlin and Dart cores do; with no grant the iOS core does the same.
+/// Holding the socket open while a grant lasts is iOS-only and covered by `AppductClientTests`.
+private struct RefusedBackgroundTime: AppductBackgroundTime {
+  func begin(onExpire: @escaping @Sendable () -> Void) -> any AppductDisposable {
+    onExpire()
+    return NoopDisposable()
+  }
+}
+
 /// Plays one scenario against a fresh `AppductClient` over `FakeTransportSession` and
 /// `FakeClientTimers`. Throws, instead of failing the test, so a test can assert that a scenario
 /// is rejected.
@@ -171,7 +182,8 @@ private final class ScenarioReplay {
       timers: timers,
       defaultToolTimeoutMs: 10_000,
       requirePrivateIp: true,
-      foregroundObserver: foreground
+      foregroundObserver: foreground,
+      backgroundTime: RefusedBackgroundTime()
     )
   }
 
@@ -240,6 +252,12 @@ private final class ScenarioReplay {
     case "drop":
       try await wait("the client to wire its transport, for \(label)") { self.transport.isWired }
       transport.simulateClose(code: nil, reason: nil)
+
+    case "failNextConnect":
+      transport.failNextConnectOnce = {
+        AppductSocketConnectError(underlying: NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotConnectToHost))
+      }
+      transport.closeAfterFailedConnect = true
 
     case "advance":
       // Timers hand their work to the client's actor on a `Task`; give it a chance to arm any
@@ -347,6 +365,7 @@ private final class ScenarioReplay {
         "sessionId": options.sessionId,
       ]
       if let resumeToken = options.resumeToken { output["resumeToken"] = resumeToken }
+      if let token = options.token { output["token"] = token }
       return output
     case .send(let text):
       return ["kind": "send", "frame": try JSONSerialization.jsonObject(with: Data(text.utf8))]

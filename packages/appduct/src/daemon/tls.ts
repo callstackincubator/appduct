@@ -38,7 +38,7 @@ export type TlsWarnFn = (message: string) => void;
 
 /** Refuses a key file that is group/world-readable. Missing files are handled by the caller
  * (`loadOrGenerateHostKeyPem`), which auto-generates instead of throwing. */
-export const loadHostKeyPem = async (keyPath: string): Promise<string> => {
+const loadHostKeyPem = async (keyPath: string): Promise<string> => {
   const fileStat = await stat(keyPath);
 
   if ((fileStat.mode & 0o077) !== 0) {

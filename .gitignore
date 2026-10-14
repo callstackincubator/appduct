@@ -51,3 +51,6 @@ playground-native/ios/.swiftpm/
 
 # Worktrees made by .agents/scripts/worktree.sh
 .worktrees/
+
+# device e2e build, Metro and flutter run logs
+e2e-device/.artifacts

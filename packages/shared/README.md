@@ -1,12 +1,20 @@
-[![Appduct][appduct-banner]][repo]
+<a href="https://callstackincubator.github.io/appduct/"><img src="https://raw.githubusercontent.com/callstackincubator/appduct/main/.github/assets/readme-banner.png" alt="Appduct by Callstack. Your app is an MCP server now: your agent calls its functions over MCP, on iOS, Android, React Native, Flutter and web." width="100%" /></a>
 
-### Shared library for Appduct
+# Appduct shared library
 
-[![MIT license][license-badge]][license] [![PRs Welcome][prs-welcome-badge]][prs-welcome]
+`@appduct/shared` contains Appduct's wire protocol types and shared TypeScript SDK helpers. It is an internal dependency: you don't add it to your app directly, and its exports can change in any release.
 
-`@appduct/shared` is an internal dependency of [`appduct`](../appduct/README.md) and [`@appduct/react-native`](../react-native/README.md). It's installed along with them; you don't add it to a project yourself, and its exports can change in any release.
+## Used by
 
-If you're writing your own Appduct client or server, the wire protocol is specified in [`docs/PROTOCOL.md`][protocol].
+- [`appduct`](https://github.com/callstackincubator/appduct/blob/main/packages/appduct/README.md): CLI, MCP server and test client
+- [`@appduct/react-native`](https://github.com/callstackincubator/appduct/blob/main/packages/react-native/README.md): React Native SDK
+- [`@appduct/web`](https://github.com/callstackincubator/appduct/blob/main/packages/web/README.md): Web SDK
+
+## Contributor documentation
+
+- [Architecture](https://github.com/callstackincubator/appduct/blob/main/docs/ARCHITECTURE.md): package boundaries and SDK entry points
+- [Wire protocol](https://github.com/callstackincubator/appduct/blob/main/docs/PROTOCOL.md): messages, schemas and connection rules
+- [Conformance fixtures](https://github.com/callstackincubator/appduct/blob/main/packages/native/fixtures/README.md): shared parsing and validation cases
 
 ## Made with ❤️ at Callstack
 
@@ -14,13 +22,4 @@ If you're writing your own Appduct client or server, the wire protocol is specif
 
 Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
 
-[appduct-banner]: https://img.shields.io/badge/Appduct-callstack%2Fincubator-111827?style=for-the-badge&logo=github&logoColor=white
-[repo]: https://github.com/callstackincubator/appduct
 [callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=appduct&utm_term=readme-with-love
-[protocol]: https://github.com/callstackincubator/appduct/blob/main/docs/PROTOCOL.md
-[license-badge]: https://img.shields.io/github/license/callstackincubator/appduct?style=for-the-badge
-[license]: https://github.com/callstackincubator/appduct/blob/main/LICENSE
-[prs-welcome-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge
-[prs-welcome]: https://github.com/callstackincubator/appduct/pulls
-[chat-badge]: https://img.shields.io/discord/426714625279524876.svg?style=for-the-badge
-[chat]: https://discord.gg/xgGt7KAjxv

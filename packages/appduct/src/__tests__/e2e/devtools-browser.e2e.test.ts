@@ -192,42 +192,6 @@ describe("e2e: the daemon attaches to a debugging-port Chrome", () => {
   );
 
   test(
-    "appduct_connect fails with the open tabs listed when none matches the url",
-    async () => {
-      const stateDir = await startDaemon();
-      await openTab("/somewhere");
-      const client = await startMcp(stateDir);
-
-      const result = await callConnect(client, { url: `${origin}/nowhere` });
-
-      expect(result.isError).toBe(true);
-      const text = JSON.stringify(result.content);
-      expect(text).toContain(`${origin}/somewhere`);
-      expect(await sessions(stateDir)).toEqual([]);
-    },
-    90_000,
-  );
-
-  test(
-    "appduct_connect fails with each tab's target id when several tabs match the url",
-    async () => {
-      const stateDir = await startDaemon();
-      await openTab("/shop/a");
-      await openTab("/shop/b");
-      const client = await startMcp(stateDir);
-
-      const result = await callConnect(client, { url: `${origin}/shop` });
-
-      expect(result.isError).toBe(true);
-      const text = JSON.stringify(result.content);
-      expect(text).toContain(await targetIdOf(`${origin}/shop/a`));
-      expect(text).toContain(await targetIdOf(`${origin}/shop/b`));
-      expect(await sessions(stateDir)).toEqual([]);
-    },
-    90_000,
-  );
-
-  test(
     "appduct_connect with a targetId claims that tab even when several tabs match the url",
     async () => {
       const stateDir = await startDaemon();

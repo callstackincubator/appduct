@@ -120,6 +120,10 @@ All imagery is ordered dithering of a generated scene, drawn on canvas.
     cells drifting slowly. Short bright pulses (8% of the width) slide along the highlights
     toward the app, each tube at its own speed. Behind them, a faint haze around the focus.
     It reads as calls flowing through the duct into your app.
+  - *Broken* (the 404 page only): the ducts with the front tube cut off short of the app. It
+    ends in an open, dark ellipse with a lit rim; past it, a dashed accent line traces where the
+    tube should run. Its pulses stop at the cut and the rim flares as each one arrives: a call
+    that never reaches the app.
   - *Flow*: soft diagonal bands of light on black, slowly turning. For quieter backdrops
     behind code or commands.
 - Windows and devices sit on top of the imagery with solid `bg` fills, so text never sits on
@@ -165,6 +169,14 @@ In order, each section in the frame:
 8. **[05] Safe by default:** four cells, then links to the security and build-variant docs.
 9. **[06] FAQ:** question-and-answer cells, three across.
 10. **Closing:** CTA bar, giant wordmark, footer row.
+
+## 404 page
+
+Nav, then the broken ducts full-bleed in the frame with a solid card on top (left on wide
+screens, above the scene on phones): a `404` accent chip with `PAGE NOT FOUND`, a two-beat
+headline ("This page doesn't exist. *The rest of Appduct does.*"), the requested path as
+inline code, Home and Docs buttons, Quick start and GitHub links. Then the giant wordmark and
+the footer row. GitHub Pages serves it at any unknown path, so every URL on it is absolute.
 
 ## Words
 

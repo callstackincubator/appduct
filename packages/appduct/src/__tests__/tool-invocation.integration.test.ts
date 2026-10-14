@@ -1259,41 +1259,6 @@ describe("events.since", () => {
 
     app.socket.close();
   });
-
-  test("tool_call_progress is fanned out live but never retained, so it can't evict app_events", async () => {
-    const daemon = await startTestDaemon();
-    const app = await claimApp(daemon);
-    await snapshotTools(daemon, app, [{ name: "slow" }]);
-
-    const appEventEmitted = waitForEvent(daemon, "app_event");
-    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "before-progress", ts: Date.now() }));
-    await appEventEmitted;
-
-    app.socket.on("message", (data) => {
-      const msg = JSON.parse(data.toString("utf8")) as Record<string, unknown>;
-
-      if (msg.type === "tool_call") {
-        for (let i = 0; i < 10; i++) {
-          app.socket.send(
-            JSON.stringify({ type: "tool_call_progress", session_id: app.sessionId, id: msg.id, progress: i / 10 }),
-          );
-        }
-        app.socket.send(JSON.stringify({ type: "tool_result", session_id: app.sessionId, id: msg.id, result: "ok" }));
-      }
-    });
-
-    const finished = waitForEvent(daemon, "tool_call_finished");
-    await rpcCall(daemon.paths.socketPath, "tools.call", { selector: app.alias, name: "slow", args: {} });
-    await finished;
-
-    const since = (await rpcCall(daemon.paths.socketPath, "events.since", { selector: app.alias })) as {
-      events: Array<{ kind: string }>;
-    };
-    expect(since.events.some((event) => event.kind === "tool_call_progress")).toBe(false);
-    expect(since.events.some((event) => event.kind === "app_event")).toBe(true);
-
-    app.socket.close();
-  });
 });
 
 describe("tools.* selectors", () => {

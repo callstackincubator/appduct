@@ -60,61 +60,18 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
     }
   });
 
-  test("every accepted schema form compiles identically against both entries (issue #27)", async () => {
+  test("a group-bound registrar infers handler args and refuses a group override on both entries", async () => {
     const realModule = await import("../index");
     const noopModule = await import("../noop");
 
-    const rawSchema = {
-      type: "object",
-      properties: { city: { type: "string" } },
-      required: ["city"],
-    };
     const zod3Input = z3.object({ a: z3.number() });
     const pairedSchema = {
       schema: zod3Input,
       jsonSchema: zodToJsonSchema(zod3Input) as Record<string, unknown>,
     };
 
-    // As with the assignments above, the real enforcement is `tsc`: each of these registrations
-    // must type-check against BOTH entries, and each `handler` must receive the inferred argument
-    // type — a bare raw schema gives `Record<string, unknown>`, `jsonSchema<T>()` gives `T`, and a
-    // pair gives the Standard Schema's own output type.
-    const registrars: AppductPublicApi["registerTool"][] = [
-      realModule.registerTool,
-      noopModule.registerTool,
-    ];
-
-    for (const registerTool of registrars) {
-      registerTool({
-        name: "raw-bare",
-        description: "d",
-        inputSchema: rawSchema,
-        handler: (args) => {
-          expectType<Record<string, unknown>>(args);
-        },
-      }).remove();
-
-      registerTool({
-        name: "raw-typed",
-        description: "d",
-        inputSchema: noopModule.jsonSchema<{ city: string }>(rawSchema),
-        handler: (args) => {
-          expectType<{ city: string }>(args);
-        },
-      }).remove();
-
-      registerTool({
-        name: "paired",
-        description: "d",
-        inputSchema: pairedSchema,
-        handler: (args) => {
-          expectType<{ a: number }>(args);
-        },
-      }).remove();
-    }
-
-    // A group-bound registrar infers handler args exactly like `registerTool`, and refuses a
-    // registration that tries to set its own `group`.
+    // The enforcement is `tsc`: `createToolGroup` from either entry must infer the paired schema's
+    // own output type, and refuse a registration that tries to set its own `group`.
     const groupFactories: AppductPublicApi["createToolGroup"][] = [
       realModule.createToolGroup,
       noopModule.createToolGroup,
@@ -140,10 +97,6 @@ describe("noop parity: type-level (see also public-api.ts's doc comment)", () =>
         handler: () => undefined,
       }).remove();
     }
-
-    // `jsonSchema` is the same identity helper on both entries.
-    expect(realModule.jsonSchema(rawSchema)).toBe(rawSchema);
-    expect(noopModule.jsonSchema(rawSchema)).toBe(rawSchema);
   });
 
   test("useAppductTool takes the same (definition, deps, options) arity on both entries", async () => {

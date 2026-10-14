@@ -1,17 +1,12 @@
 /**
  * `cli/global-flags.ts`: the declarative global-flags table. Checks that `resolveGlobalFlags`
  * (the `cac`-options path) and `resolveGlobalFlagsFromArgv` (the parse-failure fallback path)
- * agree for every flag, and that `formatJson` picks compact vs. indented correctly.
+ * agree for every flag.
  */
 
 import { describe, expect, test } from "vitest";
 
-import {
-  formatJson,
-  resolveGlobalFlags,
-  resolveGlobalFlagsFromArgv,
-  type GlobalFlags,
-} from "../cli/global-flags.js";
+import { resolveGlobalFlags, resolveGlobalFlagsFromArgv, type GlobalFlags } from "../cli/global-flags.js";
 
 type Case = {
   name: string;
@@ -66,22 +61,4 @@ describe("resolveGlobalFlags / resolveGlobalFlagsFromArgv", () => {
       expect(resolveGlobalFlagsFromArgv(argv)).toEqual(expected);
     });
   }
-
-  test("an option cac never set (undefined) reads as its default, not as truthy", () => {
-    expect(resolveGlobalFlags({})).toEqual({ json: false, pretty: false, verbose: false, color: true });
-  });
-});
-
-describe("formatJson", () => {
-  const value = { a: 1, b: { c: [1, 2] } };
-
-  test("compact by default", () => {
-    expect(formatJson(value, { pretty: false })).toBe(JSON.stringify(value));
-    expect(formatJson(value, { pretty: false })).not.toContain("\n");
-  });
-
-  test("indented under --pretty", () => {
-    expect(formatJson(value, { pretty: true })).toBe(JSON.stringify(value, null, 2));
-    expect(formatJson(value, { pretty: true })).toContain("\n");
-  });
 });

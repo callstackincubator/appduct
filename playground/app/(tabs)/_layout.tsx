@@ -35,6 +35,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Tools",
+          tabBarButtonTestID: "tab-tools",
           tabBarIcon: ({ color }) => <IconSymbol size={24} name="house.fill" color={color} />,
         }}
       />
@@ -42,6 +43,7 @@ export default function TabLayout() {
         name="status"
         options={{
           title: "Status",
+          tabBarButtonTestID: "tab-status",
           tabBarIcon: ({ color }) => (
             <IconSymbol size={24} name="paperplane.fill" color={color} />
           ),

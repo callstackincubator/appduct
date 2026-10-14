@@ -1,0 +1,18 @@
+{
+  "name": "@appduct/e2e-device",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "device": "vitest run --config vitest.config.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/node": "^22.10.0",
+    "agent-device": "0.21.23",
+    "appduct": "workspace:*",
+    "eslint": "^10",
+    "typescript": "~5.9.2"
+  }
+}

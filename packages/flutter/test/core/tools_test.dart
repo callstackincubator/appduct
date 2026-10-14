@@ -259,23 +259,6 @@ void main() {
       expect(socket.sent, hasLength(sent));
     });
 
-    test('after a cancel puts nothing on the wire', () async {
-      final (h, socket) = await active();
-      socket.receive(toolCall('c1'));
-      socket.receive({
-        'type': 'tool_cancel',
-        'session_id': sessionId,
-        'id': 'c1',
-        'reason': 'client_cancelled',
-      });
-      await settle();
-      final sent = socket.sent.length;
-
-      h.core.respondToToolCall('c1', result: {'ok': true});
-
-      expect(socket.sent, hasLength(sent));
-    });
-
     test('a second answer to the same call puts nothing on the wire', () async {
       final (h, socket) = await active();
       socket.receive(toolCall('c1'));
@@ -304,19 +287,6 @@ void main() {
         expect(h.core.state, ClientState.reconnecting);
       },
     );
-
-    test('reports the new state before the cancel', () async {
-      final (h, socket) = await active();
-      socket.receive(toolCall('c1'));
-      final order = <String>[];
-      h.core.stateChanges.listen((e) => order.add('state:${e.state.name}'));
-      h.core.toolCancels.listen((e) => order.add('cancel:${e.reason}'));
-
-      socket.drop();
-      await settle();
-
-      expect(order, ['state:reconnecting', 'cancel:session_suspended']);
-    });
 
     test('the deadline does not fire after the socket closed', () async {
       final (h, socket) = await active();

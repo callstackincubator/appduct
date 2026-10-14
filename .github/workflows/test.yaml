@@ -46,8 +46,18 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build packages
         run: pnpm build
+      # Keyed on the lockfile, which pins playwright-core and so the Chromium build it downloads.
+      - name: Cache Chromium for the web e2e
+        id: chromium-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: chromium-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      # No --with-deps: the apt step took ~20 s and the runner image already carries Chrome's
+      # shared libraries, since it ships Google Chrome.
       - name: Install Chromium for the web e2e
-        run: pnpm --filter appduct exec playwright-core install --with-deps chromium
+        if: steps.chromium-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter appduct exec playwright-core install chromium
       - name: Run JavaScript tests
         run: pnpm test
 

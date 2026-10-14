@@ -2,12 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  getAppductState,
   getAppductBuildConfig,
   postEvent,
   addAppductListener,
+  getAppductState,
   type AppductClientState,
-  type AppductSessionChangeEvent,
   type AppductUnifiedErrorEvent,
 } from "@appduct/react-native";
 import { ThemedText } from "@/components/themed-text";
@@ -46,16 +45,13 @@ export default function StatusScreen() {
   const tint = useThemeColor({}, "tint");
   const tintForeground = useThemeColor({}, "tintForeground");
 
-  const [connectionState, setConnectionState] = useState<AppductClientState>(
-    getAppductState()
-  );
+  // Read synchronously on mount: the tab mounts the first time it is opened, usually after the
+  // session is already active.
+  const [connectionState, setConnectionState] = useState<AppductClientState>(getAppductState);
   // Native build config never changes within a process's lifetime, so a plain `useState`
   // initializer -- read once, no listener needed -- is enough to show which trust mode this
   // artifact was actually built with.
   const [buildConfig] = useState(() => getAppductBuildConfig());
-  const [alias, setAlias] = useState<string | null>(null);
-  const [lastSessionEvent, setLastSessionEvent] =
-    useState<AppductSessionChangeEvent | null>(null);
   const [errors, setErrors] = useState<AppductUnifiedErrorEvent[]>([]);
   const [lastPingAt, setLastPingAt] = useState<number | null>(null);
 
@@ -74,21 +70,12 @@ export default function StatusScreen() {
     const stateSubscription = addAppductListener("stateChange", (event) => {
       setConnectionState(event.state);
     });
-    const sessionSubscription = addAppductListener("sessionChange", (event) => {
-      setLastSessionEvent(event);
-      if (event.type === "lost") {
-        setAlias(null);
-      } else {
-        setAlias(event.alias);
-      }
-    });
     const errorSubscription = addAppductListener("error", (event) => {
       setErrors((previous) => [event, ...previous].slice(0, MAX_ERRORS));
     });
 
     return () => {
       stateSubscription.remove();
-      sessionSubscription.remove();
       errorSubscription.remove();
     };
   }, []);
@@ -127,22 +114,36 @@ export default function StatusScreen() {
           <ThemedText type="overline">Connection</ThemedText>
           <View style={styles.row}>
             <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
-            <ThemedText type="subtitle" style={styles.stateLabel}>
+            <ThemedText type="subtitle" testID="connection-state">
               {connectionState}
             </ThemedText>
           </View>
           <ThemedText type="caption" style={styles.cardHint}>
-            Alias: {alias ?? "not claimed yet"}
-          </ThemedText>
-          {lastSessionEvent && (
-            <ThemedText type="caption" style={styles.cardHint}>
-              Last session event: {lastSessionEvent.type}
-              {lastSessionEvent.reason ? ` (${lastSessionEvent.reason})` : ""}
-            </ThemedText>
-          )}
-          <ThemedText type="caption" style={styles.cardHint}>
             Metro reload should suspend and resume this session automatically -- reload the app
             and watch this state go reconnecting → active without a new deep link.
+          </ThemedText>
+        </View>
+
+        <View style={cardStyle}>
+          <ThemedText type="overline">Post an event</ThemedText>
+          <Pressable
+            testID="ping-button"
+            onPress={handlePing}
+            style={[styles.button, { backgroundColor: tint }]}>
+            <ThemedText
+              type="defaultSemiBold"
+              style={{ color: tintForeground }}>
+              Send playground_ping
+            </ThemedText>
+          </Pressable>
+          <View style={styles.row}>
+            <ThemedText type="caption">Last ping:</ThemedText>
+            <ThemedText type="caption" testID="last-ping">
+              {lastPingAt ?? "none"}
+            </ThemedText>
+          </View>
+          <ThemedText type="caption" style={styles.cardHint}>
+            Watch it arrive with: appduct events tail --follow
           </ThemedText>
         </View>
 
@@ -155,24 +156,6 @@ export default function StatusScreen() {
           <ThemedText type="caption" style={styles.cardHint}>
             Read from the native module&apos;s getConstants() -- the fastest way to tell, on a
             device, which trust mode this artifact was actually built with.
-          </ThemedText>
-        </View>
-
-        <View style={cardStyle}>
-          <ThemedText type="overline">Post an event</ThemedText>
-          <Pressable
-            onPress={handlePing}
-            style={[styles.button, { backgroundColor: tint }]}>
-            <ThemedText
-              type="defaultSemiBold"
-              style={{ color: tintForeground }}>
-              Send playground_ping
-            </ThemedText>
-          </Pressable>
-          <ThemedText type="caption" style={styles.cardHint}>
-            {lastPingAt !== null
-              ? `Last sent at ${new Date(lastPingAt).toLocaleTimeString()}. Watch it with: appduct events tail --follow`
-              : "Watch it arrive with: appduct events tail --follow"}
           </ThemedText>
         </View>
 
@@ -226,9 +209,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-  },
-  stateLabel: {
-    textTransform: "capitalize",
   },
   cardHint: {
     marginTop: -4,

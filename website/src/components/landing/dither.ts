@@ -53,7 +53,7 @@ const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 
 /** A scene at one size: `frame(t)` fills and returns the tone (0..1) of every cell. */
 type Scene = { frame: (t: number) => Float32Array };
-type SceneBuilder = (cols: number, rows: number, focus?: number) => Scene;
+type SceneBuilder = (cols: number, rows: number, focus?: number, broken?: boolean) => Scene;
 
 /** A horizontally wrapping mist texture, sampled with a sliding offset. */
 function mistTexture(cols: number, rows: number, scaleX: number, scaleY: number) {
@@ -70,7 +70,9 @@ function mistTexture(cols: number, rows: number, scaleX: number, scaleY: number)
 const scenes: Record<string, SceneBuilder> = {
 	// Ducts: ribbed tubes fan in from the left and bundle into one point (the app), with light
 	// pulses travelling along them toward it. `focus` is where the bundle lands, 0..1 across.
-	ducts: (cols, rows, focus = 0.74) => {
+	// `broken` (the 404 page): the front tube stops short in an open end, a dashed outline runs on
+	// where it should be, and each pulse that reaches the end flares there instead of going on.
+	ducts: (cols, rows, focus = 0.74, broken = false) => {
 		const out = new Float32Array(cols * rows);
 		const aspect = cols / rows;
 		// Per cell: which tube is in front (-1 for none), its tone, and how far along it we are.
@@ -79,6 +81,8 @@ const scenes: Record<string, SceneBuilder> = {
 		const along = new Float32Array(cols * rows);
 		const shine = new Float32Array(cols * rows);
 		const back = new Float32Array(cols * rows);
+		// Only on the broken tube: 1 the rim of its open end, 2 the dark inside, 3 a dash.
+		const part = new Int8Array(cols * rows);
 
 		// Back to front. y0: where it enters on the left; r: radius as a share of the height.
 		const tubes = [
@@ -90,6 +94,8 @@ const scenes: Record<string, SceneBuilder> = {
 			{ y0: 0.56, r: 0.085, depth: 1, wig: 0.05, phase: 3.1 },
 		];
 		const n = tubes.length;
+		// Where the front tube is cut, 0..1 across: clear of the copy, short of the bundle.
+		const cut = focus - 0.24;
 
 		// A faint haze where the bundle lands, so the app sits in light.
 		for (let y = 0; y < rows; y++) {
@@ -108,6 +114,7 @@ const scenes: Record<string, SceneBuilder> = {
 				const wiggle = t.wig * (1 - e) * Math.sin(u * 2.2 * Math.PI + t.phase);
 				const cy = (t.y0 + (endY - t.y0) * e + wiggle) * rows;
 				const r = radius * (1 - 0.45 * e); // tubes narrow as they bundle
+				const cutHere = broken && k === n - 1;
 				for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(rows - 1, Math.ceil(cy + r)); y++) {
 					const nY = (y - cy) / r;
 					if (Math.abs(nY) > 1) continue;
@@ -115,6 +122,19 @@ const scenes: Record<string, SceneBuilder> = {
 					const body = Math.sqrt(1 - nY * nY);
 					const highlight = Math.exp(-(((nY + 0.42) / 0.2) ** 2));
 					const i = y * cols + x;
+					if (cutHere) {
+						// The open end is an ellipse a third as wide as the tube is tall.
+						const end = x - cut * cols;
+						const half = 0.32 * r * body;
+						if (end > half) {
+							// Past the end: only a dashed line along the top and bottom edges.
+							if (Math.abs(nY) < 1 - 2 / r || Math.floor(x / 3) % 2) continue;
+							part[i] = 3;
+						} else if (end >= -half) {
+							const ring = (end / (0.32 * r)) ** 2 + nY * nY;
+							part[i] = ring > 0.55 ? 1 : 2;
+						}
+					}
 					tube[i] = k;
 					shade[i] = (0.14 + 0.36 * body + 0.42 * highlight) * t.depth;
 					along[i] = u;
@@ -126,6 +146,10 @@ const scenes: Record<string, SceneBuilder> = {
 		const speeds = tubes.map((_, k) => 0.07 + 0.025 * ((k * 7) % 4));
 		return {
 			frame: (time) => {
+				// How brightly the broken end flares: full while a pulse runs into it, then fading.
+				const front = tubes[n - 1]!;
+				const atCut = (((cut * 1.6 - time * speeds[n - 1]! + front.phase) % 1) + 1) % 1;
+				const flare = atCut < 0.08 ? 1 : atCut > 0.9 ? (atCut - 0.9) / 0.1 : 0;
 				for (let i = 0; i < out.length; i++) {
 					const k = tube[i]!;
 					if (k < 0) {
@@ -134,6 +158,16 @@ const scenes: Record<string, SceneBuilder> = {
 					}
 					const u = along[i]!;
 					const t = tubes[k]!;
+					const kind = part[i]!;
+					if (kind) {
+						out[i] =
+							kind === 1
+								? 0.6 + 0.4 * flare
+								: kind === 2
+									? 0.04
+									: 0.75 + 0.25 * flare * Math.exp(-(u - cut) * 12);
+						continue;
+					}
 					// Corrugation: rings every few cells, the flexible-duct look.
 					const rib = 0.82 + 0.18 * Math.cos(u * cols * 0.55 + time * 2);
 					// Pulses: short bright runs sliding toward the app.
@@ -145,6 +179,9 @@ const scenes: Record<string, SceneBuilder> = {
 			},
 		};
 	},
+
+	// The 404 page's ducts, with the front tube broken off short of the app.
+	broken: (cols, rows, focus) => scenes.ducts!(cols, rows, focus, true),
 
 	// Soft, slowly turning bands of light on black: Apex's abstract backdrop.
 	flow: (cols, rows) => {

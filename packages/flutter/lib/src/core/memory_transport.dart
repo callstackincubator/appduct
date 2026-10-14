@@ -51,6 +51,15 @@ class MemorySocket implements Socket {
     _deliverClose(null, null);
   }
 
+  /// The daemon's key does not match the pin: the transport says so, then the connection closes
+  /// with no code.
+  void rejectPin() {
+    if (_closed) return;
+    _events.onPinMismatch();
+    _events.onError('pin mismatch');
+    _deliverClose(null, null);
+  }
+
   /// The socket's own keepalive gave up waiting for a pong: it closes with 1001, which the core
   /// resumes from.
   void missPong() => _deliverClose(1001, 'ping_timeout');

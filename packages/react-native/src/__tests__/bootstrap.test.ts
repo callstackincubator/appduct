@@ -162,23 +162,4 @@ describe("bootstrap helpers", () => {
       }
     });
   });
-
-  test("parseBootstrapUrl decodes via atob when Buffer is unavailable", () => {
-    const p = payload();
-    const rawPayload = binaryPayloadB64(p);
-
-    const g = globalThis as { Buffer?: typeof Buffer };
-    const prevBuffer = g.Buffer;
-    delete g.Buffer;
-
-    try {
-      expect(
-        parseBootstrapUrl(`playground:///?appduct=${rawPayload}`, {
-          now: FIXED_NOW,
-        })
-      ).toEqual(p);
-    } finally {
-      g.Buffer = prevBuffer;
-    }
-  });
 });

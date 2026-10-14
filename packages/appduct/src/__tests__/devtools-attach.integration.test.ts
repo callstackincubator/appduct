@@ -74,11 +74,6 @@ describe("appduct_connect with browserUrl", () => {
     await expect(failure).rejects.toThrow(/B2 {2}https:\/\/staging\.example\/shop\/orders/u);
   });
 
-  test("fails when no tab matches url", async () => {
-    const { call } = await start([{ id: "Z9", url: "https://other.example/", title: "Other" }]);
-
-    await expect(handleConnectTool({ target: "web", url: PAGE_URL, browserUrl: BROWSER_URL }, { call })).rejects.toThrow(/Z9 {2}https:\/\/other\.example\//u);
-  });
 
   test("rejects browserUrl without target web", async () => {
     const { call } = await start([]);

@@ -153,6 +153,13 @@ describe("appduct events tail --json", () => {
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     const { socket, sessionId } = await claimAppOverCli(stateDir);
+    socket.send(
+      JSON.stringify({
+        type: "tool_registry_snapshot",
+        session_id: sessionId,
+        tools: [{ name: "echo", description: "Echoes its input." }],
+      }),
+    );
     socket.send(JSON.stringify({ type: "event", session_id: sessionId, name: "greeting", ts: Date.now() }));
 
     await Promise.race([
@@ -160,8 +167,8 @@ describe("appduct events tail --json", () => {
       new Promise((_resolve, reject) => setTimeout(() => reject(new Error("Timed out waiting for an app_event line")), 5000)),
     ]);
 
-    // Every line must be independently parseable NDJSON, and the link and claim that came first
-    // must not have been printed.
+    // Every line must be independently parseable NDJSON, and the link, claim and tool registration
+    // that came first must not have been printed.
     expect(lines.map((line) => JSON.parse(line).kind)).toEqual(["app_event"]);
     expect(JSON.parse(lines[0]!)).toHaveProperty("ts");
 

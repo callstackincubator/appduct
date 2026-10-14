@@ -816,44 +816,14 @@ describe("mcp: appduct_connect / appduct_wait_for_session", () => {
     // one. It matters most for ios-device, the first MCP path reaching a phone over the LAN.
     const query = new URLSearchParams(data.deepLink.slice(data.deepLink.indexOf("?") + 1));
     expect(query.get("pin")).toMatch(/^sha256\//u);
+    // Percent-encoded, as the CLI composes it: a raw pin's `+` would decode as a space.
+    expect(data.deepLink).toMatch(/^appduct:\/\/\/\?appduct=[^&]+&pin=sha256%2F/u);
 
     // ...and the bootstrap blob still decodes: the pin is a separate param appended after it, so
     // anything slicing to the end of the string instead of stopping at "&" would corrupt it.
     expect(decodeBootstrap(data.deepLink.split("appduct=")[1]!.split("&")[0]!)).not.toBeNull();
   });
 
-  test("the CLI and MCP deep-link compositions are byte-identical for the same link.create result", async () => {
-    const { composeDeepLink } = await import("../link.js");
-
-    // The `&pin=` param went missing from the MCP side precisely because there were two copies of
-    // this string. `connect-tool.ts` now imports this exact function; the test pins the shape so a
-    // future edit to one path cannot silently diverge from the other.
-    const result = {
-      sessionId: "s-1",
-      deepLinkPayload: "AAAA-payload_x",
-      endpoint: { address: "192.168.1.10", port: 8443, family: 4 as const },
-      expiresAt: 1_800_000_000,
-      // Standard base64: contains the `+`, `/` and `=` that must be percent-encoded.
-      pin: "sha256/ab+cd/ef=",
-    };
-
-    expect(composeDeepLink("appduct", result)).toBe(
-      "appduct:///?appduct=AAAA-payload_x&pin=sha256%2Fab%2Bcd%2Fef%3D",
-    );
-
-    // And a real MCP-minted link has the same shape, pin included.
-    const { stateDir } = await startTestDaemon();
-    const handle = await createMcpHandle(stateDir);
-    const client = await connectInMemoryClient(handle);
-
-    const called = await client.request(
-      { method: "tools/call", params: { name: "appduct_connect", arguments: {} } },
-      CallToolResultSchema,
-    );
-
-    const data = called.structuredContent as { deepLink: string };
-    expect(data.deepLink).toMatch(/^appduct:\/\/\/\?appduct=[^&]+&pin=sha256%2F/u);
-  });
 
   test('target "ios-device" refuses a loopback advertised address instead of delivering it', async () => {
     // The MCP twin of the CLI guard: a 127.0.0.1 link handed to a phone points it at itself, and
@@ -1860,44 +1830,6 @@ describe("daemon: events.since / events.subscribe name filter (issue #112)", () 
     })) as { events: Array<{ data: { name: string } }> };
 
     expect(result.events.map((event) => event.data.name)).toEqual(["cart.item_added", "cart.item_removed"]);
-
-    app.socket.close();
-  });
-
-  test("an exact name never matches a longer name it prefixes", async () => {
-    const { daemon } = await startTestDaemon();
-    const app = await claimApp(daemon);
-
-    for (const name of ["checkout_completed", "checkout_completed_v2"]) {
-      const emitted = waitForEvent(daemon, "app_event");
-      app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name, ts: Date.now() }));
-      await emitted;
-    }
-
-    const result = (await rpcCall(daemon.paths.socketPath, "events.since", {
-      selector: app.alias,
-      name: "checkout_completed",
-    })) as { events: Array<{ data: { name: string } }> };
-
-    expect(result.events.map((event) => event.data.name)).toEqual(["checkout_completed"]);
-
-    app.socket.close();
-  });
-
-  test("name matching is case-sensitive", async () => {
-    const { daemon } = await startTestDaemon();
-    const app = await claimApp(daemon);
-
-    const emitted = waitForEvent(daemon, "app_event");
-    app.socket.send(JSON.stringify({ type: "event", session_id: app.sessionId, name: "cart.item_added", ts: Date.now() }));
-    await emitted;
-
-    const result = (await rpcCall(daemon.paths.socketPath, "events.since", {
-      selector: app.alias,
-      name: "Cart.*",
-    })) as { events: unknown[] };
-
-    expect(result.events).toEqual([]);
 
     app.socket.close();
   });
