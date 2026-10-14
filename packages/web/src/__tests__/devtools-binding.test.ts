@@ -19,7 +19,7 @@ describe("the devtools binding transport", () => {
   it("asks the relay for a daemon socket when opened", () => {
     const { sent } = setup();
 
-    expect(sent).toEqual([{ kind: "open" }]);
+    expect(sent).toEqual([{ kind: "open", id: expect.any(String) }]);
   });
 
   it("reports the socket open once the relay says the daemon socket is", () => {
@@ -37,7 +37,7 @@ describe("the devtools binding transport", () => {
     socket.send('{"type":"x"}');
     devtools.receive(JSON.stringify({ kind: "message", text: '{"type":"y"}' }));
 
-    expect(sent.at(-1)).toEqual({ kind: "send", text: '{"type":"x"}' });
+    expect(sent.at(-1)).toMatchObject({ kind: "send", text: '{"type":"x"}' });
     expect(events.at(-1)).toBe('message:{"type":"y"}');
   });
 
@@ -53,7 +53,7 @@ describe("the devtools binding transport", () => {
 
     socket.close(4008, "invalid_ack");
 
-    expect(sent.at(-1)).toEqual({ kind: "close", code: 4008, reason: "invalid_ack" });
+    expect(sent.at(-1)).toMatchObject({ kind: "close", code: 4008, reason: "invalid_ack" });
   });
 
   it("reports a daemon close as a close with its code", () => {
