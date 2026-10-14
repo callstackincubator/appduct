@@ -19,7 +19,7 @@ describe("the devtools binding transport", () => {
   it("asks the relay for a daemon socket when opened", () => {
     const { sent } = setup();
 
-    expect(sent).toEqual([{ kind: "open" }]);
+    expect(sent).toEqual([{ kind: "open", id: expect.any(String) }]);
   });
 
   it("reports the socket open once the relay says the daemon socket is", () => {
@@ -37,7 +37,7 @@ describe("the devtools binding transport", () => {
     socket.send('{"type":"x"}');
     devtools.receive(JSON.stringify({ kind: "message", text: '{"type":"y"}' }));
 
-    expect(sent.at(-1)).toEqual({ kind: "send", text: '{"type":"x"}' });
+    expect(sent.at(-1)).toMatchObject({ kind: "send", text: '{"type":"x"}' });
     expect(events.at(-1)).toBe('message:{"type":"y"}');
   });
 
@@ -53,7 +53,7 @@ describe("the devtools binding transport", () => {
 
     socket.close(4008, "invalid_ack");
 
-    expect(sent.at(-1)).toEqual({ kind: "close", code: 4008, reason: "invalid_ack" });
+    expect(sent.at(-1)).toMatchObject({ kind: "close", code: 4008, reason: "invalid_ack" });
   });
 
   it("reports a daemon close as a close with its code", () => {
@@ -63,5 +63,59 @@ describe("the devtools binding transport", () => {
     devtools.receive(JSON.stringify({ kind: "close", code: 1008, reason: "invalid_token" }));
 
     expect(events.at(-1)).toBe("close:1008:invalid_token");
+  });
+
+  it("puts the same id on every message it sends for one socket", () => {
+    const { devtools, socket, sent } = setup();
+    devtools.receive(JSON.stringify({ kind: "open", id: sent[0]!.id }));
+
+    socket.send("{}");
+    socket.close(1000, "done");
+
+    expect(typeof sent[0]!.id).toBe("string");
+    expect(sent.map((message) => message.id)).toEqual([sent[0]!.id, sent[0]!.id, sent[0]!.id]);
+  });
+
+  it("gives each socket it opens its own id", () => {
+    const { devtools, sent } = setup();
+
+    devtools.transport.open("ws://127.0.0.1:49152", { open() {}, message() {}, close() {}, error() {} });
+
+    expect(sent[1]!.id).not.toBe(sent[0]!.id);
+  });
+
+  it("drops a message the relay tagged for an earlier socket", () => {
+    const { devtools, sent, events } = setup();
+    const first = sent[0]!.id;
+    const second: string[] = [];
+    devtools.transport.open("ws://127.0.0.1:49152", {
+      open: () => second.push("open"),
+      message: (text) => second.push(`message:${text}`),
+      close: (code, reason) => second.push(`close:${code}:${reason}`),
+      error: () => undefined,
+    });
+
+    devtools.receive(JSON.stringify({ kind: "open", id: first }));
+    devtools.receive(JSON.stringify({ kind: "message", id: first, text: '{"type":"session_ack"}' }));
+    devtools.receive(JSON.stringify({ kind: "close", id: first, code: 1006, reason: "" }));
+
+    expect(second).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  it("delivers a message the relay tagged for the active socket", () => {
+    const { devtools, sent, events } = setup();
+
+    devtools.receive(JSON.stringify({ kind: "open", id: sent[0]!.id }));
+
+    expect(events).toEqual(["open"]);
+  });
+
+  it("delivers a message without an id to the active socket", () => {
+    const { devtools, events } = setup();
+
+    devtools.receive(JSON.stringify({ kind: "open" }));
+
+    expect(events).toEqual(["open"]);
   });
 });

@@ -11,6 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: attaching the same browser page a second time no longer sometimes fails with `invalid_ack`.** A late message for the earlier attach could land on the new one; now each message only reaches the connection it belongs to.
 - **Docs: the root, package and playground READMEs share the Appduct banner, Callstack footer and shorter getting-started guides.** Platform setup, build behavior and detailed reference documentation are linked from each SDK.
 
 ## 0.15.0 (2026-10-12)
