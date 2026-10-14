@@ -114,4 +114,20 @@ describe("relayPage", () => {
 
     expect(page.received()).toEqual([{ kind: "open" }]);
   });
+
+  it("tells the page which socket each open, message and close belongs to", () => {
+    const { page, daemon } = setup();
+    page.call({ kind: "open", id: "a" });
+    page.call({ kind: "open", id: "b" });
+
+    daemon.sockets[1]!.open();
+    daemon.sockets[1]!.receive("{}");
+    daemon.sockets[1]!.closeFromDaemon(1006, "lost");
+
+    expect(page.received()).toEqual([
+      { kind: "open", id: "b" },
+      { kind: "message", id: "b", text: "{}" },
+      { kind: "close", id: "b", code: 1006, reason: "lost" },
+    ]);
+  });
 });
