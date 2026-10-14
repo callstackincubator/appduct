@@ -115,6 +115,27 @@ describe("the devtools binding transport", () => {
     const { devtools, events } = setup();
 
     devtools.receive(JSON.stringify({ kind: "open" }));
+    devtools.receive(JSON.stringify({ kind: "message", text: '{"type":"y"}' }));
+
+    expect(events).toEqual(["open", 'message:{"type":"y"}']);
+  });
+
+  it("still delivers what the relay tags for the new socket after dropping the old one's", () => {
+    const { devtools, socket, sent } = setup();
+    const first = sent[0]!.id;
+    socket.close(1000, "superseded");
+    const events: string[] = [];
+    devtools.transport.open("ws://127.0.0.1:49152", {
+      open: () => events.push("open"),
+      message: (text) => events.push(`message:${text}`),
+      close: (code, reason) => events.push(`close:${code}:${reason}`),
+      error: (message) => events.push(`error:${message}`),
+    });
+    const second = sent.filter((message) => message.kind === "open")[1]!.id;
+
+    devtools.receive(JSON.stringify({ kind: "open", id: first }));
+    devtools.receive(JSON.stringify({ kind: "close", id: first, code: 1006, reason: "" }));
+    devtools.receive(JSON.stringify({ kind: "open", id: second }));
 
     expect(events).toEqual(["open"]);
   });

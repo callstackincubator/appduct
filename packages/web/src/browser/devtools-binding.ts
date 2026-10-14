@@ -10,7 +10,8 @@ import type { SocketEvents, Transport } from "../core/index.js";
  *
  * Every message carries the `id` of the socket it is about, chosen by the page on `open`. The
  * relay echoes it, so a message queued for a socket the page has since replaced is dropped
- * instead of reaching the new one. A message without an `id` goes to the active socket.
+ * instead of reaching the new one. A message without an `id` (an older relay, or `attachPage`
+ * closing the page's socket) goes to the active socket.
  */
 export const createDevtoolsBindingTransport = (
   sendToRelay: (json: string) => void,
