@@ -12,9 +12,8 @@ import type { Spec } from "../NativeAppduct";
  *
  * "react-native"'s own source cannot be parsed under a Node test runner (Flow-typed; see
  * `deep-link-install.test.ts` for the same constraint), so it is mocked with working `AppState`/
- * `Linking` stubs. The native-module loader resolves to a nullish `NativeAppduct` export --
- * the same "not found" case `AppductModule.ts`'s defensive check
- * treats identically to the real module throwing from `TurboModuleRegistry.getEnforcing` (Expo Go, a
+ * `Linking` stubs. The native-module loader resolves to a nullish `NativeAppduct` export, which is
+ * what `TurboModuleRegistry.get` returns when the native module is missing (Expo Go, a
  * misconfigured build, an inert release build, or this test's environment).
  */
 let nativeAccessAttempts = 0;

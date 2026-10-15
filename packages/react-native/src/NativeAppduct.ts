@@ -140,5 +140,10 @@ export interface Spec extends TurboModule {
   readonly onError: CodegenTypes.EventEmitter<AppductErrorEventNative>;
 }
 
-export const NativeAppduct =
-  TurboModuleRegistry.getEnforcing<Spec>("Appduct");
+/**
+ * `get`, not `getEnforcing`: null when the build does not link the native module. Throwing here
+ * would crash the app, because Metro reports any error a lazily required module throws while
+ * loading as fatal before the caller's try/catch sees it. `AppductModule.ts` turns null into the
+ * actionable error.
+ */
+export const NativeAppduct = TurboModuleRegistry.get<Spec>("Appduct");
