@@ -1,6 +1,6 @@
 name: appduct
 description: Call functions inside a running Flutter app from a terminal, a test runner or an agent.
-version: 0.15.0
+version: 0.15.1
 homepage: https://callstackincubator.github.io/appduct/install/flutter/
 repository: https://github.com/callstackincubator/appduct/tree/main/packages/flutter
 issue_tracker: https://github.com/callstackincubator/appduct/issues

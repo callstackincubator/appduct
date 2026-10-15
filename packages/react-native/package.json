@@ -1,6 +1,6 @@
 {
   "name": "@appduct/react-native",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "React Native SDK for Appduct: register tools an agent, test or terminal can call in your running app.",
   "main": "build/index.js",
   "module": "build/index.js",

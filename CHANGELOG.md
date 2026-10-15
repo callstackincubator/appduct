@@ -11,6 +11,8 @@ section into a versioned heading.
 
 ## Unreleased
 
+## 0.15.1 (2026-10-15)
+
 - **Fix: a React Native build that leaves out Appduct's native module no longer crashes when the app registers a tool.** `registerTool`, `useAppductTool` and the rest of the API now do nothing in that build, as they should, instead of raising a fatal error in Release.
 - **Fix: attaching the same browser page a second time no longer sometimes fails with `invalid_ack`.** A late message for the earlier attach could land on the new one; now each message only reaches the connection it belongs to.
 - **Docs: the root, package and playground READMEs share the Appduct banner, Callstack footer and shorter getting-started guides.** Platform setup, build behavior and detailed reference documentation are linked from each SDK.
