@@ -12,14 +12,14 @@ type NativeAppductModule = typeof import("./NativeAppduct");
 type NativeModuleLoader = () => NativeAppductModule;
 
 /**
- * ARCHITECTURE.md §11: the root entry is side-effect-free, so the TurboModule lookup
- * (`TurboModuleRegistry.getEnforcing`, which throws when the native module was never registered —
- * Expo Go, a misconfigured build, or a JS-only environment) must happen lazily on the *first* native
- * call, never at import time. `require` here (not a static `import`) is what makes the lookup lazy:
- * `./NativeAppduct`'s top-level `getEnforcing` call only runs the first time this function
- * actually executes.
+ * ARCHITECTURE.md §11: the root entry is side-effect-free, so the TurboModule lookup must happen
+ * lazily on the *first* native call, never at import time. `require` here (not a static `import`)
+ * is what makes the lookup lazy: `./NativeAppduct`'s top-level `TurboModuleRegistry.get` call only
+ * runs the first time this function actually executes. It yields null when the native module was
+ * never registered (Expo Go, a build that does not link it, a JS-only environment).
  */
-let cachedNative: NativeAppductModule["NativeAppduct"] | null = null;
+let cachedNative: NonNullable<NativeAppductModule["NativeAppduct"]> | null =
+  null;
 const defaultNativeModuleLoader: NativeModuleLoader = () =>
   require("./NativeAppduct") as NativeAppductModule;
 let nativeModuleLoader: NativeModuleLoader = defaultNativeModuleLoader;
@@ -37,32 +37,26 @@ export const __appductSetNativeModuleLoaderForTests = (
   nativeModuleLoader = loader ?? defaultNativeModuleLoader;
 };
 
-const resolveNativeModule = (): NativeAppductModule["NativeAppduct"] => {
+const resolveNativeModule = (): NonNullable<
+  NativeAppductModule["NativeAppduct"]
+> => {
   if (cachedNative) {
     return cachedNative;
   }
 
-  try {
-    const nativeModule = nativeModuleLoader();
-    const resolvedNative = nativeModule.NativeAppduct;
-    if (!resolvedNative) {
-      // Defensive: the real `NativeAppduct.ts` either resolves or throws (it never resolves to
-      // a nullish value), but a test double or an unexpected bundler transform could — treat that
-      // the same as "not found" rather than deferring a crash to the first actual method call.
-      throw new Error("NativeAppduct module resolved to a nullish value.");
-    }
-    cachedNative = resolvedNative;
-    return cachedNative;
-  } catch (error) {
+  // Null when the build does not link the native module. A test double may also leave the module
+  // itself undefined.
+  const resolvedNative = nativeModuleLoader()?.NativeAppduct;
+  if (!resolvedNative) {
     throw new Error(
       '@appduct/react-native could not find its native module ("Appduct"). ' +
         "This library ships native code and requires a custom development build — Expo Go and " +
         "JS-only bundles do not include it. Rebuild with `expo run:ios`/`expo run:android` (or " +
-        `your bare React Native dev client), then try again. (${
-          error instanceof Error ? error.message : String(error)
-        })`,
+        "your bare React Native dev client), then try again.",
     );
   }
+  cachedNative = resolvedNative;
+  return cachedNative;
 };
 
 /**
