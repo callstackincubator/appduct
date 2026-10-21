@@ -1,6 +1,6 @@
 {
   "name": "@appduct/e2e",
-  "version": "0.15.1",
+  "version": "0.16.0",
   "description": "Use Appduct in e2e tests: call your app's tools from a test or let e2e's agent call them.",
   "type": "module",
   "main": "./dist/index.js",
