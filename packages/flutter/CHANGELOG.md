@@ -4,6 +4,10 @@ This package is versioned together with the `appduct` CLI. The
 [Appduct changelog](https://github.com/callstackincubator/appduct/blob/main/CHANGELOG.md) lists what
 changed in each version.
 
+## 0.16.0
+
+No changes to the Flutter package. The changes in this release are in the Appduct changelog.
+
 ## 0.15.1
 
 No changes to the Flutter package. The fixes in this release are in the Appduct changelog.
