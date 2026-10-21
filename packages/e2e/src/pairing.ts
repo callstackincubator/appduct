@@ -1,4 +1,6 @@
-import { AppductError, link, waitForSession, type AppClient } from "appduct/client";
+import { link, waitForSession, type AppClient } from "appduct/client";
+
+import type { Clock } from "./session.js";
 
 /** The part of e2e's `browser` fixture pairing uses. */
 export type PairingBrowser = {
@@ -18,46 +20,40 @@ export type PairingTarget =
 
 /** A web page claims at once; a device may still be launching the app. */
 const CLAIM_TIMEOUT_MS = 60_000;
+/** How long an iOS app gets to claim before pairing looks for iOS's "Open in …?" question. */
+const PROMPT_WAIT_MS = 2_000;
+
+const claim = (sessionId: string): Promise<AppClient> => waitForSession(sessionId, { timeoutMs: CLAIM_TIMEOUT_MS });
 
 /** Connects the page in the test's browser, which must load `@appduct/web`. */
-const linkPage = async (browser: PairingBrowser): Promise<string> => {
+const linkPage = async (browser: PairingBrowser): Promise<AppClient> => {
   const { sessionId, script } = await link({ target: "web", url: await browser.url() });
   await browser.evaluate(`(${script}, null)`);
-  return sessionId;
-};
-
-/** Has e2e open the app's deep link, launching the app if it is not running. */
-const openDeepLink = async (device: PairingDevice): Promise<string> => {
-  const { sessionId, deepLink } = await link();
-  await device.openLink(deepLink);
-  return sessionId;
+  return claim(sessionId);
 };
 
 /**
- * Opens the link on the simulator itself when exactly one is booted, which is quick and asks
- * nothing. A link e2e opens for the test makes iOS ask "Open in …?", so that path, taken when
- * several simulators are booted or the device is a phone, accepts the question as well.
+ * Has e2e open the app's deep link, which launches the app if it is not running. A simulator asks
+ * "Open in …?" for the first link it opens into an app and not again once accepted, so the question
+ * is accepted only when the app has not claimed in time.
  */
-const linkIosApp = async (device: PairingDevice): Promise<string> => {
-  try {
-    return (await link({ target: "ios-sim" })).sessionId;
-  } catch (error) {
-    if (!(error instanceof AppductError && error.type === "client_error")) throw error;
+const linkApp = async (target: Extract<PairingTarget, { device: PairingDevice }>, clock: Clock): Promise<AppClient> => {
+  const { sessionId, deepLink } = await link();
+  await target.device.openLink(deepLink);
+  const claimed = claim(sessionId);
+  if (target.platform === "ios") {
+    const settled = claimed.then(
+      () => true,
+      () => true,
+    );
+    if (!(await Promise.race([settled, clock.sleep(PROMPT_WAIT_MS).then(() => false)]))) {
+      // agent-device can report a failure for a question it did accept, so the claim decides.
+      await target.device.alert("accept").catch(() => undefined);
+    }
   }
-  const sessionId = await openDeepLink(device);
-  // agent-device reports a failure for an accepted question too, after it closes, so the outcome is
-  // read from the claim instead.
-  await device.alert("accept").catch(() => undefined);
-  return sessionId;
+  return claimed;
 };
 
 /** Hands the app under test a fresh link and resolves once the app has claimed it. */
-export const pairWith = async (target: PairingTarget): Promise<AppClient> => {
-  const sessionId =
-    target.platform === "web"
-      ? await linkPage(target.browser)
-      : target.platform === "ios"
-        ? await linkIosApp(target.device)
-        : await openDeepLink(target.device);
-  return waitForSession(sessionId, { timeoutMs: CLAIM_TIMEOUT_MS });
-};
+export const pairWith = (target: PairingTarget, clock: Clock): Promise<AppClient> =>
+  target.platform === "web" ? linkPage(target.browser) : linkApp(target, clock);

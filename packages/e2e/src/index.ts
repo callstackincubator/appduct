@@ -51,7 +51,7 @@ const targetOf = (fixtures: EngineFixtures): PairingTarget => {
  */
 export const withAppduct = <Fixtures extends TestFixtures>(base: TestAPI<Fixtures>): TestAPI<Fixtures & { appduct: Appduct }> => {
   const appduct: FixtureFn<Fixtures, Appduct> = async (fixtures, use) => {
-    const session = sessions.forTest(() => pairWith(targetOf(fixtures as unknown as EngineFixtures)));
+    const session = sessions.forTest(() => pairWith(targetOf(fixtures as unknown as EngineFixtures), clock));
     const withdraw = offerToAgent(session);
     await use(session);
     withdraw();
