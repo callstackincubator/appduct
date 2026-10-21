@@ -849,4 +849,19 @@ describe("waitForSession", () => {
     expect(app.sessionId).toBe("s1");
     app.close();
   });
+
+  test("rejects at once when the daemon refuses the subscription", async () => {
+    const stateDir = await makeTempStateDir();
+    await startFakeDaemon(stateDir, {
+      version: "9.9.9",
+      answer: (method) =>
+        method === "events.subscribe"
+          ? { error: { code: -32000, message: "No such session.", data: { type: "unknown_session" } } }
+          : { error: { code: -32000, message: "unknown", data: { type: "unknown_session" } } },
+    });
+
+    await expect(waitForSession("s1", { stateDir, autoSpawn: false, timeoutMs: 5_000 })).rejects.toMatchObject({
+      type: "unknown_session",
+    });
+  });
 });
