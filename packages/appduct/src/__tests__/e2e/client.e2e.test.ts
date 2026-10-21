@@ -315,6 +315,42 @@ describe("e2e: appduct/client", () => {
     15_000,
   );
 
+  test("state() reports an active session, and suspended once the app's connection drops", async () => {
+    const { stateDir } = await makeTempStateDir();
+    await ensureDaemon(stateDir);
+    const fakeApp = new FakeAppClient(await daemonWssPort(stateDir), await fetchPinnedKeys(stateDir));
+    const link = await mintLink(stateDir);
+    await fakeApp.claim(link);
+    const app = await connect({ stateDir, selector: link.sessionId });
+
+    expect(await app.state()).toBe("active");
+
+    const events = await subscribeToEvents(stateDir);
+    const suspended = events.waitFor("session_suspended");
+    fakeApp.dropSocket();
+    await suspended;
+    events.close();
+
+    expect(await app.state()).toBe("suspended");
+    app.close();
+  });
+
+  test("revoke() ends the session, so it no longer exists and the app is disconnected", async () => {
+    const { stateDir } = await makeTempStateDir();
+    await ensureDaemon(stateDir);
+    const fakeApp = new FakeAppClient(await daemonWssPort(stateDir), await fetchPinnedKeys(stateDir));
+    const link = await mintLink(stateDir);
+    await fakeApp.claim(link);
+    const app = await connect({ stateDir, selector: link.sessionId });
+    const disconnected = fakeApp.waitForClose();
+
+    await app.revoke();
+
+    expect(await disconnected).toMatchObject({ code: 1000 });
+    await expect(app.state()).rejects.toMatchObject({ type: "unknown_session" });
+    app.close();
+  });
+
   test("connect() rejects with a connection_error AppductError when the daemon is unreachable and auto-spawn is disabled", async () => {
     const { stateDir } = await makeTempStateDir();
 
