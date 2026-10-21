@@ -1,0 +1,7 @@
+{
+  "scheme": "appduct-native",
+  "appId": {
+    "ios": "com.callstack.appduct.playgroundnative",
+    "android": "com.callstack.appduct.playground"
+  }
+}
