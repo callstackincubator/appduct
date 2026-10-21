@@ -26,66 +26,86 @@ const isGone = (error: unknown): boolean =>
   error instanceof AppductError &&
   (error.type === "session_suspended" || error.type === "session_not_active" || error.type === "unknown_session");
 
+/** Ends a session that is no longer worth keeping. The daemon may have forgotten it already. */
+const discard = (client: AppClient): void => {
+  void client.revoke().catch(() => undefined);
+  client.close();
+};
+
 /**
- * Pairs with `pair` on first use and again whenever the session has gone, as it does when the
- * test relaunches the app or reloads the page.
+ * The worker's Appduct session, kept across tests: e2e runs one test at a time in a worker, and a
+ * test that leaves the app running hands the next one an app that is still connected.
  */
-export const createSession = (pair: () => Promise<AppClient>, clock: Clock): Appduct & { close(): void } => {
-  let pairing: Promise<AppClient> | undefined;
+export const createSessions = (clock: Clock) => {
+  let kept: AppClient | undefined;
 
-  const forget = (stale: Promise<AppClient>) => {
-    if (pairing === stale) pairing = undefined;
-  };
-
-  const paired = (): Promise<AppClient> => {
-    if (!pairing) {
-      const attempt = pair();
-      attempt.catch(() => forget(attempt)); // so the next use pairs again
-      pairing = attempt;
+  /** The kept session while the app is still connected to it, else a newly paired one. */
+  const resume = async (pair: () => Promise<AppClient>): Promise<AppClient> => {
+    const previous = kept;
+    kept = undefined;
+    if (previous) {
+      // Anything but `active` means the app went away: relaunched, reloaded or closed.
+      if ((await previous.state().catch(() => undefined)) === "active") return (kept = previous);
+      discard(previous);
     }
-    return pairing;
+    return (kept = await pair());
   };
 
-  /** Runs `use` on the paired client, pairing once more if the session has gone. */
-  const withClient = async <T>(use: (client: AppClient) => Promise<T>): Promise<T> => {
-    const current = paired();
-    const client = await current;
-    try {
-      return await use(client);
-    } catch (error) {
-      if (!isGone(error)) throw error;
-      client.close();
-      forget(current);
-      return use(await paired());
-    }
-  };
+  /**
+   * One test's view of the session. It connects on first use, reusing the kept session when it can,
+   * and pairs again once if the session goes away during the test.
+   */
+  const forTest = (pair: () => Promise<AppClient>): Appduct => {
+    let current: Promise<AppClient> | undefined;
 
-  return {
-    call: async (name, args = {}, options) => {
-      const deadline = clock.now() + TOOL_WAIT_MS;
-      for (;;) {
-        try {
-          return await withClient((client) => client.call(name, args, options));
-        } catch (error) {
-          const missing = error instanceof AppductError && error.type === "tool_not_found";
-          if (!missing || clock.now() >= deadline) throw error;
+    const connected = (): Promise<AppClient> => {
+      if (!current) {
+        const attempt = resume(pair);
+        attempt.catch(() => {
+          if (current === attempt) current = undefined; // so the next use tries again
+        });
+        current = attempt;
+      }
+      return current;
+    };
+
+    const withClient = async <T>(use: (client: AppClient) => Promise<T>): Promise<T> => {
+      const attempt = connected();
+      const client = await attempt;
+      try {
+        return await use(client);
+      } catch (error) {
+        if (!isGone(error)) throw error;
+        if (current === attempt) current = undefined; // a concurrent call may have reconnected already
+        return use(await connected());
+      }
+    };
+
+    return {
+      call: async (name, args = {}, options) => {
+        const deadline = clock.now() + TOOL_WAIT_MS;
+        for (;;) {
+          try {
+            return await withClient((client) => client.call(name, args, options));
+          } catch (error) {
+            const missing = error instanceof AppductError && error.type === "tool_not_found";
+            if (!missing || clock.now() >= deadline) throw error;
+            await clock.sleep(POLL_MS);
+          }
+        }
+      },
+      tools: async () => {
+        const deadline = clock.now() + TOOL_WAIT_MS;
+        for (;;) {
+          const tools = await withClient((client) => client.tools());
+          if (tools.length > 0 || clock.now() >= deadline) return tools;
           await clock.sleep(POLL_MS);
         }
-      }
-    },
-    tools: async () => {
-      const deadline = clock.now() + TOOL_WAIT_MS;
-      for (;;) {
-        const tools = await withClient((client) => client.tools());
-        if (tools.length > 0 || clock.now() >= deadline) return tools;
-        await clock.sleep(POLL_MS);
-      }
-    },
-    waitForEvent: <TPayload>(name: string, options?: EventWait) =>
-      withClient((client) => client.waitForEvent<TPayload>(name, options)),
-    close: () => {
-      pairing?.then((client) => client.close(), () => undefined);
-      pairing = undefined;
-    },
+      },
+      waitForEvent: <TPayload>(name: string, options?: EventWait) =>
+        withClient((client) => client.waitForEvent<TPayload>(name, options)),
+    };
   };
+
+  return { forTest };
 };

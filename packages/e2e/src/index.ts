@@ -21,7 +21,7 @@ import type { FixtureDefinitions, FixtureFn, TestAPI, TestFixtures } from "e2e";
 
 import { offerToAgent } from "./agent-tools.js";
 import { pairWith, type PairingBrowser, type PairingDevice, type PairingTarget } from "./pairing.js";
-import { createSession, type Appduct, type Clock } from "./session.js";
+import { createSessions, type Appduct, type Clock } from "./session.js";
 
 export { appductTools } from "./agent-tools.js";
 export type { Appduct, EventWait } from "./session.js";
@@ -30,6 +30,9 @@ const clock: Clock = {
   now: () => Date.now(),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
+
+/** One per worker process, shared by every `withAppduct` test in it. */
+const sessions = createSessions(clock);
 
 type EngineFixtures = TestFixtures & { readonly browser: PairingBrowser; readonly device: PairingDevice };
 
@@ -42,16 +45,16 @@ const targetOf = (fixtures: EngineFixtures): PairingTarget => {
 };
 
 /**
- * Adds an `appduct` fixture to `base`: the app's Appduct session, paired on first use. `base` is
+ * Adds an `appduct` fixture to `base`: the app's Appduct session, connected on first use and kept
+ * for the next test while the app stays connected. `base` is
  * e2e's `test`, an engine's typed `test`, or one you already extended.
  */
 export const withAppduct = <Fixtures extends TestFixtures>(base: TestAPI<Fixtures>): TestAPI<Fixtures & { appduct: Appduct }> => {
   const appduct: FixtureFn<Fixtures, Appduct> = async (fixtures, use) => {
-    const session = createSession(() => pairWith(targetOf(fixtures as unknown as EngineFixtures)), clock);
+    const session = sessions.forTest(() => pairWith(targetOf(fixtures as unknown as EngineFixtures)));
     const withdraw = offerToAgent(session);
     await use(session);
     withdraw();
-    session.close();
   };
   // The mapped definition type cannot tell that `appduct` is absent from a generic `Fixtures`; a
   // base that has one fails at import with e2e's own COLLECTION_ERROR.
