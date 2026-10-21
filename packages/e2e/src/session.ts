@@ -27,9 +27,9 @@ const isGone = (error: unknown): boolean =>
   (error.type === "session_suspended" || error.type === "session_not_active" || error.type === "unknown_session");
 
 /** Ends a session that is no longer worth keeping. The daemon may have forgotten it already. */
-const discard = (client: AppClient): void => {
-  void client.revoke().catch(() => undefined);
-  client.close();
+const discard = async (client: AppClient): Promise<void> => {
+  await client.revoke().catch(() => undefined);
+  client.close(); // only now: closing drops a revoke still on its way
 };
 
 /**
@@ -46,7 +46,7 @@ export const createSessions = (clock: Clock) => {
     if (previous) {
       // Anything but `active` means the app went away: relaunched, reloaded or closed.
       if ((await previous.state().catch(() => undefined)) === "active") return (kept = previous);
-      discard(previous);
+      await discard(previous);
     }
     return (kept = await pair());
   };
@@ -82,22 +82,25 @@ export const createSessions = (clock: Clock) => {
     };
 
     return {
+      // Each wait starts at the app's first answer, so the time pairing took does not count.
       call: async (name, args = {}, options) => {
-        const deadline = clock.now() + TOOL_WAIT_MS;
+        let deadline: number | undefined;
         for (;;) {
           try {
             return await withClient((client) => client.call(name, args, options));
           } catch (error) {
-            const missing = error instanceof AppductError && error.type === "tool_not_found";
-            if (!missing || clock.now() >= deadline) throw error;
+            if (!(error instanceof AppductError && error.type === "tool_not_found")) throw error;
+            deadline ??= clock.now() + TOOL_WAIT_MS;
+            if (clock.now() >= deadline) throw error;
             await clock.sleep(POLL_MS);
           }
         }
       },
       tools: async () => {
-        const deadline = clock.now() + TOOL_WAIT_MS;
+        let deadline: number | undefined;
         for (;;) {
           const tools = await withClient((client) => client.tools());
+          deadline ??= clock.now() + TOOL_WAIT_MS;
           if (tools.length > 0 || clock.now() >= deadline) return tools;
           await clock.sleep(POLL_MS);
         }

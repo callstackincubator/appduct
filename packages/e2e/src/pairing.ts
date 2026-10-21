@@ -1,5 +1,6 @@
-import { link, waitForSession, type AppClient } from "appduct/client";
+import { AppductError, type AppClient } from "appduct/client";
 
+import type { Daemon } from "./daemon.js";
 import type { Clock } from "./session.js";
 
 /** The part of e2e's `browser` fixture pairing uses. */
@@ -18,18 +19,24 @@ export type PairingTarget =
   | { platform: "web"; browser: PairingBrowser }
   | { platform: "ios" | "android"; device: PairingDevice };
 
-/** A web page claims at once; a device may still be launching the app. */
-const CLAIM_TIMEOUT_MS = 60_000;
+/** A device may still be launching the app; a page that loads `@appduct/web` connects at once. */
+const DEVICE_CLAIM_SECONDS = 60;
+const WEB_CLAIM_SECONDS = 10;
 /** How long an iOS app gets to claim before pairing looks for iOS's "Open in …?" question. */
 const PROMPT_WAIT_MS = 2_000;
 
-const claim = (sessionId: string): Promise<AppClient> => waitForSession(sessionId, { timeoutMs: CLAIM_TIMEOUT_MS });
-
-/** Connects the page in the test's browser, which must load `@appduct/web`. */
-const linkPage = async (browser: PairingBrowser): Promise<AppClient> => {
-  const { sessionId, script } = await link({ target: "web", url: await browser.url() });
+/** Connects the page in the test's browser. */
+const linkPage = async (browser: PairingBrowser, daemon: Daemon): Promise<AppClient> => {
+  // The link lasts only as long as the wait, so a failed pairing leaves nothing behind.
+  const { sessionId, script } = await daemon.webLink(await browser.url(), WEB_CLAIM_SECONDS);
   await browser.evaluate(`(${script}, null)`);
-  return claim(sessionId);
+  return daemon.claim(sessionId, WEB_CLAIM_SECONDS * 1000).catch((error: unknown) => {
+    if (!(error instanceof AppductError && error.type === "timeout")) throw error;
+    throw new AppductError(
+      "timeout",
+      `The page did not connect to Appduct within ${WEB_CLAIM_SECONDS} s. Check that it loads @appduct/web from a development build.`,
+    );
+  });
 };
 
 /**
@@ -37,10 +44,14 @@ const linkPage = async (browser: PairingBrowser): Promise<AppClient> => {
  * "Open in …?" for the first link it opens into an app and not again once accepted, so the question
  * is accepted only when the app has not claimed in time.
  */
-const linkApp = async (target: Extract<PairingTarget, { device: PairingDevice }>, clock: Clock): Promise<AppClient> => {
-  const { sessionId, deepLink } = await link();
+const linkApp = async (
+  target: Extract<PairingTarget, { device: PairingDevice }>,
+  daemon: Daemon,
+  clock: Clock,
+): Promise<AppClient> => {
+  const { sessionId, deepLink } = await daemon.deviceLink(DEVICE_CLAIM_SECONDS);
   await target.device.openLink(deepLink);
-  const claimed = claim(sessionId);
+  const claimed = daemon.claim(sessionId, DEVICE_CLAIM_SECONDS * 1000);
   if (target.platform === "ios") {
     const settled = claimed.then(
       () => true,
@@ -55,5 +66,5 @@ const linkApp = async (target: Extract<PairingTarget, { device: PairingDevice }>
 };
 
 /** Hands the app under test a fresh link and resolves once the app has claimed it. */
-export const pairWith = (target: PairingTarget, clock: Clock): Promise<AppClient> =>
-  target.platform === "web" ? linkPage(target.browser) : linkApp(target, clock);
+export const pairWith = (target: PairingTarget, daemon: Daemon, clock: Clock): Promise<AppClient> =>
+  target.platform === "web" ? linkPage(target.browser, daemon) : linkApp(target, daemon, clock);

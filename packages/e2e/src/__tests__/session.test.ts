@@ -16,7 +16,7 @@ type FakeApp = {
   state?: SessionState;
 };
 
-type Fake = AppClient & { closed: boolean; revoked: boolean; app: FakeApp };
+type Fake = AppClient & { closed: boolean; revoked: boolean; closedBeforeRevoked: boolean; app: FakeApp };
 
 /** An app client whose answers the test scripts, recording whether it was closed or revoked. */
 const fakeClient = (app: FakeApp = { state: "active" }): Fake => {
@@ -25,8 +25,13 @@ const fakeClient = (app: FakeApp = { state: "active" }): Fake => {
     app,
     closed: false,
     revoked: false,
+    closedBeforeRevoked: false,
     state: async () => app.state ?? Promise.reject(new AppductError("unknown_session", "No such session.")),
-    revoke: async () => void (client.revoked = true),
+    revoke: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      client.closedBeforeRevoked = client.closed;
+      client.revoked = true;
+    },
     call: app.call ?? (async () => ({ ok: true })),
     tools: app.tools ?? (async () => [{ name: "sum" } as ListedToolDescriptor]),
     events: async () => ({ events: [], cursor: 0, dropped: 0, remaining: 0 }),
@@ -78,6 +83,7 @@ describe("one test", () => {
     expect(count()).toBe(2);
     expect(first.revoked).toBe(true);
     expect(first.closed).toBe(true);
+    expect(first.closedBeforeRevoked).toBe(false);
   });
 
   it("pairs again once when concurrent calls find the session gone", async () => {
@@ -117,6 +123,30 @@ describe("one test", () => {
     const session = createSessions(fakeClock()).forTest(pairings(app).pair);
 
     expect(await session.call("sum")).toEqual({ total: 3 });
+  });
+
+  it("starts the wait for a missing tool once the app has claimed, however long pairing took", async () => {
+    const clock = fakeClock();
+    let calls = 0;
+    const app = fakeClient({ state: "active", call: async () => (++calls < 3 ? Promise.reject(missing()) : { total: 3 }) });
+    const session = createSessions(clock).forTest(async () => {
+      await clock.sleep(15_000); // a slow device launch
+      return app;
+    });
+
+    expect(await session.call("sum")).toEqual({ total: 3 });
+  });
+
+  it("starts the wait for the first tool once the app has claimed, however long pairing took", async () => {
+    const clock = fakeClock();
+    let lists = 0;
+    const app = fakeClient({ state: "active", tools: async () => (++lists < 3 ? [] : [{ name: "sum" } as ListedToolDescriptor]) });
+    const session = createSessions(clock).forTest(async () => {
+      await clock.sleep(15_000);
+      return app;
+    });
+
+    expect((await session.tools()).map((tool) => tool.name)).toEqual(["sum"]);
   });
 
   it("fails with tool_not_found when the tool is still missing after ten seconds", async () => {
@@ -182,6 +212,7 @@ describe("across tests in a worker", () => {
     expect(count()).toBe(2);
     expect(relaunched.revoked).toBe(true);
     expect(relaunched.closed).toBe(true);
+    expect(relaunched.closedBeforeRevoked).toBe(false);
   });
 
   it("pairs again when the previous test's session no longer exists", async () => {

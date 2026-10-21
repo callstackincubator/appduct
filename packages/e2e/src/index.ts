@@ -20,6 +20,7 @@
 import type { FixtureDefinitions, FixtureFn, TestAPI, TestFixtures } from "e2e";
 
 import { offerToAgent } from "./agent-tools.js";
+import { appductDaemon } from "./daemon.js";
 import { pairWith, type PairingBrowser, type PairingDevice, type PairingTarget } from "./pairing.js";
 import { createSessions, type Appduct, type Clock } from "./session.js";
 
@@ -51,10 +52,13 @@ const targetOf = (fixtures: EngineFixtures): PairingTarget => {
  */
 export const withAppduct = <Fixtures extends TestFixtures>(base: TestAPI<Fixtures>): TestAPI<Fixtures & { appduct: Appduct }> => {
   const appduct: FixtureFn<Fixtures, Appduct> = async (fixtures, use) => {
-    const session = sessions.forTest(() => pairWith(targetOf(fixtures as unknown as EngineFixtures), clock));
+    const session = sessions.forTest(() => pairWith(targetOf(fixtures as unknown as EngineFixtures), appductDaemon, clock));
     const withdraw = offerToAgent(session);
-    await use(session);
-    withdraw();
+    try {
+      await use(session);
+    } finally {
+      withdraw();
+    }
   };
   // The mapped definition type cannot tell that `appduct` is absent from a generic `Fixtures`; a
   // base that has one fails at import with e2e's own COLLECTION_ERROR.
