@@ -59,7 +59,7 @@ jobs:
           pnpm --filter @appduct/web pack --pack-destination release
           pnpm --filter @appduct/e2e pack --pack-destination release
       - name: Upload release tarballs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-packages
           path: release/*.tgz
@@ -451,7 +451,7 @@ jobs:
       - name: Save the deployment id for a re-run
         if: env.ALREADY_PUBLISHED == 'false' && env.REUSE_DEPLOYMENT != 'true'
         # Deliberately before the status poll, so the id survives whatever fails after the upload.
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: central-deployment-id
           path: ${{ runner.temp }}/central-deployment/deployment-id
