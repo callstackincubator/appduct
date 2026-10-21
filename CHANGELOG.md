@@ -11,6 +11,8 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Fix: `waitForSession()` from `appduct/client` no longer sometimes times out when the app claims the session right after the wait starts.**
+
 ## 0.15.1 (2026-10-15)
 
 - **Fix: a React Native build that leaves out Appduct's native module no longer crashes when the app registers a tool.** `registerTool`, `useAppductTool` and the rest of the API now do nothing in that build, as they should, instead of raising a fatal error in Release.
