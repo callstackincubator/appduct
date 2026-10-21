@@ -131,17 +131,6 @@ export const waitForSession = async <TTools = ToolMap>(
     openDaemonStream({ stateDir, spawn: options.spawn, autoSpawn: options.autoSpawn });
 
   try {
-    // The session may already be claimed by the time this runs — resolve immediately rather than
-    // waiting for an event that already happened.
-    try {
-      await stream.call<SessionsDescribeResult>(RPC_METHODS.sessionsDescribe, { selector: sessionId });
-      return makeAppClient<TTools>(stream, sessionId, openStream);
-    } catch (error) {
-      if (!(error instanceof DaemonRpcError) || error.data?.type !== "unknown_session") {
-        throw error;
-      }
-    }
-
     await new Promise<void>((resolve, reject) => {
       let settled = false;
 
@@ -196,11 +185,21 @@ export const waitForSession = async <TTools = ToolMap>(
         }
       });
 
+      // Looks for the session only once subscribed: a claim before the subscription sent no
+      // notification this stream can see, so it must be found by looking, and a claim after it
+      // is seen by the listener above.
+      const fail = (error: unknown) => settle(() => reject(toAppductError(error)));
       stream
         .call(RPC_METHODS.eventsSubscribe, { sessionSelector: sessionId, kinds: ["session_claimed"] })
-        .catch((error) => {
-          settle(() => reject(toAppductError(error)));
-        });
+        .then(() => {
+          stream.call<SessionsDescribeResult>(RPC_METHODS.sessionsDescribe, { selector: sessionId }).then(
+            () => settle(resolve),
+            // Not claimed yet: the subscription reports the claim when it comes.
+            (error) => {
+              if (!(error instanceof DaemonRpcError) || error.data?.type !== "unknown_session") fail(error);
+            },
+          );
+        }, fail);
     });
 
     return makeAppClient<TTools>(stream, sessionId, openStream);

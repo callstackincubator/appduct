@@ -12,6 +12,7 @@ cards, slides, diagrams, videos), follow [docs/DESIGN.md](docs/DESIGN.md).
 | `packages/appduct` | CLI, daemon, MCP server, `appduct/client` (TypeScript) |
 | `packages/shared` | Wire protocol and domain types shared by CLI and SDK, plus the TypeScript SDK layer (`/sdk`: client, schema conversion, tool groups; `/react`: the hook; `/inert`: the only entry a noop entry may import, no client code) |
 | `packages/react-native` | React Native SDK, Expo config plugin, Metro helper |
+| `packages/e2e` | `@appduct/e2e`: the `appduct` fixture and agent tools for the e2e test runner; `e2e/` is its suite against the playgrounds |
 | `packages/native` | Framework-free iOS (Swift) and Android (Kotlin) core |
 | `packages/flutter` | Flutter plugin `appduct`, outside the pnpm workspace (no `package.json`); `lib/src/core/` is a pure-Dart wire codec checked against `packages/native/fixtures` |
 | `playground`, `playground-native`, `playground-flutter` | Expo app, native apps and a Flutter app (outside the pnpm workspace) registering the same five demo tools |

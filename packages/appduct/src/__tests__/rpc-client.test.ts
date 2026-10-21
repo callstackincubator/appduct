@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 
 import { afterEach, describe, expect, test } from "vitest";
 
+import { waitForSession } from "../client/index.js";
 import { getStateDirPaths } from "../daemon/state-dir.js";
 import {
   callDaemon,
@@ -83,6 +84,8 @@ const startFakeDaemon = async (
     pendingLinks?: number;
     /** Accept the connection but never answer `daemon.status` — an alive-but-wedged daemon. */
     stallStatus?: boolean;
+    /** The reply to any other method: its `result` or its `error`. */
+    answer?: (method: string) => { result: unknown } | { error: { code: number; message: string; data?: unknown } };
   },
 ): Promise<FakeDaemon> => {
   const paths = getStateDirPaths(stateDir);
@@ -163,6 +166,9 @@ const startFakeDaemon = async (
         } else if (request.method === "daemon.shutdown") {
           shutdownCalls += 1;
           result = { ok: true };
+        } else if (options.answer) {
+          socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, ...options.answer(request.method) })}\n`);
+          continue;
         } else {
           result = { answeredBy: id };
         }
@@ -820,3 +826,42 @@ describe("daemon version check: a contended lock is not an ineffective restart (
   });
 });
 
+
+describe("waitForSession", () => {
+  test("resolves for a session claimed just before its subscription took effect", async () => {
+    const stateDir = await makeTempStateDir();
+    // The app claims the session as the subscription arrives, too early for the subscription to
+    // carry a `session_claimed` notification.
+    let claimed = false;
+    await startFakeDaemon(stateDir, {
+      version: "9.9.9",
+      answer: (method) => {
+        if (method === "events.subscribe") claimed = true;
+        if (method !== "sessions.describe") return { result: {} };
+        return claimed
+          ? { result: { sessionId: "s1" } }
+          : { error: { code: -32000, message: "unknown", data: { type: "unknown_session" } } };
+      },
+    });
+
+    const app = await waitForSession("s1", { stateDir, autoSpawn: false, timeoutMs: 1_000 });
+
+    expect(app.sessionId).toBe("s1");
+    app.close();
+  });
+
+  test("rejects at once when the daemon refuses the subscription", async () => {
+    const stateDir = await makeTempStateDir();
+    await startFakeDaemon(stateDir, {
+      version: "9.9.9",
+      answer: (method) =>
+        method === "events.subscribe"
+          ? { error: { code: -32000, message: "No such session.", data: { type: "unknown_session" } } }
+          : { error: { code: -32000, message: "unknown", data: { type: "unknown_session" } } },
+    });
+
+    await expect(waitForSession("s1", { stateDir, autoSpawn: false, timeoutMs: 5_000 })).rejects.toMatchObject({
+      type: "unknown_session",
+    });
+  });
+});

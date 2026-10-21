@@ -34,7 +34,7 @@ function fixture({
 }: Versions = {}): string {
   const root = mkdtempSync(join(tmpdir(), "release-version-"));
   roots.push(root);
-  for (const name of ["shared", "appduct", "react-native", "web"]) {
+  for (const name of ["shared", "appduct", "react-native", "web", "e2e"]) {
     mkdirSync(join(root, "packages", name), { recursive: true });
     writeFileSync(
       join(root, "packages", name, "package.json"),
@@ -110,6 +110,17 @@ describe("release version check", () => {
     const result = run(root);
     expect(result.code).toBe(1);
     expect(result.err).toContain("packages/web/package.json");
+  });
+
+  it("rejects an e2e package whose version differs from the other npm packages", () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, "packages", "e2e", "package.json"),
+      JSON.stringify({ version: "0.14.0" }),
+    );
+    const result = run(root);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("packages/e2e/package.json");
   });
 
   it("rejects a prerelease version", () => {

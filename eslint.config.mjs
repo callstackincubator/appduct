@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import tseslint from "typescript-eslint";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const PACKAGES = ["packages/appduct/src", "packages/shared/src", "packages/web/src"];
+const PACKAGES = ["packages/appduct/src", "packages/shared/src", "packages/web/src", "packages/e2e/src"];
 const SOURCE = PACKAGES.map((p) => `${p}/**/*.ts`);
 // The device suite is test code throughout: it may reach the OS, but never mock a module.
 const TESTS = [...PACKAGES.map((p) => `${p}/__tests__/**/*.ts`), "e2e-device/**/*.ts"];

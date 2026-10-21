@@ -11,6 +11,10 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **New: an `AppClient` from `appduct/client` has `state()` and `revoke()`.** `state()` tells whether the app is still connected, and `revoke()` ends the session.
+- **New: `@appduct/e2e` lets [e2e](https://github.com/tester-army/e2e) tests and their agent call your app's tools.** Wrap your `test` with `withAppduct` to get an `appduct` fixture, and add `appductTools()` to an agent; see the [package README](https://github.com/callstackincubator/appduct/tree/main/packages/e2e).
+- **Fix: `waitForSession()` from `appduct/client` no longer sometimes times out when the app claims the session right after the wait starts.**
+
 ## 0.15.1 (2026-10-15)
 
 - **Fix: a React Native build that leaves out Appduct's native module no longer crashes when the app registers a tool.** `registerTool`, `useAppductTool` and the rest of the API now do nothing in that build, as they should, instead of raising a fatal error in Release.

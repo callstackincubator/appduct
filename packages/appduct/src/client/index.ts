@@ -35,4 +35,4 @@ export type {
   WaitForEventOptions,
 } from "./app-client.js";
 export type { TruncatedAppEvent } from "@appduct/shared";
-export type { AgentEndpoint, ErrorType, ListedToolDescriptor, ToolDescriptor } from "@appduct/shared";
+export type { AgentEndpoint, ErrorType, ListedToolDescriptor, SessionState, ToolDescriptor } from "@appduct/shared";

@@ -1,0 +1,52 @@
+{
+  "name": "@appduct/e2e",
+  "version": "0.15.1",
+  "description": "Use Appduct in e2e tests: call your app's tools from a test or let e2e's agent call them.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "lint": "eslint src",
+    "test": "vitest run --config ../../vitest.config.ts src",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "repository": "https://github.com/callstackincubator/appduct",
+  "bugs": {
+    "url": "https://github.com/callstackincubator/appduct/issues"
+  },
+  "author": "Szymon Chmal <szymon@chmal.it> (V3RON)",
+  "license": "MIT",
+  "dependencies": {
+    "appduct": "workspace:*"
+  },
+  "peerDependencies": {
+    "ai": "^7.0.0",
+    "e2e": ">=0.21.0 <1"
+  },
+  "devDependencies": {
+    "@e2e-dev/mobile": "0.12.3",
+    "@e2e-dev/web": "0.15.2",
+    "@types/node": "^22.10.0",
+    "ai": "^7.0.0",
+    "e2e": "0.21.2",
+    "typescript": "~5.9.2"
+  },
+  "homepage": "https://github.com/callstackincubator/appduct/tree/main/packages/e2e#readme",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "appduct",
+    "e2e",
+    "testing"
+  ]
+}

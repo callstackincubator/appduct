@@ -17,6 +17,8 @@ import {
   type EventsSinceResult,
   type FullAppEvent,
   type ListedToolDescriptor,
+  type SessionsDescribeResult,
+  type SessionState,
   type ToolsCallResult,
   type ToolsListResult,
 } from "@appduct/shared";
@@ -114,6 +116,15 @@ export type { AppEvent, FullAppEvent } from "@appduct/shared";
 
 export type AppClient<TTools = ToolMap> = {
   readonly sessionId: string;
+
+  /** The session's state now: `active` while the app is connected, `suspended` while it is away
+   * (its process died, it was backgrounded or a page closed) and may still come back. Rejects with
+   * `"unknown_session"` once the session is gone. */
+  state(): Promise<SessionState>;
+
+  /** Ends the session: the daemon disconnects the app and forgets the session, so it can never
+   * resume. Works in any state. */
+  revoke(): Promise<void>;
 
   /** `tools.list` for this session. An entry spells an ungrouped tool's `group` as `null`,
    * where a registration omits it. */
@@ -242,6 +253,22 @@ export const makeAppClient = <TTools = ToolMap>(
 
   const client = {
     sessionId,
+
+    state: async (): Promise<SessionState> => {
+      try {
+        return (await stream.call<SessionsDescribeResult>(RPC_METHODS.sessionsDescribe, { selector: sessionId })).state;
+      } catch (error) {
+        throw toAppductError(error);
+      }
+    },
+
+    revoke: async (): Promise<void> => {
+      try {
+        await stream.call(RPC_METHODS.sessionsRevoke, { selector: sessionId });
+      } catch (error) {
+        throw toAppductError(error);
+      }
+    },
 
     tools: async (): Promise<ListedToolDescriptor[]> => {
       try {
