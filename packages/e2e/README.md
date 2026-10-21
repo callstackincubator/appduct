@@ -17,12 +17,22 @@ Call your app's Appduct tools from [e2e](https://github.com/tester-army/e2e) tes
 npm install -D @appduct/e2e
 ```
 
-Write tests with `test` from `@appduct/e2e` instead of `e2e`. Each test gets an `appduct` fixture:
+Add the `appduct` fixture to your `test` in one place:
+
+```ts
+// tests/fixtures.ts
+import { test as base } from "e2e";
+import { withAppduct } from "@appduct/e2e";
+
+export const test = withAppduct(base);
+```
+
+`base` can also be an engine's `test`, such as the one from `@e2e-dev/mobile`, or a `test` you already extended with fixtures of your own. Then write tests with it:
 
 ```ts
 // tests/cart.e2e.ts
 import { expect } from "e2e";
-import { test } from "@appduct/e2e";
+import { test } from "./fixtures.ts";
 
 test("a seeded cart checks out", async ({ app, appduct, screen }) => {
   await app.open();
@@ -50,7 +60,7 @@ export default {
 } satisfies E2EConfig;
 ```
 
-The agent gets `appduct_tools`, which lists the app's tools, and `appduct_call`, which calls one. They work in tests written with `test` from `@appduct/e2e`.
+The agent gets `appduct_tools`, which lists the app's tools, and `appduct_call`, which calls one. They work in tests written with a `test` from `withAppduct`.
 
 ## The `appduct` fixture
 

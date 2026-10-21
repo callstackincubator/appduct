@@ -1,10 +1,13 @@
 /**
- * `@appduct/e2e`: Appduct in e2e (https://github.com/tester-army/e2e) tests. `test` gives every
- * test an `appduct` fixture that calls the app's tools, and `appductTools()` gives e2e's agent the
- * same reach.
+ * `@appduct/e2e`: Appduct in e2e (https://github.com/tester-army/e2e) tests. `withAppduct(test)`
+ * gives every test an `appduct` fixture that calls the app's tools, and `appductTools()` gives
+ * e2e's agent the same reach.
  *
  * ```ts
- * import { test } from "@appduct/e2e";
+ * import { test as base } from "e2e";
+ * import { withAppduct } from "@appduct/e2e";
+ *
+ * const test = withAppduct(base);
  *
  * test("checks out", async ({ app, appduct, agent }) => {
  *   await app.open();
@@ -14,7 +17,7 @@
  * });
  * ```
  */
-import { test as base, type TestFixtures } from "e2e";
+import type { FixtureDefinitions, FixtureFn, TestAPI, TestFixtures } from "e2e";
 
 import { offerToAgent } from "./agent-tools.js";
 import { pairWith, type PairingBrowser, type PairingDevice, type PairingTarget } from "./pairing.js";
@@ -38,13 +41,19 @@ const targetOf = (fixtures: EngineFixtures): PairingTarget => {
   throw new Error(`Appduct pairs with web, iOS and Android targets, not "${platform}".`);
 };
 
-/** e2e's `test` with an `appduct` fixture: the app's Appduct session, paired on first use. */
-export const test = base.extend<{ appduct: Appduct }>({
-  appduct: async (fixtures, use) => {
-    const session = createSession(() => pairWith(targetOf(fixtures as EngineFixtures)), clock);
+/**
+ * Adds an `appduct` fixture to `base`: the app's Appduct session, paired on first use. `base` is
+ * e2e's `test`, an engine's typed `test`, or one you already extended.
+ */
+export const withAppduct = <Fixtures extends TestFixtures>(base: TestAPI<Fixtures>): TestAPI<Fixtures & { appduct: Appduct }> => {
+  const appduct: FixtureFn<Fixtures, Appduct> = async (fixtures, use) => {
+    const session = createSession(() => pairWith(targetOf(fixtures as unknown as EngineFixtures)), clock);
     const withdraw = offerToAgent(session);
     await use(session);
     withdraw();
     session.close();
-  },
-});
+  };
+  // The mapped definition type cannot tell that `appduct` is absent from a generic `Fixtures`; a
+  // base that has one fails at import with e2e's own COLLECTION_ERROR.
+  return base.extend({ appduct } as FixtureDefinitions<Fixtures, { appduct: Appduct }>);
+};

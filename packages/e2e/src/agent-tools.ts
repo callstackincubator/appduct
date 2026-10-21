@@ -15,13 +15,13 @@ export const offerToAgent = (session: Appduct): (() => void) => {
 };
 
 const session = (): Appduct => {
-  if (!current) throw new Error("No Appduct session in this test. Write the test with `test` from '@appduct/e2e'.");
+  if (!current) throw new Error("No Appduct session in this test. Write the test with a `test` from `withAppduct`.");
   return current;
 };
 
 /**
  * Tools for e2e's agent that call the tools the app registered with Appduct. Add them to an
- * agent's `tools` in `e2e.config.ts`; they work in tests written with `test` from `@appduct/e2e`.
+ * agent's `tools` in `e2e.config.ts`; they work in tests written with a `test` from `withAppduct`.
  */
 export const appductTools = () => ({
   appduct_tools: defineTool(

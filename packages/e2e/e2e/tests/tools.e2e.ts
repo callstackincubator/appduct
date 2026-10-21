@@ -1,5 +1,5 @@
 import { expect } from "e2e";
-import { test } from "@appduct/e2e";
+import { test } from "./fixtures.ts";
 
 test("calls a tool in the running app", async ({ app, appduct }) => {
   await app.open();
