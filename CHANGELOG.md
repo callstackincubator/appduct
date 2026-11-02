@@ -11,7 +11,7 @@ section into a versioned heading.
 
 ## Unreleased
 
-- **Fix: an Appduct link no longer sends an Expo Router or React Navigation app to its first screen.** Add `isAppductLink` from `@appduct/react-native` to your `+native-intent` or `linking.filter`; see the [React Native install guide](https://callstackincubator.github.io/appduct/install/react-native/).
+- **New: `isAppductLink` from `@appduct/react-native` keeps an Appduct link from sending your Expo Router or React Navigation app to its first screen.** Use it in your `+native-intent` or `linking.filter`; see the [React Native install guide](https://callstackincubator.github.io/appduct/install/react-native/).
 
 ## 0.16.0 (2026-10-21)
 

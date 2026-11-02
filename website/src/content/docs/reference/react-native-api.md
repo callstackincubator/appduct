@@ -173,6 +173,14 @@ await connect(parseBootstrapUrl(url));
 
 Connects from a link you received yourself. Most apps don't need this: `/auto` does it. `parseBootstrapUrl` throws `AppductBootstrapParseError` with `code` `invalid_url`, `missing_payload`, `invalid_payload`, or `expired_payload`. `connect` rejects with `AppductDisabledError` (`code: "appduct_disabled"`) in a build without Appduct.
 
+### `isAppductLink`
+
+```ts
+isAppductLink(url)
+```
+
+Returns `true` when `url` is an Appduct connection link. Use it in `+native-intent` or `linking.filter` to keep these links out of your router; see the [React Native install guide](/appduct/install/react-native/).
+
 ### `getAppductBuildConfig`
 
 Returns `{ trust, hasEmbeddedPins, allowPrivateLanOnly }`: the trust settings this build actually uses. `trust` is `"pin"` whenever pins are embedded, `"link"` otherwise, and `"absent"` in a build without Appduct. Never exposes the pins.
