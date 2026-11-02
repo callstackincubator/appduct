@@ -161,6 +161,34 @@ By default, Appduct's native code is in **debug** builds only. In a release buil
 
 With no configuration, a build trusts the computer whose link it opened, for that session. Before you give a build to anyone outside your team, [pin it to your key](/appduct/guides/security/#pin-a-build-to-your-key).
 
+## Keep Appduct links out of your router
+
+If the app uses Expo Router or React Navigation, the connection link also reaches the router, which opens the app's first screen. Tell the router to ignore Appduct links. Connecting works either way.
+
+For Expo Router, add this to `app/+native-intent.ts`. If you already have a `redirectSystemPath`, add the `isAppductLink` check to it.
+
+```ts
+import { isAppductLink } from "@appduct/react-native";
+
+export function redirectSystemPath({ path }: { path: string; initial: boolean }) {
+  if (isAppductLink(path)) return "";
+  return path;
+}
+```
+
+For React Navigation, filter the link in `linking`:
+
+```ts
+import { isAppductLink } from "@appduct/react-native";
+
+const linking = {
+  prefixes: ["myapp://"],
+  filter: (url: string) => !isAppductLink(url),
+};
+```
+
+An app without URL routing needs nothing.
+
 ## Handle links yourself
 
 If your app handles incoming links itself (custom routing, an in-app QR scanner), you can skip `/auto` and connect manually with [`parseBootstrapUrl` and `connect`](/appduct/reference/react-native-api/#connect). Call `restoreSession()` once at startup, before your own link handling. Without it, every Metro reload drops the session.

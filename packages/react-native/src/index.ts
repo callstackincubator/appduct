@@ -26,6 +26,7 @@ import * as noop from "./noop";
 
 export * from "./Appduct.types";
 export { parseBootstrapPayload, parseBootstrapUrl };
+export { isAppductLink } from "@appduct/shared/inert";
 export {
   createAppductClient,
   type AppductClient,

@@ -26,6 +26,7 @@ import { createUseAppductTool } from "@appduct/shared/react";
 import { createToolGroupFactory } from "@appduct/shared/inert";
 
 export * from "./Appduct.types";
+export { isAppductLink } from "@appduct/shared/inert";
 export type {
   AppductPublicApi,
   CordierePublicApi,

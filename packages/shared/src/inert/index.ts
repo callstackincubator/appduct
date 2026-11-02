@@ -12,6 +12,25 @@ import type {
 
 export { createToolGroupFactory } from "./tool-group.js";
 
+/**
+ * True iff `url` has an `appduct` key in its query string, the rule the native core's `handleUrl`
+ * and the JS deep-link listener use to recognise a pairing link. Accepts full URLs and bare paths,
+ * returns `false` for anything else, never throws. A query-string scan on purpose: `new URL`
+ * throws on relative input.
+ *
+ * Use it to keep Appduct links out of your router, for example in Expo Router's
+ * `+native-intent` `redirectSystemPath`: `isAppductLink("myapp:///?appduct=abc")` is `true`,
+ * `isAppductLink("myapp:///settings")` is `false`.
+ */
+export function isAppductLink(url: string): boolean {
+  if (typeof url !== "string") return false;
+  const queryStart = url.indexOf("?");
+  if (queryStart === -1) return false;
+  const hashStart = url.indexOf("#", queryStart);
+  const query = url.slice(queryStart + 1, hashStart === -1 ? undefined : hashStart);
+  return query.split("&").some((pair) => pair.split("=")[0] === "appduct");
+}
+
 /** Local app-side ceiling for a tool handler, matching the daemon's `tools.call` default (§5/§11). */
 export const APPDUCT_DEFAULT_TOOL_TIMEOUT_MS = 10_000;
 

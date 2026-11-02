@@ -21,6 +21,7 @@ export {
 } from "@appduct/web";
 export { useAppductTool } from "@appduct/web/react";
 export { parseBootstrapPayload, parseBootstrapUrl } from "./bootstrap";
+export { isAppductLink } from "@appduct/shared/inert";
 export { createAppductClient, type AppductClient, type CreateAppductClientOptions } from "@appduct/shared/sdk";
 export type {
   AppductPublicApi,
