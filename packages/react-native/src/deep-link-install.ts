@@ -60,10 +60,12 @@ export function installAppductDeepLinkBootstrap(
 
   let initialUrlPromise: Promise<string | null>;
   try {
-    initialUrlPromise = Linking.getInitialURL().catch((error: unknown) => {
-      logger.warn("Appduct: Linking.getInitialURL failed", error);
-      return null;
-    });
+    initialUrlPromise = Linking.getInitialURL()
+      .then((url) => url ?? null)
+      .catch((error: unknown) => {
+        logger.warn("Appduct: Linking.getInitialURL failed", error);
+        return null;
+      });
   } catch (error) {
     logger.warn("Appduct: Linking.getInitialURL failed", error);
     initialUrlPromise = Promise.resolve(null);
