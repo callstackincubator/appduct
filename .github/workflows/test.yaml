@@ -241,7 +241,7 @@ jobs:
         # project, because `expo prebuild --clean` below deletes playground/android outright.
         # Writes the cache only from the default branch (the action's default), so a PR can never
         # poison what main restores.
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build packages
