@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   js:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is Ubuntu 26.04, which Playwright 1.64 cannot install Chromium on.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out source
@@ -156,6 +157,14 @@ jobs:
             echo "::error::The pub archive is over 1 MB; something that should be ignored is in it."
             exit 1
           fi
+      - name: Set up Java 17
+        # The runner's default JDK is now 25, which the Kotlin plugin cannot target, so
+        # compileKotlin (22) and compileJava (25) disagree. Same pin as the android job.
+        if: steps.affected.outputs.run == 'true'
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 17
       - name: Test the Android shim state
         if: steps.affected.outputs.run == 'true'
         run: gradle -p android/shim-test test
