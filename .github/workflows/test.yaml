@@ -161,7 +161,7 @@ jobs:
         # The runner's default JDK is now 25, which the Kotlin plugin cannot target, so
         # compileKotlin (22) and compileJava (25) disagree. Same pin as the android job.
         if: steps.affected.outputs.run == 'true'
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: 17
@@ -230,7 +230,7 @@ jobs:
           # fires when package.json's packageManager field names npm — this repo's names pnpm.
           cache: pnpm
       - name: Set up Java 17
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: 17
