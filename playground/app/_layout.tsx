@@ -1,9 +1,4 @@
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
-import { Stack } from "expo-router";
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 // Side-effect entry (ARCHITECTURE.md §11): installs the default deep-link bootstrap listener on
