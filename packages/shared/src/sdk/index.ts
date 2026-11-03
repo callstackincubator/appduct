@@ -25,6 +25,7 @@ export {
   AppductBootstrapParseError,
   AppductDisabledError,
   createToolGroupFactory,
+  isAppductLink,
   jsonSchema,
 } from "../inert/index.js";
 export * from "./types.js";

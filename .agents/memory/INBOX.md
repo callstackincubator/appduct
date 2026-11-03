@@ -111,3 +111,11 @@ One note per PR that hit friction, four lines:
   What went wrong: new iOS tests that depended on the order of two transport callbacks passed locally but failed in CI's `-test-iterations 20 -run-tests-until-failure` run, because each callback started its own Task; the same race also sat in the real transport below the fake.
   Would have prevented it: before pushing iOS tests that depend on callback order, run them in a loop under CPU load (as CI's iteration run effectively does), and fix ordering in both the client and the real transport, not only behind the fake.
   Cost: CI failure, extra fix and review round
+- 2026-11-02 #267 skill: implement-issue
+  What went wrong: A new public SDK export got install-guide docs but not a line in the shipped skill's `skills/appduct/references/setup.md`, so an agent setting up an app from the skill would skip the step.
+  Would have prevented it: When a change adds a setup step for users, update the shipped skill's setup reference in the same commit as the website install guide.
+  Cost: review round
+- 2026-11-02 #267 skill: e2e-device
+  What went wrong: The suite picked the newest iOS runtime (27.0), where the Expo playground aborts at launch ("UIScene life cycle is required"), and four cases timed out at 120 s each before anyone checked the simulator log.
+  Would have prevented it: When device cases time out and Metro shows no native bundle request, read the simulator log for a launch failure, and pin `APPDUCT_E2E_DEVICE` to a known-good runtime.
+  Cost: e2e rerun

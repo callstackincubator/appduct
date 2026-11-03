@@ -11,6 +11,8 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **New: `isAppductLink` from `@appduct/react-native` keeps an Appduct link from sending your Expo Router or React Navigation app to its first screen.** Use it in your `+native-intent` or `linking.filter`; see the [React Native install guide](https://callstackincubator.github.io/appduct/install/react-native/).
+
 ## 0.16.0 (2026-10-21)
 
 - **New: an `AppClient` from `appduct/client` has `state()` and `revoke()`.** `state()` tells whether the app is still connected, and `revoke()` ends the session.

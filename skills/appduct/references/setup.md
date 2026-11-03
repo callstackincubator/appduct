@@ -33,6 +33,13 @@ not do it as part of a first-time setup.
    `@appduct/react-native/metro` (call it last, after anything else that sets
    `resolver.resolveRequest`) and build releases with `APPDUCT_ENABLED=0`. See
    https://callstackincubator.github.io/appduct/guides/build-variants/.
+6. If the app uses Expo Router or React Navigation, keep Appduct links out of the router, or
+   the connection link also opens the app's first screen. Connecting works either way. Import
+   `isAppductLink` from `@appduct/react-native`. In Expo Router, return `""` from
+   `redirectSystemPath` in `app/+native-intent.ts` when `isAppductLink(path)` is true (add the
+   check to the existing function if the file has one). In React Navigation, set
+   `linking.filter` to `(url) => !isAppductLink(url)`. Full examples:
+   https://callstackincubator.github.io/appduct/install/react-native/#keep-appduct-links-out-of-your-router
 
 ## Expo
 

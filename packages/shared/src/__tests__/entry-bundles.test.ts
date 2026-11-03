@@ -54,6 +54,7 @@ describe("@appduct/shared entries", () => {
       "AppductBootstrapParseError",
       "AppductDisabledError",
       "createToolGroupFactory",
+      "isAppductLink",
       "jsonSchema",
     ]);
     const source = read("inert.js");
