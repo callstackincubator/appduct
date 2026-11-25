@@ -11,10 +11,12 @@ section into a versioned heading.
 
 ## Unreleased
 
+- **Docs: the website has a guide for `@appduct/e2e`.** [Test with e2e](https://callstackincubator.github.io/appduct/guides/e2e/) covers the `appduct` fixture, the agent tools and what to check when a test can't connect.
+
 ## 0.16.0 (2026-10-21)
 
 - **New: an `AppClient` from `appduct/client` has `state()` and `revoke()`.** `state()` tells whether the app is still connected, and `revoke()` ends the session.
-- **New: `@appduct/e2e` lets [e2e](https://github.com/tester-army/e2e) tests and their agent call your app's tools.** Wrap your `test` with `withAppduct` to get an `appduct` fixture, and add `appductTools()` to an agent; see the [package README](https://github.com/callstackincubator/appduct/tree/main/packages/e2e).
+- **New: `@appduct/e2e` lets [e2e](https://github.com/e2e-inc/e2e) tests and their agent call your app's tools.** Wrap your `test` with `withAppduct` to get an `appduct` fixture, and add `appductTools()` to an agent; see the [package README](https://github.com/callstackincubator/appduct/tree/main/packages/e2e).
 - **Fix: `waitForSession()` from `appduct/client` no longer sometimes times out when the app claims the session right after the wait starts.**
 
 ## 0.15.1 (2026-10-15)

@@ -1,0 +1,143 @@
+---
+title: Test with e2e
+description: Call your app's tools from e2e tests with the appduct fixture, and let e2e's agent call them during agent steps.
+sidebar:
+  order: 7
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+With `@appduct/e2e`, an [e2e](https://github.com/e2e-inc/e2e) test calls the tools your app registered. A test can seed a cart with one call instead of tapping through screens, then read the order status from the app instead of from the screen. e2e's agent can call the same tools during agent steps.
+
+For Jest, Vitest, Detox or another runner, see [Drive the app from a test suite](/appduct/guides/cli/#drive-the-app-from-a-test-suite).
+
+## Before you start
+
+- Your app registers tools with an Appduct SDK and runs a debug build. A web page loads `@appduct/web` from a development build. See [Installation](/appduct/install/react-native/).
+- e2e 0.21 or newer, with its web or mobile engine.
+- The target is a web page, an iOS simulator or an Android emulator.
+- For iOS and Android, `.appduct/config.json` with your app's URL scheme sits at your e2e project root. `appduct init` writes it; see [How the CLI finds your scheme](/appduct/guides/cli/#how-the-cli-finds-your-scheme).
+
+## Set up the fixture
+
+<Steps>
+
+1. Install the package in your e2e project:
+
+   ```bash
+   npm install -D @appduct/e2e
+   ```
+
+2. Wrap your `test` with `withAppduct` in one place:
+
+   ```ts title="tests/fixtures.ts"
+   import { test as base } from "e2e";
+   import { withAppduct } from "@appduct/e2e";
+
+   export const test = withAppduct(base);
+   ```
+
+   `base` can also be an engine's `test`, such as the one from `@e2e-dev/mobile`, or a `test` you already extended with fixtures of your own.
+
+3. Import `test` from that file in your tests, and use the `appduct` fixture:
+
+   ```ts title="tests/cart.e2e.ts"
+   import { expect } from "e2e";
+   import { test } from "./fixtures.ts";
+
+   test("a seeded cart checks out", async ({ app, appduct, screen }) => {
+     await app.open();
+     await appduct.call("seed_cart", { items: 3 });
+
+     await screen.getByRole("button", { name: "Check out" }).tap();
+
+     expect(await appduct.call("order_status")).toEqual({ status: "paid" });
+   });
+   ```
+
+</Steps>
+
+The first `appduct` call in a test connects to the app the test opened, so call `app.open()` first. A test that never uses `appduct` doesn't connect.
+
+## Call tools and wait for events
+
+| Member | What it does |
+| --- | --- |
+| `call(name, args?, options?)` | Calls a tool and returns its result. Waits up to 10 seconds for a tool the app hasn't registered yet. Pass `{ timeoutMs }` to change how long the tool gets to finish. |
+| `tools()` | Lists the app's tools. Waits up to 10 seconds for the app to register its first. |
+| `waitForEvent(name, options?)` | Resolves with the next event the app posts under `name`. Waits 30 seconds unless you pass `{ timeoutMs }`. |
+
+`waitForEvent` checks events that already arrived before waiting, so it's safe to call after the action that posts the event:
+
+```ts
+await screen.getByRole("button", { name: "Pay" }).tap();
+const { payload } = await appduct.waitForEvent("checkout_completed", { timeoutMs: 5_000 });
+expect(payload).toEqual({ orderId: "ord_1042" });
+```
+
+A failed call rejects with an `AppductError` from `appduct/client`. Its `type` is the same error type the CLI reports, so you can assert on it:
+
+```ts
+await expect(appduct.call("refund_order", { orderId: "ord_1042" })).rejects.toMatchObject({ type: "policy_denied" });
+```
+
+## Let the agent call your tools
+
+Add `appductTools()` to an agent's `tools` in `e2e.config.ts`:
+
+```ts title="e2e.config.ts"
+import type { E2EConfig } from "e2e";
+import { appductTools } from "@appduct/e2e";
+
+export default {
+  // targets: …
+  agents: { default: { model, tools: appductTools() } },
+} satisfies E2EConfig;
+```
+
+The agent gets two tools: `appduct_tools`, which lists the app's tools, and `appduct_call`, which calls one. In an agent step, say what you want from the app and the agent picks the tool:
+
+```ts
+test("the agent empties the cart", async ({ app, appduct, agent }) => {
+  await app.open();
+  await appduct.call("seed_cart", { items: 3 });
+
+  await agent.act("empty the cart with the app's tools, then confirm the cart screen says it's empty");
+
+  expect(await appduct.call("cart_count")).toEqual({ count: 0 });
+});
+```
+
+The agent tools need a `test` from `withAppduct`. In any other test they fail with `No Appduct session in this test`.
+
+Agent steps that call `appduct_call` run live every time. A tool call may change app state, so e2e can't replay it from its cache.
+
+## Share one app between tests
+
+The connection lasts as long as the app does. A test that doesn't reopen the app, such as the second test in a `serial` group, reuses the previous test's connection and sees the state that test left:
+
+```ts
+import { describe, expect } from "e2e";
+import { test } from "./fixtures.ts";
+
+describe("checkout", { serial: true }, () => {
+  test("seeds the cart", async ({ app, appduct }) => {
+    await app.open();
+    await appduct.call("seed_cart", { items: 3 });
+  });
+
+  test("still has the cart in the same app", async ({ appduct }) => {
+    expect(await appduct.call("cart_count")).toEqual({ count: 3 });
+  });
+});
+```
+
+After `app.open()`, `app.restart()` or a reload, the next call connects to the new app and ends the old connection, so `appduct sessions ls` doesn't fill up with dead sessions.
+
+## When something goes wrong
+
+- **`The page did not connect to Appduct within 10 s`.** The page doesn't load `@appduct/web`, or it runs a production build. Serve a development build; see [Web setup](/appduct/install/web/#production-builds).
+- **A mobile test fails with `timeout` after 60 seconds.** The app never opened the link. Check that the scheme in `.appduct/config.json` matches the installed app, and that the app is a debug build; see [Build variants](/appduct/guides/build-variants/).
+- **`tool_not_found`.** The app didn't register that tool within 10 seconds. A tool a screen registers exists only while that screen is open, so navigate there first. Check the name with `await appduct.tools()`.
+- **`policy_denied`.** Appduct refuses a tool with policy `"deny"`. It also refuses one with policy `"prompt"`, because a test has nobody to approve the call. Set the tools your tests call to `"allow"` in `~/.appduct/config.json`, on your machine and in CI; see [Security](/appduct/guides/security/#limit-what-callers-can-run).
+- **A new iOS simulator shows "Open in …?" once.** The fixture accepts it for you, which shows as a `device.alert` step in that test's report. The simulator doesn't ask again.

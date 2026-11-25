@@ -1,5 +1,5 @@
 /**
- * `@appduct/e2e`: Appduct in e2e (https://github.com/tester-army/e2e) tests. `withAppduct(test)`
+ * `@appduct/e2e`: Appduct in e2e (https://github.com/e2e-inc/e2e) tests. `withAppduct(test)`
  * gives every test an `appduct` fixture that calls the app's tools, and `appductTools()` gives
  * e2e's agent the same reach.
  *

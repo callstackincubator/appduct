@@ -2,7 +2,7 @@
 
 # Appduct for e2e
 
-Call your app's Appduct tools from [e2e](https://github.com/tester-army/e2e) tests, and let e2e's agent call them during agent steps. Set up state without tapping through the UI, and check what the app holds instead of only what it shows.
+Call your app's Appduct tools from [e2e](https://github.com/e2e-inc/e2e) tests, and let e2e's agent call them during agent steps. Set up state without tapping through the UI, and check what the app holds instead of only what it shows.
 
 ## Requirements
 
@@ -77,6 +77,10 @@ Errors are `AppductError`s from `appduct/client`, with the same `type` the CLI r
 - **The connection lasts as long as the app does.** A test that keeps the app running, such as the next test in a `serial` group, reuses the previous test's connection. After `app.open()`, `app.restart()` or a reload, the next call connects to the new app and ends the old connection, so `appduct sessions ls` doesn't fill up with dead sessions.
 - **A new iOS simulator asks once before the first link opens the app.** The fixture accepts iOS's "Open in …?" question for you, which shows as a `device.alert` step in that test's report. The simulator doesn't ask again.
 - **Agent steps that call `appduct_call` run live.** e2e can't replay a call that may change app state from its cache.
+
+## Documentation
+
+See [Test with e2e](https://callstackincubator.github.io/appduct/guides/e2e/) for waiting on events, sharing one app between tests and fixing a test that can't connect.
 
 ## Made with ❤️ at Callstack
 

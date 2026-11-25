@@ -165,6 +165,8 @@ Exit codes tell failures apart without parsing: for example, `71` for a session 
 
 The `appduct/client` module lets an end-to-end test call tools directly, instead of tapping through setup screens. It works with Jest, Vitest, Detox, or any Node test runner.
 
+For [e2e](https://github.com/e2e-inc/e2e) tests, use the `appduct` fixture from `@appduct/e2e` instead; see [Test with e2e](/appduct/guides/e2e/).
+
 Install `appduct` as a dev dependency of your test project, then connect in a global setup:
 
 ```ts title="global-setup.ts"
